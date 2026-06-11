@@ -13,8 +13,8 @@ __ss.openFile = async function(id) {
     state.currentFileType = f.type || 'ig_cookie';
     state.COLUMNS = __ss.getTypeDef(state.currentFileType).columns;
     state.rows = await api.getRows(id);
-    state.undoStack = await api.getStack(id, 'undo');
-    state.redoStack = await api.getStack(id, 'redo');
+    state.undoStack = [];
+    state.redoStack = [];
     state.selectedCell = null;
     state.isDirty = false;
 

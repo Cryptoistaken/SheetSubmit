@@ -15,6 +15,9 @@ var ids = [
     'typeOverlay', 'typeOptions', 'typeCancel',
     'connStatus', 'connStatusText',
     'fileSelBar', 'fileSelCount', 'fileSelDelete',
+    'sheetMoreBtn', 'sheetMoreMenu', 'menuDownload', 'menuUpload',
+    'uploadModeOverlay', 'uploadReplace', 'uploadAppend', 'uploadModeCancel',
+    'xlsxFileInput', 'xlsxFileInputHome',
 ];
 ids.forEach(function(id) {
     var el = document.getElementById(id);

@@ -440,6 +440,117 @@ dom.copyAllBtn.addEventListener('click', function() {
     }).catch(function() { __ss.showToast('Cannot copy'); });
 });
 
+// ── Sheet more menu ──
+dom.sheetMoreBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var rect = dom.sheetMoreBtn.getBoundingClientRect();
+    dom.sheetMoreMenu.style.top = (rect.bottom + 4) + 'px';
+    dom.sheetMoreMenu.style.right = (window.innerWidth - rect.right) + 'px';
+    dom.sheetMoreMenu.classList.toggle('open');
+});
+
+document.addEventListener('click', function() {
+    dom.sheetMoreMenu.classList.remove('open');
+});
+
+// ── Download xlsx ──
+dom.menuDownload.addEventListener('click', function() {
+    dom.sheetMoreMenu.classList.remove('open');
+    if (!state.rows.length) { __ss.showToast('No data'); return; }
+    var data = [state.COLUMNS.map(function(c) { return c.label; })];
+    state.rows.forEach(function(row) {
+        var isEmpty = state.COLUMNS.every(function(c) { return !row[c.key]; });
+        if (!isEmpty) data.push(state.COLUMNS.map(function(c) { return row[c.key] || ''; }));
+    });
+    var ws = XLSX.utils.aoa_to_sheet(data);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    var name = dom.sheetTitleBtn.textContent || 'export';
+    XLSX.writeFile(wb, name + '.xlsx');
+    __ss.showToast('Downloaded');
+});
+
+// ── Upload xlsx (inside file) ──
+var pendingUploadData = null;
+
+dom.menuUpload.addEventListener('click', function() {
+    dom.sheetMoreMenu.classList.remove('open');
+    dom.xlsxFileInput.click();
+});
+
+dom.xlsxFileInput.addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+        var wb = XLSX.read(ev.target.result, { type: 'array' });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        if (json.length < 2) { __ss.showToast('File is empty'); return; }
+        var headers = json[0].map(function(h) { return String(h).toLowerCase().trim(); });
+        var matchedCols = state.COLUMNS.filter(function(c) {
+            return headers.indexOf(c.key.toLowerCase()) !== -1 || headers.indexOf(c.label.toLowerCase()) !== -1;
+        });
+        if (matchedCols.length === 0) { __ss.showToast('Columns don\'t match this file type'); return; }
+        var colMap = matchedCols.map(function(c) {
+            var idx = headers.indexOf(c.key.toLowerCase());
+            if (idx === -1) idx = headers.indexOf(c.label.toLowerCase());
+            return { key: c.key, idx: idx };
+        });
+        var rows = [];
+        for (var i = 1; i < json.length; i++) {
+            var row = {};
+            var hasData = false;
+            colMap.forEach(function(cm) {
+                var val = json[i][cm.idx] || '';
+                row[cm.key] = String(val);
+                if (val) hasData = true;
+            });
+            if (hasData) rows.push(row);
+        }
+        if (rows.length === 0) { __ss.showToast('No data rows found'); return; }
+        pendingUploadData = rows;
+        dom.uploadModeOverlay.classList.add('open');
+    };
+    reader.readAsArrayBuffer(file);
+});
+
+dom.uploadReplace.addEventListener('click', function() {
+    if (!pendingUploadData) return;
+    dom.uploadModeOverlay.classList.remove('open');
+    state.rows = pendingUploadData;
+    while (state.rows.length < 100) state.rows.push(__ss.makeEmptyRow(state.COLUMNS));
+    state.isDirty = true;
+    renderSheet();
+    persist();
+    __ss.showToast('Replaced with ' + pendingUploadData.length + ' rows');
+    pendingUploadData = null;
+});
+
+dom.uploadAppend.addEventListener('click', function() {
+    if (!pendingUploadData) return;
+    dom.uploadModeOverlay.classList.remove('open');
+    state.rows = state.rows.concat(pendingUploadData);
+    state.isDirty = true;
+    renderSheet();
+    persist();
+    __ss.showToast('Appended ' + pendingUploadData.length + ' rows');
+    pendingUploadData = null;
+});
+
+dom.uploadModeCancel.addEventListener('click', function() {
+    dom.uploadModeOverlay.classList.remove('open');
+    pendingUploadData = null;
+});
+
+dom.uploadModeOverlay.addEventListener('click', function(e) {
+    if (e.target === dom.uploadModeOverlay) {
+        dom.uploadModeOverlay.classList.remove('open');
+        pendingUploadData = null;
+    }
+});
+
 // ── Keyboard ──
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' && state.selectionMode) {

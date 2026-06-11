@@ -185,6 +185,20 @@ __ss.commitRename = async function() {
 // ── File type modal ──
 __ss.showTypeModal = function() {
     dom.typeOptions.innerHTML = '';
+
+    var uploadOpt = document.createElement('div');
+    uploadOpt.className = 'type-option';
+    uploadOpt.innerHTML =
+        '<div class="type-option-icon" style="background:var(--bg3);color:var(--text2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>' +
+        '<div class="type-option-info">' +
+        '<div class="type-option-name">Upload xlsx</div>' +
+        '<div class="type-option-desc">Import data from a spreadsheet</div></div>';
+    uploadOpt.addEventListener('click', function() {
+        dom.typeOverlay.classList.remove('open');
+        dom.xlsxFileInputHome.click();
+    });
+    dom.typeOptions.appendChild(uploadOpt);
+
     __ss.FILE_TYPE_KEYS.forEach(function(k) {
         var td = __ss.FILE_TYPES[k];
         var opt = document.createElement('div');
@@ -209,7 +223,7 @@ __ss.createFile = async function(typeKey) {
     }
 
     var td = __ss.getTypeDef(typeKey);
-    var name = __ss.todayStr();
+    var name = td.label + ' ' + __ss.todayStr();
     var files = await api.getFiles();
     if (files.some(function(f) { return f.name === name; })) {
         var suffix = 2;
@@ -286,6 +300,58 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' && state.fileSelectionMode) {
         exitFileSelectionMode();
     }
+});
+
+// ── Home xlsx upload ──
+dom.xlsxFileInputHome.addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+        var wb = XLSX.read(ev.target.result, { type: 'array' });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        if (json.length < 2) { __ss.showToast('File is empty'); return; }
+        var headers = json[0].map(function(h) { return String(h).toLowerCase().trim(); });
+        var td = __ss.FILE_TYPES['ig_cookie'];
+        var matchedCols = td.columns.filter(function(c) {
+            return headers.indexOf(c.key.toLowerCase()) !== -1 || headers.indexOf(c.label.toLowerCase()) !== -1;
+        });
+        if (matchedCols.length === 0) { __ss.showToast('Columns don\'t match any file type'); return; }
+        var colMap = matchedCols.map(function(c) {
+            var idx = headers.indexOf(c.key.toLowerCase());
+            if (idx === -1) idx = headers.indexOf(c.label.toLowerCase());
+            return { key: c.key, idx: idx };
+        });
+        var rows = [];
+        for (var i = 1; i < json.length; i++) {
+            var row = {};
+            var hasData = false;
+            colMap.forEach(function(cm) {
+                var val = json[i][cm.idx] || '';
+                row[cm.key] = String(val);
+                if (val) hasData = true;
+            });
+            if (hasData) rows.push(row);
+        }
+        if (rows.length === 0) { __ss.showToast('No data rows found'); return; }
+        var name = file.name.replace(/\.xlsx?$/i, '') || 'Import ' + __ss.todayStr();
+        api.getFiles().then(function(files) {
+            if (files.some(function(f) { return f.name === name; })) {
+                name = name + ' (' + __ss.genId().slice(0, 4) + ')';
+            }
+            var id = __ss.genId();
+            api.createFile({ id: id, name: name, type: 'ig_cookie', rowCount: rows.length, createdAt: Date.now(), updatedAt: Date.now() }).then(function() {
+                api.saveRows(id, rows).then(function() {
+                    __ss.renderHome();
+                    __ss.showToast('Imported ' + rows.length + ' rows');
+                    __ss.openFile(id);
+                });
+            });
+        });
+    };
+    reader.readAsArrayBuffer(file);
 });
 
 })();

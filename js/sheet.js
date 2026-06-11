@@ -422,14 +422,21 @@ dom.selUnselectAll.addEventListener('click', function() {
 // ── Copy all ──
 dom.copyAllBtn.addEventListener('click', function() {
     if (!state.rows.length) { __ss.showToast('No data'); return; }
+    var hasData = state.rows.some(function(row) {
+        return state.COLUMNS.some(function(c) { return row[c.key]; });
+    });
+    if (!hasData) { __ss.showToast('No data'); return; }
     var lines = [];
     lines.push(state.COLUMNS.map(function(c) { return c.label; }).join('\t'));
     state.rows.forEach(function(row) {
-        lines.push(state.COLUMNS.map(function(c) { return row[c.key] || ''; }).join('\t'));
+        var isEmpty = state.COLUMNS.every(function(c) { return !row[c.key]; });
+        if (!isEmpty) {
+            lines.push(state.COLUMNS.map(function(c) { return row[c.key] || ''; }).join('\t'));
+        }
     });
     var text = lines.join('\n');
     navigator.clipboard.writeText(text).then(function() {
-        __ss.showToast('Copied all ' + state.rows.length + ' rows');
+        __ss.showToast('Copied ' + (lines.length - 1) + ' rows');
     }).catch(function() { __ss.showToast('Cannot copy'); });
 });
 

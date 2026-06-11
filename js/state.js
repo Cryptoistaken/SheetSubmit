@@ -14,6 +14,7 @@ var ids = [
     'renameOverlay', 'renameInput', 'renameCancel', 'renameConfirm',
     'typeOverlay', 'typeOptions', 'typeCancel',
     'connStatus', 'connStatusText',
+    'fileSelBar', 'fileSelCount', 'fileSelDelete',
 ];
 ids.forEach(function(id) {
     var el = document.getElementById(id);

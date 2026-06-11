@@ -1,75 +1,152 @@
 /* ── Reset ── */
-* {
+*, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
-/* ── Design tokens ── */
+/* ── Geist Fonts ── */
+@font-face {
+    font-family: 'Geist Sans';
+    src: url('https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-sans/Geist-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Geist Sans';
+    src: url('https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-sans/Geist-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Geist Sans';
+    src: url('https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-sans/Geist-SemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Geist Sans';
+    src: url('https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-sans/Geist-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Geist Mono';
+    src: url('https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-mono/GeistMono-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Geist Mono';
+    src: url('https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-mono/GeistMono-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Geist Mono';
+    src: url('https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-mono/GeistMono-SemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Geist Mono';
+    src: url('https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-mono/GeistMono-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* ── Design tokens — Vercel Geist ── */
 :root {
     /* Backgrounds */
-    --bg: #f3f2ed;
-    --bg2: #fafaf8;
-    --bg3: #eeecea;
-    --bg4: #e4e2d8;
+    --bg: #ffffff;
+    --bg2: #fafafa;
+    --bg3: #f5f5f5;
+    --bg4: #eaeaea;
 
     /* Text */
-    --text: #111110;
-    --text2: #5c5a56;
-    --text3: #a09d97;
+    --text: #000000;
+    --text2: #666666;
+    --text3: #999999;
 
     /* Borders */
-    --border: rgba(20, 20, 19, 0.09);
-    --border2: rgba(20, 20, 19, 0.17);
+    --border: #eaeaea;
+    --border2: #d4d4d4;
 
-    /* Brand colors — green deepened for WCAG AA on white text */
-    --red: #b83228;
-    --green: #788c5d;
-    --green-dark: #5e7240;
-    --green-alpha-1: rgba(120, 140, 93, 0.06);
-    --green-alpha-2: rgba(120, 140, 93, 0.09);
-    --green-alpha-3: rgba(120, 140, 93, 0.11);
-    --green-alpha-4: rgba(120, 140, 93, 0.15);
-    --green-alpha-5: rgba(120, 140, 93, 0.20);
-    --green-alpha-6: rgba(120, 140, 93, 0.25);
-    --green-border: rgba(120, 140, 93, 0.25);
-    --green-border2: rgba(120, 140, 93, 0.32);
-    --green-border3: rgba(120, 140, 93, 0.38);
-    --green-border4: rgba(120, 140, 93, 0.45);
-    --green-border5: rgba(120, 140, 93, 0.55);
-    --yellow: #9c700a;
-    --accent: #d97757;
-    --accent-blue: #6a9bcc;
-    --orange: #d06e22;
-    --red-bg: rgba(184, 50, 40, 0.08);
-    --green-bg: var(--green-alpha-3);
+    /* Brand — Vercel */
+    --blue: #0070f3;
+    --blue-dark: #0060df;
+    --blue-light: rgba(0, 112, 243, 0.08);
+    --red: #ee0000;
+    --red-bg: rgba(238, 0, 0, 0.08);
+    --green: #00b4d8;
+    --green-dark: #0096b7;
+    --green-bg: rgba(0, 180, 216, 0.08);
+    --yellow: #f5a623;
+    --yellow-bg: rgba(245, 166, 35, 0.08);
+
+    /* Selection highlight */
+    --sel-bg: rgba(0, 112, 243, 0.08);
+    --sel-border: rgba(0, 112, 243, 0.4);
+    --sel-outline: #0070f3;
 
     /* Focus ring */
-    --focus-ring: 0 0 0 3px rgba(94, 114, 64, 0.22);
+    --focus-ring: 0 0 0 2px #0070f3;
 
     /* Shape */
     --r: 6px;
-    --rl: 10px;
+    --rl: 8px;
 
     /* Fonts */
-    --mono: "DM Mono", "Fira Mono", "Cascadia Code", "Menlo", monospace;
-    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --serif: "Libre Baskerville", Georgia, serif;
+    --sans: 'Geist Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono: 'Geist Mono', 'SF Mono', 'Fira Code', monospace;
 
-    /* Shadows — richer depth */
-    --shadow-sm: 0 2px 8px rgba(20, 20, 19, 0.10), 0 1px 2px rgba(20, 20, 19, 0.06);
-    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.13), 0 2px 6px rgba(0, 0, 0, 0.07);
-    --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.17), 0 3px 8px rgba(0, 0, 0, 0.08);
+    /* Shadows — Vercel minimal */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
 
     /* Overlays */
-    --overlay-light: rgba(0, 0, 0, 0.32);
-    --overlay-mid: rgba(0, 0, 0, 0.36);
-    --overlay-dark: rgba(0, 0, 0, 0.42);
+    --overlay-light: rgba(0, 0, 0, 0.25);
+    --overlay-mid: rgba(0, 0, 0, 0.35);
+    --overlay-dark: rgba(0, 0, 0, 0.45);
 
-    /* Easing curves */
-    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    /* Easing */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ── Dark theme ── */
+[data-theme="dark"] {
+    --bg: #000000;
+    --bg2: #0a0a0a;
+    --bg3: #111111;
+    --bg4: #1a1a1a;
+    --text: #ededed;
+    --text2: #888888;
+    --text3: #666666;
+    --border: #222222;
+    --border2: #333333;
+    --blue-light: rgba(0, 112, 243, 0.15);
+    --red-bg: rgba(238, 0, 0, 0.15);
+    --green-bg: rgba(0, 180, 216, 0.15);
+    --yellow-bg: rgba(245, 166, 35, 0.15);
+    --sel-bg: rgba(0, 112, 243, 0.15);
+    --sel-border: rgba(0, 112, 243, 0.5);
+    --overlay-light: rgba(0, 0, 0, 0.5);
+    --overlay-mid: rgba(0, 0, 0, 0.6);
+    --overlay-dark: rgba(0, 0, 0, 0.7);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 /* ── Base ── */
@@ -84,6 +161,8 @@ body {
     color: var(--text);
     display: flex;
     flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 button, input, select, textarea {
@@ -99,105 +178,31 @@ button, input, select, textarea {
 
 @keyframes slideUp {
     from { transform: translateY(56px); opacity: 0; }
-    to   { transform: translateY(0);    opacity: 1; }
+    to   { transform: translateY(0); opacity: 1; }
 }
 
-/* Modal/popover: scale from slightly below center — nothing appears from nothing */
 @keyframes mIn {
     from { opacity: 0; transform: translateY(8px) scale(0.96); }
-    to   { opacity: 1; transform: translateY(0)   scale(1);    }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* Dropdown/context menu: scales from top-origin */
 @keyframes smIn {
     from { opacity: 0; transform: translateY(-6px) scale(0.95); }
-    to   { opacity: 1; transform: translateY(0)    scale(1);    }
-}
-
-/* Toast: enters from below */
-@keyframes toastIn {
-    from { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.96); }
-    to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1);    }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
 
-@keyframes shimmer {
-    0%   { background-position: -500px 0; }
-    100% { background-position:  500px 0; }
-}
-
-/* pulse: opacity fade — used by row dots, api dot, status dots */
 @keyframes pulse {
     0%, 100% { opacity: 0.4; }
-    50%       { opacity: 1;   }
+    50% { opacity: 1; }
 }
 
-/* pulseDot: scale+fade — used by gtm/ghm sdots */
-@keyframes pulseDot {
-    0%, 100% { opacity: 1; transform: scale(1);    }
-    50%       { opacity: 0.3; transform: scale(0.65); }
-}
-
-/* blink: alias of pulse with stronger contrast */
-@keyframes blink {
-    0%, 100% { opacity: 1;    }
-    50%       { opacity: 0.25; }
-}
-
-@keyframes fabFlash {
-    0%   { box-shadow: 0 4px 18px var(--green-border5); }
-    40%  { box-shadow: 0 0 0 10px var(--green-border3); }
-    100% { box-shadow: 0 4px 18px var(--green-border5); }
-}
-
-/* ── Dark theme (default) ── */
-[data-theme="dark"] {
-    --bg: #000000;
-    --bg2: #080808;
-    --bg3: #0f0f0f;
-    --bg4: #181818;
-    --text: #e5e5e5;
-    --text2: #888888;
-    --text3: #505050;
-    --border: rgba(255, 255, 255, 0.05);
-    --border2: rgba(255, 255, 255, 0.10);
-    --overlay-light: rgba(0, 0, 0, 0.55);
-    --overlay-mid: rgba(0, 0, 0, 0.65);
-    --overlay-dark: rgba(0, 0, 0, 0.75);
-    --focus-ring: 0 0 0 3px rgba(120, 140, 93, 0.35);
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
-    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
-    --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.5), 0 3px 8px rgba(0, 0, 0, 0.3);
-    --green-alpha-1: rgba(120, 140, 93, 0.08);
-    --green-alpha-2: rgba(120, 140, 93, 0.12);
-    --green-alpha-3: rgba(120, 140, 93, 0.16);
-    --green-alpha-4: rgba(120, 140, 93, 0.22);
-    --green-alpha-5: rgba(120, 140, 93, 0.28);
-    --green-alpha-6: rgba(120, 140, 93, 0.35);
-    --green-border: rgba(120, 140, 93, 0.3);
-    --green-border2: rgba(120, 140, 93, 0.38);
-    --green-border3: rgba(120, 140, 93, 0.45);
-    --green-border4: rgba(120, 140, 93, 0.52);
-    --green-border5: rgba(120, 140, 93, 0.6);
-    --red-bg: rgba(184, 50, 40, 0.12);
-}
-
-[data-theme="dark"] table.grid td.dc {
-    background: #111111;
-}
-[data-theme="dark"] table.grid th,
-[data-theme="dark"] table.grid td {
-    border-color: rgba(255, 255, 255, 0.25);
-}
-
-/* ── Accessibility: reduced motion ── */
+/* ── Accessibility ── */
 @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
+    *, *::before, *::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;

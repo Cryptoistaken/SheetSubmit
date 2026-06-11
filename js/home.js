@@ -18,7 +18,7 @@ __ss.renderHome = async function() {
         var card = document.createElement('div');
         card.className = 'file-card';
         card.innerHTML =
-            '<div class="file-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>' +
+            '<div class="file-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>' +
             '<div class="file-card-name">' + __ss.esc(f.name) + '</div>' +
             '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px">' +
             '<span class="file-type-badge ' + td.badgeClass + '">' + __ss.esc(td.badge) + '</span>' +

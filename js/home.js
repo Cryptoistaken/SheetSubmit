@@ -48,6 +48,12 @@ __ss.renderHome = async function() {
             e.stopPropagation();
             if (!state.fileSelectionMode) showFileCtx(e, f.id);
         });
+        card.querySelector('.file-card-dots').addEventListener('mousedown', function(e) {
+            e.stopPropagation();
+        });
+        card.querySelector('.file-card-dots').addEventListener('touchstart', function(e) {
+            e.stopPropagation();
+        }, {passive: true});
 
         dom.filesGrid.appendChild(card);
     });

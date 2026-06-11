@@ -51,9 +51,15 @@ __ss.renderHome = async function() {
         card.querySelector('.file-card-dots').addEventListener('mousedown', function(e) {
             e.stopPropagation();
         });
+        card.querySelector('.file-card-dots').addEventListener('mouseup', function(e) {
+            e.stopPropagation();
+        });
         card.querySelector('.file-card-dots').addEventListener('touchstart', function(e) {
             e.stopPropagation();
         }, {passive: true});
+        card.querySelector('.file-card-dots').addEventListener('touchend', function(e) {
+            e.stopPropagation();
+        });
 
         dom.filesGrid.appendChild(card);
     });

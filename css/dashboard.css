@@ -1,5 +1,5 @@
 /* ── Gear/Profile button ── */
-.gear-btn, .profile-btn {
+.undo-redo-btn, .gear-btn, .profile-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -16,14 +16,19 @@
 
 .profile-btn { overflow: hidden; }
 
-.gear-btn:hover, .profile-btn:hover {
+.undo-redo-btn:hover:not(:disabled), .gear-btn:hover, .profile-btn:hover {
     background: var(--bg3);
     color: var(--text);
     border-color: var(--border);
 }
 
-.gear-btn:active, .profile-btn:active {
+.undo-redo-btn:active:not(:disabled), .gear-btn:active, .profile-btn:active {
     transform: scale(0.97);
+}
+
+.undo-redo-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
 }
 
 .profile-btn .gear-icon { display: block; }

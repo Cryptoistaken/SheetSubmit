@@ -426,6 +426,8 @@ table.grid td.dot-cell:hover {
     background: var(--bg2) !important;
     border-color: var(--border) !important;
     cursor: pointer;
+    padding: 14px 0;
+    transition: background 0.1s;
 }
 
 tr.add-row td:hover {
@@ -434,12 +436,14 @@ tr.add-row td:hover {
 
 td.rh-add {
     font-size: 13px;
-    color: var(--text3);
+    font-weight: 500;
+    color: var(--text2);
     text-align: center;
     position: sticky;
     left: 0;
     background: var(--bg2) !important;
     z-index: 4;
+    letter-spacing: -0.01em;
 }
 
 /* ── Selection states ── */

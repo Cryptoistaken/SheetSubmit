@@ -19,12 +19,15 @@ __ss.renderHome = async function() {
         card.className = 'file-card';
         card.dataset.id = f.id;
         if (state.selectedFiles.has(f.id)) card.classList.add('selected');
+
+        var metaHtml = '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px">' +
+            '<span class="file-type-badge ' + td.badgeClass + '">' + __ss.esc(td.badge) + '</span>' +
+            '<span class="file-card-meta" id="meta-' + f.id + '">...</span></div>';
+
         card.innerHTML =
             '<div class="file-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>' +
             '<div class="file-card-name">' + __ss.esc(f.name) + '</div>' +
-            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px">' +
-            '<span class="file-type-badge ' + td.badgeClass + '">' + __ss.esc(td.badge) + '</span>' +
-            '<span class="file-card-meta">' + (f.rowCount || 0) + ' rows</span></div>' +
+            metaHtml +
             '<button class="file-card-dots" data-id="' + f.id + '">&hellip;</button>';
 
         __ss.attachTapHold(card, {
@@ -62,6 +65,18 @@ __ss.renderHome = async function() {
         });
 
         dom.filesGrid.appendChild(card);
+
+        api.getRows(f.id).then(function(rows) {
+            var meta = document.getElementById('meta-' + f.id);
+            if (!meta) return;
+            var count = 0;
+            if (rows) {
+                count = rows.filter(function(row) {
+                    return td.columns.some(function(c) { return row[c.key]; });
+                }).length;
+            }
+            meta.textContent = count + ' row' + (count !== 1 ? 's' : '');
+        });
     });
 };
 
@@ -112,7 +127,6 @@ function deleteSelectedFiles() {
     });
 }
 
-// ── File selection bar events ──
 if (dom.fileSelDelete) {
     dom.fileSelDelete.addEventListener('click', deleteSelectedFiles);
 }

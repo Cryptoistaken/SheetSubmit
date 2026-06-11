@@ -84,7 +84,10 @@ async function persist() {
 
 // ── Undo / Redo ──
 function pushUndo() {
-    state.undoStack.push(__ss.cloneRows(state.rows));
+    var current = __ss.cloneRows(state.rows);
+    var last = state.undoStack[state.undoStack.length - 1];
+    if (last && JSON.stringify(last) === JSON.stringify(current)) return;
+    state.undoStack.push(current);
     if (state.undoStack.length > 100) state.undoStack.shift();
     state.redoStack = [];
     updateUndoRedo();

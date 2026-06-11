@@ -1,7 +1,9 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 var express = require('express');
 var path = require('path');
 var Redis = require('ioredis');
+
+var ROOT = path.join(__dirname, '..');
 
 var app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -110,11 +112,11 @@ app.get('/api/health', function(req, res) {
 });
 
 // ── Serve static files ──
-app.use(express.static(__dirname));
+app.use(express.static(ROOT));
 
 // ── SPA fallback ──
 app.get('*', function(req, res) {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(ROOT, 'index.html'));
 });
 
 var PORT = process.env.PORT || 3000;

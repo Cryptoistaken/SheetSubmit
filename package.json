@@ -4,8 +4,8 @@
   "private": true,
   "description": "Sheet Submit - Account manager with Redis backend",
   "scripts": {
-    "start": "bun run server.js",
-    "dev": "bun --watch run server.js"
+    "start": "bun run server/index.js",
+    "dev": "bun --watch run server/index.js"
   },
   "dependencies": {
     "express": "^4.18.2",

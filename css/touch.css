@@ -1,0 +1,7 @@
+/* overflow: visible lets absolutely-positioned children protrude from
+   td cells on touch devices. layout.css sets overflow: hidden on td.dc
+   for text clipping; that still works because .cell-text has its own
+   overflow: hidden. */
+body.is-touch table.grid td.dc {
+    overflow: visible;
+}

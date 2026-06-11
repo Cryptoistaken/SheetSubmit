@@ -1,0 +1,15 @@
+{
+  "name": "sheet-submit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sheet Submit - Account manager with Redis backend",
+  "scripts": {
+    "start": "bun run server.js",
+    "dev": "bun --watch run server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ioredis": "^5.3.2",
+    "dotenv": "^16.3.1"
+  }
+}

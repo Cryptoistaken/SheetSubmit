@@ -17,6 +17,8 @@ __ss.renderHome = async function() {
         var td = __ss.getTypeDef(f.type);
         var card = document.createElement('div');
         card.className = 'file-card';
+        card.dataset.id = f.id;
+        if (state.selectedFiles.has(f.id)) card.classList.add('selected');
         card.innerHTML =
             '<div class="file-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>' +
             '<div class="file-card-name">' + __ss.esc(f.name) + '</div>' +
@@ -24,17 +26,84 @@ __ss.renderHome = async function() {
             '<span class="file-type-badge ' + td.badgeClass + '">' + __ss.esc(td.badge) + '</span>' +
             '<span class="file-card-meta">' + (f.rowCount || 0) + ' rows</span></div>' +
             '<button class="file-card-dots" data-id="' + f.id + '">&hellip;</button>';
-        card.addEventListener('click', function(e) {
-            if (e.target.closest('.file-card-dots')) return;
-            __ss.openFile(f.id);
+
+        __ss.attachTapHold(card, {
+            onTap: function(el) {
+                if (state.fileSelectionMode) {
+                    toggleFileSelection(f.id);
+                } else {
+                    __ss.openFile(f.id);
+                }
+            },
+            onHold: function(el) {
+                if (!state.fileSelectionMode) {
+                    enterFileSelectionMode(f.id);
+                } else {
+                    toggleFileSelection(f.id);
+                }
+            }
         });
+
         card.querySelector('.file-card-dots').addEventListener('click', function(e) {
             e.stopPropagation();
-            showFileCtx(e, f.id);
+            if (!state.fileSelectionMode) showFileCtx(e, f.id);
         });
+
         dom.filesGrid.appendChild(card);
     });
 };
+
+// ── File multi-select ──
+function enterFileSelectionMode(fileId) {
+    state.fileSelectionMode = true;
+    state.selectedFiles.clear();
+    state.selectedFiles.add(fileId);
+    updateFileSelBar();
+    __ss.renderHome();
+}
+
+function exitFileSelectionMode() {
+    state.fileSelectionMode = false;
+    state.selectedFiles.clear();
+    if (dom.fileSelBar) dom.fileSelBar.classList.remove('open');
+    __ss.renderHome();
+}
+
+function toggleFileSelection(fileId) {
+    if (state.selectedFiles.has(fileId)) {
+        state.selectedFiles.delete(fileId);
+    } else {
+        state.selectedFiles.add(fileId);
+    }
+    if (state.selectedFiles.size === 0) {
+        exitFileSelectionMode();
+        return;
+    }
+    updateFileSelBar();
+    __ss.renderHome();
+}
+
+function updateFileSelBar() {
+    if (!dom.fileSelBar) return;
+    var count = state.selectedFiles.size;
+    dom.fileSelCount.textContent = count + ' selected';
+    dom.fileSelBar.classList.add('open');
+}
+
+function deleteSelectedFiles() {
+    if (!state.fileSelectionMode) return;
+    var ids = Array.from(state.selectedFiles);
+    Promise.all(ids.map(function(id) { return api.deleteFile(id); })).then(function() {
+        exitFileSelectionMode();
+        __ss.renderHome();
+        __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' deleted');
+    });
+}
+
+// ── File selection bar events ──
+if (dom.fileSelDelete) {
+    dom.fileSelDelete.addEventListener('click', deleteSelectedFiles);
+}
 
 function showFileCtx(e, fileId) {
     state.fileCtxFileId = fileId;
@@ -136,7 +205,7 @@ __ss.createFile = async function(typeKey) {
     __ss.openFile(id);
 };
 
-// ── Context menu event listeners (wired in app.js) ──
+// ── Context menu events ──
 dom.fileCtxRename.addEventListener('click', function() {
     var id = state.fileCtxFileId;
     hideFileCtx();
@@ -183,6 +252,13 @@ dom.typeCancel.addEventListener('click', function() {
 dom.typeOverlay.addEventListener('click', function(e) {
     if (e.target === dom.typeOverlay) {
         dom.typeOverlay.classList.remove('open');
+    }
+});
+
+// ── Exit file selection on Escape ──
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && state.fileSelectionMode) {
+        exitFileSelectionMode();
     }
 });
 

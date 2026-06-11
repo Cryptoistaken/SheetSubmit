@@ -63,6 +63,12 @@ __ss.closeSheet = function() {
     var logo = document.querySelector('.topbar-logo');
     if (logo) logo.style.display = '';
 
+    try {
+        if (window.location.pathname !== '/') {
+            history.pushState(null, '', '/');
+        }
+    } catch(e) {}
+
     __ss.renderHome();
 };
 

@@ -35,6 +35,8 @@ __ss.state = {
     lastCellTap: 0,
     selectionMode: false,
     selectedItems: new Set(),
+    fileSelectionMode: false,
+    selectedFiles: new Set(),
     fileCtxFileId: null,
     renameFileId: null,
     isTouch: 'ontouchstart' in window,

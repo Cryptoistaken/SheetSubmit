@@ -456,7 +456,10 @@ document.addEventListener('click', function() {
 // ── Download xlsx ──
 dom.menuDownload.addEventListener('click', function() {
     dom.sheetMoreMenu.classList.remove('open');
-    if (!state.rows.length) { __ss.showToast('No data'); return; }
+    var hasData = state.rows.some(function(row) {
+        return state.COLUMNS.some(function(c) { return row[c.key]; });
+    });
+    if (!hasData) { __ss.showToast('No data to download'); return; }
     var data = [state.COLUMNS.map(function(c) { return c.label; })];
     state.rows.forEach(function(row) {
         var isEmpty = state.COLUMNS.every(function(c) { return !row[c.key]; });

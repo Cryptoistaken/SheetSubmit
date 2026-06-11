@@ -76,8 +76,40 @@ app.put('/api/files/:id', async function(req, res) {
 
 app.delete('/api/files/:id', async function(req, res) {
     var files = await getJSON('files') || [];
-    files = files.filter(function(f) { return f.id !== req.params.id; });
+    var idx = files.findIndex(function(f) { return f.id === req.params.id; });
+    if (idx === -1) { res.status(404).json({ error: 'not found' }); return; }
+    var file = files.splice(idx, 1)[0];
+    file.deletedAt = Date.now();
+    var archived = await getJSON('archive') || [];
+    archived.unshift(file);
     await setJSON('files', files);
+    await setJSON('archive', archived);
+    res.json({ ok: true });
+});
+
+// ── API: Archive ──
+app.get('/api/archive', async function(req, res) {
+    var archived = await getJSON('archive') || [];
+    res.json(archived);
+});
+
+app.post('/api/archive/:id/restore', async function(req, res) {
+    var archived = await getJSON('archive') || [];
+    var idx = archived.findIndex(function(f) { return f.id === req.params.id; });
+    if (idx === -1) { res.status(404).json({ error: 'not found' }); return; }
+    var file = archived.splice(idx, 1)[0];
+    delete file.deletedAt;
+    var files = await getJSON('files') || [];
+    files.unshift(file);
+    await setJSON('archive', archived);
+    await setJSON('files', files);
+    res.json({ ok: true });
+});
+
+app.delete('/api/archive/:id', async function(req, res) {
+    var archived = await getJSON('archive') || [];
+    archived = archived.filter(function(f) { return f.id !== req.params.id; });
+    await setJSON('archive', archived);
     await delKey('rows:' + req.params.id);
     await delKey('undo:' + req.params.id);
     await delKey('redo:' + req.params.id);

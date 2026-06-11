@@ -183,32 +183,6 @@
     color: var(--text3);
 }
 
-.file-card-dots {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 24px;
-    height: 24px;
-    border-radius: var(--r);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text3);
-    font-size: 16px;
-    font-weight: 500;
-    cursor: pointer;
-    background: transparent;
-    border: none;
-    line-height: 1;
-    padding: 0;
-    transition: background 0.1s, color 0.1s;
-}
-
-.file-card-dots:hover {
-    background: var(--bg3);
-    color: var(--text);
-}
-
 @media (hover: none) {
     .file-card { min-height: 90px; }
 }

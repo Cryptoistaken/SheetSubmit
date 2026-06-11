@@ -81,6 +81,10 @@
         .sheet-more-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 13px; font-weight: 500; border-radius: 4px; cursor: pointer; color: var(--text); transition: background 0.08s; white-space: nowrap; width: 100%; border: none; background: none; text-align: left; }
         .sheet-more-item:hover { background: var(--bg3); }
 
+        .file-card-actions { display: flex; align-items: center; gap: 2px; position: absolute; top: 7px; right: 7px; }
+        .file-card-dl, .file-card-dots { width: 24px; height: 24px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--text3); cursor: pointer; background: transparent; border: none; transition: background 0.1s, color 0.1s; padding: 0; }
+        .file-card-dl:hover, .file-card-dots:hover { background: var(--bg3); color: var(--text); }
+
         .file-card.selected { border-color: var(--blue) !important; background: var(--blue-light) !important; }
         .file-sel-bar { position: fixed; z-index: 600; bottom: 12px; left: 8px; right: 8px; }
     </style>
@@ -138,6 +142,7 @@
 <div id="homeView">
     <div class="home-tabs" id="homeTabs">
         <button class="home-tab active" data-htab="files">My Files</button>
+        <button class="home-tab" data-htab="archive">Archive</button>
     </div>
     <div class="home-pane" id="homePaneFiles">
         <div id="emptyState" class="empty-state">
@@ -147,12 +152,13 @@
         </div>
         <div class="files-grid" id="filesGrid"></div>
     </div>
-
-    <div class="sel-bar file-sel-bar" id="fileSelBar">
-        <span class="sel-bar-count" id="fileSelCount">0 selected</span>
-        <div class="sel-bar-actions">
-            <button class="sel-btn danger" id="fileSelDelete">Delete</button>
+    <div class="home-pane" id="homePaneArchive" style="display:none">
+        <div id="archiveEmptyState" class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+            <div class="empty-state-title">No archived files</div>
+            <div class="empty-state-sub">Deleted files appear here for 30 days</div>
         </div>
+        <div class="files-grid" id="archiveGrid"></div>
     </div>
 </div>
 
@@ -169,13 +175,12 @@
         </div>
     </div>
 
-    <div class="sel-bar" id="selBar">
-        <span class="sel-bar-count" id="selCount">0 selected</span>
+    <div class="sel-bar" id="fileSelBar">
+        <span class="sel-bar-count" id="fileSelCount">0 selected</span>
         <div class="sel-bar-actions">
-            <button class="sel-btn danger" id="selDelete">Delete</button>
-            <button class="sel-btn" id="selCopy">Copy</button>
-            <button class="sel-btn" id="selSelectAll">Select All</button>
-            <button class="sel-btn" id="selUnselectAll">Unselect All</button>
+            <button class="sel-btn" id="fileSelSelectAll">Select All</button>
+            <button class="sel-btn" id="fileSelUnselectAll">Unselect All</button>
+            <button class="sel-btn danger" id="fileSelDelete">Delete</button>
         </div>
     </div>
 </div>
@@ -225,6 +230,11 @@
 <div class="file-ctx-popup" id="fileCtxPopup">
     <div class="file-ctx-item" id="fileCtxRename">Rename</div>
     <div class="file-ctx-item danger" id="fileCtxDelete">Delete</div>
+</div>
+
+<div class="file-ctx-popup" id="archiveCtxPopup">
+    <div class="file-ctx-item" id="archiveCtxRestore">Restore</div>
+    <div class="file-ctx-item danger" id="archiveCtxDelete">Delete Permanently</div>
 </div>
 
 <button class="home-fab" id="homeFab" aria-label="Create file">

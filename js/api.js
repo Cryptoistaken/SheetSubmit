@@ -40,6 +40,9 @@ __ss.api = {
     getStack: function(id, name) { return get('/files/' + id + '/stack/' + name); },
     saveStack: function(id, name, stack) { return put('/files/' + id + '/stack/' + name, stack); },
     health: function() { return get('/health'); },
+    getArchive: function() { return get('/archive'); },
+    restoreFile: function(id) { return post('/archive/' + id + '/restore'); },
+    permanentDelete: function(id) { return del('/archive/' + id); },
 };
 
 })();

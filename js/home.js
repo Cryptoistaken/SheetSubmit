@@ -10,9 +10,9 @@ __ss.renderHome = async function() {
     dom.filesGrid.innerHTML = '';
     if (files.length === 0) {
         dom.emptyState.style.display = 'flex';
-        return;
+    } else {
+        dom.emptyState.style.display = 'none';
     }
-    dom.emptyState.style.display = 'none';
     files.forEach(function(f) {
         var td = __ss.getTypeDef(f.type);
         var card = document.createElement('div');
@@ -28,7 +28,10 @@ __ss.renderHome = async function() {
             '<div class="file-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>' +
             '<div class="file-card-name">' + __ss.esc(f.name) + '</div>' +
             metaHtml +
-            '<button class="file-card-dots" data-id="' + f.id + '">&hellip;</button>';
+            '<div class="file-card-actions">' +
+            '<button class="file-card-dl" data-id="' + f.id + '" title="Download xlsx"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>' +
+            '<button class="file-card-dots" data-id="' + f.id + '">&hellip;</button>' +
+            '</div>';
 
         __ss.attachTapHold(card, {
             onTap: function(el) {
@@ -51,17 +54,16 @@ __ss.renderHome = async function() {
             e.stopPropagation();
             if (!state.fileSelectionMode) showFileCtx(e, f.id);
         });
-        card.querySelector('.file-card-dots').addEventListener('mousedown', function(e) {
-            e.stopPropagation();
+        ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(function(evt) {
+            card.querySelector('.file-card-dots').addEventListener(evt, function(e) { e.stopPropagation(); });
         });
-        card.querySelector('.file-card-dots').addEventListener('mouseup', function(e) {
+
+        card.querySelector('.file-card-dl').addEventListener('click', function(e) {
             e.stopPropagation();
+            downloadFile(f.id, f.name);
         });
-        card.querySelector('.file-card-dots').addEventListener('touchstart', function(e) {
-            e.stopPropagation();
-        }, {passive: true});
-        card.querySelector('.file-card-dots').addEventListener('touchend', function(e) {
-            e.stopPropagation();
+        ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(function(evt) {
+            card.querySelector('.file-card-dl').addEventListener(evt, function(e) { e.stopPropagation(); });
         });
 
         dom.filesGrid.appendChild(card);
@@ -79,6 +81,27 @@ __ss.renderHome = async function() {
         });
     });
 };
+
+function downloadFile(id, name) {
+    api.getRows(id).then(function(rows) {
+        if (!rows || !rows.length) { __ss.showToast('No data'); return; }
+        api.getFiles().then(function(files) {
+            var f = files.find(function(x) { return x.id === id; });
+            var td = __ss.getTypeDef(f ? f.type : 'ig_cookie');
+            var data = [td.columns.map(function(c) { return c.label; })];
+            rows.forEach(function(row) {
+                var isEmpty = td.columns.every(function(c) { return !row[c.key]; });
+                if (!isEmpty) data.push(td.columns.map(function(c) { return row[c.key] || ''; }));
+            });
+            if (data.length < 2) { __ss.showToast('No data'); return; }
+            var ws = XLSX.utils.aoa_to_sheet(data);
+            var wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+            XLSX.writeFile(wb, (name || 'export') + '.xlsx');
+            __ss.showToast('Downloaded');
+        });
+    });
+}
 
 // ── File multi-select ──
 function enterFileSelectionMode(fileId) {
@@ -117,28 +140,40 @@ function updateFileSelBar() {
     dom.fileSelBar.classList.add('open');
 }
 
+function selectAllFiles() {
+    api.getFiles().then(function(files) {
+        files.forEach(function(f) { state.selectedFiles.add(f.id); });
+        updateFileSelBar();
+        __ss.renderHome();
+    });
+}
+
+function unselectAllFiles() {
+    state.selectedFiles.clear();
+    exitFileSelectionMode();
+}
+
 function deleteSelectedFiles() {
     if (!state.fileSelectionMode) return;
     var ids = Array.from(state.selectedFiles);
     Promise.all(ids.map(function(id) { return api.deleteFile(id); })).then(function() {
         exitFileSelectionMode();
         __ss.renderHome();
-        __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' deleted');
+        __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' archived');
     });
 }
 
-if (dom.fileSelDelete) {
-    dom.fileSelDelete.addEventListener('click', deleteSelectedFiles);
-}
+if (dom.fileSelDelete) dom.fileSelDelete.addEventListener('click', deleteSelectedFiles);
+if (dom.fileSelSelectAll) dom.fileSelSelectAll.addEventListener('click', selectAllFiles);
+if (dom.fileSelUnselectAll) dom.fileSelUnselectAll.addEventListener('click', unselectAllFiles);
 
+// ── Context menu ──
 function showFileCtx(e, fileId) {
     state.fileCtxFileId = fileId;
     var rect = e.target.getBoundingClientRect();
     var left = rect.left;
     var popupW = 140;
-    if (left + popupW > window.innerWidth - 8) {
-        left = window.innerWidth - popupW - 8;
-    }
+    if (left + popupW > window.innerWidth - 8) left = window.innerWidth - popupW - 8;
     dom.fileCtxPopup.style.left = left + 'px';
     dom.fileCtxPopup.style.top = (rect.bottom + 4) + 'px';
     dom.fileCtxPopup.classList.add('open');
@@ -152,7 +187,7 @@ function hideFileCtx() {
 __ss.deleteFile = async function(id) {
     await api.deleteFile(id);
     __ss.renderHome();
-    __ss.showToast('File deleted');
+    __ss.showToast('File archived');
 };
 
 __ss.promptRenameFile = function(id) {
@@ -175,12 +210,95 @@ __ss.commitRename = async function() {
     await api.updateFile(state.renameFileId, { name: name });
     dom.renameOverlay.classList.remove('open');
     state.renameFileId = null;
-    if (state.currentFileId === f.id) {
-        dom.sheetTitleBtn.textContent = name;
-    }
+    if (state.currentFileId === f.id) dom.sheetTitleBtn.textContent = name;
     __ss.renderHome();
     __ss.showToast('Renamed');
 };
+
+// ── Home tabs ──
+var htabs = dom.homeTabs ? dom.homeTabs.querySelectorAll('.home-tab') : [];
+htabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+        htabs.forEach(function(t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        var isArchive = tab.dataset.htab === 'archive';
+        if (dom.homePaneFiles) dom.homePaneFiles.style.display = isArchive ? 'none' : '';
+        if (dom.homePaneArchive) dom.homePaneArchive.style.display = isArchive ? '' : 'none';
+        if (isArchive) renderArchive();
+        else __ss.renderHome();
+    });
+});
+
+// ── Archive ──
+function renderArchive() {
+    api.getArchive().then(function(archived) {
+        dom.archiveGrid.innerHTML = '';
+        if (!archived.length) {
+            dom.archiveEmptyState.style.display = 'flex';
+            return;
+        }
+        dom.archiveEmptyState.style.display = 'none';
+        archived.forEach(function(f) {
+            var td = __ss.getTypeDef(f.type);
+            var daysLeft = Math.max(0, 30 - Math.floor((Date.now() - (f.deletedAt || 0)) / 86400000));
+            var card = document.createElement('div');
+            card.className = 'file-card';
+            card.innerHTML =
+                '<div class="file-card-icon" style="opacity:0.5"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/></svg></div>' +
+                '<div class="file-card-name" style="opacity:0.7">' + __ss.esc(f.name) + '</div>' +
+                '<span class="file-card-meta">' + daysLeft + ' days left</span>' +
+                '<div class="file-card-actions">' +
+                '<button class="file-card-dots archive-dots" data-id="' + f.id + '">&hellip;</button>' +
+                '</div>';
+
+            card.querySelector('.archive-dots').addEventListener('click', function(e) {
+                e.stopPropagation();
+                showArchiveCtx(e, f.id);
+            });
+            ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(function(evt) {
+                card.querySelector('.archive-dots').addEventListener(evt, function(ev) { ev.stopPropagation(); });
+            });
+
+            dom.archiveGrid.appendChild(card);
+        });
+    });
+}
+
+function showArchiveCtx(e, fileId) {
+    state.archiveCtxFileId = fileId;
+    var rect = e.target.getBoundingClientRect();
+    var left = rect.left;
+    var popupW = 180;
+    if (left + popupW > window.innerWidth - 8) left = window.innerWidth - popupW - 8;
+    dom.archiveCtxPopup.style.left = left + 'px';
+    dom.archiveCtxPopup.style.top = (rect.bottom + 4) + 'px';
+    dom.archiveCtxPopup.classList.add('open');
+}
+
+dom.archiveCtxRestore.addEventListener('click', function() {
+    var id = state.archiveCtxFileId;
+    dom.archiveCtxPopup.classList.remove('open');
+    if (!id) return;
+    api.restoreFile(id).then(function() {
+        __ss.showToast('File restored');
+        renderArchive();
+    });
+});
+
+dom.archiveCtxDelete.addEventListener('click', function() {
+    var id = state.archiveCtxFileId;
+    dom.archiveCtxPopup.classList.remove('open');
+    if (!id) return;
+    api.permanentDelete(id).then(function() {
+        __ss.showToast('Permanently deleted');
+        renderArchive();
+    });
+});
+
+document.addEventListener('click', function(e) {
+    if (!dom.fileCtxPopup.contains(e.target)) hideFileCtx();
+    if (!dom.archiveCtxPopup.contains(e.target)) dom.archiveCtxPopup.classList.remove('open');
+});
 
 // ── File type modal ──
 __ss.showTypeModal = function() {
@@ -221,7 +339,6 @@ __ss.createFile = async function(typeKey) {
     if (navigator.clipboard && navigator.clipboard.read) {
         navigator.clipboard.readText().then(function() {}).catch(function() {});
     }
-
     var td = __ss.getTypeDef(typeKey);
     var name = td.label + ' ' + __ss.todayStr();
     var files = await api.getFiles();
@@ -232,74 +349,36 @@ __ss.createFile = async function(typeKey) {
     }
     var id = __ss.genId();
     await api.createFile({ id: id, name: name, type: typeKey, rowCount: 100, createdAt: Date.now(), updatedAt: Date.now() });
-
     state.COLUMNS = td.columns;
     var emptyRows = [];
-    for (var i = 0; i < 100; i++) {
-        emptyRows.push(__ss.makeEmptyRow(state.COLUMNS));
-    }
+    for (var i = 0; i < 100; i++) emptyRows.push(__ss.makeEmptyRow(state.COLUMNS));
     await api.saveRows(id, emptyRows);
-
     __ss.renderHome();
     __ss.showToast(td.label + ' file created');
     __ss.openFile(id);
 };
 
-// ── Context menu events ──
-dom.fileCtxRename.addEventListener('click', function() {
-    var id = state.fileCtxFileId;
-    hideFileCtx();
-    if (id) __ss.promptRenameFile(id);
-});
-
-dom.fileCtxDelete.addEventListener('click', function() {
-    var id = state.fileCtxFileId;
-    hideFileCtx();
-    if (id) __ss.deleteFile(id);
-});
-
-document.addEventListener('click', function(e) {
-    if (!dom.fileCtxPopup.contains(e.target)) {
-        hideFileCtx();
-    }
-});
-
-// ── Rename modal events ──
+// ── Rename modal ──
 dom.renameCancel.addEventListener('click', function() {
     dom.renameOverlay.classList.remove('open');
     state.renameFileId = null;
 });
-
 dom.renameConfirm.addEventListener('click', __ss.commitRename);
-
 dom.renameInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') { e.preventDefault(); __ss.commitRename(); }
     if (e.key === 'Escape') { dom.renameOverlay.classList.remove('open'); state.renameFileId = null; }
 });
-
 dom.renameOverlay.addEventListener('click', function(e) {
-    if (e.target === dom.renameOverlay) {
-        dom.renameOverlay.classList.remove('open');
-        state.renameFileId = null;
-    }
+    if (e.target === dom.renameOverlay) { dom.renameOverlay.classList.remove('open'); state.renameFileId = null; }
 });
 
-// ── Type modal events ──
-dom.typeCancel.addEventListener('click', function() {
-    dom.typeOverlay.classList.remove('open');
-});
+// ── Type modal ──
+dom.typeCancel.addEventListener('click', function() { dom.typeOverlay.classList.remove('open'); });
+dom.typeOverlay.addEventListener('click', function(e) { if (e.target === dom.typeOverlay) dom.typeOverlay.classList.remove('open'); });
 
-dom.typeOverlay.addEventListener('click', function(e) {
-    if (e.target === dom.typeOverlay) {
-        dom.typeOverlay.classList.remove('open');
-    }
-});
-
-// ── Exit file selection on Escape ──
+// ── Escape exits file selection ──
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && state.fileSelectionMode) {
-        exitFileSelectionMode();
-    }
+    if (e.key === 'Escape' && state.fileSelectionMode) exitFileSelectionMode();
 });
 
 // ── Home xlsx upload ──
@@ -315,15 +394,12 @@ dom.xlsxFileInputHome.addEventListener('change', function(e) {
         if (json.length < 2) { __ss.showToast('File is empty'); return; }
         var headers = json[0].map(function(h) { return String(h).toLowerCase().trim(); });
         var td = __ss.FILE_TYPES['ig_cookie'];
-        var matchedCols = td.columns.filter(function(c) {
-            return headers.indexOf(c.key.toLowerCase()) !== -1 || headers.indexOf(c.label.toLowerCase()) !== -1;
-        });
-        if (matchedCols.length === 0) { __ss.showToast('Columns don\'t match any file type'); return; }
-        var colMap = matchedCols.map(function(c) {
+        var colMap = td.columns.map(function(c) {
             var idx = headers.indexOf(c.key.toLowerCase());
             if (idx === -1) idx = headers.indexOf(c.label.toLowerCase());
             return { key: c.key, idx: idx };
-        });
+        }).filter(function(cm) { return cm.idx !== -1; });
+        if (colMap.length === 0) { __ss.showToast('Columns don\'t match any file type'); return; }
         var rows = [];
         for (var i = 1; i < json.length; i++) {
             var row = {};
@@ -338,9 +414,7 @@ dom.xlsxFileInputHome.addEventListener('change', function(e) {
         if (rows.length === 0) { __ss.showToast('No data rows found'); return; }
         var name = file.name.replace(/\.xlsx?$/i, '') || 'Import ' + __ss.todayStr();
         api.getFiles().then(function(files) {
-            if (files.some(function(f) { return f.name === name; })) {
-                name = name + ' (' + __ss.genId().slice(0, 4) + ')';
-            }
+            if (files.some(function(f) { return f.name === name; })) name = name + ' (' + __ss.genId().slice(0, 4) + ')';
             var id = __ss.genId();
             api.createFile({ id: id, name: name, type: 'ig_cookie', rowCount: rows.length, createdAt: Date.now(), updatedAt: Date.now() }).then(function() {
                 api.saveRows(id, rows).then(function() {

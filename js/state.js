@@ -18,6 +18,9 @@ var ids = [
     'sheetMoreBtn', 'sheetMoreMenu', 'menuDownload', 'menuUpload',
     'uploadModeOverlay', 'uploadReplace', 'uploadAppend', 'uploadModeCancel',
     'xlsxFileInput', 'xlsxFileInputHome',
+    'fileSelSelectAll', 'fileSelUnselectAll',
+    'homePaneArchive', 'archiveGrid', 'archiveEmptyState',
+    'archiveCtxPopup', 'archiveCtxRestore', 'archiveCtxDelete',
 ];
 ids.forEach(function(id) {
     var el = document.getElementById(id);

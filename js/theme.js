@@ -2,7 +2,7 @@
     var THEME_KEY = 'ss_theme';
 
     function getTheme() {
-        return localStorage.getItem(THEME_KEY) || 'dark';
+        return localStorage.getItem(THEME_KEY) || 'light';
     }
 
     function setTheme(theme) {

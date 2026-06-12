@@ -19,7 +19,7 @@ git push -u origin main
 4. Select your `sheetsubmit` repo
 
 ### 3. Add Redis
-1. In your project, click "New" > "Database" > "Redis"
+1. In your project, click "New" > "Database" > 
 2. Railway auto-generates `REDIS_URL` variable
 
 ### 4. Set Environment Variables

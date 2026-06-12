@@ -50,7 +50,9 @@ function generateToken() {
 
 // ── Telegram Bot ──
 var BOT_TOKEN = process.env.TG_BOT_TOKEN;
-var APP_URL = process.env.APP_URL || 'http://localhost:' + (process.env.PORT || 3000);
+var APP_URL = process.env.RAILWAY_PUBLIC_DOMAIN
+    ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN
+    : (process.env.APP_URL || 'http://localhost:' + (process.env.PORT || 3000));
 var TG_API = 'https://api.telegram.org/bot' + BOT_TOKEN;
 
 async function tg(method, body) {
@@ -382,20 +384,14 @@ if (BOT_TOKEN) {
             console.log('Bot: @' + botUsername);
             await setJSON('bot:info', { username: botUsername });
 
-            // Detect Railway public URL
-            var publicDomain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.APP_URL;
-            if (publicDomain && publicDomain.startsWith('http')) {
-                var webhookUrl = publicDomain.replace(/\/$/, '') + '/api/bot/webhook';
-                console.log('Setting webhook: ' + webhookUrl);
-                var wh = await tg('setWebhook', { url: webhookUrl, allowed_updates: ['message', 'callback_query'] });
-                if (wh.ok) {
-                    console.log('Webhook set successfully');
-                    return;
-                }
-                console.log('Webhook failed, falling back to polling');
-            } else {
-                console.log('No public URL, using polling');
+            var webhookUrl = APP_URL + '/api/bot/webhook';
+            console.log('Setting webhook: ' + webhookUrl);
+            var wh = await tg('setWebhook', { url: webhookUrl, allowed_updates: ['message', 'callback_query'] });
+            if (wh.ok) {
+                console.log('Webhook set successfully');
+                return;
             }
+            console.log('Webhook failed, falling back to polling');
         } catch(e) {
             console.log('Webhook setup failed: ' + e.message + ', falling back to polling');
         }

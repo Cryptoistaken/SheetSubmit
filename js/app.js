@@ -23,6 +23,7 @@ function showLogin() {
     document.getElementById('homeView').style.display = 'none';
     document.getElementById('sheetView').style.display = 'none';
     document.querySelector('.topbar').style.display = 'none';
+    document.getElementById('homeFab').classList.add('hidden');
 
     fetch('/api/bot/info').then(function(r) { return r.json(); }).then(function(info) {
         if (info.username) {
@@ -36,6 +37,7 @@ function showApp(user) {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('homeView').style.display = 'flex';
     document.querySelector('.topbar').style.display = 'flex';
+    document.getElementById('homeFab').classList.remove('hidden');
 
     // Set user profile
     if (user) {

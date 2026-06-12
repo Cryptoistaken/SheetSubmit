@@ -408,9 +408,7 @@ if (BOT_TOKEN) {
             if (cb.data === 'login') {
                 var token = generateToken();
                 var url = APP_URL + '/api/auth/telegram?token=' + token;
-                var copyKey = crypto.randomBytes(6).toString('hex');
                 await setJSONex('login:' + token, { chatId: cb.message.chat.id }, 900000);
-                await setJSONex('cpy:' + copyKey, token, 900000);
                 await tg('editMessageText', {
                     chat_id: cb.message.chat.id,
                     message_id: cb.message.message_id,
@@ -418,20 +416,11 @@ if (BOT_TOKEN) {
                     reply_markup: {
                         inline_keyboard: [
                             [{ text: 'Open URL', url: url }],
-                            [{ text: 'Copy URL', callback_data: 'cpy:' + copyKey }]
+                            [{ text: 'Copy URL', copy_text: { text: url } }]
                         ]
                     }
                 });
                 await tg('answerCallbackQuery', { callback_query_id: cb.id });
-            } else if (cb.data && cb.data.startsWith('cpy:')) {
-                var copyKey = cb.data.replace('cpy:', '');
-                var token = await getJSON('cpy:' + copyKey);
-                if (token) {
-                    var url = APP_URL + '/api/auth/telegram?token=' + token;
-                    await tg('answerCallbackQuery', { callback_query_id: cb.id, text: url });
-                } else {
-                    await tg('answerCallbackQuery', { callback_query_id: cb.id, text: 'Link expired' });
-                }
             }
         }
     }

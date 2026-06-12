@@ -410,10 +410,11 @@ if (BOT_TOKEN) {
                 var token = await getJSON('cpy:' + copyKey);
                 if (token) {
                     var url = APP_URL + '/api/auth/telegram?token=' + token;
-                    await tg('sendMessage', { chat_id: cb.message.chat.id, text: '<code>' + url + '</code>', parse_mode: 'HTML' });
+                    await tg('answerCallbackQuery', { callback_query_id: cb.id, text: url });
                     await delKey('cpy:' + copyKey);
+                } else {
+                    await tg('answerCallbackQuery', { callback_query_id: cb.id, text: 'Link expired' });
                 }
-                await tg('answerCallbackQuery', { callback_query_id: cb.id });
             }
         }
     }

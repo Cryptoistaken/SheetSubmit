@@ -274,6 +274,7 @@ app.put('/api/files/:id/persist', requireAuth, requireFileAccess, async function
     var body = req.body;
     var promises = [];
     if (body.rows !== undefined) promises.push(setJSON('rows:' + req.params.id, body.rows));
+    if (body.logs !== undefined) promises.push(setJSON('logs:' + req.params.id, body.logs));
     if (body.undo !== undefined) promises.push(setJSON('undo:' + req.params.id, body.undo));
     if (body.redo !== undefined) promises.push(setJSON('redo:' + req.params.id, body.redo));
     if (body.dataCount !== undefined) {

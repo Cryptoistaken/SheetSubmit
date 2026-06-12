@@ -156,23 +156,46 @@ function unselectAllFiles() {
     exitFileSelectionMode();
 }
 
-function deleteSelectedFiles() {
+async function deleteSelectedFiles() {
     if (!state.fileSelectionMode) return;
     var ids = Array.from(state.selectedFiles);
-    if (!confirm('Move ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' to archive?')) return;
-    Promise.all(ids.map(function(id) { return api.deleteFile(id); })).then(function() {
-        exitFileSelectionMode();
-        __ss.renderHome();
-        __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' archived');
-    });
+    var ok = await __ss.showConfirm('Move ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' to archive?', 'Archive');
+    if (!ok) return;
+    await Promise.all(ids.map(function(id) { return api.deleteFile(id); }));
+    exitFileSelectionMode();
+    __ss.renderHome();
+    __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' archived');
 }
 
 if (dom.fileSelDelete) dom.fileSelDelete.addEventListener('click', deleteSelectedFiles);
 if (dom.fileSelSelectAll) dom.fileSelSelectAll.addEventListener('click', selectAllFiles);
 if (dom.fileSelUnselectAll) dom.fileSelUnselectAll.addEventListener('click', unselectAllFiles);
 
+__ss.showConfirm = function(message, okText) {
+    return new Promise(function(resolve) {
+        dom.confirmMessage.textContent = message;
+        dom.confirmOk.textContent = okText || 'Delete';
+        dom.confirmOverlay.classList.add('open');
+        function cleanup() {
+            dom.confirmOverlay.classList.remove('open');
+            dom.confirmOk.removeEventListener('click', onOk);
+            dom.confirmCancel.removeEventListener('click', onCancel);
+            dom.confirmOverlay.removeEventListener('click', onOverlay);
+        }
+        function onOk() { cleanup(); resolve(true); }
+        function onCancel() { cleanup(); resolve(false); }
+        function onOverlay(e) {
+            if (e.target === dom.confirmOverlay) { cleanup(); resolve(false); }
+        }
+        dom.confirmOk.addEventListener('click', onOk);
+        dom.confirmCancel.addEventListener('click', onCancel);
+        dom.confirmOverlay.addEventListener('click', onOverlay);
+    });
+};
+
 __ss.deleteFile = async function(id) {
-    if (!confirm('Move this file to archive?')) return;
+    var ok = await __ss.showConfirm('Move this file to archive?', 'Archive');
+    if (!ok) return;
     await api.deleteFile(id);
     __ss.renderHome();
     __ss.showToast('File archived');
@@ -281,13 +304,13 @@ function renderArchive() {
                 card.querySelector('.archive-restore').addEventListener(evt, function(ev) { ev.stopPropagation(); });
             });
 
-            card.querySelector('.archive-del').addEventListener('click', function(e) {
+            card.querySelector('.archive-del').addEventListener('click', async function(e) {
                 e.stopPropagation();
-                if (!confirm('Permanently delete this file?')) return;
-                api.permanentDelete(f.id).then(function() {
-                    __ss.showToast('Permanently deleted');
-                    renderArchive();
-                });
+                var ok = await __ss.showConfirm('Permanently delete this file?', 'Delete Forever');
+                if (!ok) return;
+                await api.permanentDelete(f.id);
+                __ss.showToast('Permanently deleted');
+                renderArchive();
             });
             ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(function(evt) {
                 card.querySelector('.archive-del').addEventListener(evt, function(ev) { ev.stopPropagation(); });
@@ -350,28 +373,28 @@ if (dom.archiveSelUnselectAll) {
 }
 
 if (dom.archiveSelRestore) {
-    dom.archiveSelRestore.addEventListener('click', function() {
+    dom.archiveSelRestore.addEventListener('click', async function() {
         if (!state.archiveSelectionMode) return;
         var ids = Array.from(state.selectedArchiveFiles);
-        if (!confirm('Restore ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + '?')) return;
-        api.batchRestore(ids).then(function() {
-            exitArchiveSelectionMode();
-            renderArchive();
-            __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' restored');
-        });
+        var ok = await __ss.showConfirm('Restore ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + '?', 'Restore');
+        if (!ok) return;
+        await api.batchRestore(ids);
+        exitArchiveSelectionMode();
+        renderArchive();
+        __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' restored');
     });
 }
 
 if (dom.archiveSelDelete) {
-    dom.archiveSelDelete.addEventListener('click', function() {
+    dom.archiveSelDelete.addEventListener('click', async function() {
         if (!state.archiveSelectionMode) return;
         var ids = Array.from(state.selectedArchiveFiles);
-        if (!confirm('Permanently delete ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + '?')) return;
-        api.batchDelete(ids).then(function() {
-            exitArchiveSelectionMode();
-            renderArchive();
-            __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' permanently deleted');
-        });
+        var ok = await __ss.showConfirm('Permanently delete ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + '?', 'Delete Forever');
+        if (!ok) return;
+        await api.batchDelete(ids);
+        exitArchiveSelectionMode();
+        renderArchive();
+        __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' permanently deleted');
     });
 }
 

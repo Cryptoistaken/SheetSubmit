@@ -91,6 +91,7 @@ async function persist() {
     }).length;
     await api.persist(state.currentFileId, {
         rows: trimmed,
+        logs: state.apiLogs,
         undo: state.undoStack,
         redo: state.redoStack,
         dataCount: dataCount

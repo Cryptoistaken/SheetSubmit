@@ -21,6 +21,7 @@ var ids = [
     'xlsxFileInput', 'xlsxFileInputHome',
     'syncToggle', 'syncDot',
     'fileSelSelectAll', 'fileSelUnselectAll',
+    'confirmOverlay', 'confirmMessage', 'confirmCancel', 'confirmOk',
     'homePaneArchive', 'archiveGrid', 'archiveEmptyState',
     'archiveCtxPopup', 'archiveCtxRestore', 'archiveCtxDelete',
     'archiveSelBar', 'archiveSelCount',

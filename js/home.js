@@ -205,6 +205,17 @@ __ss.commitRename = async function() {
 
 // ── Context menu (archive only) ──
 function showArchiveCtx(e, fileId) {
+    state.archiveCtxFileId = fileId;
+    var rect = e.target.getBoundingClientRect();
+    var left = rect.left;
+    var popupW = 180;
+    if (left + popupW > window.innerWidth - 8) left = window.innerWidth - popupW - 8;
+    dom.archiveCtxPopup.style.left = left + 'px';
+    dom.archiveCtxPopup.style.top = (rect.bottom + 4) + 'px';
+    dom.archiveCtxPopup.classList.add('open');
+}
+
+// ── Home tabs ──
 var htabs = dom.homeTabs ? dom.homeTabs.querySelectorAll('.home-tab') : [];
 htabs.forEach(function(tab) {
     tab.addEventListener('click', function() {

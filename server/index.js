@@ -404,62 +404,56 @@ if (BOT_TOKEN) {
         }
     }
 
-    // Use long-polling (more reliable than webhook on cloud platforms)
+    // Webhook endpoint for Telegram updates
+    app.post('/webhook/tg', function(req, res) {
+        res.sendStatus(200);
+        handleBotUpdate(req.body);
+    });
+
+    // Use webhook on Railway (public URL), fallback to polling locally
+    var usingWebhook = false;
+
     async function startBot() {
         try {
             var info = await tg('getMe');
             if (!info.ok) throw new Error('getMe failed');
             botUsername = info.result.username;
-            console.log('Bot: @' + botUsername + ' id=' + info.result.id);
+            console.log('[Bot] @' + botUsername + ' id=' + info.result.id);
             await setJSON('bot:info', { username: botUsername });
 
-            await tg('deleteWebhook');
-            var webhookInfo = await tg('getWebhookInfo');
-            console.log('Webhook info: url=' + (webhookInfo.result ? webhookInfo.result.url : 'unknown') + ' pending_count=' + (webhookInfo.result ? webhookInfo.result.pending_update_count : '?') + ' has_custom_certificate=' + (webhookInfo.result ? webhookInfo.result.has_custom_certificate : '?'));
-            console.log('Starting long-polling');
-
-            var pollingOffset = 0;
-            var pollFailCount = 0;
-            var pollTotal = 0;
-            var lastStateLog = Date.now();
-            async function poll() {
-                pollTotal++;
-                var now = Date.now();
-                if (now - lastStateLog > 30000) {
-                    console.log('[Bot] State: offset=' + pollingOffset + ' total_polls=' + pollTotal + ' fails=' + pollFailCount + ' next_delay=' + (pollFailCount > 5 ? 5000 : 1000) + 'ms');
-                    lastStateLog = now;
+            var hasPublicUrl = !!(process.env.RAILWAY_PUBLIC_DOMAIN || process.env.APP_URL);
+            if (hasPublicUrl) {
+                var webhookUrl = APP_URL + '/webhook/tg';
+                var result = await tg('setWebhook', { url: webhookUrl, allowed_updates: ['message', 'callback_query'] });
+                if (result.ok) {
+                    usingWebhook = true;
+                    console.log('[Bot] Webhook set to ' + webhookUrl);
+                } else {
+                    console.log('[Bot] Webhook failed, falling back to polling: ' + (result.description || ''));
                 }
-                try {
-                    var data = await tg('getUpdates', { offset: pollingOffset, timeout: 30, allowed_updates: ['message', 'callback_query'] });
-                    if (data.ok && data.result) {
-                        pollFailCount = 0;
-                        if (data.result.length > 0) {
-                            console.log('[Bot] received ' + data.result.length + ' update(s), offset=' + pollingOffset);
-                        }
-                        for (var update of data.result) {
-                            pollingOffset = update.update_id + 1;
-                            await handleBotUpdate(update);
-                        }
-                    } else if (data.ok === false) {
-                        pollFailCount++;
-                        console.log('[Bot] poll fail #' + pollFailCount + ': offset=' + pollingOffset + ' error=' + (data.error_code || '?') + ' ' + (data.description || ''));
-                        if (data.error_code === 409) {
-                            console.log('[Bot] CONFLICT - another bot instance is polling waiting for old instance to die.');
-                        }
-                        if (data.error_code === 401) {
-                            console.log('[Bot] UNAUTHORIZED - bot token is invalid or revoked.');
-                        }
-                    }
-                } catch(e) {
-                    pollFailCount++;
-                    console.error('[Bot] Poll error #' + pollFailCount + ' offset=' + pollingOffset + ': ' + e.message);
-                }
-                var delay = data && data.error_code === 409 ? 10000 : (pollFailCount > 5 ? 5000 : 1000);
-                setTimeout(poll, delay);
             }
-            poll();
+
+            if (!usingWebhook) {
+                await tg('deleteWebhook');
+                console.log('[Bot] No public URL, using long-polling');
+                var pollingOffset = 0;
+                async function poll() {
+                    try {
+                        var data = await tg('getUpdates', { offset: pollingOffset, timeout: 30, allowed_updates: ['message', 'callback_query'] });
+                        if (data.ok && data.result) {
+                            if (data.result.length > 0) console.log('[Bot] received ' + data.result.length + ' update(s)');
+                            for (var update of data.result) {
+                                pollingOffset = update.update_id + 1;
+                                await handleBotUpdate(update);
+                            }
+                        }
+                    } catch(e) { console.error('[Bot] Poll err:', e.message); }
+                    setTimeout(poll, 2000);
+                }
+                poll();
+            }
         } catch(e) {
-            console.error('Bot init error:', e.message);
+            console.error('[Bot] init error:', e.message);
             setTimeout(startBot, 10000);
         }
     }

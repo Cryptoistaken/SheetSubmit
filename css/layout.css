@@ -507,7 +507,8 @@ th.rh:hover {
     overflow-y: auto;
 }
 
-#homePaneFiles {
+#homePaneFiles,
+#homePaneArchive {
     padding: 32px 24px;
     max-width: 960px;
     margin: 0 auto;
@@ -515,5 +516,5 @@ th.rh:hover {
 }
 
 @media (max-width: 480px) {
-    #homePaneFiles { padding: 20px 14px; }
+    #homePaneFiles, #homePaneArchive { padding: 20px 14px; }
 }

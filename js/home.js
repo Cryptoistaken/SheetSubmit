@@ -25,7 +25,7 @@ __ss.renderHome = async function() {
             '<span class="file-card-meta" id="meta-' + f.id + '">...</span></div>';
 
         card.innerHTML =
-            '<div class="file-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div>' +
+            '<div class="file-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/><path d="M12 12v.01"/><path d="M11 17v.01"/><path d="M7 14v.01"/></svg></div>' +
             '<div class="file-card-name">' + __ss.esc(f.name) + '</div>' +
             metaHtml +
             '<div class="file-card-actions">' +
@@ -401,7 +401,7 @@ __ss.showTypeModal = function() {
         var opt = document.createElement('div');
         opt.className = 'type-option';
         opt.innerHTML =
-            '<div class="type-option-icon ' + td.badgeClass + '">' + __ss.esc(td.icon) + '</div>' +
+            '<div class="type-option-icon ' + td.badgeClass + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/><path d="M12 12v.01"/><path d="M11 17v.01"/><path d="M7 14v.01"/></svg></div>' +
             '<div class="type-option-info">' +
             '<div class="type-option-name">' + __ss.esc(td.label) + '</div>' +
             '<div class="type-option-desc">' + __ss.esc(td.desc) + '</div></div>';

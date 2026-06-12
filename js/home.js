@@ -261,6 +261,8 @@ function renderArchive() {
                 onTap: function(el) {
                     if (state.archiveSelectionMode) {
                         toggleArchiveSelection(f.id);
+                    } else {
+                        enterArchiveSelectionMode(f.id);
                     }
                 },
                 onHold: function(el) {

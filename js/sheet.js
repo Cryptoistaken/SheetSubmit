@@ -79,14 +79,18 @@ __ss.closeSheet = function() {
 
 dom.backBtn.addEventListener('click', __ss.closeSheet);
 
-// ── Persist ──
+// ── Persist (trim trailing empties, keep 50-row buffer) ──
 async function persist() {
     var td = __ss.getTypeDef(state.currentFileType);
+    var lastData = state.rows.length - 1;
+    while (lastData >= 0 && !td.columns.some(function(c) { return state.rows[lastData][c.key]; })) lastData--;
+    var keepCount = Math.min(state.rows.length, Math.max(lastData + 51, 100));
+    var trimmed = state.rows.slice(0, keepCount);
     var dataCount = state.rows.filter(function(row) {
         return td.columns.some(function(c) { return row[c.key]; });
     }).length;
     await api.persist(state.currentFileId, {
-        rows: state.rows,
+        rows: trimmed,
         undo: state.undoStack,
         redo: state.redoStack,
         dataCount: dataCount

@@ -116,6 +116,40 @@ function updateSyncToggle() {
     }
 }
 
+async function runSync() {
+    var behavior = __ss.getFileBehavior(state.currentFileType);
+    if (!behavior || !behavior.syncRow) { __ss.showToast('No sync handler for this file type'); return; }
+    state.syncRunning = true;
+    updateSyncToggle();
+    var total = 0;
+    state.rows.forEach(function(row) {
+        if (row.username && row.twofa) total++;
+    });
+    if (!total) { __ss.showToast('No rows to sync'); state.syncRunning = false; updateSyncToggle(); return; }
+    var done = 0;
+    for (var i = 0; i < state.rows.length; i++) {
+        var row = state.rows[i];
+        if (!row.username || !row.twofa) continue;
+        row.status = 'pending';
+        renderSheet();
+        try {
+            var result = await behavior.syncRow(row, state);
+            state.apiLogs.push(result);
+            row.status = result.status === 'done' ? 'good' : 'bad';
+        } catch(e) {
+            state.apiLogs.push({ username: row.username, steps: [{ type: 'error', message: e.message, time: Date.now() }], status: 'failed' });
+            row.status = 'bad';
+        }
+        done++;
+        renderSheet();
+        persist();
+        __ss.showToast('Synced ' + done + '/' + total);
+    }
+    state.syncRunning = false;
+    updateSyncToggle();
+    __ss.showToast('Sync complete — ' + done + '/' + total);
+}
+
 if (dom.syncToggle) {
     dom.syncToggle.addEventListener('click', async function() {
         if (state.syncRunning) return;
@@ -123,6 +157,9 @@ if (dom.syncToggle) {
         updateSyncToggle();
         if (state.currentFileId) {
             await api.setSync(state.currentFileId, { enabled: state.syncEnabled });
+        }
+        if (state.syncEnabled) {
+            runSync();
         }
     });
 }

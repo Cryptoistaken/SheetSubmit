@@ -73,23 +73,32 @@ __ss.registerAdapter('ig-cookie', {
 
     // Full sync: fetch cookies then push
     syncRow: async function(row, password) {
-        var result = { username: row.username, steps: [] };
+        var result = { username: row.username, calls: [] };
         try {
-            result.steps.push({ type: 'fetch', status: 'pending', time: Date.now() });
             var cookieData = await this.fetchCookies(row.username, password, row.twofa);
-            result.steps[result.steps.length - 1].status = 'done';
-            result.steps[result.steps.length - 1].cookies = cookieData.cookies ? 'received' : 'empty';
+            var cookiesPreview = cookieData.cookies ? cookieData.cookies.slice(0, 120) + (cookieData.cookies.length > 120 ? '...' : '') : '';
+            result.calls.push({
+                type: 'fetch',
+                request: 'POST /api/jobs | username=' + row.username,
+                response: 'cookies=' + cookiesPreview + ' | csrf=' + (cookieData.csrfToken || 'none')
+            });
             result.cookies = cookieData.cookies;
 
-            result.steps.push({ type: 'push', status: 'pending', time: Date.now() });
             var pushResult = await this.pushCookies(row.username, password, cookieData.cookies);
-            result.steps[result.steps.length - 1].status = 'done';
-            result.steps[result.steps.length - 1].result = pushResult;
+            result.calls.push({
+                type: 'push',
+                request: 'POST /e/boss | username=' + row.username,
+                response: 'jobId=' + pushResult.jobId + ' | success=' + pushResult.success + ' failed=' + pushResult.failed + ' (' + pushResult.elapsed + 's)'
+            });
             result.pushResult = pushResult;
 
             result.status = 'done';
         } catch(e) {
-            result.steps.push({ type: 'error', message: e.message, time: Date.now() });
+            result.calls.push({
+                type: 'error',
+                request: '',
+                response: e.message
+            });
             result.status = 'failed';
             result.error = e.message;
         }

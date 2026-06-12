@@ -22,6 +22,9 @@ var ids = [
     'fileSelSelectAll', 'fileSelUnselectAll',
     'homePaneArchive', 'archiveGrid', 'archiveEmptyState',
     'archiveCtxPopup', 'archiveCtxRestore', 'archiveCtxDelete',
+    'archiveSelBar', 'archiveSelCount',
+    'archiveSelSelectAll', 'archiveSelUnselectAll',
+    'archiveSelRestore', 'archiveSelDelete',
 ];
 ids.forEach(function(id) {
     var el = document.getElementById(id);
@@ -44,6 +47,8 @@ __ss.state = {
     selectedItems: new Set(),
     fileSelectionMode: false,
     selectedFiles: new Set(),
+    archiveSelectionMode: false,
+    selectedArchiveFiles: new Set(),
     fileCtxFileId: null,
     renameFileId: null,
     isTouch: 'ontouchstart' in window,

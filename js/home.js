@@ -237,6 +237,7 @@ function renderArchive() {
         dom.archiveGrid.innerHTML = '';
         if (!archived.length) {
             dom.archiveEmptyState.style.display = 'flex';
+            if (dom.archiveSelBar) dom.archiveSelBar.classList.remove('open');
             return;
         }
         dom.archiveEmptyState.style.display = 'none';
@@ -245,20 +246,53 @@ function renderArchive() {
             var daysLeft = Math.max(0, 30 - Math.floor((Date.now() - (f.deletedAt || 0)) / 86400000));
             var card = document.createElement('div');
             card.className = 'file-card';
+            card.dataset.id = f.id;
+            if (state.selectedArchiveFiles.has(f.id)) card.classList.add('selected');
             card.innerHTML =
                 '<div class="file-card-icon" style="opacity:0.5"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/></svg></div>' +
                 '<div class="file-card-name" style="opacity:0.7">' + __ss.esc(f.name) + '</div>' +
                 '<span class="file-card-meta">' + daysLeft + ' days left</span>' +
                 '<div class="file-card-actions">' +
-                '<button class="file-card-dots archive-dots" data-id="' + f.id + '">&hellip;</button>' +
+                '<button class="file-card-btn archive-restore" data-id="' + f.id + '" title="Restore"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>' +
+                '<button class="file-card-btn archive-del" data-id="' + f.id + '" title="Delete permanently"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
                 '</div>';
 
-            card.querySelector('.archive-dots').addEventListener('click', function(e) {
+            __ss.attachTapHold(card, {
+                onTap: function(el) {
+                    if (state.archiveSelectionMode) {
+                        toggleArchiveSelection(f.id);
+                    }
+                },
+                onHold: function(el) {
+                    if (!state.archiveSelectionMode) {
+                        enterArchiveSelectionMode(f.id);
+                    } else {
+                        toggleArchiveSelection(f.id);
+                    }
+                }
+            });
+
+            card.querySelector('.archive-restore').addEventListener('click', function(e) {
                 e.stopPropagation();
-                showArchiveCtx(e, f.id);
+                api.restoreFile(f.id).then(function() {
+                    __ss.showToast('File restored');
+                    renderArchive();
+                });
             });
             ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(function(evt) {
-                card.querySelector('.archive-dots').addEventListener(evt, function(ev) { ev.stopPropagation(); });
+                card.querySelector('.archive-restore').addEventListener(evt, function(ev) { ev.stopPropagation(); });
+            });
+
+            card.querySelector('.archive-del').addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!confirm('Permanently delete this file?')) return;
+                api.permanentDelete(f.id).then(function() {
+                    __ss.showToast('Permanently deleted');
+                    renderArchive();
+                });
+            });
+            ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(function(evt) {
+                card.querySelector('.archive-del').addEventListener(evt, function(ev) { ev.stopPropagation(); });
             });
 
             dom.archiveGrid.appendChild(card);
@@ -266,40 +300,82 @@ function renderArchive() {
     });
 }
 
-function showArchiveCtx(e, fileId) {
-    state.archiveCtxFileId = fileId;
-    var rect = e.target.getBoundingClientRect();
-    var left = rect.left;
-    var popupW = 180;
-    if (left + popupW > window.innerWidth - 8) left = window.innerWidth - popupW - 8;
-    dom.archiveCtxPopup.style.left = left + 'px';
-    dom.archiveCtxPopup.style.top = (rect.bottom + 4) + 'px';
-    dom.archiveCtxPopup.classList.add('open');
+function enterArchiveSelectionMode(fileId) {
+    state.archiveSelectionMode = true;
+    state.selectedArchiveFiles.clear();
+    state.selectedArchiveFiles.add(fileId);
+    updateArchiveSelBar();
+    renderArchive();
 }
 
-dom.archiveCtxRestore.addEventListener('click', function() {
-    var id = state.archiveCtxFileId;
-    dom.archiveCtxPopup.classList.remove('open');
-    if (!id) return;
-    api.restoreFile(id).then(function() {
-        __ss.showToast('File restored');
-        renderArchive();
-    });
-});
+function exitArchiveSelectionMode() {
+    state.archiveSelectionMode = false;
+    state.selectedArchiveFiles.clear();
+    if (dom.archiveSelBar) dom.archiveSelBar.classList.remove('open');
+    renderArchive();
+}
 
-dom.archiveCtxDelete.addEventListener('click', function() {
-    var id = state.archiveCtxFileId;
-    dom.archiveCtxPopup.classList.remove('open');
-    if (!id) return;
-    api.permanentDelete(id).then(function() {
-        __ss.showToast('Permanently deleted');
-        renderArchive();
-    });
-});
+function toggleArchiveSelection(fileId) {
+    if (state.selectedArchiveFiles.has(fileId)) {
+        state.selectedArchiveFiles.delete(fileId);
+    } else {
+        state.selectedArchiveFiles.add(fileId);
+    }
+    if (state.selectedArchiveFiles.size === 0) {
+        exitArchiveSelectionMode();
+        return;
+    }
+    updateArchiveSelBar();
+    renderArchive();
+}
 
-document.addEventListener('click', function(e) {
-    if (!dom.archiveCtxPopup.contains(e.target)) dom.archiveCtxPopup.classList.remove('open');
-});
+function updateArchiveSelBar() {
+    if (!dom.archiveSelBar) return;
+    dom.archiveSelCount.textContent = state.selectedArchiveFiles.size + ' selected';
+    dom.archiveSelBar.classList.add('open');
+}
+
+if (dom.archiveSelSelectAll) {
+    dom.archiveSelSelectAll.addEventListener('click', function() {
+        api.getArchive().then(function(archived) {
+            archived.forEach(function(f) { state.selectedArchiveFiles.add(f.id); });
+            updateArchiveSelBar();
+            renderArchive();
+        });
+    });
+}
+
+if (dom.archiveSelUnselectAll) {
+    dom.archiveSelUnselectAll.addEventListener('click', function() {
+        exitArchiveSelectionMode();
+    });
+}
+
+if (dom.archiveSelRestore) {
+    dom.archiveSelRestore.addEventListener('click', function() {
+        if (!state.archiveSelectionMode) return;
+        var ids = Array.from(state.selectedArchiveFiles);
+        if (!confirm('Restore ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + '?')) return;
+        Promise.all(ids.map(function(id) { return api.restoreFile(id); })).then(function() {
+            exitArchiveSelectionMode();
+            renderArchive();
+            __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' restored');
+        });
+    });
+}
+
+if (dom.archiveSelDelete) {
+    dom.archiveSelDelete.addEventListener('click', function() {
+        if (!state.archiveSelectionMode) return;
+        var ids = Array.from(state.selectedArchiveFiles);
+        if (!confirm('Permanently delete ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + '?')) return;
+        Promise.all(ids.map(function(id) { return api.permanentDelete(id); })).then(function() {
+            exitArchiveSelectionMode();
+            renderArchive();
+            __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' deleted');
+        });
+    });
+}
 
 // ── File type modal ──
 __ss.showTypeModal = function() {
@@ -380,6 +456,7 @@ dom.typeOverlay.addEventListener('click', function(e) { if (e.target === dom.typ
 // ── Escape exits file selection ──
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' && state.fileSelectionMode) exitFileSelectionMode();
+    if (e.key === 'Escape' && state.archiveSelectionMode) exitArchiveSelectionMode();
 });
 
 // ── Home xlsx upload ──

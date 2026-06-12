@@ -244,9 +244,6 @@ app.post('/api/files', requireAuth, async function(req, res) {
     file.updatedAt = Date.now();
     files.unshift(file);
     await setJSON('files:' + req.userId, files);
-    if (req.body.initialRows) {
-        await setJSON('rows:' + file.id, req.body.initialRows);
-    }
     res.json(file);
 });
 

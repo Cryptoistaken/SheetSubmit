@@ -13,6 +13,7 @@ __ss.openFile = async function(id) {
     state.currentFileType = f.type || 'ig_cookie';
     state.COLUMNS = __ss.getTypeDef(state.currentFileType).columns;
     state.rows = results[1] || [];
+    while (state.rows.length < 100) state.rows.push(__ss.makeEmptyRow(state.COLUMNS));
     state.undoStack = [];
     state.redoStack = [];
     state.selectedCell = null;

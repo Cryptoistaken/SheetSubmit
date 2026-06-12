@@ -67,7 +67,7 @@ To add a new file type: create `filetypes/newtype.js`, call `registerFileBehavio
 ### Server API Routes
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/api/files` | GET/POST | List/create files (POST accepts `initialRows`) |
+| `/api/files` | GET/POST | List/create files |
 | `/api/files/:id` | GET/PUT/DELETE | Read/update/archive single file |
 | `/api/files/:id/rows` | GET | Read row data |
 | `/api/files/:id/persist` | PUT | Batch save rows + undo/redo + dataCount |
@@ -75,7 +75,9 @@ To add a new file type: create `filetypes/newtype.js`, call `registerFileBehavio
 | `/api/files/:id/logs` | GET | API call logs |
 | `/api/archive` | GET | List archived files |
 | `/api/archive/:id/restore` | POST | Restore from archive |
+| `/api/archive/batch-restore` | POST | Batch restore multiple files |
 | `/api/archive/:id` | DELETE | Permanently delete (removes rows, stacks, sync, logs) |
+| `/api/archive/batch-delete` | POST | Batch permanently delete multiple files |
 | `/api/ig/jobs` | POST | Proxy: IG Auto Cookies API |
 | `/api/ig/jobs/:jobId` | GET | Proxy: poll IG job |
 | `/api/sky/push` | POST | Proxy: SkySys push |

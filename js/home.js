@@ -424,10 +424,7 @@ __ss.createFile = async function(typeKey) {
         name = name + ' (' + suffix + ')';
     }
     var id = __ss.genId();
-    state.COLUMNS = td.columns;
-    var emptyRows = [];
-    for (var i = 0; i < 100; i++) emptyRows.push(__ss.makeEmptyRow(state.COLUMNS));
-    await api.createFile({ id: id, name: name, type: typeKey, rowCount: 100, initialRows: emptyRows });
+    await api.createFile({ id: id, name: name, type: typeKey });
     __ss.showToast(td.label + ' file created');
     __ss.openFile(id);
 };
@@ -491,7 +488,7 @@ dom.xlsxFileInputHome.addEventListener('change', async function(e) {
         var files = state.filesCache || await api.getFiles();
         if (files.some(function(f) { return f.name === name; })) name = name + ' (' + __ss.genId().slice(0, 4) + ')';
         var id = __ss.genId();
-        await api.createFile({ id: id, name: name, type: 'ig_cookie', rowCount: rows.length, initialRows: rows });
+        await api.createFile({ id: id, name: name, type: 'ig_cookie', rowCount: rows.length });
         __ss.showToast('Imported ' + rows.length + ' rows');
         __ss.openFile(id);
     };

@@ -379,6 +379,26 @@ app.put('/api/files/:id/sync', requireAuth, requireFileAccess, async function(re
     res.json({ ok: true });
 });
 
+// ── API: Cell update (auth required) ──
+app.put('/api/files/:id/cell', requireAuth, requireFileAccess, async function(req, res) {
+    var rows = await getJSON('rows:' + req.params.id) || [];
+    var r = req.body;
+    if (r.rowIdx !== undefined && r.colKey !== undefined) {
+        while (rows.length <= r.rowIdx) rows.push({});
+        rows[r.rowIdx][r.colKey] = r.value;
+        await setJSON('rows:' + req.params.id, rows);
+    }
+    res.json({ ok: true });
+});
+
+// ── API: Log append (auth required) ──
+app.post('/api/files/:id/log', requireAuth, requireFileAccess, async function(req, res) {
+    var logs = await getJSON('logs:' + req.params.id) || [];
+    logs.push(req.body.log);
+    await setJSON('logs:' + req.params.id, logs);
+    res.json({ ok: true });
+});
+
 // ── API: Logs (auth required) ──
 app.get('/api/files/:id/logs', requireAuth, requireFileAccess, async function(req, res) {
     var logs = await getJSON('logs:' + req.params.id);

@@ -136,13 +136,17 @@ async function runSync() {
             var result = await behavior.syncRow(row, state);
             state.apiLogs.push(result);
             row.status = result.status === 'done' ? 'good' : 'bad';
+            api.appendLog(state.currentFileId, { log: result });
+            api.updateCell(state.currentFileId, { rowIdx: i, colKey: 'status', value: row.status });
         } catch(e) {
-            state.apiLogs.push({ username: row.username, steps: [{ type: 'error', message: e.message, time: Date.now() }], status: 'failed' });
+            var errLog = { username: row.username, steps: [{ type: 'error', message: e.message, time: Date.now() }], status: 'failed' };
+            state.apiLogs.push(errLog);
             row.status = 'bad';
+            api.appendLog(state.currentFileId, { log: errLog });
+            api.updateCell(state.currentFileId, { rowIdx: i, colKey: 'status', value: 'bad' });
         }
         done++;
         renderSheet();
-        persist();
         __ss.showToast('Synced ' + done + '/' + total);
     }
     state.syncRunning = false;
@@ -302,6 +306,19 @@ function renderSheet() {
                 if (!state.selectionMode) {
                     enterSelectionMode('col', null, el.dataset.col);
                 }
+            },
+            onDoubleTap: function(el) {
+                var colKey = el.dataset.col;
+                var lines = [];
+                state.rows.forEach(function(row) {
+                    var val = row[colKey] || '';
+                    if (val) lines.push(val);
+                });
+                if (!lines.length) { __ss.showToast('No data'); return; }
+                navigator.clipboard.writeText(lines.join('\n')).then(function() {
+                    __ss.vibrate();
+                    __ss.showToast('Copied ' + lines.length + ' cells');
+                }).catch(function() { __ss.showToast('Cannot copy'); });
             }
         });
     });
@@ -317,6 +334,18 @@ function renderSheet() {
                 if (!state.selectionMode) {
                     enterSelectionMode('row', el.dataset.row, null);
                 }
+            },
+            onDoubleTap: function(el) {
+                var rowIdx = parseInt(el.dataset.row);
+                var row = state.rows[rowIdx];
+                if (!row) return;
+                var vals = state.COLUMNS.map(function(c) { return row[c.key] || ''; });
+                var hasData = vals.some(function(v) { return v; });
+                if (!hasData) { __ss.showToast('Empty row'); return; }
+                navigator.clipboard.writeText(vals.join('\t')).then(function() {
+                    __ss.vibrate();
+                    __ss.showToast('Row copied');
+                }).catch(function() { __ss.showToast('Cannot copy'); });
             }
         });
     });
@@ -352,7 +381,7 @@ function doubleTapAction(rowIdx, colKey) {
             row[colKey] = text;
             state.isDirty = true;
             renderSheet();
-            persist();
+            api.updateCell(state.currentFileId, { rowIdx: rowIdx, colKey: colKey, value: text });
             __ss.showToast('Pasted');
         }).catch(function() {});
     } else {
@@ -388,7 +417,7 @@ function commitQuickEdit() {
         row[state.selectedCell.colIdx] = val;
         state.isDirty = true;
         renderSheet();
-        persist();
+        api.updateCell(state.currentFileId, { rowIdx: state.selectedCell.rowIdx, colKey: state.selectedCell.colIdx, value: val });
     }
     dom.qebBar.classList.remove('open');
     __ss.clearCellHighlight();

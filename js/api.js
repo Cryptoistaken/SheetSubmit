@@ -46,6 +46,8 @@ __ss.api = {
     batchDelete: function(ids) { return post('/archive/batch-delete', { ids: ids }); },
     getSync: function(id) { return get('/files/' + id + '/sync'); },
     setSync: function(id, data) { return put('/files/' + id + '/sync', data); },
+    updateCell: function(id, data) { return put('/files/' + id + '/cell', data); },
+    appendLog: function(id, data) { return post('/files/' + id + '/log', data); },
     getLogs: function(id) { return get('/files/' + id + '/logs'); },
 };
 

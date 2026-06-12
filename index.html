@@ -82,8 +82,9 @@
         .sheet-more-item:hover { background: var(--bg3); }
 
         .file-card-actions { display: flex; align-items: center; gap: 2px; position: absolute; top: 7px; right: 7px; }
-        .file-card-dl, .file-card-dots { width: 24px; height: 24px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--text3); cursor: pointer; background: transparent; border: none; transition: background 0.1s, color 0.1s; padding: 0; }
-        .file-card-dl:hover, .file-card-dots:hover { background: var(--bg3); color: var(--text); }
+        .file-card-btn { width: 24px; height: 24px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--text3); cursor: pointer; background: transparent; border: none; transition: background 0.1s, color 0.1s; padding: 0; }
+        .file-card-btn:hover { background: var(--bg3); color: var(--text); }
+        .file-card-del:hover { color: var(--red); background: var(--red-bg); }
 
         .file-card.selected { border-color: var(--blue) !important; background: var(--blue-light) !important; }
         .file-sel-bar { position: fixed; z-index: 600; bottom: 12px; left: 8px; right: 8px; }
@@ -162,6 +163,15 @@
     </div>
 </div>
 
+<div class="sel-bar" id="fileSelBar">
+    <span class="sel-bar-count" id="fileSelCount">0 selected</span>
+    <div class="sel-bar-actions">
+        <button class="sel-btn" id="fileSelSelectAll">Select All</button>
+        <button class="sel-btn" id="fileSelUnselectAll">Unselect All</button>
+        <button class="sel-btn danger" id="fileSelDelete">Delete</button>
+    </div>
+</div>
+
 <div id="sheetView">
     <div class="sheet-wrap" id="sheetWrap">
         <table class="grid" id="grid" cellspacing="0" cellpadding="0"></table>
@@ -172,15 +182,6 @@
         <div class="qeb-right">
             <button class="qeb-paste-btn" id="qebPasteBtn">Paste</button>
             <button class="qeb-icon-btn save" id="qebSaveBtn">OK</button>
-        </div>
-    </div>
-
-    <div class="sel-bar" id="fileSelBar">
-        <span class="sel-bar-count" id="fileSelCount">0 selected</span>
-        <div class="sel-bar-actions">
-            <button class="sel-btn" id="fileSelSelectAll">Select All</button>
-            <button class="sel-btn" id="fileSelUnselectAll">Unselect All</button>
-            <button class="sel-btn danger" id="fileSelDelete">Delete</button>
         </div>
     </div>
 </div>

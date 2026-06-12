@@ -29,8 +29,9 @@ __ss.renderHome = async function() {
             '<div class="file-card-name">' + __ss.esc(f.name) + '</div>' +
             metaHtml +
             '<div class="file-card-actions">' +
-            '<button class="file-card-dl" data-id="' + f.id + '" title="Download xlsx"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>' +
-            '<button class="file-card-dots" data-id="' + f.id + '">&hellip;</button>' +
+            '<button class="file-card-btn file-card-dl" data-id="' + f.id + '" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>' +
+            '<button class="file-card-btn file-card-rename" data-id="' + f.id + '" title="Rename"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>' +
+            '<button class="file-card-btn file-card-del" data-id="' + f.id + '" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
             '</div>';
 
         __ss.attachTapHold(card, {
@@ -50,20 +51,24 @@ __ss.renderHome = async function() {
             }
         });
 
-        card.querySelector('.file-card-dots').addEventListener('click', function(e) {
-            e.stopPropagation();
-            if (!state.fileSelectionMode) showFileCtx(e, f.id);
-        });
-        ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(function(evt) {
-            card.querySelector('.file-card-dots').addEventListener(evt, function(e) { e.stopPropagation(); });
-        });
-
-        card.querySelector('.file-card-dl').addEventListener('click', function(e) {
-            e.stopPropagation();
-            downloadFile(f.id, f.name);
-        });
         ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(function(evt) {
             card.querySelector('.file-card-dl').addEventListener(evt, function(e) { e.stopPropagation(); });
+        });
+
+        card.querySelector('.file-card-rename').addEventListener('click', function(e) {
+            e.stopPropagation();
+            __ss.promptRenameFile(f.id);
+        });
+        ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(function(evt) {
+            card.querySelector('.file-card-rename').addEventListener(evt, function(e) { e.stopPropagation(); });
+        });
+
+        card.querySelector('.file-card-del').addEventListener('click', function(e) {
+            e.stopPropagation();
+            __ss.deleteFile(f.id);
+        });
+        ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(function(evt) {
+            card.querySelector('.file-card-del').addEventListener(evt, function(e) { e.stopPropagation(); });
         });
 
         dom.filesGrid.appendChild(card);
@@ -167,23 +172,6 @@ if (dom.fileSelDelete) dom.fileSelDelete.addEventListener('click', deleteSelecte
 if (dom.fileSelSelectAll) dom.fileSelSelectAll.addEventListener('click', selectAllFiles);
 if (dom.fileSelUnselectAll) dom.fileSelUnselectAll.addEventListener('click', unselectAllFiles);
 
-// ── Context menu ──
-function showFileCtx(e, fileId) {
-    state.fileCtxFileId = fileId;
-    var rect = e.target.getBoundingClientRect();
-    var left = rect.left;
-    var popupW = 140;
-    if (left + popupW > window.innerWidth - 8) left = window.innerWidth - popupW - 8;
-    dom.fileCtxPopup.style.left = left + 'px';
-    dom.fileCtxPopup.style.top = (rect.bottom + 4) + 'px';
-    dom.fileCtxPopup.classList.add('open');
-}
-
-function hideFileCtx() {
-    dom.fileCtxPopup.classList.remove('open');
-    state.fileCtxFileId = null;
-}
-
 __ss.deleteFile = async function(id) {
     await api.deleteFile(id);
     __ss.renderHome();
@@ -215,7 +203,8 @@ __ss.commitRename = async function() {
     __ss.showToast('Renamed');
 };
 
-// ── Home tabs ──
+// ── Context menu (archive only) ──
+function showArchiveCtx(e, fileId) {
 var htabs = dom.homeTabs ? dom.homeTabs.querySelectorAll('.home-tab') : [];
 htabs.forEach(function(tab) {
     tab.addEventListener('click', function() {
@@ -296,7 +285,6 @@ dom.archiveCtxDelete.addEventListener('click', function() {
 });
 
 document.addEventListener('click', function(e) {
-    if (!dom.fileCtxPopup.contains(e.target)) hideFileCtx();
     if (!dom.archiveCtxPopup.contains(e.target)) dom.archiveCtxPopup.classList.remove('open');
 });
 

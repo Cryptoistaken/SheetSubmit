@@ -49,6 +49,11 @@ async function setJSON(k, val) {
     catch { return false; }
 }
 
+async function setJSONex(k, val, ms) {
+    try { await redis.set(key(k), JSON.stringify(val), 'PX', ms); return true; }
+    catch { return false; }
+}
+
 async function delKey(k) {
     try { await redis.del(key(k)); return true; }
     catch { return false; }
@@ -107,11 +112,6 @@ app.get('/api/auth/telegram', async function(req, res) {
 
     var loginData = await getJSON('login:' + token);
     if (!loginData) { console.log('[Auth] invalid token'); res.status(400).send('Invalid or expired token'); return; }
-    if (Date.now() - loginData.createdAt > 300000) {
-        await delKey('login:' + token);
-        console.log('[Auth] token expired');
-        res.status(400).send('Token expired'); return;
-    }
 
     console.log('[Auth] login for chatId=' + loginData.chatId);
     var userInfo = null;
@@ -123,16 +123,12 @@ app.get('/api/auth/telegram', async function(req, res) {
                 firstName: chatRes.result.first_name || '',
                 lastName: chatRes.result.last_name || '',
                 username: chatRes.result.username || '',
-                photoUrl: null
+                fileId: null
             };
             try {
                 var photosRes = await tg('getUserProfilePhotos', { user_id: loginData.chatId, limit: 1 });
                 if (photosRes.ok && photosRes.result.photos.length > 0) {
-                    var fileId = photosRes.result.photos[0][photosRes.result.photos[0].length - 1].file_id;
-                    var fileRes = await tg('getFile', { file_id: fileId });
-                    if (fileRes.ok) {
-                        userInfo.photoUrl = 'https://api.telegram.org/file/bot' + BOT_TOKEN + '/' + fileRes.result.file_path;
-                    }
+                    userInfo.fileId = photosRes.result.photos[0][photosRes.result.photos[0].length - 1].file_id;
                 }
             } catch {}
         }
@@ -141,17 +137,20 @@ app.get('/api/auth/telegram', async function(req, res) {
     if (!userInfo) { console.log('[Auth] failed to get user info'); res.status(500).send('Failed to get user info'); return; }
 
     console.log('[Auth] user=' + (userInfo.username || userInfo.firstName) + ' id=' + userInfo.id);
-    await setJSON('user:' + userInfo.id, {
+
+    var existing = await getJSON('user:' + userInfo.id) || {};
+    var merged = {
         id: userInfo.id,
         firstName: userInfo.firstName,
         lastName: userInfo.lastName,
         username: userInfo.username,
-        photoUrl: userInfo.photoUrl,
+        fileId: userInfo.fileId || existing.fileId || null,
         lastLogin: Date.now()
-    });
+    };
+    await setJSON('user:' + userInfo.id, merged);
 
     var sessionId = generateToken();
-    await setJSON('session:' + sessionId, { userId: userInfo.id, createdAt: Date.now() });
+    await setJSONex('session:' + sessionId, { userId: userInfo.id }, 2592000000);
     await delKey('login:' + token);
 
     res.setHeader('Set-Cookie', 'session=' + sessionId + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000');
@@ -164,6 +163,19 @@ app.get('/api/auth/telegram', async function(req, res) {
     });
 
     res.redirect('/');
+});
+
+app.get('/api/auth/photo/:userId', async function(req, res) {
+    var user = await getJSON('user:' + req.params.userId);
+    if (!user || !user.fileId) { res.status(404).end(); return; }
+    try {
+        var fileRes = await tg('getFile', { file_id: user.fileId });
+        if (fileRes.ok) {
+            res.redirect('https://api.telegram.org/file/bot' + BOT_TOKEN + '/' + fileRes.result.file_path);
+        } else {
+            res.status(404).end();
+        }
+    } catch { res.status(500).end(); }
 });
 
 app.get('/api/auth/logout', async function(req, res) {
@@ -180,6 +192,9 @@ app.get('/api/auth/me', async function(req, res) {
     var session = await getJSON('session:' + sessionId);
     if (!session) { console.log('[Auth] me: session expired'); res.json(null); return; }
     var user = await getJSON('user:' + session.userId);
+    if (user) {
+        user.photoUrl = user.fileId ? '/api/auth/photo/' + user.id : null;
+    }
     console.log('[Auth] me: user=' + (user ? user.username || user.firstName || user.id : 'null'));
     res.json(user || null);
 });
@@ -392,18 +407,14 @@ if (BOT_TOKEN) {
             var cb = update.callback_query;
             if (cb.data === 'login') {
                 var token = generateToken();
-                await setJSON('login:' + token, { chatId: cb.message.chat.id, createdAt: Date.now() });
                 var url = APP_URL + '/api/auth/telegram?token=' + token;
                 var copyKey = crypto.randomBytes(6).toString('hex');
-                await setJSON('cpy:' + copyKey, token);
+                await setJSONex('login:' + token, { chatId: cb.message.chat.id }, 900000);
+                await setJSONex('cpy:' + copyKey, token, 900000);
                 await tg('editMessageText', {
                     chat_id: cb.message.chat.id,
                     message_id: cb.message.message_id,
-                    text: 'Login link ready:'
-                });
-                await tg('sendMessage', {
-                    chat_id: cb.message.chat.id,
-                    text: url,
+                    text: 'Login link ready:',
                     reply_markup: {
                         inline_keyboard: [
                             [{ text: 'Open URL', url: url }],
@@ -418,7 +429,6 @@ if (BOT_TOKEN) {
                 if (token) {
                     var url = APP_URL + '/api/auth/telegram?token=' + token;
                     await tg('answerCallbackQuery', { callback_query_id: cb.id, text: url });
-                    await delKey('cpy:' + copyKey);
                 } else {
                     await tg('answerCallbackQuery', { callback_query_id: cb.id, text: 'Link expired' });
                 }

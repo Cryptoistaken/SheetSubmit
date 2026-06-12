@@ -1,5 +1,8 @@
 [phases.setup]
-nixPkgs = ["bun"]
+nixPkgs = ["nodejs_18", "bun"]
+
+[phases.install]
+cmd = "npm i"
 
 [start]
 cmd = "bun run server/index.js"

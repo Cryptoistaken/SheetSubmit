@@ -60,16 +60,8 @@
         .sel-btn.danger { color: var(--red); border-color: var(--red); background: var(--red-bg); }
         .sel-btn.danger:hover { background: rgba(238, 0, 0, 0.15); }
 
-        .user-profile-btn { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; overflow: hidden; flex-shrink: 0; border: 1.5px solid var(--border); transition: border-color 0.15s; }
-        .user-profile-btn:hover { border-color: var(--text3); }
-        .user-avatar { width: 100%; height: 100%; object-fit: cover; }
-        .user-profile-panel { position: fixed; top: 48px; right: 8px; z-index: 800; background: var(--bg); border: 1px solid var(--border); border-radius: var(--rl); padding: 16px; width: 220px; box-shadow: var(--shadow-lg); transform: translateY(4px); opacity: 0; pointer-events: none; transition: opacity 0.15s, transform 0.15s; }
-        .user-profile-panel.open { opacity: 1; pointer-events: all; transform: translateY(0); }
-        .user-profile-card { text-align: center; }
-        .user-profile-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; margin-bottom: 8px; border: 2px solid var(--border); }
-        .user-profile-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
-        .user-profile-username { font-size: 12px; color: var(--text3); margin-top: 2px; }
-        .user-profile-uid { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-top: 4px; }
+        .user-btn-avatar { width: 100%; height: 100%; object-fit: cover; display: none; }
+        .profile-btn.loaded .user-btn-avatar { display: block; }
 
         .file-ctx-popup { position: fixed; z-index: 800; background: var(--bg); border: 1px solid var(--border); border-radius: var(--rl); padding: 4px; width: 140px; box-shadow: var(--shadow-lg); transform: translateY(4px); opacity: 0; pointer-events: none; transition: opacity 0.12s, transform 0.12s; }
         .file-ctx-popup.open { opacity: 1; pointer-events: all; transform: translateY(0); }
@@ -143,22 +135,18 @@
             </button>
         </div>
         <span class="conn-status" id="connStatus"><span class="conn-status-dot"></span><span id="connStatusText">Connecting...</span></span>
-        <div class="profile-btn" id="gearBtn" title="Settings">
-            <svg class="gear-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </div>
-        <div class="user-profile-btn" id="userProfileBtn" style="display:none">
-            <img class="user-avatar" id="userAvatar" src="" alt="" />
-        </div>
-        <div class="user-profile-panel" id="userProfilePanel">
-            <div class="user-profile-card">
-                <img class="user-profile-avatar" id="userProfileAvatar" src="" alt="" />
-                <div class="user-profile-name" id="userProfileName"></div>
-                <div class="user-profile-username" id="userProfileUsername"></div>
-                <div class="user-profile-uid" id="userProfileUid"></div>
-            </div>
-            <button class="btn btn-ghost" id="logoutBtn" style="width:100%;justify-content:center;margin-top:8px">Logout</button>
+        <div class="profile-btn" id="gearBtn" title="User menu">
+            <img class="user-btn-avatar" id="userBtnAvatar" src="" alt="" />
         </div>
         <div class="gear-settings-panel" id="gearPanel">
+            <div class="gear-user-card" id="gearUserCard">
+                <img class="gear-user-avatar" id="gearUserAvatar" src="" alt="" />
+                <div class="gear-user-info">
+                    <div class="gear-user-name" id="gearUserName"></div>
+                    <div class="gear-user-username" id="gearUserUsername"></div>
+                </div>
+            </div>
+            <div class="gear-divider"></div>
             <div class="gear-settings-title">Settings</div>
             <div class="gear-toggle-row">
                 <div>
@@ -170,6 +158,8 @@
                     <span class="toggle-track"></span>
                 </label>
             </div>
+            <div class="gear-divider"></div>
+            <button class="btn btn-ghost" id="logoutBtn" style="width:100%;justify-content:center">Logout</button>
         </div>
     </div>
 </div>
@@ -332,23 +322,8 @@
 <script src="js/app.js"></script>
 <script>
 (function() {
-    var gearBtn = document.getElementById('gearBtn');
-    var gearPanel = document.getElementById('gearPanel');
     var themeToggle = document.getElementById('themeToggle');
-
     themeToggle.checked = window.__theme.getTheme() === 'dark';
-
-    gearBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        gearPanel.classList.toggle('open');
-    });
-
-    document.addEventListener('click', function(e) {
-        if (!gearPanel.contains(e.target) && e.target !== gearBtn && !gearBtn.contains(e.target)) {
-            gearPanel.classList.remove('open');
-        }
-    });
-
     themeToggle.addEventListener('change', function() {
         var theme = this.checked ? 'dark' : 'light';
         window.__theme.setTheme(theme);

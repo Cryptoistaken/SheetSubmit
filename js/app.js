@@ -49,39 +49,32 @@ function showApp(user) {
     document.querySelector('.topbar').style.display = 'flex';
     document.getElementById('homeFab').classList.remove('hidden');
 
-    // Set user profile
+    // Set user avatar on gear button
     if (user) {
-        var profileBtn = document.getElementById('userProfileBtn');
-        var avatar = document.getElementById('userAvatar');
-        if (profileBtn) {
-            profileBtn.style.display = 'block';
-            if (user.photoUrl) {
-                avatar.src = user.photoUrl;
-            } else {
-                avatar.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>');
-            }
+        var gearBtn = document.getElementById('gearBtn');
+        var avatar = document.getElementById('userBtnAvatar');
+        if (gearBtn && user.photoUrl) {
+            avatar.src = user.photoUrl;
+            gearBtn.classList.add('loaded');
         }
     }
 }
 
-// ── User profile panel ──
-var profileBtn = document.getElementById('userProfileBtn');
-var profilePanel = document.getElementById('userProfilePanel');
+// ── Gear button: populate merged panel with user info ──
+var gearPanel = document.getElementById('gearPanel');
+var gearBtn = document.getElementById('gearBtn');
 var logoutBtn = document.getElementById('logoutBtn');
 
-if (profileBtn) {
-    profileBtn.addEventListener('click', function(e) {
+if (gearBtn) {
+    gearBtn.addEventListener('click', function(e) {
         e.stopPropagation();
         var user = __ss.currentUser;
         if (user) {
-            document.getElementById('userProfileAvatar').src = user.photoUrl || '';
-            document.getElementById('userProfileName').textContent = (user.firstName || '') + ' ' + (user.lastName || '');
-            document.getElementById('userProfileUsername').textContent = user.username ? '@' + user.username : '';
-            document.getElementById('userProfileUid').textContent = 'UID: ' + user.id;
-            if (!user.photoUrl) document.getElementById('userProfileAvatar').style.display = 'none';
-            else document.getElementById('userProfileAvatar').style.display = 'block';
+            document.getElementById('gearUserAvatar').src = user.photoUrl || '';
+            document.getElementById('gearUserName').textContent = (user.firstName || '') + ' ' + (user.lastName || '');
+            document.getElementById('gearUserUsername').textContent = user.username ? '@' + user.username : '';
         }
-        profilePanel.classList.toggle('open');
+        gearPanel.classList.toggle('open');
     });
 }
 
@@ -94,8 +87,8 @@ if (logoutBtn) {
 }
 
 document.addEventListener('click', function(e) {
-    if (profilePanel && !profilePanel.contains(e.target) && e.target !== profileBtn && !profileBtn.contains(e.target)) {
-        profilePanel.classList.remove('open');
+    if (gearPanel && !gearPanel.contains(e.target) && e.target !== gearBtn && !gearBtn.contains(e.target)) {
+        gearPanel.classList.remove('open');
     }
 });
 

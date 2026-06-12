@@ -370,19 +370,11 @@ if (BOT_TOKEN) {
         if (update.message && update.message.text) {
             var msg = update.message;
             if (msg.text === '/start' || msg.text.startsWith('/start ')) {
-                var token = generateToken();
-                await setJSON('login:' + token, { chatId: msg.chat.id, createdAt: Date.now() });
-                var loginUrl = APP_URL + '/api/auth/telegram?token=' + token;
-                var cbKey = crypto.randomBytes(6).toString('hex');
-                await setJSON('cb:' + cbKey, token);
                 await tg('sendMessage', {
                     chat_id: msg.chat.id,
-                    text: 'Click the button below to login to Sheet Submit:',
+                    text: 'Welcome to Sheet Submit. Tap the button below to log in:',
                     reply_markup: {
-                        inline_keyboard: [
-                            [{ text: 'Login to Sheet Submit', url: loginUrl }],
-                            [{ text: 'Copy Login Link', callback_data: 'cpy:' + cbKey }]
-                        ]
+                        inline_keyboard: [[{ text: 'Login', callback_data: 'login' }]]
                     }
                 });
             } else if (msg.text === '/myid') {
@@ -391,13 +383,35 @@ if (BOT_TOKEN) {
         }
         if (update.callback_query) {
             var cb = update.callback_query;
-            if (cb.data && cb.data.startsWith('cpy:')) {
-                var cbKey = cb.data.replace('cpy:', '');
-                var token = await getJSON('cb:' + cbKey);
+            if (cb.data === 'login') {
+                var token = generateToken();
+                await setJSON('login:' + token, { chatId: cb.message.chat.id, createdAt: Date.now() });
+                var url = APP_URL + '/api/auth/telegram?token=' + token;
+                var copyKey = crypto.randomBytes(6).toString('hex');
+                await setJSON('cpy:' + copyKey, token);
+                await tg('editMessageText', {
+                    chat_id: cb.message.chat.id,
+                    message_id: cb.message.message_id,
+                    text: 'Login link ready:'
+                });
+                await tg('sendMessage', {
+                    chat_id: cb.message.chat.id,
+                    text: url,
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: 'Open URL', url: url }],
+                            [{ text: 'Copy URL', callback_data: 'cpy:' + copyKey }]
+                        ]
+                    }
+                });
+                await tg('answerCallbackQuery', { callback_query_id: cb.id });
+            } else if (cb.data && cb.data.startsWith('cpy:')) {
+                var copyKey = cb.data.replace('cpy:', '');
+                var token = await getJSON('cpy:' + copyKey);
                 if (token) {
                     var url = APP_URL + '/api/auth/telegram?token=' + token;
-                    await tg('sendMessage', { chat_id: cb.message.chat.id, text: 'Copy this link:\n' + url });
-                    await delKey('cb:' + cbKey);
+                    await tg('sendMessage', { chat_id: cb.message.chat.id, text: '<code>' + url + '</code>', parse_mode: 'HTML' });
+                    await delKey('cpy:' + copyKey);
                 }
                 await tg('answerCallbackQuery', { callback_query_id: cb.id });
             }

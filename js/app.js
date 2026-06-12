@@ -25,12 +25,23 @@ function showLogin() {
     document.querySelector('.topbar').style.display = 'none';
     document.getElementById('homeFab').classList.add('hidden');
 
+    var btn = document.getElementById('botLink');
+    btn.classList.add('loading');
+    btn.querySelector('.btn-label').textContent = 'Connecting...';
+
     fetch('/api/bot/info').then(function(r) { return r.json(); }).then(function(info) {
         if (info.username) {
-            document.getElementById('botLink').href = 'https://t.me/' + info.username;
+            btn.href = 'https://t.me/' + info.username + '?start=login';
+            btn.querySelector('.btn-label').textContent = 'Open Telegram Bot & Send /start';
             document.getElementById('botUsernameHint').textContent = '@' + info.username;
+            btn.classList.remove('loading');
+            btn.classList.add('ready');
+        } else {
+            btn.querySelector('.btn-label').textContent = 'Bot not available';
         }
-    }).catch(function() {});
+    }).catch(function() {
+        btn.querySelector('.btn-label').textContent = 'Connection failed';
+    });
 }
 
 function showApp(user) {

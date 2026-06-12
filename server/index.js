@@ -9,6 +9,16 @@ var ROOT = path.join(__dirname, '..');
 var app = express();
 app.use(express.json({ limit: '10mb' }));
 
+// ── Request logger ──
+app.use(function(req, res, next) {
+    var start = Date.now();
+    res.on('finish', function() {
+        var ms = Date.now() - start;
+        console.log('[API] ' + req.method + ' ' + req.originalUrl + ' → ' + res.statusCode + ' (' + ms + 'ms)');
+    });
+    next();
+});
+
 var redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 var redisOpts = {};
 if (redisUrl.startsWith('rediss://') || redisUrl.includes('upstash.io')) {
@@ -56,12 +66,15 @@ var APP_URL = process.env.RAILWAY_PUBLIC_DOMAIN
 var TG_API = 'https://api.telegram.org/bot' + BOT_TOKEN;
 
 async function tg(method, body) {
+    console.log('[Bot] tg.' + method + ' body=' + JSON.stringify(body).slice(0, 100));
     var res = await fetch(TG_API + '/' + method, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
     });
-    return res.json();
+    var json = await res.json();
+    console.log('[Bot] tg.' + method + ' → ok=' + json.ok);
+    return json;
 }
 
 // ── Session helpers ──
@@ -84,14 +97,17 @@ async function requireAuth(req, res, next) {
 app.get('/api/auth/telegram', async function(req, res) {
     var token = req.query.token;
     if (!token) { res.status(400).send('Missing token'); return; }
+    console.log('[Auth] login callback with token=' + token.slice(0, 8) + '...');
 
     var loginData = await getJSON('login:' + token);
-    if (!loginData) { res.status(400).send('Invalid or expired token'); return; }
+    if (!loginData) { console.log('[Auth] invalid token'); res.status(400).send('Invalid or expired token'); return; }
     if (Date.now() - loginData.createdAt > 300000) {
         await delKey('login:' + token);
+        console.log('[Auth] token expired');
         res.status(400).send('Token expired'); return;
     }
 
+    console.log('[Auth] login for chatId=' + loginData.chatId);
     var userInfo = null;
     try {
         var chatRes = await tg('getChat', { chat_id: loginData.chatId });
@@ -116,8 +132,9 @@ app.get('/api/auth/telegram', async function(req, res) {
         }
     } catch {}
 
-    if (!userInfo) { res.status(500).send('Failed to get user info'); return; }
+    if (!userInfo) { console.log('[Auth] failed to get user info'); res.status(500).send('Failed to get user info'); return; }
 
+    console.log('[Auth] user=' + (userInfo.username || userInfo.firstName) + ' id=' + userInfo.id);
     await setJSON('user:' + userInfo.id, {
         id: userInfo.id,
         firstName: userInfo.firstName,
@@ -132,11 +149,13 @@ app.get('/api/auth/telegram', async function(req, res) {
     await delKey('login:' + token);
 
     res.setHeader('Set-Cookie', 'session=' + sessionId + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000');
+    console.log('[Auth] session created, redirecting');
     res.redirect('/');
 });
 
 app.get('/api/auth/logout', async function(req, res) {
     var sessionId = getSessionId(req);
+    console.log('[Auth] logout session=' + (sessionId ? sessionId.slice(0, 8) + '...' : 'none'));
     if (sessionId) await delKey('session:' + sessionId);
     res.setHeader('Set-Cookie', 'session=; Path=/; HttpOnly; Max-Age=0');
     res.json({ ok: true });
@@ -146,8 +165,9 @@ app.get('/api/auth/me', async function(req, res) {
     var sessionId = getSessionId(req);
     if (!sessionId) { res.json(null); return; }
     var session = await getJSON('session:' + sessionId);
-    if (!session) { res.json(null); return; }
+    if (!session) { console.log('[Auth] me: session expired'); res.json(null); return; }
     var user = await getJSON('user:' + session.userId);
+    console.log('[Auth] me: user=' + (user ? user.username || user.firstName || user.id : 'null'));
     res.json(user || null);
 });
 
@@ -277,6 +297,7 @@ app.get('/api/health', function(req, res) {
 var IG_API = 'https://igautocookiesofficial.site/api';
 
 app.post('/api/ig/jobs', requireAuth, async function(req, res) {
+    console.log('[Proxy] IG POST /jobs');
     try {
         var r = await fetch(IG_API + '/jobs', {
             method: 'POST',
@@ -284,22 +305,26 @@ app.post('/api/ig/jobs', requireAuth, async function(req, res) {
             body: JSON.stringify(req.body)
         });
         var data = await r.json();
+        console.log('[Proxy] IG POST /jobs → ' + r.status);
         res.status(r.status).json(data);
-    } catch(e) { res.status(500).json({ error: e.message }); }
+    } catch(e) { console.error('[Proxy] IG POST error:', e.message); res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/ig/jobs/:jobId', requireAuth, async function(req, res) {
+    console.log('[Proxy] IG GET /jobs/' + req.params.jobId);
     try {
         var r = await fetch(IG_API + '/jobs/' + req.params.jobId);
         var data = await r.json();
+        console.log('[Proxy] IG GET /jobs/' + req.params.jobId + ' → ' + r.status);
         res.status(r.status).json(data);
-    } catch(e) { res.status(500).json({ error: e.message }); }
+    } catch(e) { console.error('[Proxy] IG GET error:', e.message); res.status(500).json({ error: e.message }); }
 });
 
 // ── SkySys Push API Proxy (auth required) ──
 var SKY_URL = 'https://skysysx.net';
 
 app.post('/api/sky/push', requireAuth, async function(req, res) {
+    console.log('[Proxy] Sky POST /push');
     try {
         var r = await fetch(SKY_URL + '/e/boss', {
             method: 'POST',
@@ -307,16 +332,19 @@ app.post('/api/sky/push', requireAuth, async function(req, res) {
             body: req.body
         });
         var data = await r.json();
+        console.log('[Proxy] Sky POST /push → ' + r.status);
         res.status(r.status).json(data);
-    } catch(e) { res.status(500).json({ error: e.message }); }
+    } catch(e) { console.error('[Proxy] Sky POST error:', e.message); res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/sky/status/:jobId', requireAuth, async function(req, res) {
+    console.log('[Proxy] Sky GET /status/' + req.params.jobId);
     try {
         var r = await fetch(SKY_URL + '/api/status/' + req.params.jobId);
         var data = await r.json();
+        console.log('[Proxy] Sky GET /status/' + req.params.jobId + ' → ' + r.status);
         res.status(r.status).json(data);
-    } catch(e) { res.status(500).json({ error: e.message }); }
+    } catch(e) { console.error('[Proxy] Sky GET error:', e.message); res.status(500).json({ error: e.message }); }
 });
 
 // ── Start Telegram bot ──
@@ -329,9 +357,10 @@ if (BOT_TOKEN) {
     });
 
     async function handleBotUpdate(update) {
+        console.log('[Bot] update id=' + update.update_id + ' from=' + (update.message ? update.message.chat.id : update.callback_query ? update.callback_query.message.chat.id : '?'));
         if (update.message && update.message.text) {
             var msg = update.message;
-            if (msg.text === '/start') {
+            if (msg.text === '/start' || msg.text.startsWith('/start ')) {
                 var token = generateToken();
                 await setJSON('login:' + token, { chatId: msg.chat.id, createdAt: Date.now() });
                 var loginUrl = APP_URL + '/api/auth/telegram?token=' + token;
@@ -377,12 +406,13 @@ if (BOT_TOKEN) {
                 try {
                     var data = await tg('getUpdates', { offset: pollingOffset, timeout: 30, allowed_updates: ['message', 'callback_query'] });
                     if (data.ok && data.result) {
+                        if (data.result.length > 0) console.log('[Bot] received ' + data.result.length + ' update(s)');
                         for (var update of data.result) {
                             pollingOffset = update.update_id + 1;
                             await handleBotUpdate(update);
                         }
                     }
-                } catch(e) { console.error('Poll error:', e.message); }
+                } catch(e) { console.error('[Bot] Poll error:', e.message); }
                 setTimeout(poll, 1000);
             }
             poll();

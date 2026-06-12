@@ -320,6 +320,7 @@ function doubleTapAction(rowIdx, colKey) {
     if (!val) {
         navigator.clipboard.readText().then(function(text) {
             if (!text) return;
+            __ss.vibrate();
             pushUndo();
             row[colKey] = text;
             state.isDirty = true;
@@ -329,6 +330,7 @@ function doubleTapAction(rowIdx, colKey) {
         }).catch(function() {});
     } else {
         navigator.clipboard.writeText(val).then(function() {
+            __ss.vibrate();
             __ss.showToast('Copied');
         }).catch(function() {});
     }
@@ -421,6 +423,7 @@ dom.qebClearBtn.addEventListener('click', function() {
 
 // ── Selection mode ──
 function enterSelectionMode(type, row, col) {
+    __ss.vibrate();
     state.selectionMode = true;
     dom.qebBar.classList.remove('open');
     __ss.clearCellHighlight();

@@ -313,6 +313,19 @@ button, input, select, textarea {
 .login-btn svg {
     flex-shrink: 0;
 }
+.login-btn.loading {
+    opacity: 0.5;
+    cursor: default;
+    pointer-events: none;
+}
+.login-btn.loading:hover {
+    opacity: 0.5;
+    transform: none;
+}
+.login-btn.ready {
+    cursor: pointer;
+    pointer-events: auto;
+}
 .login-hint {
     font-size: 12px;
     color: var(--text3);

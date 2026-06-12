@@ -73,6 +73,13 @@ function lpCancel() {
     _lp.triggered = false;
 }
 
+// ── Vibration helper ──
+__ss.vibrate = function(pattern) {
+    if (navigator.vibrate) {
+        navigator.vibrate(pattern || 10);
+    }
+};
+
 // ── General helpers ──
 __ss.genId = function() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);

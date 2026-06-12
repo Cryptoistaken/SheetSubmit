@@ -6,7 +6,7 @@ var dom = {};
 var ids = [
     'homeView', 'sheetView', 'filesGrid', 'emptyState', 'grid',
     'sheetTitleBtn', 'backBtn', 'homeFab', 'qebBar', 'qebInput',
-    'qebChip', 'qebSaveBtn', 'qebPasteBtn', 'undoBtn', 'redoBtn',
+    'qebChip', 'qebSaveBtn', 'qebPasteBtn', 'qebClearBtn', 'undoBtn', 'redoBtn',
     'sheetBtns', 'toast', 'homeTopTitle', 'gearBtn',
     'fileCtxPopup', 'fileCtxRename', 'fileCtxDelete',
     'selBar', 'selCount', 'selDelete', 'selCopy',

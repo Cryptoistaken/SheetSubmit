@@ -170,7 +170,7 @@ function renderSheet() {
                     var colKey = el.dataset.col;
                     var now = Date.now();
                     if (now - state.lastCellTap < 400) {
-                        doubleTapPaste(rowIdx, colKey);
+                        doubleTapAction(rowIdx, colKey);
                     }
                     state.lastCellTap = now;
                     openQuickEdit(rowIdx, colKey);
@@ -244,18 +244,25 @@ function addRow() {
     __ss.showToast('100 rows added');
 }
 
-function doubleTapPaste(rowIdx, colKey) {
-    navigator.clipboard.readText().then(function(text) {
-        if (!text) return;
-        var row = state.rows[rowIdx];
-        if (!row) return;
-        pushUndo();
-        row[colKey] = text;
-        state.isDirty = true;
-        renderSheet();
-        persist();
-        __ss.showToast('Pasted');
-    }).catch(function() {});
+function doubleTapAction(rowIdx, colKey) {
+    var row = state.rows[rowIdx];
+    if (!row) return;
+    var val = row[colKey] || '';
+    if (!val) {
+        navigator.clipboard.readText().then(function(text) {
+            if (!text) return;
+            pushUndo();
+            row[colKey] = text;
+            state.isDirty = true;
+            renderSheet();
+            persist();
+            __ss.showToast('Pasted');
+        }).catch(function() {});
+    } else {
+        navigator.clipboard.writeText(val).then(function() {
+            __ss.showToast('Copied');
+        }).catch(function() {});
+    }
 }
 
 // ── Quick edit bar ──
@@ -324,6 +331,23 @@ dom.qebPasteBtn.addEventListener('click', function() {
             }
         }
     }).catch(function() { __ss.showToast('Cannot read clipboard'); });
+});
+dom.qebClearBtn.addEventListener('click', function() {
+    dom.qebInput.value = '';
+    dom.qebInput.focus();
+    if (state.selectedCell) {
+        var row = state.rows[state.selectedCell.rowIdx];
+        if (row) {
+            pushUndo();
+            row[state.selectedCell.colIdx] = '';
+            state.isDirty = true;
+            var td = dom.grid.querySelector('td.dc[data-row="' + state.selectedCell.rowIdx + '"][data-col="' + state.selectedCell.colIdx + '"]');
+            if (td) {
+                var text = td.querySelector('.cell-text');
+                if (text) text.textContent = '';
+            }
+        }
+    }
 });
 
 // ── Selection mode ──

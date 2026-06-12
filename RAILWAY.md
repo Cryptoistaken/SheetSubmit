@@ -23,7 +23,12 @@ git push -u origin main
 2. Railway auto-generates `REDIS_URL` variable
 
 ### 4. Set Environment Variables
-Railway sets `PORT` automatically. No other env vars needed — `REDIS_URL` is injected by the Redis addon.
+Set these in Railway service variables:
+- `REDIS_URL` — auto-set by Redis addon
+- `TG_BOT_TOKEN` — your Telegram bot token
+- `APP_URL` — your Railway app URL (e.g. `https://your-app.up.railway.app`)
+
+`PORT` is set automatically by Railway.
 
 ### 5. Deploy
 Railway auto-deploys on every push to `main`.

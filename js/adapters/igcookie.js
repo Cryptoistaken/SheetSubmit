@@ -32,11 +32,10 @@ __ss.registerAdapter('ig-cookie', {
 
     // Fetch cookies via IG API (proxied through server)
     fetchCookies: async function(username, password, twofaKey) {
-        var code = await this.generateTOTP(twofaKey);
         var jobRes = await fetch('/api/ig/jobs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ usernames: [username], commonPassword: password, twofaCodes: [code] })
+            body: JSON.stringify({ usernames: [username], commonPassword: password, twofaCodes: [twofaKey] })
         });
         if (!jobRes.ok) throw new Error('Job create failed: ' + jobRes.status);
         var jobId = (await jobRes.json()).jobId;

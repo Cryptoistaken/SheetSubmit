@@ -23,6 +23,13 @@ function showLogin() {
     document.getElementById('homeView').style.display = 'none';
     document.getElementById('sheetView').style.display = 'none';
     document.querySelector('.topbar').style.display = 'none';
+
+    fetch('/api/bot/info').then(function(r) { return r.json(); }).then(function(info) {
+        if (info.username) {
+            document.getElementById('botLink').href = 'https://t.me/' + info.username;
+            document.getElementById('botUsernameHint').textContent = '@' + info.username;
+        }
+    }).catch(function() {});
 }
 
 function showApp(user) {

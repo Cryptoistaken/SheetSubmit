@@ -325,55 +325,99 @@ app.get('*', function(req, res) {
     res.sendFile(path.join(ROOT, 'index.html'));
 });
 
-// ── Start Telegram bot polling ──
-if (BOT_TOKEN) {
-    var pollingOffset = 0;
+// ── Start Telegram bot ──
+var botUsername = '';
 
-    async function pollUpdates() {
-        try {
-            var data = await tg('getUpdates', { offset: pollingOffset, timeout: 30, allowed_updates: ['message', 'callback_query'] });
-            if (data.ok && data.result) {
-                for (var update of data.result) {
-                    pollingOffset = update.update_id + 1;
-                    if (update.message && update.message.text) {
-                        var msg = update.message;
-                        if (msg.text === '/start') {
-                            var token = generateToken();
-                            await setJSON('login:' + token, { chatId: msg.chat.id, createdAt: Date.now() });
-                            var loginUrl = APP_URL + '/api/auth/telegram?token=' + token;
-                            await tg('sendMessage', {
-                                chat_id: msg.chat.id,
-                                text: 'Click the button below to login to Sheet Submit:',
-                                reply_markup: {
-                                    inline_keyboard: [
-                                        [{ text: 'Login to Sheet Submit', url: loginUrl }],
-                                        [{ text: 'Copy Login Link', callback_data: 'copy:' + token }]
-                                    ]
-                                }
-                            });
-                        } else if (msg.text === '/myid') {
-                            await tg('sendMessage', { chat_id: msg.chat.id, text: 'Your Telegram ID: ' + msg.chat.id });
-                        }
+if (BOT_TOKEN) {
+    // Webhook handler
+    app.post('/api/bot/webhook', async function(req, res) {
+        res.json({ ok: true });
+        var update = req.body;
+        await handleBotUpdate(update);
+    });
+
+    // Bot info endpoint (for client)
+    app.get('/api/bot/info', function(req, res) {
+        res.json({ username: botUsername });
+    });
+
+    async function handleBotUpdate(update) {
+        if (update.message && update.message.text) {
+            var msg = update.message;
+            if (msg.text === '/start') {
+                var token = generateToken();
+                await setJSON('login:' + token, { chatId: msg.chat.id, createdAt: Date.now() });
+                var loginUrl = APP_URL + '/api/auth/telegram?token=' + token;
+                await tg('sendMessage', {
+                    chat_id: msg.chat.id,
+                    text: 'Click the button below to login to Sheet Submit:',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: 'Login to Sheet Submit', url: loginUrl }],
+                            [{ text: 'Copy Login Link', callback_data: 'copy:' + token }]
+                        ]
                     }
-                    if (update.callback_query) {
-                        var cb = update.callback_query;
-                        if (cb.data && cb.data.startsWith('copy:')) {
-                            var token = cb.data.replace('copy:', '');
-                            var url = APP_URL + '/api/auth/telegram?token=' + token;
-                            await tg('sendMessage', { chat_id: cb.message.chat.id, text: 'Copy this link:\n' + url });
-                            await tg('answerCallbackQuery', { callback_query_id: cb.id });
-                        }
-                    }
-                }
+                });
+            } else if (msg.text === '/myid') {
+                await tg('sendMessage', { chat_id: msg.chat.id, text: 'Your Telegram ID: ' + msg.chat.id });
             }
-        } catch(e) { console.error('Poll error:', e.message); }
-        setTimeout(pollUpdates, 1000);
+        }
+        if (update.callback_query) {
+            var cb = update.callback_query;
+            if (cb.data && cb.data.startsWith('copy:')) {
+                var token = cb.data.replace('copy:', '');
+                var url = APP_URL + '/api/auth/telegram?token=' + token;
+                await tg('sendMessage', { chat_id: cb.message.chat.id, text: 'Copy this link:\n' + url });
+                await tg('answerCallbackQuery', { callback_query_id: cb.id });
+            }
+        }
     }
 
-    tg('getMe').then(function(info) {
-        console.log('Bot started: @' + info.result.username);
+    // Try webhook first, fall back to polling
+    async function initBot() {
+        try {
+            var info = await tg('getMe');
+            if (!info.ok) throw new Error('getMe failed');
+            botUsername = info.result.username;
+            console.log('Bot: @' + botUsername);
+            await setJSON('bot:info', { username: botUsername });
+
+            // Detect Railway public URL
+            var publicDomain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.APP_URL;
+            if (publicDomain && publicDomain.startsWith('http')) {
+                var webhookUrl = publicDomain.replace(/\/$/, '') + '/api/bot/webhook';
+                console.log('Setting webhook: ' + webhookUrl);
+                var wh = await tg('setWebhook', { url: webhookUrl, allowed_updates: ['message', 'callback_query'] });
+                if (wh.ok) {
+                    console.log('Webhook set successfully');
+                    return;
+                }
+                console.log('Webhook failed, falling back to polling');
+            } else {
+                console.log('No public URL, using polling');
+            }
+        } catch(e) {
+            console.log('Webhook setup failed: ' + e.message + ', falling back to polling');
+        }
+
+        // Polling fallback
+        var pollingOffset = 0;
+        async function pollUpdates() {
+            try {
+                var data = await tg('getUpdates', { offset: pollingOffset, timeout: 30, allowed_updates: ['message', 'callback_query'] });
+                if (data.ok && data.result) {
+                    for (var update of data.result) {
+                        pollingOffset = update.update_id + 1;
+                        await handleBotUpdate(update);
+                    }
+                }
+            } catch(e) { console.error('Poll error:', e.message); }
+            setTimeout(pollUpdates, 1000);
+        }
         pollUpdates();
-    }).catch(function(e) { console.error('Bot failed:', e.message); });
+    }
+
+    initBot();
 }
 
 var PORT = process.env.PORT || 3000;

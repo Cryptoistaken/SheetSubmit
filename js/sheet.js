@@ -584,6 +584,7 @@ dom.selUnselectAll.addEventListener('click', function() {
 
 // ── Copy all ──
 dom.copyAllBtn.addEventListener('click', function() {
+    dom.sheetMoreMenu.classList.remove('open');
     if (!state.rows.length) { __ss.showToast('No data'); return; }
     var hasData = state.rows.some(function(row) {
         return state.COLUMNS.some(function(c) { return row[c.key]; });

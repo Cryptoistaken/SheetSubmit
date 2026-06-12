@@ -66,12 +66,14 @@ var APP_URL = process.env.RAILWAY_PUBLIC_DOMAIN
 var TG_API = 'https://api.telegram.org/bot' + BOT_TOKEN;
 
 async function tg(method, body) {
-    console.log('[Bot] tg.' + method + ' body=' + JSON.stringify(body).slice(0, 100));
-    var res = await fetch(TG_API + '/' + method, {
+    var bodyStr = body !== undefined ? JSON.stringify(body).slice(0, 100) : '(no body)';
+    console.log('[Bot] tg.' + method + ' body=' + bodyStr);
+    var opts = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-    });
+    };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    var res = await fetch(TG_API + '/' + method, opts);
     var json = await res.json();
     console.log('[Bot] tg.' + method + ' → ok=' + json.ok);
     return json;

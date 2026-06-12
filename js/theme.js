@@ -10,11 +10,15 @@
         document.documentElement.setAttribute('data-theme', theme);
         var logo = document.querySelector('.topbar-logo');
         var favicon = document.querySelector('link[rel="icon"]');
+        var loginLogo = document.getElementById('loginLogo');
         if (logo) {
             logo.src = theme === 'dark' ? 'public/dark_logo.svg' : 'public/white_logo.svg';
         }
         if (favicon) {
             favicon.href = theme === 'dark' ? 'public/dark_favicon.svg' : 'public/white_favicon.svg';
+        }
+        if (loginLogo) {
+            loginLogo.src = theme === 'dark' ? 'public/white_logo.svg' : 'public/dark_logo.svg';
         }
     }
 

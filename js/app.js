@@ -27,13 +27,12 @@ function showLogin() {
 
     var btn = document.getElementById('botLink');
     btn.classList.add('loading');
-    btn.querySelector('.btn-label').textContent = 'Connecting...';
+    btn.querySelector('.btn-label').textContent = 'Loading...';
 
     fetch('/api/bot/info').then(function(r) { return r.json(); }).then(function(info) {
         if (info.username) {
             btn.href = 'https://t.me/' + info.username + '?start=login';
-            btn.querySelector('.btn-label').textContent = 'Open Telegram Bot & Send /start';
-            document.getElementById('botUsernameHint').textContent = '@' + info.username;
+            btn.querySelector('.btn-label').textContent = 'Open Telegram';
             btn.classList.remove('loading');
             btn.classList.add('ready');
         } else {

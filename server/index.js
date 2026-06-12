@@ -323,18 +323,7 @@ app.get('/api/sky/status/:jobId', requireAuth, async function(req, res) {
 var botUsername = '';
 
 if (BOT_TOKEN) {
-    // Webhook handler — must be before SPA fallback
-    app.post('/api/bot/webhook', async function(req, res) {
-        res.json({ ok: true });
-        try {
-            var update = req.body;
-            await handleBotUpdate(update);
-        } catch(e) {
-            console.error('Webhook handler error:', e.message);
-        }
-    });
-
-    // Bot info endpoint (for client) — must be before SPA fallback
+    // Bot info endpoint (for client)
     app.get('/api/bot/info', function(req, res) {
         res.json({ username: botUsername });
     });
@@ -371,8 +360,8 @@ if (BOT_TOKEN) {
         }
     }
 
-    // Try webhook first, fall back to polling
-    async function initBot() {
+    // Use long-polling (more reliable than webhook on cloud platforms)
+    async function startBot() {
         try {
             var info = await tg('getMe');
             if (!info.ok) throw new Error('getMe failed');
@@ -380,36 +369,30 @@ if (BOT_TOKEN) {
             console.log('Bot: @' + botUsername);
             await setJSON('bot:info', { username: botUsername });
 
-            var webhookUrl = APP_URL + '/api/bot/webhook';
-            console.log('Setting webhook: ' + webhookUrl);
-            var wh = await tg('setWebhook', { url: webhookUrl, allowed_updates: ['message', 'callback_query'] });
-            if (wh.ok) {
-                console.log('Webhook set successfully');
-                return;
-            }
-            console.log('Webhook failed, falling back to polling');
-        } catch(e) {
-            console.log('Webhook setup failed: ' + e.message + ', falling back to polling');
-        }
+            await tg('deleteWebhook');
+            console.log('Starting long-polling');
 
-        // Polling fallback
-        var pollingOffset = 0;
-        async function pollUpdates() {
-            try {
-                var data = await tg('getUpdates', { offset: pollingOffset, timeout: 30, allowed_updates: ['message', 'callback_query'] });
-                if (data.ok && data.result) {
-                    for (var update of data.result) {
-                        pollingOffset = update.update_id + 1;
-                        await handleBotUpdate(update);
+            var pollingOffset = 0;
+            async function poll() {
+                try {
+                    var data = await tg('getUpdates', { offset: pollingOffset, timeout: 30, allowed_updates: ['message', 'callback_query'] });
+                    if (data.ok && data.result) {
+                        for (var update of data.result) {
+                            pollingOffset = update.update_id + 1;
+                            await handleBotUpdate(update);
+                        }
                     }
-                }
-            } catch(e) { console.error('Poll error:', e.message); }
-            setTimeout(pollUpdates, 1000);
+                } catch(e) { console.error('Poll error:', e.message); }
+                setTimeout(poll, 1000);
+            }
+            poll();
+        } catch(e) {
+            console.error('Bot init error:', e.message);
+            setTimeout(startBot, 10000);
         }
-        pollUpdates();
     }
 
-    initBot();
+    startBot();
 }
 
 // ── Serve static files (after API routes) ──

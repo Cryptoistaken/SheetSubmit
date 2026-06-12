@@ -96,6 +96,44 @@ async function persist() {
     state.isDirty = false;
 }
 
+// ── Sync toggle ──
+function updateSyncToggle() {
+    if (!dom.syncToggle) return;
+    if (state.syncEnabled) {
+        dom.syncToggle.classList.add('on');
+        dom.syncToggle.title = 'Sync: ON';
+    } else {
+        dom.syncToggle.classList.remove('on');
+        dom.syncToggle.title = 'Sync: OFF';
+    }
+    if (state.syncRunning) {
+        dom.syncDot.classList.add('running');
+    } else {
+        dom.syncDot.classList.remove('running');
+    }
+}
+
+if (dom.syncToggle) {
+    dom.syncToggle.addEventListener('click', async function() {
+        if (state.syncRunning) return;
+        state.syncEnabled = !state.syncEnabled;
+        updateSyncToggle();
+        if (state.currentFileId) {
+            await api.setSync(state.currentFileId, { enabled: state.syncEnabled });
+        }
+    });
+}
+
+// ── API log popup ──
+function showApiLogs(logs, username) {
+    var msg = username + ' — ' + logs.length + ' API calls\n';
+    logs.slice(0, 5).forEach(function(log) {
+        var t = log.steps ? log.steps.map(function(s) { return s.type + ':' + s.status; }).join(' → ') : '';
+        msg += '• ' + t + '\n';
+    });
+    __ss.showToast(msg.trim());
+}
+
 // ── Undo / Redo ──
 function pushUndo() {
     var current = __ss.cloneRows(state.rows);

@@ -319,26 +319,22 @@ app.get('/api/sky/status/:jobId', requireAuth, async function(req, res) {
     } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Serve static files ──
-app.use(express.static(ROOT));
-
-// ── SPA fallback ──
-app.get('*', function(req, res) {
-    res.sendFile(path.join(ROOT, 'index.html'));
-});
-
 // ── Start Telegram bot ──
 var botUsername = '';
 
 if (BOT_TOKEN) {
-    // Webhook handler
+    // Webhook handler — must be before SPA fallback
     app.post('/api/bot/webhook', async function(req, res) {
         res.json({ ok: true });
-        var update = req.body;
-        await handleBotUpdate(update);
+        try {
+            var update = req.body;
+            await handleBotUpdate(update);
+        } catch(e) {
+            console.error('Webhook handler error:', e.message);
+        }
     });
 
-    // Bot info endpoint (for client)
+    // Bot info endpoint (for client) — must be before SPA fallback
     app.get('/api/bot/info', function(req, res) {
         res.json({ username: botUsername });
     });
@@ -415,6 +411,14 @@ if (BOT_TOKEN) {
 
     initBot();
 }
+
+// ── Serve static files (after API routes) ──
+app.use(express.static(ROOT));
+
+// ── SPA fallback (last) ──
+app.get('*', function(req, res) {
+    res.sendFile(path.join(ROOT, 'index.html'));
+});
 
 var PORT = process.env.PORT || 3000;
 app.listen(PORT, function() {

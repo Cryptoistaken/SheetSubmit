@@ -243,7 +243,15 @@ function renderSheet() {
     dom.grid.querySelectorAll('.dot-cell').forEach(function(td) {
         __ss.attachTapHold(td, {
             onTap: function(el) {
-                cycleStatus(parseInt(el.dataset.row));
+                var behavior = __ss.getFileBehavior(state.currentFileType);
+                if (behavior && behavior.onDotDoubleTap) {
+                    var row = state.rows[parseInt(el.dataset.row)];
+                    behavior.onDotDoubleTap(row).then(function(result) {
+                        if (result && result.action === 'totp_copied') {
+                            __ss.showToast('TOTP ' + result.code + ' copied');
+                        }
+                    });
+                }
             },
             onHold: function(el) {
                 var behavior = __ss.getFileBehavior(state.currentFileType);
@@ -253,17 +261,6 @@ function renderSheet() {
                     if (result && result.action === 'show_logs') {
                         showApiLogs(result.logs, row.username);
                     }
-                }
-            },
-            onDoubleTap: function(el) {
-                var behavior = __ss.getFileBehavior(state.currentFileType);
-                if (behavior && behavior.onDotDoubleTap) {
-                    var row = state.rows[parseInt(el.dataset.row)];
-                    behavior.onDotDoubleTap(row).then(function(result) {
-                        if (result && result.action === 'totp_copied') {
-                            __ss.showToast('TOTP ' + result.code + ' copied');
-                        }
-                    });
                 }
             }
         });
@@ -331,16 +328,6 @@ function renderSheet() {
 }
 
 // ── Row operations ──
-function cycleStatus(idx) {
-    pushUndo();
-    var row = state.rows[idx];
-    if (!row) return;
-    var map = { '': 'good', good: 'bad', bad: 'pending', pending: '' };
-    row.status = map[row.status] || 'good';
-    state.isDirty = true;
-    renderSheet();
-    persist();
-}
 
 function addRow() {
     pushUndo();

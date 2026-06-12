@@ -35,6 +35,7 @@ __ss.dom = dom;
 
 // ── Shared state ──
 __ss.state = {
+    filesCache: null,
     currentFileId: null,
     currentFileType: null,
     COLUMNS: [],

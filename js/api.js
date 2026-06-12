@@ -42,6 +42,8 @@ __ss.api = {
     getArchive: function() { return get('/archive'); },
     restoreFile: function(id) { return post('/archive/' + id + '/restore'); },
     permanentDelete: function(id) { return del('/archive/' + id); },
+    batchRestore: function(ids) { return post('/archive/batch-restore', { ids: ids }); },
+    batchDelete: function(ids) { return post('/archive/batch-delete', { ids: ids }); },
     getSync: function(id) { return get('/files/' + id + '/sync'); },
     setSync: function(id, data) { return put('/files/' + id + '/sync', data); },
     getLogs: function(id) { return get('/files/' + id + '/logs'); },

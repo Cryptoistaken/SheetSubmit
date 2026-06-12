@@ -310,6 +310,26 @@ app.post('/api/archive/:id/restore', requireAuth, async function(req, res) {
     res.json({ ok: true });
 });
 
+app.post('/api/archive/batch-restore', requireAuth, async function(req, res) {
+    var ids = req.body.ids;
+    if (!ids || !ids.length) { res.status(400).json({ error: 'no ids' }); return; }
+    var archived = await getJSON('archive:' + req.userId) || [];
+    var files = await getUserFiles(req.userId);
+    var restored = [];
+    archived = archived.filter(function(f) {
+        if (ids.indexOf(f.id) !== -1) {
+            delete f.deletedAt;
+            files.unshift(f);
+            restored.push(f);
+            return false;
+        }
+        return true;
+    });
+    await setJSON('archive:' + req.userId, archived);
+    await setJSON('files:' + req.userId, files);
+    res.json({ restored: restored.length });
+});
+
 app.delete('/api/archive/:id', requireAuth, async function(req, res) {
     var archived = await getJSON('archive:' + req.userId) || [];
     var existed = archived.some(function(f) { return f.id === req.params.id; });
@@ -322,6 +342,26 @@ app.delete('/api/archive/:id', requireAuth, async function(req, res) {
     await delKey('sync:' + req.params.id);
     await delKey('logs:' + req.params.id);
     res.json({ ok: true });
+});
+
+app.post('/api/archive/batch-delete', requireAuth, async function(req, res) {
+    var ids = req.body.ids;
+    if (!ids || !ids.length) { res.status(400).json({ error: 'no ids' }); return; }
+    var archived = await getJSON('archive:' + req.userId) || [];
+    var idSet = {};
+    ids.forEach(function(id) { idSet[id] = true; });
+    archived = archived.filter(function(f) { return !idSet[f.id]; });
+    await setJSON('archive:' + req.userId, archived);
+    var delPromises = [];
+    ids.forEach(function(id) {
+        delPromises.push(delKey('rows:' + id));
+        delPromises.push(delKey('undo:' + id));
+        delPromises.push(delKey('redo:' + id));
+        delPromises.push(delKey('sync:' + id));
+        delPromises.push(delKey('logs:' + id));
+    });
+    await Promise.all(delPromises);
+    res.json({ deleted: ids.length });
 });
 
 // ── API: Rows (auth required) ──

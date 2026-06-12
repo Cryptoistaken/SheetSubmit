@@ -116,8 +116,8 @@ dom.homeFab.addEventListener('click', __ss.showTypeModal);
 // ── Popstate (browser nav) ──
 window.addEventListener('popstate', function(e) {
     if (e.state && e.state.fileId) {
-        fetch('/api/files').then(function(r) { return r.json(); }).then(function(files) {
-            if (files.find(function(x) { return x.id === e.state.fileId; })) {
+        __ss.api.getFile(e.state.fileId).then(function(f) {
+            if (f && f.id) {
                 if (__ss.state.currentFileId !== e.state.fileId) __ss.openFile(e.state.fileId);
                 return;
             }
@@ -137,9 +137,8 @@ checkAuth().then(function() {
         // Restore file from URL
         var m = window.location.pathname.match(/\/file\/([^/]+)/);
         if (m) {
-            fetch('/api/files').then(function(r) { return r.json(); }).then(function(files) {
-                var f = files.find(function(x) { return x.id === m[1]; });
-                if (f) {
+            __ss.api.getFile(m[1]).then(function(f) {
+                if (f && f.id) {
                     try { history.replaceState({fileId: m[1]}, '', 'file/' + m[1]); } catch(e) {}
                     __ss.openFile(m[1]);
                 }

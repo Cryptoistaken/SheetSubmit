@@ -6,23 +6,20 @@ var state = __ss.state;
 
 // ── Open / Close ──
 __ss.openFile = async function(id) {
-    var f = await api.getFile(id);
+    var results = await Promise.all([api.getFile(id), api.getRows(id), api.getSync(id), api.getLogs(id)]);
+    var f = results[0];
     if (!f || !f.id) return;
     state.currentFileId = id;
     state.currentFileType = f.type || 'ig_cookie';
     state.COLUMNS = __ss.getTypeDef(state.currentFileType).columns;
-    state.rows = await api.getRows(id);
+    state.rows = results[1] || [];
     state.undoStack = [];
     state.redoStack = [];
     state.selectedCell = null;
     state.isDirty = false;
-    state.syncEnabled = false;
+    state.syncEnabled = (results[2] && results[2].enabled) || false;
     state.syncRunning = false;
-    state.apiLogs = [];
-
-    var results = await Promise.all([api.getSync(id), api.getLogs(id)]);
-    state.syncEnabled = (results[0].enabled) || false;
-    state.apiLogs = results[1] || [];
+    state.apiLogs = results[3] || [];
 
     dom.homeView.style.display = 'none';
     dom.sheetView.classList.add('active');

@@ -7,6 +7,7 @@ var state = __ss.state;
 // ── Home render ──
 __ss.renderHome = async function() {
     var files = await api.getFiles();
+    state.filesCache = files;
     dom.filesGrid.innerHTML = '';
     if (files.length === 0) {
         dom.emptyState.style.display = 'flex';
@@ -51,6 +52,10 @@ __ss.renderHome = async function() {
             }
         });
 
+        card.querySelector('.file-card-dl').addEventListener('click', function(e) {
+            e.stopPropagation();
+            downloadFile(f.id, f.name);
+        });
         ['mousedown', 'mouseup', 'touchstart', 'touchend'].forEach(function(evt) {
             card.querySelector('.file-card-dl').addEventListener(evt, function(e) { e.stopPropagation(); });
         });
@@ -187,12 +192,12 @@ __ss.promptRenameFile = function(id) {
 __ss.commitRename = async function() {
     var name = dom.renameInput.value.trim();
     if (!name) { __ss.showToast('Name cannot be empty'); return; }
-    var f = await api.getFile(state.renameFileId);
-    if (!f || !f.id) return;
-    await api.updateFile(state.renameFileId, { name: name });
+    var fileId = state.renameFileId;
+    if (!fileId) return;
+    await api.updateFile(fileId, { name: name });
     dom.renameOverlay.classList.remove('open');
     state.renameFileId = null;
-    if (state.currentFileId === f.id) dom.sheetTitleBtn.textContent = name;
+    if (state.currentFileId === fileId) dom.sheetTitleBtn.textContent = name;
     __ss.renderHome();
     __ss.showToast('Renamed');
 };
@@ -350,7 +355,7 @@ if (dom.archiveSelRestore) {
         if (!state.archiveSelectionMode) return;
         var ids = Array.from(state.selectedArchiveFiles);
         if (!confirm('Restore ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + '?')) return;
-        Promise.all(ids.map(function(id) { return api.restoreFile(id); })).then(function() {
+        api.batchRestore(ids).then(function() {
             exitArchiveSelectionMode();
             renderArchive();
             __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' restored');
@@ -363,10 +368,10 @@ if (dom.archiveSelDelete) {
         if (!state.archiveSelectionMode) return;
         var ids = Array.from(state.selectedArchiveFiles);
         if (!confirm('Permanently delete ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + '?')) return;
-        Promise.all(ids.map(function(id) { return api.permanentDelete(id); })).then(function() {
+        api.batchDelete(ids).then(function() {
             exitArchiveSelectionMode();
             renderArchive();
-            __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' deleted');
+            __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' permanently deleted');
         });
     });
 }
@@ -412,7 +417,7 @@ __ss.createFile = async function(typeKey) {
     }
     var td = __ss.getTypeDef(typeKey);
     var name = td.label + ' ' + __ss.todayStr();
-    var files = await api.getFiles();
+    var files = state.filesCache || await api.getFiles();
     if (files.some(function(f) { return f.name === name; })) {
         var suffix = 2;
         while (files.some(function(f) { return f.name === name + ' (' + suffix + ')'; })) { suffix++; }
@@ -423,7 +428,6 @@ __ss.createFile = async function(typeKey) {
     var emptyRows = [];
     for (var i = 0; i < 100; i++) emptyRows.push(__ss.makeEmptyRow(state.COLUMNS));
     await api.createFile({ id: id, name: name, type: typeKey, rowCount: 100, initialRows: emptyRows });
-    __ss.renderHome();
     __ss.showToast(td.label + ' file created');
     __ss.openFile(id);
 };
@@ -453,12 +457,12 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ── Home xlsx upload ──
-dom.xlsxFileInputHome.addEventListener('change', function(e) {
+dom.xlsxFileInputHome.addEventListener('change', async function(e) {
     var file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
     var reader = new FileReader();
-    reader.onload = function(ev) {
+    reader.onload = async function(ev) {
         var wb = XLSX.read(ev.target.result, { type: 'array' });
         var ws = wb.Sheets[wb.SheetNames[0]];
         var json = XLSX.utils.sheet_to_json(ws, { header: 1 });
@@ -484,15 +488,12 @@ dom.xlsxFileInputHome.addEventListener('change', function(e) {
         }
         if (rows.length === 0) { __ss.showToast('No data rows found'); return; }
         var name = file.name.replace(/\.xlsx?$/i, '') || 'Import ' + __ss.todayStr();
-        api.getFiles().then(function(files) {
-            if (files.some(function(f) { return f.name === name; })) name = name + ' (' + __ss.genId().slice(0, 4) + ')';
-            var id = __ss.genId();
-            api.createFile({ id: id, name: name, type: 'ig_cookie', rowCount: rows.length, initialRows: rows }).then(function() {
-                __ss.renderHome();
-                __ss.showToast('Imported ' + rows.length + ' rows');
-                __ss.openFile(id);
-            });
-        });
+        var files = state.filesCache || await api.getFiles();
+        if (files.some(function(f) { return f.name === name; })) name = name + ' (' + __ss.genId().slice(0, 4) + ')';
+        var id = __ss.genId();
+        await api.createFile({ id: id, name: name, type: 'ig_cookie', rowCount: rows.length, initialRows: rows });
+        __ss.showToast('Imported ' + rows.length + ' rows');
+        __ss.openFile(id);
     };
     reader.readAsArrayBuffer(file);
 });

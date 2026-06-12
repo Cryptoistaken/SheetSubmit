@@ -307,18 +307,36 @@ function renderSheet() {
                     enterSelectionMode('col', null, el.dataset.col);
                 }
             },
-            onDoubleTap: function(el) {
+            onTripleTap: function(el) {
                 var colKey = el.dataset.col;
-                var lines = [];
-                state.rows.forEach(function(row) {
-                    var val = row[colKey] || '';
-                    if (val) lines.push(val);
+                var vals = [];
+                state.rows.forEach(function(row, i) {
+                    var v = row[colKey] || '';
+                    if (v) vals.push({ idx: i, val: v });
                 });
-                if (!lines.length) { __ss.showToast('No data'); return; }
-                navigator.clipboard.writeText(lines.join('\n')).then(function() {
-                    __ss.vibrate();
-                    __ss.showToast('Copied ' + lines.length + ' cells');
-                }).catch(function() { __ss.showToast('Cannot copy'); });
+                if (vals.length) {
+                    var text = vals.map(function(v) { return v.val; }).join('\n');
+                    navigator.clipboard.writeText(text).then(function() {
+                        __ss.vibrate();
+                        __ss.showToast('Copied ' + vals.length + ' cells');
+                    }).catch(function() { __ss.showToast('Cannot copy'); });
+                } else {
+                    navigator.clipboard.readText().then(function(text) {
+                        if (!text) return;
+                        var parts = text.split('\n').filter(function(s) { return s; });
+                        pushUndo();
+                        parts.forEach(function(val, i) {
+                            if (state.rows[i]) state.rows[i][colKey] = val;
+                        });
+                        state.isDirty = true;
+                        renderSheet();
+                        parts.forEach(function(val, i) {
+                            if (state.rows[i]) api.updateCell(state.currentFileId, { rowIdx: i, colKey: colKey, value: val });
+                        });
+                        __ss.vibrate();
+                        __ss.showToast('Pasted ' + parts.length + ' cells');
+                    }).catch(function() {});
+                }
             }
         });
     });
@@ -335,17 +353,35 @@ function renderSheet() {
                     enterSelectionMode('row', el.dataset.row, null);
                 }
             },
-            onDoubleTap: function(el) {
+            onTripleTap: function(el) {
                 var rowIdx = parseInt(el.dataset.row);
                 var row = state.rows[rowIdx];
                 if (!row) return;
-                var vals = state.COLUMNS.map(function(c) { return row[c.key] || ''; });
-                var hasData = vals.some(function(v) { return v; });
-                if (!hasData) { __ss.showToast('Empty row'); return; }
-                navigator.clipboard.writeText(vals.join('\t')).then(function() {
-                    __ss.vibrate();
-                    __ss.showToast('Row copied');
-                }).catch(function() { __ss.showToast('Cannot copy'); });
+                var vals = state.COLUMNS.map(function(c) { return { key: c.key, val: row[c.key] || '' }; });
+                var hasData = vals.some(function(v) { return v.val; });
+                if (hasData) {
+                    var text = vals.map(function(v) { return v.val; }).join('\t');
+                    navigator.clipboard.writeText(text).then(function() {
+                        __ss.vibrate();
+                        __ss.showToast('Row copied');
+                    }).catch(function() { __ss.showToast('Cannot copy'); });
+                } else {
+                    navigator.clipboard.readText().then(function(text) {
+                        if (!text) return;
+                        var parts = text.split('\t');
+                        pushUndo();
+                        vals.forEach(function(v, i) {
+                            if (parts[i] !== undefined) row[v.key] = parts[i];
+                        });
+                        state.isDirty = true;
+                        renderSheet();
+                        vals.forEach(function(v, i) {
+                            if (parts[i] !== undefined) api.updateCell(state.currentFileId, { rowIdx: rowIdx, colKey: v.key, value: parts[i] });
+                        });
+                        __ss.vibrate();
+                        __ss.showToast('Row pasted');
+                    }).catch(function() {});
+                }
             }
         });
     });

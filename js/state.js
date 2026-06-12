@@ -121,7 +121,8 @@ __ss.makeEmptyRow = function(columns) {
 };
 
 __ss.attachTapHold = function(el, opts) {
-    var lastTap = 0;
+    var taps = [];
+    var tapTimer = null;
     function handleDown() {
         lpStart(function() {
             if (opts.onHold) opts.onHold(el);
@@ -130,14 +131,26 @@ __ss.attachTapHold = function(el, opts) {
     function handleUp() {
         var held = lpEnd();
         if (held) return;
-        var now = Date.now();
-        if (opts.onDoubleTap && now - lastTap < 350) {
-            opts.onDoubleTap(el);
-            lastTap = 0;
-        } else {
-            lastTap = now;
-            if (opts.onTap) opts.onTap(el);
+        taps.push(Date.now());
+        if (taps.length > 3) taps.shift();
+        clearTimeout(tapTimer);
+        var gap = taps.length > 1 ? taps[taps.length - 1] - taps[taps.length - 2] : Infinity;
+        if (gap > 400) { taps = [taps[taps.length - 1]]; }
+        if (taps.length === 3) {
+            var t = taps;
+            taps = [];
+            if (opts.onTripleTap) opts.onTripleTap(el);
+            return;
         }
+        if (taps.length === 2) {
+            tapTimer = setTimeout(function() {
+                if (taps.length === 2) { taps = []; if (opts.onDoubleTap) opts.onDoubleTap(el); }
+            }, 400);
+            return;
+        }
+        tapTimer = setTimeout(function() {
+            if (taps.length === 1) { taps = []; if (opts.onTap) opts.onTap(el); }
+        }, 400);
     }
     if (__ss.state.isTouch) {
         el.addEventListener('touchstart', handleDown, {passive: true});

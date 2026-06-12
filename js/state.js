@@ -14,6 +14,7 @@ var ids = [
     'renameOverlay', 'renameInput', 'renameCancel', 'renameConfirm',
     'typeOverlay', 'typeOptions', 'typeCancel',
     'connStatus', 'connStatusText',
+    'homeTabs', 'homePaneFiles',
     'fileSelBar', 'fileSelCount', 'fileSelDelete',
     'sheetMoreBtn', 'sheetMoreMenu', 'menuDownload', 'menuUpload',
     'uploadModeOverlay', 'uploadReplace', 'uploadAppend', 'uploadModeCancel',

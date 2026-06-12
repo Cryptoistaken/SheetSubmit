@@ -161,6 +161,7 @@ function unselectAllFiles() {
 function deleteSelectedFiles() {
     if (!state.fileSelectionMode) return;
     var ids = Array.from(state.selectedFiles);
+    if (!confirm('Move ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' to archive?')) return;
     Promise.all(ids.map(function(id) { return api.deleteFile(id); })).then(function() {
         exitFileSelectionMode();
         __ss.renderHome();
@@ -173,6 +174,7 @@ if (dom.fileSelSelectAll) dom.fileSelSelectAll.addEventListener('click', selectA
 if (dom.fileSelUnselectAll) dom.fileSelUnselectAll.addEventListener('click', unselectAllFiles);
 
 __ss.deleteFile = async function(id) {
+    if (!confirm('Move this file to archive?')) return;
     await api.deleteFile(id);
     __ss.renderHome();
     __ss.showToast('File archived');

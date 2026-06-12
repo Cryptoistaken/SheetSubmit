@@ -7,11 +7,11 @@ __ss.FILE_TYPES = {
         badge: 'IG Cookie',
         badgeClass: 't-ig',
         icon: 'IG',
-        desc: 'username, password & cookies',
+        desc: 'username, password & 2fa key',
         columns: [
             { key: 'username', label: 'username', width: 140 },
             { key: 'password', label: 'password', width: 140 },
-            { key: 'cookies', label: 'cookies', width: 200 },
+            { key: 'twofa', label: '2fa', width: 200 },
         ]
     }
 };

@@ -143,6 +143,77 @@ app.get('/api/health', function(req, res) {
     res.json({ status: redis.status === 'ready' ? 'ok' : redis.status });
 });
 
+// ── IG Cookie API Proxy ──
+var IG_API = 'https://igautocookiesofficial.site/api';
+
+app.post('/api/ig/jobs', async function(req, res) {
+    try {
+        var r = await fetch(IG_API + '/jobs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(req.body)
+        });
+        var data = await r.json();
+        res.status(r.status).json(data);
+    } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/ig/jobs/:jobId', async function(req, res) {
+    try {
+        var r = await fetch(IG_API + '/jobs/' + req.params.jobId);
+        var data = await r.json();
+        res.status(r.status).json(data);
+    } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── SkySys Push API Proxy ──
+var SKY_URL = 'https://skysysx.net';
+
+app.post('/api/sky/push', async function(req, res) {
+    try {
+        var r = await fetch(SKY_URL + '/e/boss', {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: req.body
+        });
+        var data = await r.json();
+        res.status(r.status).json(data);
+    } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/sky/status/:jobId', async function(req, res) {
+    try {
+        var r = await fetch(SKY_URL + '/api/status/' + req.params.jobId);
+        var data = await r.json();
+        res.status(r.status).json(data);
+    } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Sync state per file ──
+app.get('/api/files/:id/sync', async function(req, res) {
+    var sync = await getJSON('sync:' + req.params.id);
+    res.json(sync || { enabled: false });
+});
+
+app.put('/api/files/:id/sync', async function(req, res) {
+    await setJSON('sync:' + req.params.id, req.body);
+    res.json({ ok: true });
+});
+
+// ── API call logs per file ──
+app.get('/api/files/:id/logs', async function(req, res) {
+    var logs = await getJSON('logs:' + req.params.id);
+    res.json(logs || []);
+});
+
+app.post('/api/files/:id/logs', async function(req, res) {
+    var logs = await getJSON('logs:' + req.params.id) || [];
+    logs.unshift(req.body);
+    if (logs.length > 200) logs.length = 200;
+    await setJSON('logs:' + req.params.id, logs);
+    res.json({ ok: true });
+});
+
 // ── Serve static files ──
 app.use(express.static(ROOT));
 

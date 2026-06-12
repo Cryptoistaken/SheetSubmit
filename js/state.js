@@ -19,6 +19,7 @@ var ids = [
     'sheetMoreBtn', 'sheetMoreMenu', 'menuDownload', 'menuUpload',
     'uploadModeOverlay', 'uploadReplace', 'uploadAppend', 'uploadModeCancel',
     'xlsxFileInput', 'xlsxFileInputHome',
+    'syncToggle', 'syncDot',
     'fileSelSelectAll', 'fileSelUnselectAll',
     'homePaneArchive', 'archiveGrid', 'archiveEmptyState',
     'archiveCtxPopup', 'archiveCtxRestore', 'archiveCtxDelete',
@@ -111,6 +112,7 @@ __ss.makeEmptyRow = function(columns) {
 };
 
 __ss.attachTapHold = function(el, opts) {
+    var lastTap = 0;
     function handleDown() {
         lpStart(function() {
             if (opts.onHold) opts.onHold(el);
@@ -118,7 +120,15 @@ __ss.attachTapHold = function(el, opts) {
     }
     function handleUp() {
         var held = lpEnd();
-        if (!held && opts.onTap) opts.onTap(el);
+        if (held) return;
+        var now = Date.now();
+        if (opts.onDoubleTap && now - lastTap < 350) {
+            opts.onDoubleTap(el);
+            lastTap = 0;
+        } else {
+            lastTap = now;
+            if (opts.onTap) opts.onTap(el);
+        }
     }
     if (__ss.state.isTouch) {
         el.addEventListener('touchstart', handleDown, {passive: true});

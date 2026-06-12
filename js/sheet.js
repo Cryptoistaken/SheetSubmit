@@ -17,6 +17,13 @@ __ss.openFile = async function(id) {
     state.redoStack = [];
     state.selectedCell = null;
     state.isDirty = false;
+    state.syncEnabled = false;
+    state.syncRunning = false;
+    state.apiLogs = [];
+
+    var syncData = await api.getSync(id);
+    state.syncEnabled = syncData.enabled || false;
+    state.apiLogs = await api.getLogs(id);
 
     dom.homeView.style.display = 'none';
     dom.sheetView.classList.add('active');
@@ -32,6 +39,7 @@ __ss.openFile = async function(id) {
     var logo = document.querySelector('.topbar-logo');
     if (logo) logo.style.display = 'none';
 
+    updateSyncToggle();
     try { history.pushState({fileId: id}, '', 'file/' + id); } catch(e) {}
     updateUndoRedo();
     renderSheet();
@@ -155,8 +163,31 @@ function renderSheet() {
     dom.grid.innerHTML = h;
 
     dom.grid.querySelectorAll('.dot-cell').forEach(function(td) {
-        td.addEventListener('click', function(e) {
-            cycleStatus(parseInt(td.dataset.row));
+        __ss.attachTapHold(td, {
+            onTap: function(el) {
+                cycleStatus(parseInt(el.dataset.row));
+            },
+            onHold: function(el) {
+                var behavior = __ss.getFileBehavior(state.currentFileType);
+                if (behavior && behavior.onDotHold) {
+                    var row = state.rows[parseInt(el.dataset.row)];
+                    var result = behavior.onDotHold(row, state.apiLogs);
+                    if (result && result.action === 'show_logs') {
+                        showApiLogs(result.logs, row.username);
+                    }
+                }
+            },
+            onDoubleTap: function(el) {
+                var behavior = __ss.getFileBehavior(state.currentFileType);
+                if (behavior && behavior.onDotDoubleTap) {
+                    var row = state.rows[parseInt(el.dataset.row)];
+                    behavior.onDotDoubleTap(row).then(function(result) {
+                        if (result && result.action === 'totp_copied') {
+                            __ss.showToast('TOTP ' + result.code + ' copied');
+                        }
+                    });
+                }
+            }
         });
     });
 

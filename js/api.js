@@ -43,6 +43,10 @@ __ss.api = {
     getArchive: function() { return get('/archive'); },
     restoreFile: function(id) { return post('/archive/' + id + '/restore'); },
     permanentDelete: function(id) { return del('/archive/' + id); },
+    getSync: function(id) { return get('/files/' + id + '/sync'); },
+    setSync: function(id, data) { return put('/files/' + id + '/sync', data); },
+    getLogs: function(id) { return get('/files/' + id + '/logs'); },
+    addLog: function(id, log) { return post('/files/' + id + '/logs', log); },
 };
 
 })();

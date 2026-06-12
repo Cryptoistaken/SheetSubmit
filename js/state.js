@@ -22,7 +22,7 @@ var ids = [
     'syncToggle', 'syncDot',
     'fileSelSelectAll', 'fileSelUnselectAll',
     'confirmOverlay', 'confirmMessage', 'confirmCancel', 'confirmOk',
-    'logPopupOverlay', 'logPopupTitle', 'logPopupBody', 'logPopupClose',
+    'logPopup', 'logPopupTitle', 'logPopupBody',
     'homePaneArchive', 'archiveGrid', 'archiveEmptyState',
     'archiveCtxPopup', 'archiveCtxRestore', 'archiveCtxDelete',
     'archiveSelBar', 'archiveSelCount',

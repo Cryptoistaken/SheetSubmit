@@ -168,32 +168,36 @@ if (dom.syncToggle) {
     });
 }
 
-// ── API log popup ──
-function showApiLogs(logs, username) {
+// ── API log popup (positioned from dot) ──
+function showApiLogs(logs, username, el) {
     dom.logPopupTitle.textContent = username + ' — ' + logs.length + ' API call' + (logs.length > 1 ? 's' : '');
     var h = '';
     logs.forEach(function(log, idx) {
-        var statusBadge = log.status === 'done' ? '<span style="color:var(--green)">&#10003; Done</span>' : '<span style="color:var(--red)">&#10007; Failed</span>';
-        h += '<div style="padding:8px 0;border-top:' + (idx ? '1px solid var(--border)' : 'none') + '">';
-        h += '<div style="font-weight:600;font-size:13px;margin-bottom:4px">#' + (idx + 1) + ' ' + statusBadge + '</div>';
+        var statusIcon = log.status === 'done' ? '&#10003;' : '&#10007;';
+        var statusColor = log.status === 'done' ? 'var(--green)' : 'var(--red)';
+        h += '<div style="padding:6px 0;border-top:' + (idx ? '1px solid var(--border)' : 'none') + ';font-size:12px">';
         (log.calls || []).forEach(function(call) {
             if (call.type === 'error') {
-                h += '<div style="color:var(--red);padding:4px 0;font-size:12px">&#9888; ' + __ss.esc(call.response) + '</div>';
+                h += '<div style="color:var(--red);padding:2px 0;font-size:12px">&#9888; ' + __ss.esc(call.response) + '</div>';
             } else {
-                h += '<div style="display:flex;gap:6px;padding:3px 0">';
-                h += '<span style="font-weight:500;white-space:nowrap;color:var(--text)">' + call.type + ':</span>';
-                h += '<span style="word-break:break-all">' + __ss.esc(call.response) + '</span>';
-                h += '</div>';
+                h += '<div style="margin-bottom:4px"><span style="color:' + statusColor + ';font-weight:600">' + statusIcon + ' ' + call.type.toUpperCase() + '</span></div>';
+                h += '<div style="color:var(--text3);font-size:11px;margin-bottom:1px">' + __ss.esc(call.request) + '</div>';
+                h += '<div style="word-break:break-all;color:var(--text)">' + __ss.esc(call.response) + '</div>';
             }
         });
         h += '</div>';
     });
-    dom.logPopupBody.innerHTML = h || '<div style="padding:8px 0;color:var(--text3)">No logs</div>';
-    dom.logPopupOverlay.classList.add('open');
+    dom.logPopupBody.innerHTML = h || '<div style="padding:6px 0;color:var(--text3);font-size:12px">No logs for this row</div>';
+
+    var rect = el.getBoundingClientRect();
+    dom.logPopup.style.left = Math.max(4, rect.right - 340) + 'px';
+    dom.logPopup.style.top = (rect.bottom + 4) + 'px';
+    dom.logPopup.classList.add('open');
 }
 
-dom.logPopupClose.addEventListener('click', function() { dom.logPopupOverlay.classList.remove('open'); });
-dom.logPopupOverlay.addEventListener('click', function(e) { if (e.target === dom.logPopupOverlay) dom.logPopupOverlay.classList.remove('open'); });
+document.addEventListener('click', function(e) {
+    if (dom.logPopup && !dom.logPopup.contains(e.target)) dom.logPopup.classList.remove('open');
+});
 
 // ── Undo / Redo ──
 function pushUndo() {
@@ -280,7 +284,7 @@ function renderSheet() {
                     var row = state.rows[parseInt(el.dataset.row)];
                     var result = behavior.onDotHold(row, state.apiLogs);
                     if (result && result.action === 'show_logs') {
-                        showApiLogs(result.logs, row.username);
+                        showApiLogs(result.logs, row.username, el);
                     }
                 }
             }

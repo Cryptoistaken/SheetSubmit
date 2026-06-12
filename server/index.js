@@ -66,7 +66,7 @@ var APP_URL = process.env.RAILWAY_PUBLIC_DOMAIN
 var TG_API = 'https://api.telegram.org/bot' + BOT_TOKEN;
 
 async function tg(method, body) {
-    var bodyStr = body !== undefined ? JSON.stringify(body).slice(0, 100) : '(no body)';
+    var bodyStr = body !== undefined ? JSON.stringify(body).slice(0, 200) : '(no body)';
     console.log('[Bot] tg.' + method + ' body=' + bodyStr);
     var opts = {
         method: 'POST',
@@ -75,7 +75,11 @@ async function tg(method, body) {
     if (body !== undefined) opts.body = JSON.stringify(body);
     var res = await fetch(TG_API + '/' + method, opts);
     var json = await res.json();
-    console.log('[Bot] tg.' + method + ' → ok=' + json.ok);
+    if (json.ok) {
+        console.log('[Bot] tg.' + method + ' → ok=' + json.ok);
+    } else {
+        console.log('[Bot] tg.' + method + ' → ok=' + json.ok + ' error_code=' + json.error_code + ' description="' + json.description + '"');
+    }
     return json;
 }
 
@@ -352,6 +356,9 @@ app.get('/api/sky/status/:jobId', requireAuth, async function(req, res) {
 // ── Start Telegram bot ──
 var botUsername = '';
 
+console.log('[Bot] Config: token=' + (BOT_TOKEN ? BOT_TOKEN.slice(0, 10) + '...' : 'MISSING') + ' app_url=' + APP_URL + ' port=' + (process.env.PORT || 3000));
+console.log('[Bot] Node version: ' + process.version);
+
 if (BOT_TOKEN) {
     // Bot info endpoint (for client)
     app.get('/api/bot/info', function(req, res) {
@@ -397,25 +404,52 @@ if (BOT_TOKEN) {
             var info = await tg('getMe');
             if (!info.ok) throw new Error('getMe failed');
             botUsername = info.result.username;
-            console.log('Bot: @' + botUsername);
+            console.log('Bot: @' + botUsername + ' id=' + info.result.id);
             await setJSON('bot:info', { username: botUsername });
 
             await tg('deleteWebhook');
+            var webhookInfo = await tg('getWebhookInfo');
+            console.log('Webhook info: url=' + (webhookInfo.result ? webhookInfo.result.url : 'unknown') + ' pending_count=' + (webhookInfo.result ? webhookInfo.result.pending_update_count : '?') + ' has_custom_certificate=' + (webhookInfo.result ? webhookInfo.result.has_custom_certificate : '?'));
             console.log('Starting long-polling');
 
             var pollingOffset = 0;
+            var pollFailCount = 0;
+            var pollTotal = 0;
+            var lastStateLog = Date.now();
             async function poll() {
+                pollTotal++;
+                var now = Date.now();
+                if (now - lastStateLog > 30000) {
+                    console.log('[Bot] State: offset=' + pollingOffset + ' total_polls=' + pollTotal + ' fails=' + pollFailCount + ' next_delay=' + (pollFailCount > 5 ? 5000 : 1000) + 'ms');
+                    lastStateLog = now;
+                }
                 try {
                     var data = await tg('getUpdates', { offset: pollingOffset, timeout: 30, allowed_updates: ['message', 'callback_query'] });
                     if (data.ok && data.result) {
-                        if (data.result.length > 0) console.log('[Bot] received ' + data.result.length + ' update(s)');
+                        pollFailCount = 0;
+                        if (data.result.length > 0) {
+                            console.log('[Bot] received ' + data.result.length + ' update(s), offset=' + pollingOffset);
+                        }
                         for (var update of data.result) {
                             pollingOffset = update.update_id + 1;
                             await handleBotUpdate(update);
                         }
+                    } else if (data.ok === false) {
+                        pollFailCount++;
+                        console.log('[Bot] poll fail #' + pollFailCount + ': offset=' + pollingOffset + ' error=' + (data.error_code || '?') + ' ' + (data.description || ''));
+                        if (data.error_code === 409) {
+                            console.log('[Bot] CONFLICT - another bot instance is polling. This means the bot is running elsewhere (Railway?).');
+                        }
+                        if (data.error_code === 401) {
+                            console.log('[Bot] UNAUTHORIZED - bot token is invalid or revoked.');
+                        }
                     }
-                } catch(e) { console.error('[Bot] Poll error:', e.message); }
-                setTimeout(poll, 1000);
+                } catch(e) {
+                    pollFailCount++;
+                    console.error('[Bot] Poll error #' + pollFailCount + ' offset=' + pollingOffset + ': ' + e.message);
+                }
+                var delay = pollFailCount > 5 ? 5000 : 1000;
+                setTimeout(poll, delay);
             }
             poll();
         } catch(e) {

@@ -104,7 +104,6 @@ function downloadFile(id, name) {
             XLSX.writeFile(wb, (name || 'export') + '.xlsx');
             __ss.showToast('Downloaded');
         });
-    });
 }
 
 // ── File multi-select ──

@@ -373,13 +373,15 @@ if (BOT_TOKEN) {
                 var token = generateToken();
                 await setJSON('login:' + token, { chatId: msg.chat.id, createdAt: Date.now() });
                 var loginUrl = APP_URL + '/api/auth/telegram?token=' + token;
+                var cbKey = crypto.randomBytes(6).toString('hex');
+                await setJSON('cb:' + cbKey, token);
                 await tg('sendMessage', {
                     chat_id: msg.chat.id,
                     text: 'Click the button below to login to Sheet Submit:',
                     reply_markup: {
                         inline_keyboard: [
                             [{ text: 'Login to Sheet Submit', url: loginUrl }],
-                            [{ text: 'Copy Login Link', callback_data: 'copy:' + token }]
+                            [{ text: 'Copy Login Link', callback_data: 'cpy:' + cbKey }]
                         ]
                     }
                 });
@@ -389,10 +391,14 @@ if (BOT_TOKEN) {
         }
         if (update.callback_query) {
             var cb = update.callback_query;
-            if (cb.data && cb.data.startsWith('copy:')) {
-                var token = cb.data.replace('copy:', '');
-                var url = APP_URL + '/api/auth/telegram?token=' + token;
-                await tg('sendMessage', { chat_id: cb.message.chat.id, text: 'Copy this link:\n' + url });
+            if (cb.data && cb.data.startsWith('cpy:')) {
+                var cbKey = cb.data.replace('cpy:', '');
+                var token = await getJSON('cb:' + cbKey);
+                if (token) {
+                    var url = APP_URL + '/api/auth/telegram?token=' + token;
+                    await tg('sendMessage', { chat_id: cb.message.chat.id, text: 'Copy this link:\n' + url });
+                    await delKey('cb:' + cbKey);
+                }
                 await tg('answerCallbackQuery', { callback_query_id: cb.id });
             }
         }
@@ -438,7 +444,7 @@ if (BOT_TOKEN) {
                         pollFailCount++;
                         console.log('[Bot] poll fail #' + pollFailCount + ': offset=' + pollingOffset + ' error=' + (data.error_code || '?') + ' ' + (data.description || ''));
                         if (data.error_code === 409) {
-                            console.log('[Bot] CONFLICT - another bot instance is polling. This means the bot is running elsewhere (Railway?).');
+                            console.log('[Bot] CONFLICT - another bot instance is polling waiting for old instance to die.');
                         }
                         if (data.error_code === 401) {
                             console.log('[Bot] UNAUTHORIZED - bot token is invalid or revoked.');
@@ -448,7 +454,7 @@ if (BOT_TOKEN) {
                     pollFailCount++;
                     console.error('[Bot] Poll error #' + pollFailCount + ' offset=' + pollingOffset + ': ' + e.message);
                 }
-                var delay = pollFailCount > 5 ? 5000 : 1000;
+                var delay = data && data.error_code === 409 ? 10000 : (pollFailCount > 5 ? 5000 : 1000);
                 setTimeout(poll, delay);
             }
             poll();

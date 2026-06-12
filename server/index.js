@@ -156,6 +156,13 @@ app.get('/api/auth/telegram', async function(req, res) {
 
     res.setHeader('Set-Cookie', 'session=' + sessionId + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000');
     console.log('[Auth] session created, redirecting');
+
+    tg('sendMessage', {
+        chat_id: loginData.chatId,
+        text: '<b>Login Successful</b>\n\nHey @' + (userInfo.username || userInfo.firstName) + ', you are signed in to SheetSubmit.\n\nIf this was not you, contact the admin immediately.',
+        parse_mode: 'HTML'
+    });
+
     res.redirect('/');
 });
 

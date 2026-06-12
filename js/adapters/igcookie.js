@@ -75,28 +75,28 @@ __ss.registerAdapter('ig-cookie', {
         var result = { username: row.username, calls: [] };
         try {
             var cookieData = await this.fetchCookies(row.username, password, row.twofa);
-            var cookiesPreview = cookieData.cookies ? cookieData.cookies.slice(0, 120) + (cookieData.cookies.length > 120 ? '...' : '') : '';
             result.calls.push({
                 type: 'fetch',
                 request: 'POST /api/jobs | username=' + row.username,
-                response: 'cookies=' + cookiesPreview + ' | csrf=' + (cookieData.csrfToken || 'none')
+                response: JSON.stringify({ cookies: cookieData.cookies ? cookieData.cookies.slice(0, 200) + '...' : '', csrfToken: cookieData.csrfToken })
             });
             result.cookies = cookieData.cookies;
 
             var pushResult = await this.pushCookies(row.username, password, cookieData.cookies);
+            var pushOk = pushResult.failed === 0 && pushResult.success > 0;
             result.calls.push({
                 type: 'push',
                 request: 'POST /e/boss | username=' + row.username,
-                response: 'jobId=' + pushResult.jobId + ' | success=' + pushResult.success + ' failed=' + pushResult.failed + ' (' + pushResult.elapsed + 's)'
+                response: JSON.stringify({ jobId: pushResult.jobId, success: pushResult.success, failed: pushResult.failed, elapsed: pushResult.elapsed })
             });
             result.pushResult = pushResult;
-
-            result.status = 'done';
+            result.status = pushOk ? 'done' : 'failed';
+            if (!pushOk) result.error = 'push: success=' + pushResult.success + ' failed=' + pushResult.failed;
         } catch(e) {
             result.calls.push({
                 type: 'error',
                 request: '',
-                response: e.message
+                response: JSON.stringify({ error: e.message })
             });
             result.status = 'failed';
             result.error = e.message;

@@ -182,7 +182,9 @@ function showApiLogs(logs, username, el) {
             } else {
                 h += '<div style="margin-bottom:4px"><span style="color:' + statusColor + ';font-weight:600">' + statusIcon + ' ' + call.type.toUpperCase() + '</span></div>';
                 h += '<div style="color:var(--text3);font-size:11px;margin-bottom:1px">' + __ss.esc(call.request) + '</div>';
-                h += '<div style="word-break:break-all;color:var(--text)">' + __ss.esc(call.response) + '</div>';
+                var pretty;
+                try { pretty = JSON.stringify(JSON.parse(call.response), null, 2); } catch(e) { pretty = call.response; }
+                h += '<pre style="margin:2px 0 0;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--text);font-family:var(--mono);background:var(--bg3);padding:4px 6px;border-radius:4px;line-height:1.4">' + __ss.esc(pretty) + '</pre>';
             }
         });
         h += '</div>';

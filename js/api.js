@@ -32,13 +32,12 @@ async function del(path) {
 
 __ss.api = {
     getFiles: function() { return get('/files'); },
+    getFile: function(id) { return get('/files/' + id); },
     createFile: function(data) { return post('/files', data); },
     updateFile: function(id, data) { return put('/files/' + id, data); },
     deleteFile: function(id) { return del('/files/' + id); },
     getRows: function(id) { return get('/files/' + id + '/rows'); },
-    saveRows: function(id, data) { return put('/files/' + id + '/rows', data); },
-    getStack: function(id, name) { return get('/files/' + id + '/stack/' + name); },
-    saveStack: function(id, name, stack) { return put('/files/' + id + '/stack/' + name, stack); },
+    persist: function(id, data) { return put('/files/' + id + '/persist', data); },
     health: function() { return get('/health'); },
     getArchive: function() { return get('/archive'); },
     restoreFile: function(id) { return post('/archive/' + id + '/restore'); },
@@ -46,7 +45,6 @@ __ss.api = {
     getSync: function(id) { return get('/files/' + id + '/sync'); },
     setSync: function(id, data) { return put('/files/' + id + '/sync', data); },
     getLogs: function(id) { return get('/files/' + id + '/logs'); },
-    addLog: function(id, log) { return post('/files/' + id + '/logs', log); },
 };
 
 })();

@@ -6,9 +6,8 @@ var state = __ss.state;
 
 // ── Open / Close ──
 __ss.openFile = async function(id) {
-    var files = await api.getFiles();
-    var f = files.find(function(x) { return x.id === id; });
-    if (!f) return;
+    var f = await api.getFile(id);
+    if (!f || !f.id) return;
     state.currentFileId = id;
     state.currentFileType = f.type || 'ig_cookie';
     state.COLUMNS = __ss.getTypeDef(state.currentFileType).columns;
@@ -21,9 +20,9 @@ __ss.openFile = async function(id) {
     state.syncRunning = false;
     state.apiLogs = [];
 
-    var syncData = await api.getSync(id);
-    state.syncEnabled = syncData.enabled || false;
-    state.apiLogs = await api.getLogs(id);
+    var results = await Promise.all([api.getSync(id), api.getLogs(id)]);
+    state.syncEnabled = (results[0].enabled) || false;
+    state.apiLogs = results[1] || [];
 
     dom.homeView.style.display = 'none';
     dom.sheetView.classList.add('active');
@@ -84,15 +83,16 @@ dom.backBtn.addEventListener('click', __ss.closeSheet);
 
 // ── Persist ──
 async function persist() {
-    await api.saveRows(state.currentFileId, state.rows);
-    await api.saveStack(state.currentFileId, 'undo', state.undoStack);
-    await api.saveStack(state.currentFileId, 'redo', state.redoStack);
-    var files = await api.getFiles();
-    var f = files.find(function(x) { return x.id === state.currentFileId; });
-    if (f) {
-        f.rowCount = state.rows.length;
-        await api.updateFile(state.currentFileId, { rowCount: state.rows.length });
-    }
+    var td = __ss.getTypeDef(state.currentFileType);
+    var dataCount = state.rows.filter(function(row) {
+        return td.columns.some(function(c) { return row[c.key]; });
+    }).length;
+    await api.persist(state.currentFileId, {
+        rows: state.rows,
+        undo: state.undoStack,
+        redo: state.redoStack,
+        dataCount: dataCount
+    });
     state.isDirty = false;
 }
 

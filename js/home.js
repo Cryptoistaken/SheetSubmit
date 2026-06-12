@@ -73,26 +73,20 @@ __ss.renderHome = async function() {
 
         dom.filesGrid.appendChild(card);
 
-        api.getRows(f.id).then(function(rows) {
-            var meta = document.getElementById('meta-' + f.id);
-            if (!meta) return;
-            var count = 0;
-            if (rows) {
-                count = rows.filter(function(row) {
-                    return td.columns.some(function(c) { return row[c.key]; });
-                }).length;
-            }
+        var meta = document.getElementById('meta-' + f.id);
+        if (meta) {
+            var count = f.dataCount || 0;
             meta.textContent = count + ' row' + (count !== 1 ? 's' : '');
-        });
+        }
     });
 };
 
 function downloadFile(id, name) {
-    api.getRows(id).then(function(rows) {
+    Promise.all([api.getRows(id), api.getFile(id)]).then(function(results) {
+        var rows = results[0];
+        var f = results[1];
         if (!rows || !rows.length) { __ss.showToast('No data'); return; }
-        api.getFiles().then(function(files) {
-            var f = files.find(function(x) { return x.id === id; });
-            var td = __ss.getTypeDef(f ? f.type : 'ig_cookie');
+        var td = __ss.getTypeDef(f && f.id ? f.type : 'ig_cookie');
             var data = [td.columns.map(function(c) { return c.label; })];
             rows.forEach(function(row) {
                 var isEmpty = td.columns.every(function(c) { return !row[c.key]; });
@@ -181,9 +175,8 @@ __ss.deleteFile = async function(id) {
 };
 
 __ss.promptRenameFile = function(id) {
-    api.getFiles().then(function(files) {
-        var f = files.find(function(x) { return x.id === id; });
-        if (!f) return;
+    api.getFile(id).then(function(f) {
+        if (!f || !f.id) return;
         state.renameFileId = id;
         dom.renameInput.value = f.name;
         dom.renameOverlay.classList.add('open');
@@ -194,9 +187,8 @@ __ss.promptRenameFile = function(id) {
 __ss.commitRename = async function() {
     var name = dom.renameInput.value.trim();
     if (!name) { __ss.showToast('Name cannot be empty'); return; }
-    var files = await api.getFiles();
-    var f = files.find(function(x) { return x.id === state.renameFileId; });
-    if (!f) return;
+    var f = await api.getFile(state.renameFileId);
+    if (!f || !f.id) return;
     await api.updateFile(state.renameFileId, { name: name });
     dom.renameOverlay.classList.remove('open');
     state.renameFileId = null;
@@ -427,11 +419,10 @@ __ss.createFile = async function(typeKey) {
         name = name + ' (' + suffix + ')';
     }
     var id = __ss.genId();
-    await api.createFile({ id: id, name: name, type: typeKey, rowCount: 100, createdAt: Date.now(), updatedAt: Date.now() });
     state.COLUMNS = td.columns;
     var emptyRows = [];
     for (var i = 0; i < 100; i++) emptyRows.push(__ss.makeEmptyRow(state.COLUMNS));
-    await api.saveRows(id, emptyRows);
+    await api.createFile({ id: id, name: name, type: typeKey, rowCount: 100, initialRows: emptyRows });
     __ss.renderHome();
     __ss.showToast(td.label + ' file created');
     __ss.openFile(id);
@@ -496,12 +487,10 @@ dom.xlsxFileInputHome.addEventListener('change', function(e) {
         api.getFiles().then(function(files) {
             if (files.some(function(f) { return f.name === name; })) name = name + ' (' + __ss.genId().slice(0, 4) + ')';
             var id = __ss.genId();
-            api.createFile({ id: id, name: name, type: 'ig_cookie', rowCount: rows.length, createdAt: Date.now(), updatedAt: Date.now() }).then(function() {
-                api.saveRows(id, rows).then(function() {
-                    __ss.renderHome();
-                    __ss.showToast('Imported ' + rows.length + ' rows');
-                    __ss.openFile(id);
-                });
+            api.createFile({ id: id, name: name, type: 'ig_cookie', rowCount: rows.length, initialRows: rows }).then(function() {
+                __ss.renderHome();
+                __ss.showToast('Imported ' + rows.length + ' rows');
+                __ss.openFile(id);
             });
         });
     };

@@ -18,7 +18,7 @@ SheetSubmit/
 │   ├── base.css            # Reset, design tokens, fonts, animations
 │   ├── layout.css          # Topbar, file cards, grid table, home tabs
 │   ├── components.css      # Buttons, modals, toast
-│   ├── dashboard.css       # Gear/settings panel, toggle switch
+│   ├── dashboard.css       # User button/panel, settings, toggle switch
 │   └── touch.css           # Touch device overrides
 ├── js/
 │   ├── theme.js            # Light/dark theme toggle (localStorage)
@@ -28,7 +28,6 @@ SheetSubmit/
 │   ├── home.js             # Home page: file list, archive, type modal
 │   ├── sheet.js            # Sheet page: grid, edit, undo/redo, sync
 │   ├── app.js              # Boot: health check, FAB, popstate, URL restore
-│   ├── apiig.js            # (removed — logic moved to adapters/)
 │   ├── adapters/
 │   │   ├── index.js        # Adapter registry (register/get)
 │   │   └── igcookie.js     # IG Cookie adapter: TOTP, fetch cookies, push
@@ -41,6 +40,9 @@ SheetSubmit/
 ```
 
 ## Key Concepts
+
+### Header User Menu
+Single circular button in the top-right showing the Telegram profile photo. Click opens a dropdown panel with user info (avatar, name, @username), Night mode toggle, and Logout button. Defined in `dashboard.css` and handled in `app.js`.
 
 ### File Types (`types.js`)
 Each file type defines columns, labels, and badge styling:
@@ -65,18 +67,28 @@ To add a new file type: create `filetypes/newtype.js`, call `registerFileBehavio
 ### Server API Routes
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/api/files` | GET/POST | List/create files |
-| `/api/files/:id` | PUT/DELETE | Update/archive file |
-| `/api/files/:id/rows` | GET/PUT | Read/write row data |
+| `/api/files` | GET/POST | List/create files (POST accepts `initialRows`) |
+| `/api/files/:id` | GET/PUT/DELETE | Read/update/archive single file |
+| `/api/files/:id/rows` | GET | Read row data |
+| `/api/files/:id/persist` | PUT | Batch save rows + undo/redo + dataCount |
 | `/api/files/:id/sync` | GET/PUT | Sync toggle state |
-| `/api/files/:id/logs` | GET/POST | API call logs |
+| `/api/files/:id/logs` | GET | API call logs |
 | `/api/archive` | GET | List archived files |
 | `/api/archive/:id/restore` | POST | Restore from archive |
+| `/api/archive/:id` | DELETE | Permanently delete (removes rows, stacks, sync, logs) |
 | `/api/ig/jobs` | POST | Proxy: IG Auto Cookies API |
 | `/api/ig/jobs/:jobId` | GET | Proxy: poll IG job |
 | `/api/sky/push` | POST | Proxy: SkySys push |
 | `/api/sky/status/:jobId` | GET | Proxy: poll push status |
 | `/api/health` | GET | Redis health check |
+
+All file-data routes (`:id/rows`, `:id/persist`, `:id/sync`, `:id/logs`) verify file ownership via `requireFileAccess` middleware before returning data.
+
+### Performance & Auth
+- **Batch persist**: Single `PUT /:id/persist` replaces 5 separate calls (rows + undo + redo + file update + file fetch).
+- **Single file GET**: `GET /:id` avoids fetching all files to find one.
+- **dataCount**: File list includes pre-computed non-empty row count — no N+1 calls for home page meta.
+- **Auth**: `requireFileAccess` middleware verifies the file belongs to the session user on every data route. Permanent delete cleans up all related Redis keys (rows, stacks, sync, logs).
 
 ### Themes
 Light (default) and dark via `[data-theme]` attribute. All colors use CSS variables from `base.css`.

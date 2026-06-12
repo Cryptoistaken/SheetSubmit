@@ -59,6 +59,25 @@ async function delKey(k) {
     catch { return false; }
 }
 
+async function getUserFiles(userId) {
+    return await getJSON('files:' + userId) || [];
+}
+
+async function findUserFile(userId, fileId) {
+    var files = await getUserFiles(userId);
+    var idx = files.findIndex(function(f) { return f.id === fileId; });
+    return { files: files, idx: idx, file: idx !== -1 ? files[idx] : null };
+}
+
+function countDataRows(rows, columns) {
+    if (!rows || !rows.length) return 0;
+    var keys = columns ? columns.map(function(c) { return c.key; }) : null;
+    return rows.filter(function(row) {
+        if (keys) return keys.some(function(k) { return row[k]; });
+        return Object.values(row).some(function(v) { return v; });
+    }).length;
+}
+
 function generateToken() {
     return crypto.randomBytes(32).toString('hex');
 }
@@ -199,44 +218,76 @@ app.get('/api/auth/me', async function(req, res) {
     res.json(user || null);
 });
 
+// ── Ownership check middleware ──
+async function requireFileAccess(req, res, next) {
+    var result = await findUserFile(req.userId, req.params.id);
+    if (!result.file) { res.status(404).json({ error: 'file not found' }); return; }
+    req.file = result.file;
+    next();
+}
+
 // ── API: Files (auth required) ──
 app.get('/api/files', requireAuth, async function(req, res) {
-    var files = await getJSON('files:' + req.userId) || [];
+    var files = await getUserFiles(req.userId);
     res.json(files);
 });
 
+app.get('/api/files/:id', requireAuth, requireFileAccess, async function(req, res) {
+    res.json(req.file);
+});
+
 app.post('/api/files', requireAuth, async function(req, res) {
-    var files = await getJSON('files:' + req.userId) || [];
+    var files = await getUserFiles(req.userId);
     var file = req.body;
     file.userId = req.userId;
     file.createdAt = Date.now();
     file.updatedAt = Date.now();
     files.unshift(file);
     await setJSON('files:' + req.userId, files);
+    if (req.body.initialRows) {
+        await setJSON('rows:' + file.id, req.body.initialRows);
+    }
     res.json(file);
 });
 
-app.put('/api/files/:id', requireAuth, async function(req, res) {
-    var files = await getJSON('files:' + req.userId) || [];
-    var idx = files.findIndex(function(f) { return f.id === req.params.id; });
-    if (idx === -1) { res.status(404).json({ error: 'not found' }); return; }
+app.put('/api/files/:id', requireAuth, requireFileAccess, async function(req, res) {
+    var result = await findUserFile(req.userId, req.params.id);
+    if (result.idx === -1) { res.status(404).json({ error: 'not found' }); return; }
     var updates = req.body;
-    Object.keys(updates).forEach(function(k) { files[idx][k] = updates[k]; });
-    files[idx].updatedAt = Date.now();
-    await setJSON('files:' + req.userId, files);
-    res.json(files[idx]);
+    Object.keys(updates).forEach(function(k) { result.files[result.idx][k] = updates[k]; });
+    result.files[result.idx].updatedAt = Date.now();
+    await setJSON('files:' + req.userId, result.files);
+    res.json(result.files[result.idx]);
 });
 
-app.delete('/api/files/:id', requireAuth, async function(req, res) {
-    var files = await getJSON('files:' + req.userId) || [];
-    var idx = files.findIndex(function(f) { return f.id === req.params.id; });
-    if (idx === -1) { res.status(404).json({ error: 'not found' }); return; }
-    var file = files.splice(idx, 1)[0];
+app.delete('/api/files/:id', requireAuth, requireFileAccess, async function(req, res) {
+    var result = await findUserFile(req.userId, req.params.id);
+    if (result.idx === -1) { res.status(404).json({ error: 'not found' }); return; }
+    var file = result.files.splice(result.idx, 1)[0];
     file.deletedAt = Date.now();
     var archived = await getJSON('archive:' + req.userId) || [];
     archived.unshift(file);
-    await setJSON('files:' + req.userId, files);
+    await setJSON('files:' + req.userId, result.files);
     await setJSON('archive:' + req.userId, archived);
+    res.json({ ok: true });
+});
+
+// ── API: Batch persist (auth required) ──
+app.put('/api/files/:id/persist', requireAuth, requireFileAccess, async function(req, res) {
+    var body = req.body;
+    var promises = [];
+    if (body.rows !== undefined) promises.push(setJSON('rows:' + req.params.id, body.rows));
+    if (body.undo !== undefined) promises.push(setJSON('undo:' + req.params.id, body.undo));
+    if (body.redo !== undefined) promises.push(setJSON('redo:' + req.params.id, body.redo));
+    if (body.dataCount !== undefined) {
+        var result = await findUserFile(req.userId, req.params.id);
+        if (result.idx !== -1) {
+            result.files[result.idx].dataCount = body.dataCount;
+            result.files[result.idx].updatedAt = Date.now();
+            promises.push(setJSON('files:' + req.userId, result.files));
+        }
+    }
+    await Promise.all(promises);
     res.json({ ok: true });
 });
 
@@ -252,7 +303,7 @@ app.post('/api/archive/:id/restore', requireAuth, async function(req, res) {
     if (idx === -1) { res.status(404).json({ error: 'not found' }); return; }
     var file = archived.splice(idx, 1)[0];
     delete file.deletedAt;
-    var files = await getJSON('files:' + req.userId) || [];
+    var files = await getUserFiles(req.userId);
     files.unshift(file);
     await setJSON('archive:' + req.userId, archived);
     await setJSON('files:' + req.userId, files);
@@ -261,59 +312,39 @@ app.post('/api/archive/:id/restore', requireAuth, async function(req, res) {
 
 app.delete('/api/archive/:id', requireAuth, async function(req, res) {
     var archived = await getJSON('archive:' + req.userId) || [];
+    var existed = archived.some(function(f) { return f.id === req.params.id; });
+    if (!existed) { res.status(404).json({ error: 'not found' }); return; }
     archived = archived.filter(function(f) { return f.id !== req.params.id; });
     await setJSON('archive:' + req.userId, archived);
     await delKey('rows:' + req.params.id);
     await delKey('undo:' + req.params.id);
     await delKey('redo:' + req.params.id);
+    await delKey('sync:' + req.params.id);
+    await delKey('logs:' + req.params.id);
     res.json({ ok: true });
 });
 
 // ── API: Rows (auth required) ──
-app.get('/api/files/:id/rows', requireAuth, async function(req, res) {
+app.get('/api/files/:id/rows', requireAuth, requireFileAccess, async function(req, res) {
     var rows = await getJSON('rows:' + req.params.id);
     res.json(rows || []);
 });
 
-app.put('/api/files/:id/rows', requireAuth, async function(req, res) {
-    await setJSON('rows:' + req.params.id, req.body);
-    res.json({ ok: true });
-});
-
-// ── API: Undo/Redo stacks (auth required) ──
-app.get('/api/files/:id/stack/:name', requireAuth, async function(req, res) {
-    var stack = await getJSON(req.params.name + ':' + req.params.id);
-    res.json(stack || []);
-});
-
-app.put('/api/files/:id/stack/:name', requireAuth, async function(req, res) {
-    await setJSON(req.params.name + ':' + req.params.id, req.body);
-    res.json({ ok: true });
-});
-
 // ── API: Sync state (auth required) ──
-app.get('/api/files/:id/sync', requireAuth, async function(req, res) {
+app.get('/api/files/:id/sync', requireAuth, requireFileAccess, async function(req, res) {
     var sync = await getJSON('sync:' + req.params.id);
     res.json(sync || { enabled: false });
 });
 
-app.put('/api/files/:id/sync', requireAuth, async function(req, res) {
+app.put('/api/files/:id/sync', requireAuth, requireFileAccess, async function(req, res) {
     await setJSON('sync:' + req.params.id, req.body);
     res.json({ ok: true });
 });
 
 // ── API: Logs (auth required) ──
-app.get('/api/files/:id/logs', requireAuth, async function(req, res) {
+app.get('/api/files/:id/logs', requireAuth, requireFileAccess, async function(req, res) {
     var logs = await getJSON('logs:' + req.params.id);
     res.json(logs || []);
-});
-
-app.post('/api/files/:id/logs', requireAuth, async function(req, res) {
-    var logs = await getJSON('logs:' + req.params.id) || [];
-    logs.unshift(req.body);
-    if (logs.length > 200) logs.length = 200;
-    await setJSON('logs:' + req.params.id, logs);
-    res.json({ ok: true });
 });
 
 // ── Health check (no auth) ──

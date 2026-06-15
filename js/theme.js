@@ -12,13 +12,13 @@
         var favicon = document.querySelector('link[rel="icon"]');
         var loginLogo = document.getElementById('loginLogo');
         if (logo) {
-            logo.src = theme === 'dark' ? 'public/dark_logo.svg' : 'public/white_logo.svg';
+            logo.src = theme === 'dark' ? 'public/logo-dark.svg' : 'public/logo-light.svg';
         }
         if (favicon) {
-            favicon.href = theme === 'dark' ? 'public/dark_favicon.svg' : 'public/white_favicon.svg';
+            favicon.href = theme === 'dark' ? 'public/favicon-dark.svg' : 'public/favicon-light.svg';
         }
         if (loginLogo) {
-            loginLogo.src = theme === 'dark' ? 'public/white_logo.svg' : 'public/dark_logo.svg';
+            loginLogo.src = theme === 'dark' ? 'public/logo-light.svg' : 'public/logo-dark.svg';
         }
     }
 

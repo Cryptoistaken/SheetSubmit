@@ -90,6 +90,19 @@ function generateToken() {
     return crypto.randomBytes(32).toString('hex');
 }
 
+// ── Admin IDs ──
+var ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+
+async function isAdmin(userId) {
+    if (ADMIN_IDS.length === 0) return false;
+    if (ADMIN_IDS.indexOf(String(userId)) !== -1) return true;
+    try {
+        var user = await getJSON('user:' + userId);
+        if (user && user.username && ADMIN_IDS.indexOf('@' + user.username) !== -1) return true;
+    } catch {}
+    return false;
+}
+
 // ── Telegram Bot ──
 var BOT_TOKEN = process.env.TG_BOT_TOKEN;
 var APP_URL = process.env.RAILWAY_PUBLIC_DOMAIN
@@ -175,6 +188,7 @@ app.get('/api/auth/telegram', async function(req, res) {
         lastLogin: Date.now()
     };
     await setJSON('user:' + userInfo.id, merged);
+    await redis.sadd(key('userIds'), String(userInfo.id));
 
     var sessionId = generateToken();
     await setJSONex('session:' + sessionId, { userId: userInfo.id }, 2592000000);
@@ -221,8 +235,9 @@ app.get('/api/auth/me', async function(req, res) {
     var user = await getJSON('user:' + session.userId);
     if (user) {
         user.photoUrl = user.fileId ? '/api/auth/photo/' + user.id : null;
+        user.isAdmin = await isAdmin(session.userId);
     }
-    console.log('[Auth] me: user=' + (user ? user.username || user.firstName || user.id : 'null'));
+    console.log('[Auth] me: user=' + (user ? user.username || user.firstName || user.id : 'null') + ' admin=' + (user ? user.isAdmin : false));
     res.json(user || null);
 });
 
@@ -411,6 +426,210 @@ app.post('/api/files/:id/log', requireAuth, requireFileAccess, async function(re
 app.get('/api/files/:id/logs', requireAuth, requireFileAccess, async function(req, res) {
     var logs = await getJSON('logs:' + req.params.id);
     res.json(logs || []);
+});
+
+// ── Admin middleware ──
+async function requireAdmin(req, res, next) {
+    if (!(await isAdmin(req.userId))) {
+        res.status(403).json({ error: 'admin access required' });
+        return;
+    }
+    next();
+}
+
+async function findAllUserIds() {
+    return await redis.smembers(key('userIds'));
+}
+
+async function findFileAcrossUsers(fileId) {
+    var ids = await findAllUserIds();
+    for (var i = 0; i < ids.length; i++) {
+        var files = await getJSON('files:' + ids[i]);
+        if (!files) continue;
+        for (var j = 0; j < files.length; j++) {
+            if (files[j].id === fileId) return { file: files[j], userId: ids[i], files: files, idx: j };
+        }
+    }
+    return null;
+}
+
+// ── Admin API ──
+app.get('/api/admin/stats', requireAuth, requireAdmin, async function(req, res) {
+    var userIds = await findAllUserIds();
+    var totalUsers = userIds.length;
+    var totalFiles = 0;
+    for (var i = 0; i < userIds.length; i++) {
+        var files = await getJSON('files:' + userIds[i]);
+        if (files) totalFiles += files.length;
+    }
+    res.json({ totalUsers: totalUsers, totalFiles: totalFiles });
+});
+
+app.get('/api/admin/users', requireAuth, requireAdmin, async function(req, res) {
+    var userIds = await findAllUserIds();
+    var users = [];
+    for (var i = 0; i < userIds.length; i++) {
+        var user = await getJSON('user:' + userIds[i]);
+        if (!user) continue;
+        var files = await getJSON('files:' + userIds[i]) || [];
+        var archived = await getJSON('archive:' + userIds[i]) || [];
+        user.fileCount = files.length;
+        user.archivedCount = archived.length;
+        user.photoUrl = user.fileId ? '/api/auth/photo/' + user.id : null;
+        users.push(user);
+    }
+    users.sort(function(a, b) { return (b.lastLogin || 0) - (a.lastLogin || 0); });
+    res.json(users);
+});
+
+app.get('/api/admin/users/search', requireAuth, requireAdmin, async function(req, res) {
+    var q = (req.query.q || '').toLowerCase().trim();
+    var userIds = await findAllUserIds();
+    var users = [];
+    for (var i = 0; i < userIds.length; i++) {
+        var user = await getJSON('user:' + userIds[i]);
+        if (!user) continue;
+        if (q) {
+            var name = ((user.firstName || '') + ' ' + (user.lastName || '')).toLowerCase();
+            var uname = (user.username || '').toLowerCase();
+            var uid = String(user.id);
+            if (name.indexOf(q) === -1 && uname.indexOf(q) === -1 && uid.indexOf(q) === -1) continue;
+        }
+        var files = await getJSON('files:' + userIds[i]) || [];
+        user.fileCount = files.length;
+        user.photoUrl = user.fileId ? '/api/auth/photo/' + user.id : null;
+        users.push(user);
+    }
+    users.sort(function(a, b) { return (b.lastLogin || 0) - (a.lastLogin || 0); });
+    res.json(users);
+});
+
+app.get('/api/admin/user/:userId', requireAuth, requireAdmin, async function(req, res) {
+    var user = await getJSON('user:' + req.params.userId);
+    if (!user) { res.status(404).json({ error: 'user not found' }); return; }
+    var files = await getJSON('files:' + req.params.userId) || [];
+    var archived = await getJSON('archive:' + req.params.userId) || [];
+    user.photoUrl = user.fileId ? '/api/auth/photo/' + user.id : null;
+    user.fileCount = files.length;
+    user.archivedCount = archived.length;
+    user.files = files;
+    res.json(user);
+});
+
+app.get('/api/admin/user/:userId/files', requireAuth, requireAdmin, async function(req, res) {
+    var files = await getJSON('files:' + req.params.userId) || [];
+    res.json(files);
+});
+
+app.get('/api/admin/file/:fileId', requireAuth, requireAdmin, async function(req, res) {
+    var found = await findFileAcrossUsers(req.params.fileId);
+    if (!found) { res.status(404).json({ error: 'file not found' }); return; }
+    res.json(found.file);
+});
+
+app.put('/api/admin/file/:fileId', requireAuth, requireAdmin, async function(req, res) {
+    var found = await findFileAcrossUsers(req.params.fileId);
+    if (!found) { res.status(404).json({ error: 'file not found' }); return; }
+    var updates = req.body;
+    Object.keys(updates).forEach(function(k) { found.files[found.idx][k] = updates[k]; });
+    found.files[found.idx].updatedAt = Date.now();
+    await setJSON('files:' + found.userId, found.files);
+    res.json(found.files[found.idx]);
+});
+
+app.delete('/api/admin/file/:fileId', requireAuth, requireAdmin, async function(req, res) {
+    var found = await findFileAcrossUsers(req.params.fileId);
+    if (!found) { res.status(404).json({ error: 'file not found' }); return; }
+    var file = found.files.splice(found.idx, 1)[0];
+    file.deletedAt = Date.now();
+    var archived = await getJSON('archive:' + found.userId) || [];
+    archived.unshift(file);
+    await setJSON('files:' + found.userId, found.files);
+    await setJSON('archive:' + found.userId, archived);
+    res.json({ ok: true });
+});
+
+app.get('/api/admin/file/:fileId/rows', requireAuth, requireAdmin, async function(req, res) {
+    var rows = await getJSON('rows:' + req.params.fileId);
+    res.json(rows || []);
+});
+
+app.put('/api/admin/file/:fileId/persist', requireAuth, requireAdmin, async function(req, res) {
+    var body = req.body;
+    var promises = [];
+    if (body.rows !== undefined) promises.push(setJSON('rows:' + req.params.fileId, body.rows));
+    if (body.logs !== undefined) promises.push(setJSON('logs:' + req.params.fileId, body.logs));
+    if (body.undo !== undefined) promises.push(setJSON('undo:' + req.params.fileId, body.undo));
+    if (body.redo !== undefined) promises.push(setJSON('redo:' + req.params.fileId, body.redo));
+    if (body.dataCount !== undefined && body.userId) {
+        var files = await getJSON('files:' + body.userId);
+        if (files) {
+            var idx = files.findIndex(function(f) { return f.id === req.params.fileId; });
+            if (idx !== -1) {
+                files[idx].dataCount = body.dataCount;
+                files[idx].updatedAt = Date.now();
+                promises.push(setJSON('files:' + body.userId, files));
+            }
+        }
+    }
+    await Promise.all(promises);
+    res.json({ ok: true });
+});
+
+app.put('/api/admin/file/:fileId/cell', requireAuth, requireAdmin, async function(req, res) {
+    var rows = await getJSON('rows:' + req.params.fileId) || [];
+    var r = req.body;
+    if (r.rowIdx !== undefined && r.colKey !== undefined) {
+        while (rows.length <= r.rowIdx) rows.push({});
+        rows[r.rowIdx][r.colKey] = r.value;
+        await setJSON('rows:' + req.params.fileId, rows);
+    }
+    res.json({ ok: true });
+});
+
+app.post('/api/admin/file/:fileId/log', requireAuth, requireAdmin, async function(req, res) {
+    var logs = await getJSON('logs:' + req.params.fileId) || [];
+    logs.push(req.body.log);
+    await setJSON('logs:' + req.params.fileId, logs);
+    res.json({ ok: true });
+});
+
+app.get('/api/admin/file/:fileId/logs', requireAuth, requireAdmin, async function(req, res) {
+    var logs = await getJSON('logs:' + req.params.fileId);
+    res.json(logs || []);
+});
+
+app.delete('/api/admin/user/:userId', requireAuth, requireAdmin, async function(req, res) {
+    var user = await getJSON('user:' + req.params.userId);
+    if (!user) { res.status(404).json({ error: 'user not found' }); return; }
+    var files = await getJSON('files:' + req.params.userId) || [];
+    var archived = await getJSON('archive:' + req.params.userId) || [];
+    var allFiles = files.concat(archived);
+    var delPromises = [];
+    allFiles.forEach(function(f) {
+        delPromises.push(delKey('rows:' + f.id));
+        delPromises.push(delKey('undo:' + f.id));
+        delPromises.push(delKey('redo:' + f.id));
+        delPromises.push(delKey('sync:' + f.id));
+        delPromises.push(delKey('logs:' + f.id));
+    });
+    delPromises.push(delKey('files:' + req.params.userId));
+    delPromises.push(delKey('archive:' + req.params.userId));
+    delPromises.push(delKey('user:' + req.params.userId));
+    delPromises.push(redis.srem(key('userIds'), String(req.params.userId)));
+    await Promise.all(delPromises);
+    res.json({ ok: true });
+});
+
+app.put('/api/admin/user/:userId', requireAuth, requireAdmin, async function(req, res) {
+    var user = await getJSON('user:' + req.params.userId);
+    if (!user) { res.status(404).json({ error: 'user not found' }); return; }
+    var updates = req.body;
+    Object.keys(updates).forEach(function(k) {
+        if (k !== 'id') user[k] = updates[k];
+    });
+    await setJSON('user:' + req.params.userId, user);
+    res.json(user);
 });
 
 // ── Health check (no auth) ──

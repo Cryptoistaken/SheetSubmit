@@ -6,7 +6,45 @@ var state = __ss.state;
 
 // ── Open / Close ──
 __ss.openFile = async function(id) {
+    state.isAdminFile = false;
+    state.adminFileOwnerId = null;
     var results = await Promise.all([api.getFile(id), api.getRows(id), api.getLogs(id)]);
+    var f = results[0];
+    if (!f || !f.id) return;
+    state.currentFileId = id;
+    state.currentFileType = f.type || 'ig_cookie';
+    state.COLUMNS = __ss.getTypeDef(state.currentFileType).columns;
+    state.rows = results[1] || [];
+    while (state.rows.length < 100) state.rows.push(__ss.makeEmptyRow(state.COLUMNS));
+    state.undoStack = [];
+    state.redoStack = [];
+    state.selectedCell = null;
+    state.isDirty = false;
+    state.syncRunning = false;
+    state.apiLogs = results[2] || [];
+
+    dom.homeView.style.display = 'none';
+    dom.sheetView.classList.add('active');
+    dom.homeFab.classList.add('hidden');
+    dom.sheetBtns.style.display = 'flex';
+    dom.backBtn.classList.add('visible');
+    dom.sheetTitleBtn.textContent = f.name;
+    dom.sheetTitleBtn.classList.add('visible');
+    dom.homeTopTitle.style.display = 'none';
+    dom.connStatus.style.display = 'none';
+
+    if (dom.gearBtn) dom.gearBtn.style.display = 'none';
+    var logo = document.querySelector('.topbar-logo');
+    if (logo) logo.style.display = 'none';
+
+    updateSyncState();
+    try { history.pushState({fileId: id}, '', 'file/' + id); } catch(e) {}
+    updateUndoRedo();
+    renderSheet();
+};
+
+__ss.openFileAdmin = async function(id) {
+    var results = await Promise.all([api.adminFile(id), api.adminFileRows(id), api.adminFileLogs(id)]);
     var f = results[0];
     if (!f || !f.id) return;
     state.currentFileId = id;
@@ -44,6 +82,8 @@ __ss.openFile = async function(id) {
 __ss.closeSheet = function() {
     if (state.selectionMode) exitSelectionMode();
     if (state.isDirty) persist();
+    var adminOwnerId = state.adminFileOwnerId;
+    var wasAdmin = state.isAdminFile;
     state.currentFileId = null;
     state.currentFileType = null;
     state.COLUMNS = [];
@@ -51,6 +91,8 @@ __ss.closeSheet = function() {
     state.undoStack = [];
     state.redoStack = [];
     state.selectedCell = null;
+    state.isAdminFile = false;
+    state.adminFileOwnerId = null;
     __ss.clearCellHighlight();
     dom.qebBar.classList.remove('open');
 
@@ -73,12 +115,27 @@ __ss.closeSheet = function() {
         }
     } catch(e) {}
 
-    __ss.renderHome();
+    if (wasAdmin && adminOwnerId) {
+        var adminTab = document.querySelector('[data-htab="admin"]');
+        if (adminTab && !adminTab.classList.contains('active')) adminTab.click();
+        setTimeout(function() { __ss.showAdminUserDetail(adminOwnerId); }, 50);
+    } else {
+        __ss.renderHome();
+    }
 };
 
 dom.backBtn.addEventListener('click', __ss.closeSheet);
 
 // ── Persist (trim trailing empties, keep 50-row buffer) ──
+function apiUpdateCell(fileId, data) {
+    if (state.isAdminFile) return api.adminUpdateCell(fileId, data);
+    return api.updateCell(fileId, data);
+}
+function apiAppendLog(fileId, data) {
+    if (state.isAdminFile) return api.adminAppendLog(fileId, data);
+    return api.appendLog(fileId, data);
+}
+
 async function persist() {
     var td = __ss.getTypeDef(state.currentFileType);
     var lastData = state.rows.length - 1;
@@ -88,13 +145,19 @@ async function persist() {
     var dataCount = state.rows.filter(function(row) {
         return td.columns.some(function(c) { return row[c.key]; });
     }).length;
-    await api.persist(state.currentFileId, {
+    var payload = {
         rows: trimmed,
         logs: state.apiLogs,
         undo: state.undoStack,
         redo: state.redoStack,
         dataCount: dataCount
-    });
+    };
+    if (state.isAdminFile) {
+        payload.userId = state.adminFileOwnerId;
+        await api.adminPersist(state.currentFileId, payload);
+    } else {
+        await api.persist(state.currentFileId, payload);
+    }
     state.isDirty = false;
 }
 
@@ -124,14 +187,14 @@ async function runSync() {
             var result = await behavior.syncRow(row, state);
             state.apiLogs.push(result);
             row.status = result.status === 'done' ? 'good' : 'bad';
-            api.appendLog(state.currentFileId, { log: result });
-            api.updateCell(state.currentFileId, { rowIdx: i, colKey: 'status', value: row.status });
+            apiAppendLog(state.currentFileId, { log: result });
+            apiUpdateCell(state.currentFileId, { rowIdx: i, colKey: 'status', value: row.status });
         } catch(e) {
             var errLog = { username: row.username, steps: [{ type: 'error', message: e.message, time: Date.now() }], status: 'failed' };
             state.apiLogs.push(errLog);
             row.status = 'bad';
-            api.appendLog(state.currentFileId, { log: errLog });
-            api.updateCell(state.currentFileId, { rowIdx: i, colKey: 'status', value: 'bad' });
+            apiAppendLog(state.currentFileId, { log: errLog });
+            apiUpdateCell(state.currentFileId, { rowIdx: i, colKey: 'status', value: 'bad' });
         }
         done++;
         renderSheet();
@@ -372,7 +435,7 @@ function renderSheet() {
                         state.isDirty = true;
                         renderSheet();
                         parts.forEach(function(val, i) {
-                            if (state.rows[i]) api.updateCell(state.currentFileId, { rowIdx: i, colKey: colKey, value: val });
+                            if (state.rows[i]) apiUpdateCell(state.currentFileId, { rowIdx: i, colKey: colKey, value: val });
                         });
                         __ss.vibrate();
                         __ss.showToast('Pasted ' + parts.length + ' cells');
@@ -417,7 +480,7 @@ function renderSheet() {
                         state.isDirty = true;
                         renderSheet();
                         vals.forEach(function(v, i) {
-                            if (parts[i] !== undefined) api.updateCell(state.currentFileId, { rowIdx: rowIdx, colKey: v.key, value: parts[i] });
+                            if (parts[i] !== undefined) apiUpdateCell(state.currentFileId, { rowIdx: rowIdx, colKey: v.key, value: parts[i] });
                         });
                         __ss.vibrate();
                         __ss.showToast('Row pasted');
@@ -458,7 +521,7 @@ function doubleTapAction(rowIdx, colKey) {
             row[colKey] = text;
             state.isDirty = true;
             renderSheet();
-            api.updateCell(state.currentFileId, { rowIdx: rowIdx, colKey: colKey, value: text });
+            apiUpdateCell(state.currentFileId, { rowIdx: rowIdx, colKey: colKey, value: text });
             __ss.showToast('Pasted');
         }).catch(function() {});
     } else {
@@ -494,7 +557,7 @@ function commitQuickEdit() {
         row[state.selectedCell.colIdx] = val;
         state.isDirty = true;
         updateUndoRedo();
-        api.updateCell(state.currentFileId, { rowIdx: state.selectedCell.rowIdx, colKey: state.selectedCell.colIdx, value: val });
+        apiUpdateCell(state.currentFileId, { rowIdx: state.selectedCell.rowIdx, colKey: state.selectedCell.colIdx, value: val });
     }
     dom.qebBar.classList.remove('open');
     __ss.clearCellHighlight();

@@ -57,6 +57,11 @@ function showApp(user) {
             avatar.src = user.photoUrl;
             gearBtn.classList.add('loaded');
         }
+        // Show admin tab
+        var adminBtn = document.getElementById('adminTabBtn');
+        if (adminBtn && user.isAdmin) {
+            adminBtn.style.display = '';
+        }
     }
 }
 

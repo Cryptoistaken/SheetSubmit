@@ -238,14 +238,17 @@ function showArchiveCtx(e, fileId) {
 
 // ── Home tabs ──
 var htabs = dom.homeTabs ? dom.homeTabs.querySelectorAll('.home-tab') : [];
+var allPanes = { files: dom.homePaneFiles, archive: dom.homePaneArchive, admin: dom.homePaneAdmin };
 htabs.forEach(function(tab) {
     tab.addEventListener('click', function() {
         htabs.forEach(function(t) { t.classList.remove('active'); });
         tab.classList.add('active');
-        var isArchive = tab.dataset.htab === 'archive';
-        if (dom.homePaneFiles) dom.homePaneFiles.style.display = isArchive ? 'none' : '';
-        if (dom.homePaneArchive) dom.homePaneArchive.style.display = isArchive ? '' : 'none';
-        if (isArchive) renderArchive();
+        var tabKey = tab.dataset.htab;
+        Object.keys(allPanes).forEach(function(k) {
+            if (allPanes[k]) allPanes[k].style.display = k === tabKey ? '' : 'none';
+        });
+        if (tabKey === 'archive') renderArchive();
+        else if (tabKey === 'admin') renderAdmin();
         else __ss.renderHome();
     });
 });
@@ -516,5 +519,230 @@ dom.xlsxFileInputHome.addEventListener('change', async function(e) {
     };
     reader.readAsArrayBuffer(file);
 });
+
+// ── Admin tab ──
+var adminSearchTimer = null;
+var adminSelectedUserId = null;
+
+async function renderAdmin() {
+    if (!__ss.currentUser || !__ss.currentUser.isAdmin) return;
+    if (adminSelectedUserId) { showAdminUserList(); return; }
+
+    var stats = await api.adminStats();
+    if (dom.adminTotalUsers) dom.adminTotalUsers.textContent = stats.totalUsers;
+    if (dom.adminTotalFiles) dom.adminTotalFiles.textContent = stats.totalFiles;
+
+    var users = await api.adminUsers();
+    renderAdminUserList(users);
+}
+
+function renderAdminUserList(users) {
+    if (!dom.adminUserList) return;
+    dom.adminUserList.innerHTML = '';
+    if (dom.adminUserDetail) dom.adminUserDetail.style.display = 'none';
+    if (dom.adminStats) dom.adminStats.style.display = '';
+    if (dom.adminUserSearch) dom.adminUserSearch.parentElement.style.display = '';
+
+    if (!users.length) {
+        dom.adminUserList.innerHTML = '<div class="empty-state"><div class="empty-state-title">No users found</div></div>';
+        return;
+    }
+    users.forEach(function(user) {
+        var card = document.createElement('div');
+        card.className = 'admin-user-card';
+        var displayName = ((user.firstName || '') + ' ' + (user.lastName || '')).trim() || 'Unknown';
+        var lastLogin = user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never';
+        card.innerHTML =
+            '<div class="admin-user-avatar-wrap">' +
+            (user.photoUrl ? '<img class="admin-user-avatar" src="' + user.photoUrl + '" alt="" />' : '<div class="admin-user-avatar admin-user-avatar-placeholder">' + __ss.esc(displayName.charAt(0).toUpperCase()) + '</div>') +
+            '</div>' +
+            '<div class="admin-user-info">' +
+            '<div class="admin-user-name">' + __ss.esc(displayName) + '</div>' +
+            '<div class="admin-user-username">' + (user.username ? '@' + __ss.esc(user.username) : 'ID: ' + user.id) + '</div>' +
+            '</div>' +
+            '<div class="admin-user-meta">' +
+            '<div class="admin-user-stat"><span class="admin-user-stat-val">' + (user.fileCount || 0) + '</span> files</div>' +
+            '<div class="admin-user-stat"><span class="admin-user-stat-val">' + lastLogin + '</span></div>' +
+            '</div>';
+
+        card.addEventListener('click', function() { showAdminUserDetail(user.id); });
+        dom.adminUserList.appendChild(card);
+    });
+}
+
+function showAdminUserList() {
+    adminSelectedUserId = null;
+    state.isAdminFile = false;
+    state.adminFileOwnerId = null;
+    if (dom.adminUserDetail) dom.adminUserDetail.style.display = 'none';
+    if (dom.adminStats) dom.adminStats.style.display = '';
+    if (dom.adminUserSearch) dom.adminUserSearch.parentElement.style.display = '';
+    renderAdmin();
+}
+__ss.showAdminUserList = showAdminUserList;
+
+async function showAdminUserDetail(userId) {
+    adminSelectedUserId = userId;
+    if (dom.adminStats) dom.adminStats.style.display = 'none';
+    if (dom.adminUserList) dom.adminUserList.innerHTML = '';
+    if (dom.adminUserSearch) dom.adminUserSearch.parentElement.style.display = 'none';
+    if (dom.adminUserDetail) dom.adminUserDetail.style.display = '';
+
+    var user = await api.adminUser(userId);
+    if (!user || !user.id) return;
+
+    var displayName = ((user.firstName || '') + ' ' + (user.lastName || '')).trim() || 'Unknown';
+    var lastLogin = user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never';
+
+    if (dom.adminUserHeader) {
+        dom.adminUserHeader.innerHTML =
+            '<div class="admin-detail-header">' +
+            (user.photoUrl ? '<img class="admin-detail-avatar" src="' + user.photoUrl + '" alt="" />' : '<div class="admin-detail-avatar admin-user-avatar-placeholder">' + __ss.esc(displayName.charAt(0).toUpperCase()) + '</div>') +
+            '<div class="admin-detail-info">' +
+            '<div class="admin-detail-name">' + __ss.esc(displayName) + '</div>' +
+            '<div class="admin-detail-meta">' + (user.username ? '@' + __ss.esc(user.username) : 'ID: ' + user.id) + '</div>' +
+            '<div class="admin-detail-meta">Last login: ' + lastLogin + '</div>' +
+            '<div class="admin-detail-meta">' + (user.fileCount || 0) + ' files, ' + (user.archivedCount || 0) + ' archived</div>' +
+            '</div>' +
+            '<div class="admin-detail-actions">' +
+            '<button class="btn btn-danger btn-sm" id="adminDeleteUserBtn">Delete User</button>' +
+            '</div>' +
+            '</div>';
+
+        document.getElementById('adminDeleteUserBtn').addEventListener('click', async function() {
+            var ok = await __ss.showConfirm('Permanently delete this user and all their files?', 'Delete User');
+            if (!ok) return;
+            await api.adminDeleteUser(userId);
+            __ss.showToast('User deleted');
+            showAdminUserList();
+        });
+    }
+
+    var files = user.files || [];
+    if (dom.adminFileList) {
+        dom.adminFileList.innerHTML = '';
+        if (!files.length) {
+            dom.adminFileList.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-state-title">No files</div></div>';
+            return;
+        }
+        files.forEach(function(f) {
+            var td = __ss.getTypeDef(f.type);
+            var count = f.dataCount || 0;
+            var card = document.createElement('div');
+            card.className = 'file-card';
+            card.innerHTML =
+                '<div class="file-card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/><path d="M12 12v.01"/><path d="M11 17v.01"/><path d="M7 14v.01"/></svg></div>' +
+                '<div class="file-card-name">' + __ss.esc(f.name) + '</div>' +
+                '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px">' +
+                '<span class="file-type-badge ' + td.badgeClass + '">' + __ss.esc(td.badge) + '</span>' +
+                '<span class="file-card-meta">' + count + ' row' + (count !== 1 ? 's' : '') + '</span></div>' +
+                '<div class="file-card-actions">' +
+                '<button class="file-card-btn admin-file-dl" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>' +
+                '<button class="file-card-btn admin-file-rename" title="Rename"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>' +
+                '<button class="file-card-btn admin-file-del file-card-del" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
+                '</div>';
+
+            card.addEventListener('click', function() {
+                state.isAdminFile = true;
+                state.adminFileOwnerId = userId;
+                __ss.openFileAdmin(f.id);
+            });
+            card.querySelector('.admin-file-dl').addEventListener('click', function(e) {
+                e.stopPropagation();
+                adminDownloadFile(f.id, f.name);
+            });
+            card.querySelector('.admin-file-rename').addEventListener('click', function(e) {
+                e.stopPropagation();
+                adminRenameFile(f.id, f.name, userId);
+            });
+            card.querySelector('.admin-file-del').addEventListener('click', function(e) {
+                e.stopPropagation();
+                adminDeleteFile(f.id, userId);
+            });
+
+            dom.adminFileList.appendChild(card);
+        });
+    }
+}
+__ss.showAdminUserDetail = showAdminUserDetail;
+
+function adminDownloadFile(id, name) {
+    Promise.all([api.adminFileRows(id), api.adminFile(id)]).then(function(results) {
+        var rows = results[0];
+        var f = results[1];
+        if (!rows || !rows.length) { __ss.showToast('No data'); return; }
+        var td = __ss.getTypeDef(f && f.type ? f.type : 'ig_cookie');
+        var data = [td.columns.map(function(c) { return c.label; })];
+        rows.forEach(function(row) {
+            var isEmpty = td.columns.every(function(c) { return !row[c.key]; });
+            if (!isEmpty) data.push(td.columns.map(function(c) { return row[c.key] || ''; }));
+        });
+        if (data.length < 2) { __ss.showToast('No data'); return; }
+        var ws = XLSX.utils.aoa_to_sheet(data);
+        var wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+        XLSX.writeFile(wb, (name || 'export') + '.xlsx');
+        __ss.showToast('Downloaded');
+    });
+}
+
+function adminRenameFile(fileId, currentName, userId) {
+    state.renameFileId = fileId;
+    state.renameIsAdmin = true;
+    state.renameAdminUserId = userId;
+    dom.renameInput.value = currentName;
+    dom.renameOverlay.classList.add('open');
+    setTimeout(function() { dom.renameInput.focus(); dom.renameInput.select(); }, 100);
+}
+
+async function adminDeleteFile(fileId, userId) {
+    var ok = await __ss.showConfirm('Move this file to archive?', 'Archive');
+    if (!ok) return;
+    await api.adminDeleteFile(fileId);
+    __ss.showToast('File archived');
+    if (adminSelectedUserId) showAdminUserDetail(userId);
+}
+
+if (dom.adminBackBtn) {
+    dom.adminBackBtn.addEventListener('click', showAdminUserList);
+}
+
+if (dom.adminUserSearch) {
+    dom.adminUserSearch.addEventListener('input', function() {
+        clearTimeout(adminSearchTimer);
+        var q = dom.adminUserSearch.value.trim();
+        adminSearchTimer = setTimeout(async function() {
+            if (q) {
+                var users = await api.adminSearchUsers(q);
+                renderAdminUserList(users);
+            } else {
+                renderAdmin();
+            }
+        }, 300);
+    });
+}
+
+// ── Override commitRename for admin ──
+var origCommitRename = __ss.commitRename;
+__ss.commitRename = async function() {
+    var name = dom.renameInput.value.trim();
+    if (!name) { __ss.showToast('Name cannot be empty'); return; }
+    var fileId = state.renameFileId;
+    if (!fileId) return;
+
+    if (state.renameIsAdmin) {
+        await api.adminUpdateFile(fileId, { name: name });
+        dom.renameOverlay.classList.remove('open');
+        state.renameFileId = null;
+        state.renameIsAdmin = false;
+        var userId = state.renameAdminUserId;
+        state.renameAdminUserId = null;
+        __ss.showToast('Renamed');
+        if (userId) showAdminUserDetail(userId);
+        return;
+    }
+
+    origCommitRename();
+};
 
 })();

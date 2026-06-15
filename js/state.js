@@ -28,6 +28,9 @@ var ids = [
     'archiveSelBar', 'archiveSelCount',
     'archiveSelSelectAll', 'archiveSelUnselectAll',
     'archiveSelRestore', 'archiveSelDelete',
+    'homePaneAdmin', 'adminStats', 'adminTotalUsers', 'adminTotalFiles',
+    'adminUserSearch', 'adminUserList', 'adminUserDetail',
+    'adminUserHeader', 'adminFileList', 'adminBackBtn', 'adminTabBtn',
 ];
 ids.forEach(function(id) {
     var el = document.getElementById(id);
@@ -55,6 +58,8 @@ __ss.state = {
     fileCtxFileId: null,
     renameFileId: null,
     isTouch: 'ontouchstart' in window,
+    isAdminFile: false,
+    adminFileOwnerId: null,
 };
 
 // ── Long-press helpers ──

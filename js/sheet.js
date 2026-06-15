@@ -319,14 +319,12 @@ function renderSheet() {
                 if (state.selectionMode) {
                     toggleSelection('cell', el.dataset.row, el.dataset.col);
                 } else {
-                    var rowIdx = parseInt(el.dataset.row);
-                    var colKey = el.dataset.col;
-                    var now = Date.now();
-                    if (now - state.lastCellTap < 400) {
-                        doubleTapAction(rowIdx, colKey);
-                    }
-                    state.lastCellTap = now;
-                    openQuickEdit(rowIdx, colKey);
+                    openQuickEdit(parseInt(el.dataset.row), el.dataset.col);
+                }
+            },
+            onDoubleTap: function(el) {
+                if (!state.selectionMode) {
+                    doubleTapAction(parseInt(el.dataset.row), el.dataset.col);
                 }
             },
             onHold: function(el) {

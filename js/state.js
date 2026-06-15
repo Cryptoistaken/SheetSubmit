@@ -46,7 +46,6 @@ __ss.state = {
     redoStack: [],
     selectedCell: null,
     isDirty: false,
-    lastCellTap: 0,
     selectionMode: false,
     selectedItems: new Set(),
     fileSelectionMode: false,

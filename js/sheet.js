@@ -6,7 +6,7 @@ var state = __ss.state;
 
 // ── Open / Close ──
 __ss.openFile = async function(id) {
-    var results = await Promise.all([api.getFile(id), api.getRows(id), api.getSync(id), api.getLogs(id)]);
+    var results = await Promise.all([api.getFile(id), api.getRows(id), api.getLogs(id)]);
     var f = results[0];
     if (!f || !f.id) return;
     state.currentFileId = id;
@@ -18,9 +18,8 @@ __ss.openFile = async function(id) {
     state.redoStack = [];
     state.selectedCell = null;
     state.isDirty = false;
-    state.syncEnabled = (results[2] && results[2].enabled) || false;
     state.syncRunning = false;
-    state.apiLogs = results[3] || [];
+    state.apiLogs = results[2] || [];
 
     dom.homeView.style.display = 'none';
     dom.sheetView.classList.add('active');
@@ -36,7 +35,7 @@ __ss.openFile = async function(id) {
     var logo = document.querySelector('.topbar-logo');
     if (logo) logo.style.display = 'none';
 
-    updateSyncToggle();
+    updateSyncState();
     try { history.pushState({fileId: id}, '', 'file/' + id); } catch(e) {}
     updateUndoRedo();
     renderSheet();
@@ -99,20 +98,16 @@ async function persist() {
     state.isDirty = false;
 }
 
-// ── Sync toggle ──
-function updateSyncToggle() {
-    if (!dom.syncToggle) return;
-    if (state.syncEnabled) {
-        dom.syncToggle.classList.add('on');
-        dom.syncToggle.title = 'Sync: ON';
-    } else {
-        dom.syncToggle.classList.remove('on');
-        dom.syncToggle.title = 'Sync: OFF';
-    }
+// ── Sync split button states ──
+function updateSyncState() {
+    if (!dom.syncBtnGroup) return;
     if (state.syncRunning) {
-        dom.syncDot.classList.add('running');
+        dom.syncBtnGroup.dataset.sync = 'syncing';
     } else {
-        dom.syncDot.classList.remove('running');
+        var hasData = state.rows.some(function(row) {
+            return row.username && row.twofa;
+        });
+        dom.syncBtnGroup.dataset.sync = hasData ? '' : 'disabled';
     }
 }
 
@@ -120,12 +115,12 @@ async function runSync() {
     var behavior = __ss.getFileBehavior(state.currentFileType);
     if (!behavior || !behavior.syncRow) { __ss.showToast('No sync handler for this file type'); return; }
     state.syncRunning = true;
-    updateSyncToggle();
+    updateSyncState();
     var total = 0;
     state.rows.forEach(function(row) {
         if (row.username && row.twofa) total++;
     });
-    if (!total) { __ss.showToast('No rows to sync'); state.syncRunning = false; updateSyncToggle(); return; }
+    if (!total) { __ss.showToast('No rows to sync'); state.syncRunning = false; updateSyncState(); return; }
     var done = 0;
     for (var i = 0; i < state.rows.length; i++) {
         var row = state.rows[i];
@@ -150,21 +145,53 @@ async function runSync() {
         __ss.showToast('Synced ' + done + '/' + total);
     }
     state.syncRunning = false;
-    updateSyncToggle();
+    updateSyncState();
     __ss.showToast('Sync complete — ' + done + '/' + total);
 }
 
-if (dom.syncToggle) {
-    dom.syncToggle.addEventListener('click', async function() {
+if (dom.syncBtn) {
+    dom.syncBtn.addEventListener('click', function() {
         if (state.syncRunning) return;
-        state.syncEnabled = !state.syncEnabled;
-        updateSyncToggle();
-        if (state.currentFileId) {
-            await api.setSync(state.currentFileId, { enabled: state.syncEnabled });
+        runSync();
+    });
+}
+
+// ── Sync dropdown arrow ──
+if (dom.syncArrowBtn && dom.syncDropdown) {
+    dom.syncArrowBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var isOpen = dom.syncDropdown.classList.contains('open');
+        dom.syncDropdown.classList.remove('open');
+        dom.syncArrowBtn.classList.remove('open');
+        if (!isOpen) {
+            var rect = dom.syncArrowBtn.getBoundingClientRect();
+            dom.syncDropdown.style.top = (rect.bottom + 6) + 'px';
+            dom.syncDropdown.style.right = (window.innerWidth - rect.right) + 'px';
+            dom.syncDropdown.classList.add('open');
+            dom.syncArrowBtn.classList.add('open');
         }
-        if (state.syncEnabled) {
-            runSync();
-        }
+    });
+}
+
+document.addEventListener('click', function() {
+    if (dom.syncDropdown && dom.syncArrowBtn) {
+        dom.syncDropdown.classList.remove('open');
+        dom.syncArrowBtn.classList.remove('open');
+    }
+});
+if (dom.syncDropdown) {
+    dom.syncDropdown.addEventListener('click', function(e) { e.stopPropagation(); });
+}
+
+// ── Auto-sync toggle ──
+if (dom.autoSyncToggle) {
+    var autoSyncOn = localStorage.getItem('ss_autoSync') === 'true';
+    if (autoSyncOn) dom.autoSyncToggle.classList.add('on');
+    dom.autoSyncToggle.addEventListener('click', function() {
+        autoSyncOn = !autoSyncOn;
+        dom.autoSyncToggle.classList.toggle('on', autoSyncOn);
+        localStorage.setItem('ss_autoSync', autoSyncOn ? 'true' : '');
+        __ss.showToast('Auto-sync ' + (autoSyncOn ? 'ON' : 'OFF'));
     });
 }
 

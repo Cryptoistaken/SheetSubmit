@@ -20,7 +20,11 @@ app.use(function(req, res, next) {
 });
 
 var redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-var redisOpts = {};
+var redisOpts = {
+    retryStrategy: function(times) {
+        return Math.min(times * 500, 10000);
+    }
+};
 if (redisUrl.startsWith('rediss://') || redisUrl.includes('upstash.io')) {
     redisOpts.tls = {};
 }
@@ -30,8 +34,12 @@ redis.on('error', function(err) {
     console.error('Redis connection error:', err.message);
 });
 
-redis.on('connect', function() {
-    console.log('Connected to Redis');
+var redisReady = false;
+redis.on('ready', function() {
+    if (!redisReady) {
+        redisReady = true;
+        console.log('Connected to Redis');
+    }
 });
 
 // ── Helpers ──

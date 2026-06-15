@@ -19,7 +19,7 @@ var ids = [
     'sheetMoreBtn', 'sheetMoreMenu', 'menuDownload', 'menuUpload',
     'uploadModeOverlay', 'uploadReplace', 'uploadAppend', 'uploadModeCancel',
     'xlsxFileInput', 'xlsxFileInputHome',
-    'syncToggle', 'syncDot',
+    'syncBtnGroup', 'syncBtn', 'syncArrowBtn', 'syncDropdown', 'autoSyncToggle',
     'fileSelSelectAll', 'fileSelUnselectAll',
     'confirmOverlay', 'confirmMessage', 'confirmCancel', 'confirmOk',
     'logPopup', 'logPopupTitle', 'logPopupBody',

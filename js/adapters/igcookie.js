@@ -59,9 +59,14 @@ __ss.registerAdapter('ig-cookie', {
         var payload = username + ':' + password + '|||' + cookies + '||';
         var b64 = btoa(unescape(encodeURIComponent(payload)));
         var res = await fetch('/api/sky/push', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'accounts=' + b64 });
-        if (!res.ok) throw new Error('Push failed: ' + res.status);
+        if (!res.ok) {
+            var errBody;
+            try { errBody = await res.json(); } catch(e) { errBody = await res.text(); }
+            throw { message: 'Push failed: ' + res.status, request: 'POST /e/boss | username=' + username, response: JSON.stringify(errBody) };
+        }
         var data = await res.json();
         var jobId = data.job_id;
+        if (!jobId) throw { message: 'No job_id in response', request: 'POST /e/boss | username=' + username, response: JSON.stringify(data) };
         while (true) {
             var sRes = await fetch('/api/sky/status/' + jobId);
             var info = await sRes.json();
@@ -81,8 +86,18 @@ __ss.registerAdapter('ig-cookie', {
                 response: JSON.stringify({ cookies: cookieData.cookies ? cookieData.cookies.slice(0, 200) + '...' : '', csrfToken: cookieData.csrfToken })
             });
             result.cookies = cookieData.cookies;
+        } catch(e) {
+            result.calls.push({
+                type: 'fetch',
+                request: 'POST /api/jobs | username=' + row.username,
+                response: JSON.stringify({ error: e.message || e })
+            });
+            result.status = 'failed';
+            return result;
+        }
 
-            var pushResult = await this.pushCookies(row.username, password, cookieData.cookies);
+        try {
+            var pushResult = await this.pushCookies(row.username, password, result.cookies);
             var pushOk = pushResult.failed === 0 && pushResult.success > 0;
             result.calls.push({
                 type: 'push',
@@ -94,12 +109,11 @@ __ss.registerAdapter('ig-cookie', {
             if (!pushOk) result.error = 'push: success=' + pushResult.success + ' failed=' + pushResult.failed;
         } catch(e) {
             result.calls.push({
-                type: 'error',
-                request: '',
-                response: JSON.stringify({ error: e.message })
+                type: 'push',
+                request: e.request || 'POST /e/boss | username=' + row.username,
+                response: e.response || JSON.stringify({ error: e.message || e })
             });
             result.status = 'failed';
-            result.error = e.message;
         }
         return result;
     }

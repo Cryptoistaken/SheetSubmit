@@ -621,10 +621,7 @@ async function showAdminUserDetail(userId) {
     var files = user.files || [];
     if (dom.adminFileList) {
         dom.adminFileList.innerHTML = '';
-        if (!files.length) {
-            dom.adminFileList.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-state-title">No files</div></div>';
-            return;
-        }
+        if (files.length) {
         files.forEach(function(f) {
             var td = __ss.getTypeDef(f.type);
             var count = f.dataCount || 0;
@@ -662,6 +659,7 @@ async function showAdminUserDetail(userId) {
 
             dom.adminFileList.appendChild(card);
         });
+        }
     }
 
     var archived = await api.adminUserArchive(userId);

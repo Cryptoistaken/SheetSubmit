@@ -475,7 +475,7 @@ function doubleTapAction(rowIdx, colKey) {
 function openQuickEdit(rowIdx, colKey) {
     var row = state.rows[rowIdx];
     if (!row) return;
-    state.selectedCell = { rowIdx: rowIdx, colIdx: colKey };
+    state.selectedCell = { rowIdx: rowIdx, colIdx: colKey, originalVal: row[colKey] || '' };
     var col = state.COLUMNS.find(function(c) { return c.key === colKey; });
     dom.qebChip.textContent = col ? col.label : colKey;
     dom.qebInput.value = row[colKey] || '';
@@ -491,7 +491,7 @@ function commitQuickEdit() {
     var row = state.rows[state.selectedCell.rowIdx];
     if (!row) return;
     var val = dom.qebInput.value;
-    if (row[state.selectedCell.colIdx] !== val) {
+    if (val !== state.selectedCell.originalVal) {
         pushUndo();
         row[state.selectedCell.colIdx] = val;
         state.isDirty = true;

@@ -101,14 +101,7 @@ async function persist() {
 // ── Sync split button states ──
 function updateSyncState() {
     if (!dom.syncBtnGroup) return;
-    if (state.syncRunning) {
-        dom.syncBtnGroup.dataset.sync = 'syncing';
-    } else {
-        var hasData = state.rows.some(function(row) {
-            return row.username && row.twofa;
-        });
-        dom.syncBtnGroup.dataset.sync = hasData ? '' : 'disabled';
-    }
+    dom.syncBtnGroup.dataset.sync = state.syncRunning ? 'syncing' : '';
 }
 
 async function runSync() {

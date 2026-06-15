@@ -521,6 +521,38 @@ app.get('/api/admin/user/:userId/files', requireAuth, requireAdmin, async functi
     res.json(files);
 });
 
+app.get('/api/admin/user/:userId/archive', requireAuth, requireAdmin, async function(req, res) {
+    var archived = await getJSON('archive:' + req.params.userId) || [];
+    res.json(archived);
+});
+
+app.post('/api/admin/user/:userId/archive/:fileId/restore', requireAuth, requireAdmin, async function(req, res) {
+    var archived = await getJSON('archive:' + req.params.userId) || [];
+    var idx = archived.findIndex(function(f) { return f.id === req.params.fileId; });
+    if (idx === -1) { res.status(404).json({ error: 'not found' }); return; }
+    var file = archived.splice(idx, 1)[0];
+    delete file.deletedAt;
+    var files = await getJSON('files:' + req.params.userId) || [];
+    files.unshift(file);
+    await setJSON('archive:' + req.params.userId, archived);
+    await setJSON('files:' + req.params.userId, files);
+    res.json({ ok: true });
+});
+
+app.delete('/api/admin/user/:userId/archive/:fileId', requireAuth, requireAdmin, async function(req, res) {
+    var archived = await getJSON('archive:' + req.params.userId) || [];
+    var idx = archived.findIndex(function(f) { return f.id === req.params.fileId; });
+    if (idx === -1) { res.status(404).json({ error: 'not found' }); return; }
+    var file = archived.splice(idx, 1)[0];
+    await setJSON('archive:' + req.params.userId, archived);
+    await delKey('rows:' + file.id);
+    await delKey('undo:' + file.id);
+    await delKey('redo:' + file.id);
+    await delKey('sync:' + file.id);
+    await delKey('logs:' + file.id);
+    res.json({ ok: true });
+});
+
 app.get('/api/admin/file/:fileId', requireAuth, requireAdmin, async function(req, res) {
     var found = await findFileAcrossUsers(req.params.fileId);
     if (!found) { res.status(404).json({ error: 'file not found' }); return; }

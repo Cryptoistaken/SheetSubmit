@@ -663,6 +663,49 @@ async function showAdminUserDetail(userId) {
             dom.adminFileList.appendChild(card);
         });
     }
+
+    var archived = await api.adminUserArchive(userId);
+    if (dom.adminFileList && archived.length) {
+        var archHeader = document.createElement('div');
+        archHeader.style.cssText = 'grid-column:1/-1;font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-top:8px;padding-bottom:4px;border-top:1px solid var(--border);padding-top:16px;';
+        archHeader.textContent = 'Archived (' + archived.length + ')';
+        dom.adminFileList.appendChild(archHeader);
+
+        archived.forEach(function(f) {
+            var td = __ss.getTypeDef(f.type);
+            var daysLeft = Math.max(0, 30 - Math.floor((Date.now() - (f.deletedAt || 0)) / 86400000));
+            var card = document.createElement('div');
+            card.className = 'file-card';
+            card.style.opacity = '0.6';
+            card.innerHTML =
+                '<div class="file-card-icon" style="opacity:0.5"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/></svg></div>' +
+                '<div class="file-card-name">' + __ss.esc(f.name) + '</div>' +
+                '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px">' +
+                '<span class="file-type-badge ' + td.badgeClass + '">' + __ss.esc(td.badge) + '</span>' +
+                '<span class="file-card-meta">' + daysLeft + ' days left</span></div>' +
+                '<div class="file-card-actions">' +
+                '<button class="file-card-btn admin-archive-restore" title="Restore"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>' +
+                '<button class="file-card-btn admin-archive-del file-card-del" title="Delete permanently"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
+                '</div>';
+
+            card.querySelector('.admin-archive-restore').addEventListener('click', async function(e) {
+                e.stopPropagation();
+                await api.adminRestoreArchived(userId, f.id);
+                __ss.showToast('File restored');
+                showAdminUserDetail(userId);
+            });
+            card.querySelector('.admin-archive-del').addEventListener('click', async function(e) {
+                e.stopPropagation();
+                var ok = await __ss.showConfirm('Permanently delete this file?', 'Delete Forever');
+                if (!ok) return;
+                await api.adminDeleteArchived(userId, f.id);
+                __ss.showToast('Permanently deleted');
+                showAdminUserDetail(userId);
+            });
+
+            dom.adminFileList.appendChild(card);
+        });
+    }
 }
 __ss.showAdminUserDetail = showAdminUserDetail;
 

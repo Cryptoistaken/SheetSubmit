@@ -495,7 +495,7 @@ function commitQuickEdit() {
         pushUndo();
         row[state.selectedCell.colIdx] = val;
         state.isDirty = true;
-        renderSheet();
+        updateUndoRedo();
         api.updateCell(state.currentFileId, { rowIdx: state.selectedCell.rowIdx, colKey: state.selectedCell.colIdx, value: val });
     }
     dom.qebBar.classList.remove('open');

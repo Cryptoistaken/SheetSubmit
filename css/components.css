@@ -11,7 +11,7 @@
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.1s, border-color 0.1s, transform 0.1s;
+    transition: transform 0.1s;
     white-space: nowrap;
     line-height: 1.4;
 }
@@ -127,7 +127,7 @@
     background: var(--bg);
     color: var(--text);
     outline: none;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.15s;
 }
 
 .modal-input:focus {
@@ -181,7 +181,110 @@
     transform: translateY(0) scale(1);
 }
 
+.cell-dup { background: rgba(255, 160, 0, 0.15) !important; border-color: #ffa000 !important; }
+
+.cell-invalid { background: rgba(255, 68, 68, 0.1) !important; border-color: #ff4444 !important; }
+
+.check-split-main.warning {
+    border-color: #ffa000 !important;
+    color: #ffa000 !important;
+}
+
+[data-theme="dark"] .check-split-main.warning {
+    border-color: #ffa000 !important;
+    color: #ffa000 !important;
+}
+
 .spin-icon {
     animation: spin 0.7s linear infinite;
     display: inline-block;
+    will-change: transform;
+}
+
+/* ── Download option dialog ── */
+.download-opt-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--overlay-light);
+    z-index: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.12s var(--ease-out);
+}
+
+.download-opt-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--rl);
+    padding: 16px;
+    width: 220px;
+    box-shadow: var(--shadow-lg);
+    animation: mIn 0.15s var(--ease-out);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.download-opt-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    margin-bottom: 4px;
+    letter-spacing: -0.01em;
+}
+
+.download-opt-btn {
+    padding: 8px 12px;
+    border-radius: var(--r);
+    border: 1px solid var(--border2);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.download-opt-btn:hover:not(.disabled) {
+    background: var(--bg3);
+}
+
+.download-opt-btn.disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.download-opt-btn.primary {
+    border-color: var(--text);
+    font-weight: 600;
+}
+
+.opt-count {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text2);
+    background: var(--bg3);
+    padding: 0 7px;
+    border-radius: 10px;
+    line-height: 18px;
+}
+
+.download-opt-cancel {
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text3);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: center;
+    margin-top: 2px;
+}
+
+.download-opt-cancel:hover {
+    color: var(--text);
 }

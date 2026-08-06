@@ -4,16 +4,36 @@ var dom = __ss.dom;
 var api = __ss.api;
 var state = __ss.state;
 
+// ── Cache ──
+var cachedFiles = null;
+
 // ── Home render ──
-__ss.renderHome = async function() {
-    var files = await api.getFiles();
+__ss.renderHome = async function(useCache) {
+    var files;
+    if (useCache && cachedFiles) {
+        files = cachedFiles;
+    } else {
+        files = await api.getFiles();
+        cachedFiles = files;
+    }
     state.filesCache = files;
     dom.filesGrid.innerHTML = '';
     if (files.length === 0) {
         dom.emptyState.style.display = 'flex';
-    } else {
-        dom.emptyState.style.display = 'none';
+        return;
     }
+    dom.emptyState.style.display = 'none';
+
+    var crossDupCounts = state.crossDupCounts;
+    if (!crossDupCounts) {
+        try {
+            var cd = await api.getCrossDups();
+            crossDupCounts = cd.counts;
+            state.crossDupCounts = crossDupCounts;
+        } catch(e) {}
+    }
+
+    var fragment = document.createDocumentFragment();
     files.forEach(function(f) {
         var td = __ss.getTypeDef(f.type);
         var card = document.createElement('div');
@@ -76,14 +96,18 @@ __ss.renderHome = async function() {
             card.querySelector('.file-card-del').addEventListener(evt, function(e) { e.stopPropagation(); });
         });
 
-        dom.filesGrid.appendChild(card);
+        fragment.appendChild(card);
 
-        var meta = document.getElementById('meta-' + f.id);
+        var meta = card.querySelector('.file-card-meta');
         if (meta) {
             var count = f.dataCount || 0;
-            meta.textContent = count + ' row' + (count !== 1 ? 's' : '');
+            var parts = [count + ' row' + (count !== 1 ? 's' : '')];
+            var cd = crossDupCounts && crossDupCounts[f.id];
+            if (cd) parts.push('<span class="cd-badge">' + cd + ' dup</span>');
+            meta.innerHTML = parts.join(' &middot; ');
         }
     });
+    dom.filesGrid.appendChild(fragment);
 };
 
 function downloadFile(id, name) {
@@ -92,12 +116,12 @@ function downloadFile(id, name) {
         var f = results[1];
         if (!rows || !rows.length) { __ss.showToast('No data'); return; }
         var td = __ss.getTypeDef(f && f.id ? f.type : 'ig_cookie');
-            var data = [td.columns.map(function(c) { return c.label; })];
+            var data = [];
             rows.forEach(function(row) {
                 var isEmpty = td.columns.every(function(c) { return !row[c.key]; });
                 if (!isEmpty) data.push(td.columns.map(function(c) { return row[c.key] || ''; }));
             });
-            if (data.length < 2) { __ss.showToast('No data'); return; }
+            if (!data.length) { __ss.showToast('No data'); return; }
             var ws = XLSX.utils.aoa_to_sheet(data);
             var wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
@@ -112,14 +136,16 @@ function enterFileSelectionMode(fileId) {
     state.selectedFiles.clear();
     state.selectedFiles.add(fileId);
     updateFileSelBar();
-    __ss.renderHome();
+    dom.filesGrid.classList.add('sel-mode');
+    dom.filesGrid.querySelectorAll('.file-card').forEach(function(c) { c.classList.toggle('selected', c.dataset.id === fileId); });
 }
 
 function exitFileSelectionMode() {
     state.fileSelectionMode = false;
     state.selectedFiles.clear();
     if (dom.fileSelBar) dom.fileSelBar.classList.remove('open');
-    __ss.renderHome();
+    dom.filesGrid.classList.remove('sel-mode');
+    dom.filesGrid.querySelectorAll('.file-card.selected').forEach(function(c) { c.classList.remove('selected'); });
 }
 
 function toggleFileSelection(fileId) {
@@ -133,7 +159,8 @@ function toggleFileSelection(fileId) {
         return;
     }
     updateFileSelBar();
-    __ss.renderHome();
+    var cards = dom.filesGrid.querySelectorAll('.file-card');
+    cards.forEach(function(c) { c.classList.toggle('selected', state.selectedFiles.has(c.dataset.id)); });
 }
 
 function updateFileSelBar() {
@@ -144,11 +171,20 @@ function updateFileSelBar() {
 }
 
 function selectAllFiles() {
-    api.getFiles().then(function(files) {
-        files.forEach(function(f) { state.selectedFiles.add(f.id); });
-        updateFileSelBar();
-        __ss.renderHome();
-    });
+    var files = cachedFiles || state.filesCache;
+    if (!files) {
+        api.getFiles().then(function(f) {
+            cachedFiles = f;
+            state.filesCache = f;
+            f.forEach(function(f2) { state.selectedFiles.add(f2.id); });
+            updateFileSelBar();
+            dom.filesGrid.querySelectorAll('.file-card').forEach(function(c) { c.classList.add('selected'); });
+        });
+        return;
+    }
+    files.forEach(function(f) { state.selectedFiles.add(f.id); });
+    updateFileSelBar();
+    dom.filesGrid.querySelectorAll('.file-card').forEach(function(c) { c.classList.add('selected'); });
 }
 
 function unselectAllFiles() {
@@ -263,6 +299,7 @@ function renderArchive() {
             return;
         }
         dom.archiveEmptyState.style.display = 'none';
+        var frag = document.createDocumentFragment();
         archived.forEach(function(f) {
             var td = __ss.getTypeDef(f.type);
             var daysLeft = Math.max(0, 30 - Math.floor((Date.now() - (f.deletedAt || 0)) / 86400000));
@@ -319,8 +356,9 @@ function renderArchive() {
                 card.querySelector('.archive-del').addEventListener(evt, function(ev) { ev.stopPropagation(); });
             });
 
-            dom.archiveGrid.appendChild(card);
+            frag.appendChild(card);
         });
+        dom.archiveGrid.appendChild(frag);
     });
 }
 
@@ -405,19 +443,6 @@ if (dom.archiveSelDelete) {
 __ss.showTypeModal = function() {
     dom.typeOptions.innerHTML = '';
 
-    var uploadOpt = document.createElement('div');
-    uploadOpt.className = 'type-option';
-    uploadOpt.innerHTML =
-        '<div class="type-option-icon" style="background:var(--bg3);color:var(--text2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>' +
-        '<div class="type-option-info">' +
-        '<div class="type-option-name">Upload xlsx</div>' +
-        '<div class="type-option-desc">Import data from a spreadsheet</div></div>';
-    uploadOpt.addEventListener('click', function() {
-        dom.typeOverlay.classList.remove('open');
-        dom.xlsxFileInputHome.click();
-    });
-    dom.typeOptions.appendChild(uploadOpt);
-
     __ss.FILE_TYPE_KEYS.forEach(function(k) {
         var td = __ss.FILE_TYPES[k];
         var opt = document.createElement('div');
@@ -433,6 +458,20 @@ __ss.showTypeModal = function() {
         });
         dom.typeOptions.appendChild(opt);
     });
+
+    var uploadOpt = document.createElement('div');
+    uploadOpt.className = 'type-option';
+    uploadOpt.innerHTML =
+        '<div class="type-option-icon" style="background:var(--bg3);color:var(--text2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>' +
+        '<div class="type-option-info">' +
+        '<div class="type-option-name">Upload xlsx</div>' +
+        '<div class="type-option-desc">Import data from a spreadsheet</div></div>';
+    uploadOpt.addEventListener('click', function() {
+        dom.typeOverlay.classList.remove('open');
+        dom.xlsxFileInputHome.click();
+    });
+    dom.typeOptions.appendChild(uploadOpt);
+
     dom.typeOverlay.classList.add('open');
 };
 
@@ -488,17 +527,51 @@ dom.xlsxFileInputHome.addEventListener('change', async function(e) {
         var wb = XLSX.read(ev.target.result, { type: 'array' });
         var ws = wb.Sheets[wb.SheetNames[0]];
         var json = XLSX.utils.sheet_to_json(ws, { header: 1 });
-        if (json.length < 2) { __ss.showToast('File is empty'); return; }
-        var headers = json[0].map(function(h) { return String(h).toLowerCase().trim(); });
-        var td = __ss.FILE_TYPES['ig_cookie'];
-        var colMap = td.columns.map(function(c) {
-            var idx = headers.indexOf(c.key.toLowerCase());
-            if (idx === -1) idx = headers.indexOf(c.label.toLowerCase());
-            return { key: c.key, idx: idx };
-        }).filter(function(cm) { return cm.idx !== -1; });
-        if (colMap.length === 0) { __ss.showToast('Columns don\'t match any file type'); return; }
+        if (json.length < 1) { __ss.showToast('File is empty'); return; }
+        var headers = (json[0] || []).map(function(h) { return String(h).toLowerCase().trim(); });
+        var typeKey = 'ig_cookie';
+        var bestMatch = 0;
+        __ss.FILE_TYPE_KEYS.forEach(function(tk) {
+            var tdef = __ss.FILE_TYPES[tk];
+            var matches = tdef.columns.filter(function(c) {
+                return headers.indexOf(c.key.toLowerCase()) !== -1 || headers.indexOf(c.label.toLowerCase()) !== -1;
+            });
+            if (matches.length > bestMatch) {
+                bestMatch = matches.length;
+                typeKey = tk;
+            }
+        });
+        var td = __ss.FILE_TYPES[typeKey];
+        var colMap = null;
+        var dataStart = 1;
+        if (bestMatch > 0) {
+            colMap = td.columns.map(function(c) {
+                var idx = headers.indexOf(c.key.toLowerCase());
+                if (idx === -1) idx = headers.indexOf(c.label.toLowerCase());
+                return { key: c.key, idx: idx };
+            }).filter(function(cm) { return cm.idx !== -1; });
+        } else {
+            var isFb = false;
+            for (var si = 0; si < Math.min(3, json.length); si++) {
+                var rowVals = json[si] || [];
+                for (var sj = 0; sj < rowVals.length; sj++) {
+                    var val = String(rowVals[sj]).toLowerCase();
+                    if (val.indexOf('c_user=') !== -1 || val.indexOf('ds_user_id=') !== -1) {
+                        isFb = true;
+                        break;
+                    }
+                }
+                if (isFb) break;
+            }
+            if (isFb) {
+                typeKey = 'fb_cookie';
+                td = __ss.FILE_TYPES[typeKey];
+            }
+            colMap = td.columns.map(function(c, i) { return { key: c.key, idx: i }; });
+            dataStart = 0;
+        }
         var rows = [];
-        for (var i = 1; i < json.length; i++) {
+        for (var i = dataStart; i < json.length; i++) {
             var row = {};
             var hasData = false;
             colMap.forEach(function(cm) {
@@ -508,12 +581,21 @@ dom.xlsxFileInputHome.addEventListener('change', async function(e) {
             });
             if (hasData) rows.push(row);
         }
+        if (typeKey === 'fb_cookie') {
+            rows.forEach(function(r) {
+                if (!r.uid && r.cookies) {
+                    var m = r.cookies.match(/c_user=(\d+)/);
+                    if (m) r.uid = m[1];
+                }
+            });
+        }
         if (rows.length === 0) { __ss.showToast('No data rows found'); return; }
         var name = file.name.replace(/\.xlsx?$/i, '') || 'Import ' + __ss.todayStr();
         var files = state.filesCache || await api.getFiles();
         if (files.some(function(f) { return f.name === name; })) name = name + ' (' + __ss.genId().slice(0, 4) + ')';
         var id = __ss.genId();
-        await api.createFile({ id: id, name: name, type: 'ig_cookie', rowCount: rows.length });
+        await api.createFile({ id: id, name: name, type: typeKey, rowCount: rows.length });
+        await api.persist(id, { rows: rows, dataCount: rows.length });
         __ss.showToast('Imported ' + rows.length + ' rows');
         __ss.openFile(id);
     };
@@ -713,12 +795,12 @@ function adminDownloadFile(id, name) {
         var f = results[1];
         if (!rows || !rows.length) { __ss.showToast('No data'); return; }
         var td = __ss.getTypeDef(f && f.type ? f.type : 'ig_cookie');
-        var data = [td.columns.map(function(c) { return c.label; })];
+        var data = [];
         rows.forEach(function(row) {
             var isEmpty = td.columns.every(function(c) { return !row[c.key]; });
             if (!isEmpty) data.push(td.columns.map(function(c) { return row[c.key] || ''; }));
         });
-        if (data.length < 2) { __ss.showToast('No data'); return; }
+        if (!data.length) { __ss.showToast('No data'); return; }
         var ws = XLSX.utils.aoa_to_sheet(data);
         var wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');

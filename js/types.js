@@ -13,6 +13,18 @@ __ss.FILE_TYPES = {
             { key: 'password', label: 'password', width: 140 },
             { key: 'twofa', label: '2fa', width: 200 },
         ]
+    },
+    fb_cookie: {
+        label: 'FB Cookie',
+        badge: 'FB Cookie',
+        badgeClass: 't-fb',
+        icon: 'FB',
+        desc: 'cookies, 2fa key & uid',
+        columns: [
+            { key: 'cookies', label: 'cookies', width: 340 },
+            { key: 'twofakey', label: '2fa key', width: 200 },
+            { key: 'uid', label: 'uid', width: 120 },
+        ]
     }
 };
 

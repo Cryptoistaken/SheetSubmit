@@ -2,11 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,shrink-to-fit=no" />
     <title>Sheet Submit</title>
     <base href="/">
     <link rel="icon" type="image/svg+xml" href="public/favicon-dark.svg" />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-sans/Geist-Regular.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-mono/GeistMono-Regular.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-sans/Geist-SemiBold.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-sans/Geist-Medium.woff2">
     <link rel="stylesheet" href="css/base.css" />
     <link rel="stylesheet" href="css/layout.css" />
     <link rel="stylesheet" href="css/touch.css" />
@@ -20,12 +28,16 @@
 
         .file-type-badge { font-size: 10px; font-weight: 600; color: var(--text3); background: var(--bg3); padding: 2px 6px; border-radius: 4px; display: inline-block; letter-spacing: -0.01em; margin-top: 2px; }
         .file-type-badge.t-ig { color: var(--blue); background: var(--blue-light); }
+        .file-type-badge.t-fb { color: #6366f1; background: #eef2ff; }
+        [data-theme="dark"] .file-type-badge.t-fb { color: #818cf8; background: rgba(99,102,241,0.15); }
 
         .type-option { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r); cursor: pointer; transition: background 0.1s, border-color 0.1s; margin-bottom: 8px; }
         .type-option:hover { background: var(--bg3); border-color: var(--text3); }
         .type-option:active { transform: scale(0.99); }
         .type-option-icon { width: 32px; height: 32px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; font-weight: 600; }
         .type-option-icon.t-ig { background: var(--blue-light); color: var(--blue); }
+        .type-option-icon.t-fb { background: #eef2ff; color: #6366f1; }
+        [data-theme="dark"] .type-option-icon.t-fb { background: rgba(99,102,241,0.15); color: #818cf8; }
         .type-option-info { flex: 1; min-width: 0; }
         .type-option-name { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
         .type-option-desc { font-size: 12px; color: var(--text3); margin-top: 2px; }
@@ -75,6 +87,32 @@
         .sheet-copy-btn:active { transform: scale(0.98); }
         #sheetBtns { display: none; align-items: center; gap: 8px; }
 
+        .check-split-wrap { display: inline-flex; align-items: stretch; border-radius: var(--r); overflow: hidden; border: 1px solid var(--blue); transition: opacity 0.15s var(--ease-out); }
+        .check-split-wrap[data-check="disabled"] { opacity: 0.38; border-color: var(--border2); pointer-events: none; }
+        .check-split-wrap[data-check="checking"] { opacity: 0.55; pointer-events: none; }
+        .check-split-main { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: none; background: var(--blue); color: #fff; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; line-height: 1; font-family: var(--sans); transition: background 0.1s; }
+        .check-split-main:hover { background: var(--blue-dark, #2563eb); }
+        .check-split-main:active { transform: scale(0.97); }
+        .check-split-arrow { display: inline-flex; align-items: center; justify-content: center; padding: 0 7px; background: var(--blue); color: #fff; border: none; border-left: 1px solid rgba(255,255,255,0.25); cursor: pointer; transition: background 0.1s, transform 0.12s var(--ease-out); }
+        .check-split-arrow:hover { background: var(--blue-dark, #2563eb); }
+        .check-split-arrow:active { transform: scale(0.93); }
+        .check-split-arrow svg { transition: transform 0.15s var(--ease-out); }
+        .check-split-arrow.open svg { transform: rotate(180deg); }
+        .check-dropdown { position: fixed; background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r); box-shadow: var(--shadow-md); z-index: 650; padding: 8px 12px; display: none; min-width: 150px; }
+        .check-dropdown.open { display: block; animation: smIn 0.15s var(--ease-out); }
+        .check-dropdown-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+        .autocheck-toggle { display: flex; align-items: center; gap: 8px; padding: 4px 0; background: none; border: none; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--text2); font-family: var(--sans); transition: color 0.1s; }
+        .autocheck-toggle:hover { color: var(--text); }
+        .autocheck-toggle .autocheck-track { position: relative; width: 36px; height: 20px; flex-shrink: 0; background: var(--bg4); border-radius: 10px; border: 1.5px solid var(--border2); transition: background 0.2s var(--ease-out), border-color 0.2s var(--ease-out); }
+        .autocheck-toggle .autocheck-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg); box-shadow: 0 1px 3px rgba(0,0,0,0.18); transition: transform 0.2s var(--ease-out); }
+        .autocheck-toggle.on .autocheck-track { background: var(--blue); border-color: var(--blue); }
+        .autocheck-toggle.on .autocheck-track::after { transform: translateX(16px); }
+        .sheet-more-sep { height: 1px; background: var(--border); margin: 4px 8px; }
+        .sheet-more-col-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 12px; font-weight: 500; color: var(--text); cursor: pointer; user-select: none; transition: background 0.08s; }
+        .sheet-more-col-item:hover { background: var(--bg3); }
+        .sheet-more-col-item .col-toggle { width: 16px; height: 16px; border-radius: 3px; border: 1.5px solid var(--border2); background: var(--bg); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: background 0.12s, border-color 0.12s; }
+        .sheet-more-col-item .col-toggle.on { background: var(--blue); border-color: var(--blue); }
+        .sheet-more-col-item .col-toggle.on::after { content: ''; width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); margin-top: -1px; }
         .sheet-more-btn { width: 32px; height: 32px; border-radius: var(--r); border: 1px solid transparent; background: transparent; color: var(--text3); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.1s, color 0.1s; flex-shrink: 0; padding: 0; letter-spacing: 2px; }
         .sheet-more-btn:hover { background: var(--bg3); color: var(--text); border-color: var(--border); }
 
@@ -126,7 +164,7 @@
     </div>
     <div class="topbar-r">
         <span id="sheetBtns">
-            <div class="sync-split-wrap" id="syncBtnGroup">
+            <div class="sync-split-wrap" id="syncBtnGroup" style="display:none">
                 <button class="sync-split-main" id="syncBtn">
                     <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
                         <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
@@ -147,12 +185,31 @@
                     Auto-sync
                 </button>
             </div>
+
             <button class="undo-redo-btn" id="undoBtn" title="Undo" disabled>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z" fill="currentColor"/></svg>
             </button>
             <button class="undo-redo-btn" id="redoBtn" title="Redo" disabled>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 15.7c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 15.5h9v-9l-3.6 3.1z" fill="currentColor"/></svg>
             </button>
+            <div class="check-split-wrap" id="checkBtnGroup" style="display:none">
+                <button class="check-split-main" id="checkBtn">
+                    Check
+                </button>
+                <button class="check-split-arrow" id="checkArrowBtn" title="More check options">
+                    <svg width="9" height="9" viewBox="0 0 10 6" fill="currentColor">
+                        <path d="M0 0l5 6 5-6z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="check-dropdown" id="checkDropdown">
+                <div class="check-dropdown-label">Auto-check</div>
+                <button class="autocheck-toggle" id="autoCheckToggle" style="width:100%">
+                    <span class="autocheck-track"></span>
+                    Auto-check
+                </button>
+            </div>
+
             <button class="sheet-more-btn" id="sheetMoreBtn" title="More actions">&#8942;</button>
         </span>
         <div class="sheet-more-menu" id="sheetMoreMenu">
@@ -168,6 +225,8 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 Upload xlsx
             </button>
+            <div class="sheet-more-sep"></div>
+            <div class="sheet-more-cols" id="sheetMoreCols"></div>
         </div>
         <span class="conn-status" id="connStatus"><span class="conn-status-dot"></span><span id="connStatusText">Connecting...</span></span>
         <div class="profile-btn" id="gearBtn" title="User menu">
@@ -380,18 +439,19 @@
 
 <div class="toast-wrap"><div class="toast" id="toast"></div></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="js/theme.js"></script>
-    <script src="js/types.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/state.js"></script>
-    <script src="js/adapters/index.js"></script>
-    <script src="js/adapters/igcookie.js"></script>
-    <script src="js/filetypes/index.js"></script>
-    <script src="js/filetypes/igcookie.js"></script>
-    <script src="js/home.js"></script>
-<script src="js/sheet.js"></script>
-<script src="js/app.js"></script>
+    <script src="js/types.js" defer></script>
+    <script src="js/api.js" defer></script>
+    <script src="js/state.js" defer></script>
+    <script src="js/adapters/index.js" defer></script>
+    <script src="js/adapters/igcookie.js" defer></script>
+    <script src="js/filetypes/index.js" defer></script>
+    <script src="js/filetypes/igcookie.js" defer></script>
+    <script src="js/filetypes/fbcookie.js" defer></script>
+    <script src="js/home.js" defer></script>
+<script src="js/sheet.js" defer></script>
+<script src="js/app.js" defer></script>
 <script>
 (function() {
     var themeToggle = document.getElementById('themeToggle');

@@ -1,6 +1,9 @@
 (function() {
 var __ss = window.__ss;
 
+var _syncConcurrency = 0;
+var MAX_CONCURRENT_SYNC = 3;
+
 __ss.registerAdapter('ig-cookie', {
     name: 'IG Auto Cookies + SkySys Push',
 
@@ -39,7 +42,12 @@ __ss.registerAdapter('ig-cookie', {
         });
         if (!jobRes.ok) throw new Error('Job create failed: ' + jobRes.status);
         var jobId = (await jobRes.json()).jobId;
+        var startTime = Date.now();
+        var MAX_WAIT_MS = 120000;
         while (true) {
+            if (Date.now() - startTime > MAX_WAIT_MS) {
+                throw new Error('fetchCookies timed out after ' + MAX_WAIT_MS + 'ms');
+            }
             var pollRes = await fetch('/api/ig/jobs/' + jobId);
             var job = (await pollRes.json()).job;
             if (job.status === 'completed') {
@@ -67,7 +75,12 @@ __ss.registerAdapter('ig-cookie', {
         var data = await res.json();
         var jobId = data.job_id;
         if (!jobId) throw { message: 'No job_id in response', request: 'POST /e/boss | username=' + username, response: JSON.stringify(data) };
+        var startTime = Date.now();
+        var MAX_WAIT_MS = 120000;
         while (true) {
+            if (Date.now() - startTime > MAX_WAIT_MS) {
+                throw { message: 'pushCookies timed out after ' + MAX_WAIT_MS + 'ms', request: 'POST /e/boss | username=' + username };
+            }
             var sRes = await fetch('/api/sky/status/' + jobId);
             var info = await sRes.json();
             if (info.status === 'done') return { username: username, jobId: jobId, success: info.data.success_count, failed: info.data.failed_count, elapsed: info.elapsed_seconds };
@@ -77,6 +90,10 @@ __ss.registerAdapter('ig-cookie', {
 
     // Full sync: fetch cookies then push
     syncRow: async function(row, password) {
+        if (_syncConcurrency >= MAX_CONCURRENT_SYNC) {
+            return { username: row.username, status: 'skipped', reason: 'concurrency limit' };
+        }
+        _syncConcurrency++;
         var result = { username: row.username, calls: [] };
         try {
             var cookieData = await this.fetchCookies(row.username, password, row.twofa);
@@ -93,6 +110,7 @@ __ss.registerAdapter('ig-cookie', {
                 response: JSON.stringify({ error: e.message || e })
             });
             result.status = 'failed';
+            _syncConcurrency--;
             return result;
         }
 
@@ -115,6 +133,7 @@ __ss.registerAdapter('ig-cookie', {
             });
             result.status = 'failed';
         }
+        _syncConcurrency--;
         return result;
     }
 });

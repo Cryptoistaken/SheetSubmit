@@ -1,5 +1,6 @@
 (function() {
     var THEME_KEY = 'ss_theme';
+    var _logo, _favicon, _loginLogo;
 
     function getTheme() {
         return localStorage.getItem(THEME_KEY) || 'light';
@@ -8,17 +9,17 @@
     function setTheme(theme) {
         localStorage.setItem(THEME_KEY, theme);
         document.documentElement.setAttribute('data-theme', theme);
-        var logo = document.querySelector('.topbar-logo');
-        var favicon = document.querySelector('link[rel="icon"]');
-        var loginLogo = document.getElementById('loginLogo');
-        if (logo) {
-            logo.src = theme === 'dark' ? 'public/logo-dark.svg' : 'public/logo-light.svg';
+        _logo = _logo || document.querySelector('.topbar-logo');
+        _favicon = _favicon || document.querySelector('link[rel="icon"]');
+        _loginLogo = _loginLogo || document.getElementById('loginLogo');
+        if (_logo) {
+            _logo.src = theme === 'dark' ? 'public/logo-dark.svg' : 'public/logo-light.svg';
         }
-        if (favicon) {
-            favicon.href = theme === 'dark' ? 'public/favicon-dark.svg' : 'public/favicon-light.svg';
+        if (_favicon) {
+            _favicon.href = theme === 'dark' ? 'public/favicon-dark.svg' : 'public/favicon-light.svg';
         }
-        if (loginLogo) {
-            loginLogo.src = theme === 'dark' ? 'public/logo-light.svg' : 'public/logo-dark.svg';
+        if (_loginLogo) {
+            _loginLogo.src = theme === 'dark' ? 'public/logo-light.svg' : 'public/logo-dark.svg';
         }
     }
 

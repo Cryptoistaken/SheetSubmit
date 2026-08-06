@@ -19,7 +19,7 @@ var ids = [
     'sheetMoreBtn', 'sheetMoreMenu', 'menuDownload', 'menuUpload',
     'uploadModeOverlay', 'uploadReplace', 'uploadAppend', 'uploadModeCancel',
     'xlsxFileInput', 'xlsxFileInputHome',
-    'syncBtnGroup', 'syncBtn', 'syncArrowBtn', 'syncDropdown', 'autoSyncToggle',
+    'syncBtnGroup', 'syncBtn', 'syncArrowBtn', 'syncDropdown', 'autoSyncToggle', 'checkBtnGroup', 'checkBtn', 'checkArrowBtn', 'checkDropdown', 'autoCheckToggle', 'sheetMoreCols',
     'fileSelSelectAll', 'fileSelUnselectAll',
     'confirmOverlay', 'confirmMessage', 'confirmCancel', 'confirmOk',
     'logPopup', 'logPopupTitle', 'logPopupBody',
@@ -57,9 +57,15 @@ __ss.state = {
     selectedArchiveFiles: new Set(),
     fileCtxFileId: null,
     renameFileId: null,
+    checkRunning: false,
+    visibleColumns: null,
     isTouch: 'ontouchstart' in window,
     isAdminFile: false,
     adminFileOwnerId: null,
+    dupCells: new Set(),
+    dupRows: new Set(),
+    hasDuplicates: false,
+    invalidCells: new Set(),
 };
 
 // ── Long-press helpers ──
@@ -112,10 +118,11 @@ __ss.showToast = function(msg) {
     toastTimer = setTimeout(function() { dom.toast.classList.remove('show'); }, 2000);
 };
 
+var _escDiv = null;
 __ss.esc = function(s) {
-    var d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
+    if (!_escDiv) _escDiv = document.createElement('div');
+    _escDiv.textContent = s;
+    return _escDiv.innerHTML;
 };
 
 __ss.makeEmptyRow = function(columns) {
@@ -169,14 +176,21 @@ __ss.attachTapHold = function(el, opts) {
 };
 
 // ── Cell highlight helpers ──
+var _highlightedCell = null;
+
 __ss.clearCellHighlight = function() {
-    var prev = dom.grid.querySelector('.cell-editing');
-    if (prev) prev.classList.remove('cell-editing');
+    if (_highlightedCell) {
+        _highlightedCell.classList.remove('cell-editing');
+        _highlightedCell = null;
+    }
 };
 
 __ss.highlightCell = function(td) {
     __ss.clearCellHighlight();
-    if (td) td.classList.add('cell-editing');
+    if (td) {
+        td.classList.add('cell-editing');
+        _highlightedCell = td;
+    }
 };
 
 })();

@@ -1,6 +1,9 @@
 (function() {
 var __ss = window.__ss;
 
+var _totpCache = new Map();
+var _logMap = null;
+
 __ss.registerFileBehavior('ig_cookie', {
 
     // Called when a row is about to be committed via quick edit bar
@@ -30,8 +33,21 @@ __ss.registerFileBehavior('ig_cookie', {
         if (!row.twofa) return null;
         var adapter = __ss.getAdapter('ig-cookie');
         if (!adapter) return null;
+        var step = Math.floor(Date.now() / 30000);
+        var cacheKey = row.twofa + ':' + step;
+        var cached = _totpCache.get(cacheKey);
+        if (cached) {
+            await navigator.clipboard.writeText(cached);
+            return { action: 'totp_copied', code: cached };
+        }
         var code = await adapter.generateTOTP(row.twofa);
         if (code) {
+            _totpCache.set(cacheKey, code);
+            // Limit cache size
+            if (_totpCache.size > 100) {
+                var firstKey = _totpCache.keys().next().value;
+                _totpCache.delete(firstKey);
+            }
             await navigator.clipboard.writeText(code);
             return { action: 'totp_copied', code: code };
         }
@@ -40,7 +56,11 @@ __ss.registerFileBehavior('ig_cookie', {
 
     // Long-press on dot column: return row log
     onDotHold: function(row, logs) {
-        var rowLogs = logs.filter(function(l) { return l.username === row.username; });
+        if (!_logMap || _logMap._logs !== logs) {
+            _logMap = { _logs: logs };
+            logs.forEach(function(l) { if (l.username) _logMap[l.username] = l; });
+        }
+        var rowLogs = _logMap[row.username] ? [_logMap[row.username]] : [];
         return { action: 'show_logs', logs: rowLogs };
     },
 

@@ -98,22 +98,30 @@ document.addEventListener('click', function(e) {
 });
 
 // ── Connection health ──
-async function checkConn() {
-    try {
-        var h = await fetch('/api/health').then(function(r) { return r.json(); });
-        if (h.status === 'ok') {
-            dom.connStatus.className = 'conn-status ok';
-            dom.connStatusText.textContent = 'Connected';
-        } else {
-            dom.connStatus.className = 'conn-status err';
-            dom.connStatusText.textContent = h.status;
-        }
-    } catch {
+var _healthInterval = 15000;
+var _healthTimer = null;
+
+function checkConn() {
+    fetch('/api/health').then(function(r) { return r.json(); }).then(function(h) {
+        _healthInterval = 15000; // reset on success
+        var ok = h.status === 'ok' || h.status === 'ready';
+        dom.connStatus.className = ok ? 'conn-status ok' : 'conn-status warn';
+        dom.connStatusText.textContent = ok ? 'Connected' : 'Reconnecting...';
+    }).catch(function() {
         dom.connStatus.className = 'conn-status err';
         dom.connStatusText.textContent = 'Disconnected';
-    }
+        _healthInterval = Math.min(_healthInterval * 1.5, 120000); // backoff up to 2min
+    });
 }
-setInterval(checkConn, 15000);
+
+function scheduleHealthCheck() {
+    _healthTimer = setTimeout(function() {
+        checkConn();
+        scheduleHealthCheck();
+    }, _healthInterval);
+}
+
+scheduleHealthCheck();
 
 // ── Home FAB ──
 dom.homeFab.addEventListener('click', __ss.showTypeModal);

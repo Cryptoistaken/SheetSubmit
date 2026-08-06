@@ -132,9 +132,12 @@
     flex-direction: column;
     gap: 8px;
     cursor: pointer;
-    transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+    transition: border-color 0.15s, transform 0.1s;
     position: relative;
     min-height: 110px;
+    content-visibility: auto;
+    contain-intrinsic-size: 110px;
+    will-change: transform;
     opacity: 0;
     animation: fadeIn 0.2s var(--ease-out) forwards;
 }
@@ -182,6 +185,10 @@
     font-size: 12px;
     color: var(--text3);
 }
+.file-card-meta .cd-badge {
+    color: var(--yellow);
+    font-weight: 500;
+}
 
 @media (hover: none) {
     .file-card { min-height: 90px; }
@@ -219,10 +226,23 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     z-index: 200;
-    transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+    transition: background 0.15s, transform 0.1s;
     user-select: none;
+}
+
+.home-fab::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: opacity 0.15s;
+    pointer-events: none;
+}
+
+.home-fab:hover::before {
+    opacity: 0;
 }
 
 [data-theme="dark"] .home-fab {
@@ -230,8 +250,19 @@
     color: #000;
 }
 
-.home-fab:hover {
+.home-fab::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+}
+
+.home-fab:hover::after {
+    opacity: 1;
 }
 
 .home-fab:active {
@@ -246,10 +277,11 @@
 .sheet-wrap {
     flex: 1;
     overflow: auto;
-    -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     background: var(--bg);
 }
+
+table.grid tbody tr { content-visibility: auto; contain-intrinsic-size: 36px; }
 
 /* ── Grid table ── */
 table.grid {
@@ -332,6 +364,7 @@ table.grid td.dc {
     background: var(--bg);
     overflow: hidden;
     touch-action: pan-x pan-y;
+    contain: layout style paint;
 }
 
 table.grid td.dc .cell-inner {
@@ -373,6 +406,7 @@ table.grid td.dot-cell {
     vertical-align: middle;
     background: var(--bg);
     cursor: pointer;
+    contain: layout style paint;
 }
 
 table.grid td.dot-cell:hover {
@@ -385,18 +419,21 @@ table.grid td.dot-cell:hover {
     border-radius: 50%;
     background: var(--border2);
     display: inline-block;
-    transition: background 0.15s;
+    transition: none;
 }
 
-.row-dot.d-green { background: #00b4d8; }
+.row-dot.d-blue { background: #00b4d8; }
+.row-dot.d-green { background: #16a34a; }
 .row-dot.d-yellow { background: var(--yellow); }
 .row-dot.d-red { background: var(--red); }
+
 .row-dot.d-spin {
     background: var(--blue);
     animation: pulse 1s ease-in-out infinite;
+    will-change: opacity;
 }
 
-.tr.add-row td {
+tr.add-row td {
     background: var(--bg2) !important;
     border-color: var(--border) !important;
     cursor: pointer;
@@ -481,7 +518,7 @@ th.rh:hover {
     border: none;
     border-bottom: 2px solid transparent;
     cursor: pointer;
-    transition: color 0.12s, border-color 0.12s;
+    transition: color 0.12s;
     margin-bottom: -1px;
     white-space: nowrap;
 }
@@ -539,12 +576,27 @@ th.rh:hover {
     border-radius: var(--rl);
     padding: 16px;
     background: var(--bg);
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.15s;
+    position: relative;
+}
+
+.admin-stat-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--rl);
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
 }
 
 .admin-stat-card:hover {
     border-color: var(--text3);
-    box-shadow: var(--shadow-md);
+}
+
+.admin-stat-card:hover::before {
+    opacity: 1;
 }
 
 .admin-stat-value {
@@ -576,7 +628,7 @@ th.rh:hover {
     color: var(--text);
     outline: none;
     font-family: var(--sans);
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.15s;
 }
 
 .admin-search-input::placeholder {
@@ -607,7 +659,7 @@ th.rh:hover {
     border-radius: var(--rl);
     background: var(--bg);
     cursor: pointer;
-    transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+    transition: transform 0.1s;
 }
 
 .admin-user-card:hover {

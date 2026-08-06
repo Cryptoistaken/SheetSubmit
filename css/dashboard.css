@@ -150,11 +150,10 @@
 .toggle-track {
     position: absolute;
     inset: 0;
-    background: var(--bg4);
+    background: var(--border2);
     border-radius: 10px;
     cursor: pointer;
     transition: background 0.2s;
-    border: 1px solid var(--border2);
 }
 
 .toggle-track::after {
@@ -165,7 +164,7 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: var(--text3);
+    background: #fff;
     transition: transform 0.2s, background 0.2s;
 }
 

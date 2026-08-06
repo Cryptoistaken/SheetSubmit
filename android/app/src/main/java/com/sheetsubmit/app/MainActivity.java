@@ -2,6 +2,8 @@ package com.sheetsubmit.app;
 
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -14,6 +16,7 @@ import android.os.Message;
 import android.util.Log;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -91,6 +94,12 @@ public class MainActivity extends Activity {
                 openExternal(url);
                 return true;
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                injectClipboardBridge();
+            }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -126,8 +135,42 @@ public class MainActivity extends Activity {
 
         CookieManager.getInstance().setAcceptCookie(true);
 
+        webView.addJavascriptInterface(new Object() {
+            @JavascriptInterface
+            public String readClipboard() {
+                try {
+                    ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (cm != null && cm.hasPrimaryClip() && cm.getPrimaryClip() != null && cm.getPrimaryClip().getItemCount() > 0) {
+                        CharSequence cs = cm.getPrimaryClip().getItemAt(0).getText();
+                        return cs != null ? cs.toString() : "";
+                    }
+                } catch (Exception e) { Log.e(TAG, "readClipboard: " + e.getMessage()); }
+                return "";
+            }
+
+            @JavascriptInterface
+            public void writeClipboard(String text) {
+                try {
+                    ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (cm != null) {
+                        cm.setPrimaryClip(ClipData.newPlainText("sheetsubmit", text == null ? "" : text));
+                    }
+                } catch (Exception e) { Log.e(TAG, "writeClipboard: " + e.getMessage()); }
+            }
+        }, "Android");
+
         webView.loadUrl(HOME_URL);
         pollHandler.post(pollRunnable);
+    }
+
+    private void injectClipboardBridge() {
+        String shim = "(function(){" +
+            "if(window.Android&&navigator.clipboard){var r=Android.readClipboard,w=Android.writeClipboard;" +
+            "navigator.clipboard.readText=function(){return new Promise(function(res,rej){try{res(r());}catch(e){rej(e);}});};" +
+            "navigator.clipboard.writeText=function(t){w(String(t));return Promise.resolve();};" +
+            "navigator.clipboard.read=function(){return Promise.reject(new Error('not supported'));};}" +
+            "})();";
+        webView.evaluateJavascript(shim, null);
     }
 
     private String getDeviceToken() {

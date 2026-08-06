@@ -479,7 +479,7 @@ function showApiLogs(logs, username, el, crossInfo) {
         if (row && row.wa_status) {
             if (row.wa_status === 'eligible') {
                 waHtml = '<div style="padding:6px 0;border-bottom:1px solid var(--border2);margin-bottom:4px">' +
-                    '<div style="font-size:11px;font-weight:600;color:var(--green)">&#10003; WA eligible</div></div>';
+                    '<div style="font-size:11px;font-weight:600;color:var(--green)">&#10003; FB Page</div></div>';
             } else if (row.wa_ban_reason) {
                 waHtml = '<div style="padding:6px 0;border-bottom:1px solid var(--border2);margin-bottom:4px">' +
                     '<div style="font-size:11px;color:var(--text3)">&#9888; ' + __ss.esc(row.wa_ban_reason) + '</div></div>';
@@ -1278,7 +1278,7 @@ function _doDownload(filterFn, suffix) {
     var ws = XLSX.utils.aoa_to_sheet(data);
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-    var name = (dom.sheetTitleBtn._fullName || dom.sheetTitleBtn.textContent || 'export') + (suffix || '');
+    var name = (dom.sheetTitleBtn._fullName || dom.sheetTitleBtn.textContent || 'export') + (suffix || '') + ' [' + data.length + ']';
     XLSX.writeFile(wb, name + '.xlsx');
     __ss.showToast('Downloaded');
 }
@@ -1307,9 +1307,9 @@ dom.menuDownload.addEventListener('click', function() {
         '<div class="download-opt-box">' +
             '<div class="download-opt-title">Download</div>' +
             '<button class="download-opt-btn' + (total === 0 ? ' disabled' : ' primary') + '" data-opt="all">All <span class="opt-count">' + total + '</span></button>' +
-            '<button class="download-opt-btn' + (active === 0 ? ' disabled' : '') + '" data-opt="valid">Alive <span class="opt-count">' + active + '</span></button>' +
-            '<button class="download-opt-btn' + (wa === 0 ? ' disabled' : '') + '" data-opt="wa">WA Eligible <span class="opt-count">' + wa + '</span></button>' +
-            '<button class="download-opt-btn' + (activeNoWa === 0 ? ' disabled' : '') + '" data-opt="valid-nwa">No WA <span class="opt-count">' + activeNoWa + '</span></button>' +
+            '<button class="download-opt-btn btn-green' + (active === 0 ? ' disabled' : '') + '" data-opt="valid">Alive <span class="opt-count">' + active + '</span></button>' +
+            '<button class="download-opt-btn btn-blue' + (wa === 0 ? ' disabled' : '') + '" data-opt="wa">FB Page <span class="opt-count">' + wa + '</span></button>' +
+            '<button class="download-opt-btn btn-amber' + (activeNoWa === 0 ? ' disabled' : '') + '" data-opt="valid-nwa">No FB Page <span class="opt-count">' + activeNoWa + '</span></button>' +
             '<button class="download-opt-cancel">Cancel</button>' +
         '</div>';
     document.body.appendChild(overlay);
@@ -1321,8 +1321,8 @@ dom.menuDownload.addEventListener('click', function() {
             switch (btn.dataset.opt) {
                 case 'all': _doDownload(null, ''); break;
                 case 'valid': _doDownload(function(row) { return row.status === 'good'; }, ' (Alive)'); break;
-                case 'wa': _doDownload(function(row) { return row.wa_status === 'eligible'; }, ' (WA Eligible)'); break;
-                case 'valid-nwa': _doDownload(function(row) { return row.status === 'good' && row.wa_status !== 'eligible'; }, ' (No WA)'); break;
+                case 'wa': _doDownload(function(row) { return row.wa_status === 'eligible'; }, ' (FB Page)'); break;
+                case 'valid-nwa': _doDownload(function(row) { return row.status === 'good' && row.wa_status !== 'eligible'; }, ' (No FB Page)'); break;
             }
         } else if (e.target.closest('.download-opt-cancel') || e.target === overlay) {
             overlay.remove();

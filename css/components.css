@@ -264,6 +264,51 @@
     font-weight: 600;
 }
 
+.download-opt-btn.btn-green {
+    color: #16a34a;
+    border-color: #16a34a;
+    background: rgba(22, 163, 74, 0.08);
+}
+
+.download-opt-btn.btn-green:hover:not(.disabled) {
+    background: rgba(22, 163, 74, 0.15);
+}
+
+.download-opt-btn.btn-green .opt-count {
+    color: #16a34a;
+    background: rgba(22, 163, 74, 0.12);
+}
+
+.download-opt-btn.btn-blue {
+    color: #00b4d8;
+    border-color: #00b4d8;
+    background: rgba(0, 180, 216, 0.08);
+}
+
+.download-opt-btn.btn-blue:hover:not(.disabled) {
+    background: rgba(0, 180, 216, 0.15);
+}
+
+.download-opt-btn.btn-blue .opt-count {
+    color: #00b4d8;
+    background: rgba(0, 180, 216, 0.12);
+}
+
+.download-opt-btn.btn-amber {
+    color: #f59e0b;
+    border-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.download-opt-btn.btn-amber:hover:not(.disabled) {
+    background: rgba(245, 158, 11, 0.15);
+}
+
+.download-opt-btn.btn-amber .opt-count {
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.12);
+}
+
 .opt-count {
     font-size: 12px;
     font-weight: 600;

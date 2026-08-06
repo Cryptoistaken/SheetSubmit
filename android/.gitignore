@@ -1,0 +1,18 @@
+# Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.kotlin/
+
+# Wrapper jar/scripts are committed; only ignore caches
+android/.gradle
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

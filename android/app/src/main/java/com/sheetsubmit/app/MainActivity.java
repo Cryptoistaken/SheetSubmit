@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        did = getDeviceId();
+        did = getDeviceToken();
 
         webView = new WebView(this);
         setContentView(webView);
@@ -130,7 +130,7 @@ public class MainActivity extends Activity {
         pollHandler.post(pollRunnable);
     }
 
-    private String getDeviceId() {
+    private String getDeviceToken() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         String id = prefs.getString("did", "");
         if (id.isEmpty()) {

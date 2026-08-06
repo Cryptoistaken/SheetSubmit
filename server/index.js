@@ -206,6 +206,11 @@ app.get('/api/auth/telegram', async function(req, res) {
     await setJSONex('session:' + sessionId, { userId: userInfo.id }, 2592000000);
     await delKey('login:' + token);
 
+    if (loginData.did && /^[A-Za-z0-9-]{8,64}$/.test(loginData.did)) {
+        await setJSONex('device:' + loginData.did, { sessionId: sessionId }, 3600000);
+        console.log('[Auth] session bound to device ' + loginData.did.slice(0, 8) + '...');
+    }
+
     res.setHeader('Set-Cookie', 'session=' + sessionId + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000');
     console.log('[Auth] session created, redirecting');
 
@@ -254,6 +259,17 @@ app.get('/api/auth/me', async function(req, res) {
     }
     console.log('[Auth] me: user=' + (user ? user.username || user.firstName || user.id : 'null') + ' admin=' + (user ? user.isAdmin : false));
     res.json(user || null);
+});
+
+// ── Device login poll (used by the Android WebView app) ──
+app.get('/api/auth/device', async function(req, res) {
+    var did = (req.query.token || '').trim();
+    if (!/^[A-Za-z0-9-]{8,64}$/.test(did)) { res.json({ ok: false }); return; }
+    var info = await getJSON('device:' + did);
+    if (!info || !info.sessionId) { res.json({ ok: false }); return; }
+    await delKey('device:' + did);
+    console.log('[Auth] device ' + did.slice(0, 8) + '... picked up session');
+    res.json({ ok: true, sessionId: info.sessionId });
 });
 
 // ── Ownership check middleware ──
@@ -1147,6 +1163,14 @@ if (BOT_TOKEN) {
         if (update.message && update.message.text) {
             var msg = update.message;
             if (msg.text === '/start' || msg.text.startsWith('/start ')) {
+                var payload = (msg.text.split(' ')[1] || '').trim();
+                if (payload.indexOf('login_') === 0) {
+                    var did = payload.slice(6);
+                    if (/^[A-Za-z0-9-]{8,64}$/.test(did)) {
+                        await setJSONex('didchat:' + msg.chat.id, { did: did }, 900000);
+                        console.log('[Bot] device login requested chatId=' + msg.chat.id + ' did=' + did.slice(0, 8) + '...');
+                    }
+                }
                 await tg('sendMessage', {
                     chat_id: msg.chat.id,
                     text: 'Welcome to Sheet Submit. Tap the button below to log in:',
@@ -1163,7 +1187,14 @@ if (BOT_TOKEN) {
             if (cb.data === 'login') {
                 var token = generateToken();
                 var url = APP_URL + '/api/auth/telegram?token=' + token;
-                await setJSONex('login:' + token, { chatId: cb.message.chat.id }, 900000);
+                var loginReq = { chatId: cb.message.chat.id };
+                var didChat = await getJSON('didchat:' + cb.message.chat.id);
+                if (didChat && didChat.did) {
+                    loginReq.did = didChat.did;
+                    url += '&device=' + didChat.did;
+                    await delKey('didchat:' + cb.message.chat.id);
+                }
+                await setJSONex('login:' + token, loginReq, 900000);
                 await tg('editMessageText', {
                     chat_id: cb.message.chat.id,
                     message_id: cb.message.message_id,

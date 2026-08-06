@@ -165,10 +165,11 @@ public class MainActivity extends Activity {
 
     private void injectClipboardBridge() {
         String shim = "(function(){" +
-            "if(window.Android&&navigator.clipboard){var r=Android.readClipboard,w=Android.writeClipboard;" +
-            "navigator.clipboard.readText=function(){return new Promise(function(res,rej){try{res(r());}catch(e){rej(e);}});};" +
-            "navigator.clipboard.writeText=function(t){w(String(t));return Promise.resolve();};" +
-            "navigator.clipboard.read=function(){return Promise.reject(new Error('not supported'));};}" +
+            "if(window.Android&&window.Android.readClipboard&&window.Android.writeClipboard){" +
+            "navigator.clipboard.readText=function(){return new Promise(function(res,rej){try{res(window.Android.readClipboard());}catch(e){rej(e);}});};" +
+            "navigator.clipboard.writeText=function(t){window.Android.writeClipboard(String(t));return Promise.resolve();};" +
+            "navigator.clipboard.read=function(){return Promise.reject(new Error('not supported'));};" +
+            "window.nativeClipboardReady=true;}" +
             "})();";
         webView.evaluateJavascript(shim, null);
     }

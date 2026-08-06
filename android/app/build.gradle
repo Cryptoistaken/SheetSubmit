@@ -10,14 +10,23 @@ android {
         applicationId "com.sheetsubmit.app"
         minSdk 26
         targetSdk 34
-        versionCode 1
+        versionCode (System.getenv("VERSION_CODE") ? Integer.parseInt(System.getenv("VERSION_CODE")) : 1)
         versionName "1.0"
+    }
+
+    signingConfigs {
+        release {
+            storeFile rootProject.file("android-release.keystore")
+            storePassword System.getenv("KEYSTORE_PASSWORD")
+            keyAlias "sheetsubmit"
+            keyPassword System.getenv("KEYSTORE_PASSWORD")
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            signingConfig rootProject.file("android-release.keystore").exists() ? signingConfigs.release : signingConfigs.debug
         }
     }
 

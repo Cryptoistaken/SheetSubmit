@@ -1675,7 +1675,8 @@ var _versionGroupsOpen = {};
 var _versionRowCache = new Map();
 var _versionDayEls = {};
 var _versionSummaryEls = {};
-var _versionMoreBtn = null;
+var _versionPage = 1;
+var _versionPages = 1;
 var _WEEK = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -1782,8 +1783,7 @@ function fmtDayHeader(ts) {
 }
 
 function insertVersionEl(el) {
-    if (_versionMoreBtn && _versionMoreBtn.parentNode) dom.versionList.insertBefore(el, _versionMoreBtn);
-    else dom.versionList.appendChild(el);
+    dom.versionList.appendChild(el);
 }
 
 function dayBuildGroup(ts) {
@@ -1795,7 +1795,14 @@ function dayBuildGroup(ts) {
         if (_versionGroupsOpen[key] === false) grp.classList.remove('open');
         var head = document.createElement('div');
         head.className = 'version-day';
-        head.textContent = fmtDayHeader(ts);
+        var label = document.createElement('span');
+        label.className = 'version-day-label';
+        label.textContent = fmtDayHeader(ts);
+        var countEl = document.createElement('span');
+        countEl.className = 'version-day-count';
+        countEl.textContent = '0';
+        head.appendChild(label);
+        head.appendChild(countEl);
         head.addEventListener('click', function() {
             var open = grp.classList.contains('open');
             grp.classList.toggle('open', !open);
@@ -1808,37 +1815,86 @@ function dayBuildGroup(ts) {
     return grp;
 }
 
-function ensureVersionMoreBtn() {
-    if (!_versionMoreBtn) {
-        _versionMoreBtn = document.createElement('button');
-        _versionMoreBtn.className = 'version-more-btn';
-        _versionMoreBtn.textContent = 'Show more';
-        _versionMoreBtn.addEventListener('click', appendVersionPage);
-    }
-    if (!_versionMoreBtn.parentNode) dom.versionList.appendChild(_versionMoreBtn);
+function renderVersionPager() {
+    var pager = document.createElement('div');
+    pager.className = 'version-pager';
+    var info = document.createElement('span');
+    info.className = 'version-pager-info';
+    var total = _versionMeta ? _versionMeta.length : 0;
+    var from = _versionMeta && _versionMeta.length ? (_versionPage - 1) * _versionPageSize + 1 : 0;
+    var to = Math.min(_versionPage * _versionPageSize, total);
+    info.textContent = total === 0 ? 'No versions' : 'Page ' + _versionPage + ' of ' + _versionPages + ' · ' + from + '–' + to + ' of ' + total;
+    var btns = document.createElement('span');
+    btns.className = 'version-pager-btns';
+    var prevBtn = document.createElement('button');
+    prevBtn.className = 'version-page-btn';
+    prevBtn.textContent = '← Prev';
+    prevBtn.disabled = _versionPage <= 1;
+    prevBtn.addEventListener('click', function() { goVersionPage(_versionPage - 1); });
+    var nextBtn = document.createElement('button');
+    nextBtn.className = 'version-page-btn';
+    nextBtn.textContent = 'Next →';
+    nextBtn.disabled = _versionPage >= _versionPages;
+    nextBtn.addEventListener('click', function() { goVersionPage(_versionPage + 1); });
+    btns.appendChild(prevBtn);
+    btns.appendChild(nextBtn);
+    pager.appendChild(info);
+    pager.appendChild(btns);
+    dom.versionList.appendChild(pager);
 }
 
-function removeVersionMoreBtn() {
-    if (_versionMoreBtn) { _versionMoreBtn.remove(); _versionMoreBtn = null; }
+function goVersionPage(n) {
+    n = Math.max(1, Math.min(_versionPages, n));
+    if (n === _versionPage) return;
+    _versionPage = n;
+    renderVersionPage();
 }
 
-function appendVersionPage() {
+function renderVersionPage() {
     var meta = _versionMeta;
-    if (!meta || !meta.length) return;
-    var end = Math.min(_versionShown + _versionPageSize, meta.length);
-    for (var i = _versionShown; i < end; i++) {
+    removeVersionPager();
+    _versionDayEls = {};
+    _versionSummaryEls = {};
+    if (!meta || !meta.length) {
+        var empty = document.createElement('div');
+        empty.className = 'version-empty';
+        empty.textContent = 'No versions yet — actions like replace, append, merge, check and sync are saved here.';
+        dom.versionList.appendChild(empty);
+        return;
+    }
+    renderVersionPager();
+    var start = (_versionPage - 1) * _versionPageSize;
+    var end = Math.min(start + _versionPageSize, meta.length);
+    for (var i = start; i < end; i++) {
         buildVersionItem(meta[i], i);
     }
-    _versionShown = end;
-    if (_versionShown < meta.length) ensureVersionMoreBtn();
-    else removeVersionMoreBtn();
+    refreshVersionDayCounts();
 }
 
-// Fetch uid maps for the newest ~50 only (bounded), then refresh each summary in place.
+function refreshVersionDayCounts() {
+    Object.keys(_versionDayEls).forEach(function(key) {
+        var grp = _versionDayEls[key];
+        var countEl = grp && grp.querySelector('.version-day-count');
+        if (countEl) {
+            var n = 0;
+            var children = grp.querySelectorAll(':scope > .version-item');
+            n = children.length;
+            countEl.textContent = String(n) + (n === 1 ? ' version' : ' versions');
+        }
+    });
+}
+
+function removeVersionPager() {
+    var el = dom.versionList.querySelector('.version-pager');
+    if (el) el.remove();
+}
+
+// Fetch the current page's version rows (bounded ~pageSize), then refresh each summary in place.
 function prefetchVersionSummaries() {
     var meta = _versionMeta || [];
-    var limit = Math.min(50, meta.length);
-    for (var i = 0; i < limit; i++) {
+    var start = (_versionPage - 1) * _versionPageSize;
+    var end = Math.min(start + _versionPageSize, meta.length);
+    for (var i = start; i < end; i++) {
         (function(idx) {
             var rec = meta[idx];
             versionRows(Number(rec.v)).then(function() {
@@ -1856,15 +1912,18 @@ function buildVersionItem(rec, idx) {
     var item = document.createElement('div');
     item.className = 'version-item';
     item.innerHTML =
-        '<div class="version-main">' +
-            (rec.name ? '<div class="version-name-row"><span class="version-name">' + __ss.esc(rec.name) + '</span><button class="version-rename-btn">Rename</button></div>' : '') +
-            '<div class="version-time">' + fmtVersionTime(rec.ts) + '</div>' +
-            '<div class="version-summary">' + __ss.esc(versionSummary(rec, prev)) + '</div>' +
-            '<div class="version-detail">' + (prev ? (delta >= 0 ? 'Added ' + delta + ' row' + (delta === 1 ? '' : 's') : 'Removed ' + (-delta) + ' row' + (delta === -1 ? '' : 's')) : 'Created file with ' + rec.rowCount + ' row' + (rec.rowCount === 1 ? '' : 's')) + ' · ' + rec.rowCount + ' rows</div>' +
+        '<div class="version-head">' +
+            '<div class="version-meta">' +
+                (rec.name ? '<div class="version-name-row"><span class="version-name">' + __ss.esc(rec.name) + '</span><button class="version-rename-btn">Rename</button></div>' : '') +
+                '<div class="version-time">' + fmtVersionTime(rec.ts) + '</div>' +
+                '<div class="version-summary">' + __ss.esc(versionSummary(rec, prev)) + '</div>' +
+                '<div class="version-detail">' + (prev ? (delta >= 0 ? 'Added ' + delta + ' row' + (delta === 1 ? '' : 's') : 'Removed ' + (-delta) + ' row' + (delta === -1 ? '' : 's')) : 'Created file with ' + rec.rowCount + ' row' + (rec.rowCount === 1 ? '' : 's')) + ' · ' + rec.rowCount + ' rows</div>' +
+            '</div>' +
+            '<span class="version-badge ' + (rec.action === 'restore' ? 'restore' : (rec.action === 'replace' || rec.action === 'merge') ? 'replace' : '') + '">[' + (prev ? deltaTxt : 'New') + '] ' + (ACTION_LABELS[rec.action] || rec.action) + '</span>' +
         '</div>' +
-        '<span class="version-badge ' + (rec.action === 'restore' ? 'restore' : (rec.action === 'replace' || rec.action === 'merge') ? 'replace' : '') + '">[' + (prev ? deltaTxt : 'New') + '] ' + (ACTION_LABELS[rec.action] || rec.action) + '</span>' +
-        '<div class="version-actions">' +
+        '<div class="version-footer-actions">' +
             '<button class="version-fork-btn">Copy version</button>' +
+            '<span class="spacer"></span>' +
             '<button class="btn btn-ghost btn-sm version-preview-btn">Preview</button>' +
             '<button class="btn btn-danger btn-sm version-restore-btn">Restore</button>' +
         '</div>';
@@ -1899,54 +1958,135 @@ function renderVersionList(meta, preserveState) {
     if (!preserveState) {
         _versionShown = 0;
         _versionGroupsOpen = {};
+        _versionPage = 1;
+        if (meta && meta.length) _versionPages = Math.ceil(meta.length / _versionPageSize);
+        else _versionPages = 1;
     }
-    _versionDayEls = {};
-    _versionSummaryEls = {};
-    removeVersionMoreBtn();
     dom.versionList.innerHTML = '';
-    if (!meta || !meta.length) {
-        dom.versionEmpty.style.display = 'block';
-        return;
-    }
     dom.versionEmpty.style.display = 'none';
-    appendVersionPage();
+    renderVersionPage();
     prefetchVersionSummaries();
+}
+
+// ── Diff engine for version preview ──
+function vRowLine(r) {
+    var cols = state.COLUMNS || [];
+    var vals = [];
+    cols.forEach(function (c) {
+        var v = r ? r[c.key] : null;
+        vals.push((v === null || v === undefined) ? '' : String(v));
+    });
+    return vals.join(' | ');
+}
+
+function vComputeDiff(parentRows, childRows) {
+    function vRowMap(rows) {
+        var m = {};
+        (rows || []).forEach(function (r) {
+            var k = dedupKeyForRow(r);
+            if (k) m[String(k)] = r;
+        });
+        return m;
+    }
+    var om = vRowMap(parentRows), cm = vRowMap(childRows);
+    var keys = [];
+    Object.keys(om).forEach(function(k){ if(keys.indexOf(k)===-1) keys.push(k); });
+    Object.keys(cm).forEach(function(k){ if(keys.indexOf(k)===-1) keys.push(k); });
+    var lines = [], add = 0, del = 0;
+    keys.forEach(function (k) {
+        var o = om[k], n = cm[k];
+        if (o && n) {
+            if (vRowLine(o) === vRowLine(n)) lines.push({ type: 'ctx', text: vRowLine(n) });
+            else { lines.push({ type: 'del', text: vRowLine(o) }); lines.push({ type: 'add', text: vRowLine(n) }); del++; add++; }
+        } else if (n) { lines.push({ type: 'add', text: vRowLine(n) }); add++; }
+        else { lines.push({ type: 'del', text: vRowLine(o) }); del++; }
+    });
+    return { lines: lines, add: add, del: del };
+}
+
+function vDiffHtml(d, rec, prev) {
+    var o = 1, n = 1;
+    var body = d.lines.map(function (ln) {
+        var og = (ln.type === 'del' || ln.type === 'ctx') ? String(o++) : '';
+        var ng = (ln.type === 'add' || ln.type === 'ctx') ? String(n++) : '';
+        var pfx = ln.type === 'add' ? '+' : ln.type === 'del' ? '\u2212' : ' ';
+        return '<div class="vline ' + ln.type + '">' +
+               '<span class="vnum old">' + og + '</span>' +
+               '<span class="vnum new">' + ng + '</span>' +
+               '<span class="vpfx">' + pfx + '</span>' +
+               '<span class="vcode">' + __ss.esc(ln.text) + '</span>' +
+               '</div>';
+    }).join('');
+
+    var barAdd = d.add;
+    var barDel = d.del;
+    var statsHtml = '<span class="vstat-add">+' + d.add + '</span><span class="vstat-del">\u2212' + d.del + '</span>';
+    var barHtml = '';
+    if (barAdd + barDel > 0) {
+        for (var i = 0; i < barAdd; i++) barHtml += '<span class="vbar-add"></span>';
+        for (var j = 0; j < barDel; j++) barHtml += '<span class="vbar-del"></span>';
+    }
+
+    var typeName = state.currentFileType || 'unknown';
+    var fileName = (rec.name || dom.sheetTitleBtn._fullName || 'file');
+    return '<div class="vdiff">' +
+        '<div class="vdiff-file">' +
+            '<span class="vdiff-chevron">\u25BC</span>' +
+            '<span class="vdiff-path">' + __ss.esc(fileName + '.xlsx') + '</span>' +
+            '<span class="vdiff-tag">' + __ss.esc(typeName) + '</span>' +
+            '<span class="vdiff-file-stats">' + statsHtml + '</span>' +
+            '<span class="vdiff-bar">' + barHtml + '</span>' +
+        '</div>' +
+        '<div class="vdiff-hunk">' +
+            '<span class="vdiff-hunk-menu">\u22EF</span>' +
+            '<span class="vdiff-hunk-text">@@ -1,' + Math.max(1, d.oldLen || 1) + ' +1,' + Math.max(1, d.newLen || 1) + ' @@</span>' +
+        '</div>' +
+        '<div class="vdiff-lines">' + body + '</div>' +
+    '</div>';
 }
 
 var _versionPreviewOpen = null;
 function toggleVersionPreview(item, rec) {
-    var existing = item.querySelector('.version-preview');
-    if (existing) { existing.remove(); _versionPreviewOpen = null; return; }
+    var existing = item.querySelector('.vdiff');
+    if (existing) { existing.remove(); item.classList.remove('open'); _versionPreviewOpen = null; return; }
     if (_versionPreviewOpen) { _versionPreviewOpen.remove(); _versionPreviewOpen = null; }
-    var prev = document.createElement('div');
-    prev.className = 'version-preview';
-    prev.textContent = 'Loading preview…';
-    item.appendChild(prev);
-    _versionPreviewOpen = prev;
+    var wrap = document.createElement('div');
+    wrap.textContent = 'Loading preview…';
+    wrap.className = 'version-preview';
+    item.appendChild(wrap);
+    _versionPreviewOpen = wrap;
+
+    var prev = _versionMeta[_versionMeta.indexOf(rec) + 1] || null;
     versionRows(Number(rec.v)).then(function(cached) {
-        if (!prev.parentNode) return;
-        if (!cached.ok) { prev.textContent = 'Could not load version'; console.error('[Versions] preview failed for v' + rec.v + ':', cached.rows); return; }
-        var cols = state.COLUMNS || [];
-        var shown = cached.rows.slice(0, 10).filter(function(r) { return cols.some(function(c) { return r[c.key]; }); });
-        prev.innerHTML = '';
-        var head = document.createElement('div');
-        head.textContent = shown.length ? 'Showing first ' + shown.length + ' rows with data' : 'No data rows in this version';
-        prev.appendChild(head);
-        shown.forEach(function(r) {
-            var row = document.createElement('div');
-            row.className = 'prev-row';
-            var cells = [];
-            cols.forEach(function(c) { if (r[c.key]) cells.push('<span class="prev-cell">' + __ss.esc(String(r[c.key])) + '</span>'); });
-            row.innerHTML = cells.join('');
-            prev.appendChild(row);
-        });
+        if (!wrap.parentNode) return;
+        if (!cached.ok) { wrap.textContent = 'Could not load version'; console.error('[Versions] preview failed for v' + rec.v + ':', cached.rows); return; }
+        if (prev) {
+            versionRows(Number(prev.v)).then(function(prevCached) {
+                if (!wrap.parentNode) return;
+                var d = vComputeDiff(prevCached.ok ? prevCached.rows : [], cached.rows);
+                d.oldLen = prevCached.ok ? prevCached.rows.length : 0;
+                d.newLen = cached.rows.length;
+                wrap.outerHTML = vDiffHtml(d, rec, prev);
+                item.classList.add('open');
+                _versionPreviewOpen = item.querySelector('.vdiff');
+            });
+        } else {
+            var d = { lines: [], add: cached.rows.length, del: 0, oldLen: 0, newLen: cached.rows.length };
+            cached.rows.forEach(function(r) {
+                var line = vRowLine(r);
+                if (line) d.lines.push({ type: 'add', text: line });
+            });
+            wrap.outerHTML = vDiffHtml(d, rec, null);
+            item.classList.add('open');
+            _versionPreviewOpen = item.querySelector('.vdiff');
+        }
     }).catch(function(e) {
-        if (prev.parentNode) { prev.textContent = 'Error loading preview'; console.error('[Versions] preview error v' + rec.v + ':', e); }
+        if (wrap.parentNode) { wrap.textContent = 'Error loading preview'; console.error('[Versions] preview error v' + rec.v + ':', e); }
     });
 }
 
 function startVersionRename(item, rec) {
-    var main = item.querySelector('.version-main');
+    var main = item.querySelector('.version-meta');
     if (!main) return;
     var oldRow = main.querySelector('.version-name-row');
     var row = document.createElement('div');

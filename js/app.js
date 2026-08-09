@@ -124,7 +124,7 @@ function scheduleHealthCheck() {
 scheduleHealthCheck();
 
 // ── Home FAB ──
-dom.homeFab.addEventListener('click', __ss.showTypeModal);
+dom.homeFab.addEventListener('click', __ss.toggleFabMenu);
 
 // ── Popstate (browser nav) ──
 window.addEventListener('popstate', function(e) {

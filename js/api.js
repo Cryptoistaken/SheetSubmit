@@ -109,11 +109,17 @@ __ss.api = {
     },
     appendLog: function(id, data) { return post('/files/' + id + '/log', data); },
     getLogs: function(id) { return get('/files/' + id + '/logs'); },
+    getUndo: function(fileId) {
+        return get('/files/' + fileId + '/undo');
+    },
     getCrossDups: function(fileId) {
         return get('/cross-dups' + (fileId ? '?fileId=' + fileId : ''));
     },
     waCheck: function(cookie) {
         return post('/fb/wa-check', { cookie: cookie });
+    },
+    getWaCache: function(uids) {
+        return get('/wa/cache?uids=' + encodeURIComponent(uids.join(',')));
     },
 
     adminStats: function() { return get('/admin/stats'); },
@@ -131,6 +137,17 @@ __ss.api = {
     adminUpdateCell: function(fileId, data) { return put('/admin/file/' + fileId + '/cell', data); },
     adminAppendLog: function(fileId, data) { return post('/admin/file/' + fileId + '/log', data); },
     adminFileLogs: function(fileId) { return get('/admin/file/' + fileId + '/logs'); },
+    adminUndo: function(fileId) { return get('/admin/file/' + fileId + '/undo'); },
+    getHistory: function(id) { return get('/files/' + id + '/history'); },
+    getVersion: function(id, v) { return get('/files/' + id + '/history/' + v); },
+    restoreVersion: function(id, v) { return post('/files/' + id + '/history/' + v + '/restore'); },
+    adminGetHistory: function(fileId) { return get('/admin/file/' + fileId + '/history'); },
+    adminGetVersion: function(fileId, v) { return get('/admin/file/' + fileId + '/history/' + v); },
+    adminRestoreVersion: function(fileId, v) { return post('/admin/file/' + fileId + '/history/' + v + '/restore'); },
+    nameVersion: function(id, v, name) { return post('/files/' + id + '/history/' + v + '/name', { name: name }); },
+    forkVersion: function(id, v) { return post('/files/' + id + '/history/' + v + '/fork'); },
+    adminNameVersion: function(fileId, v, name) { return post('/admin/file/' + fileId + '/history/' + v + '/name', { name: name }); },
+    adminForkVersion: function(fileId, v) { return post('/admin/file/' + fileId + '/history/' + v + '/fork'); },
     adminDeleteUser: function(userId) { return del('/admin/user/' + userId); },
 };
 

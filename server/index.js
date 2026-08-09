@@ -1,4 +1,4 @@
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+﻿require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 var express = require('express');
 var path = require('path');
 var Redis = require('ioredis');
@@ -77,6 +77,352 @@ async function findUserFile(userId, fileId) {
     return { files: files, idx: idx, file: idx !== -1 ? files[idx] : null };
 }
 
+// ── History engine (snapshot + version list + restore) ──
+var HISTORY_RETENTION_DAYS = parseInt(process.env.HISTORY_RETENTION_DAYS, 10) || 30;
+var HISTORY_CHECKPOINT_EVERY = parseInt(process.env.HISTORY_CHECKPOINT_EVERY, 10) || 20;
+var HISTORY_GC_INTERVAL_MS = parseInt(process.env.HISTORY_GC_INTERVAL_MS, 10) || 6 * 60 * 60 * 1000;
+
+function histMetaKey(id) { return 'hist:' + id; }
+function histBlobKey(id, v) { return 'hist:' + id + ':v:' + v; }
+function versionRef(fileId, v) { return fileId + ':' + v; }
+
+// ── §A2: content-addressed blobs + delta chain ──
+
+function blobContentKey(hash) { return 'blob:' + hash; }
+function blobRefsKey(hash) { return 'blobrefs:' + hash; }
+
+function hashRows(rows) {
+    return crypto.createHash('sha1').update(JSON.stringify(rows || [])).digest('hex');
+}
+
+function rowEqual(a, b) {
+    a = a || {};
+    b = b || {};
+    var ak = Object.keys(a);
+    var bk = Object.keys(b);
+    if (ak.length !== bk.length) return false;
+    for (var i = 0; i < ak.length; i++) {
+        if (a[ak[i]] !== b[ak[i]]) return false;
+    }
+    return true;
+}
+
+// Index-based delta: { changed: {rowIdx: row}, rowCount }. Only row values that
+// differ from the parent version (same index) are recorded.
+function computeDelta(prevRows, rows) {
+    var prev = prevRows || [];
+    var cur = rows || [];
+    var changed = {};
+    var n = Math.max(prev.length, cur.length);
+    for (var i = 0; i < n; i++) {
+        if (!rowEqual(prev[i], cur[i])) changed[i] = cur[i] || {};
+    }
+    return { changed: changed, rowCount: cur.length };
+}
+
+// Rebuild rows by applying a delta onto a base rows array (index-based).
+function applyDelta(rows, delta) {
+    var out = (rows || []).slice();
+    var rowCount = (delta && typeof delta.rowCount === 'number') ? delta.rowCount : out.length;
+    var changed = (delta && delta.changed) || {};
+    for (var k in changed) {
+        var idx = parseInt(k, 10);
+        if (isNaN(idx) || idx < 0 || idx >= rowCount) continue;
+        while (out.length <= idx) out.push({});
+        out[idx] = changed[k];
+    }
+    if (out.length > rowCount) out = out.slice(0, rowCount);
+    return out;
+}
+
+async function readBlobByHash(hash) {
+    if (!hash) return null;
+    var rows = await getJSON(blobContentKey(hash));
+    return Array.isArray(rows) ? rows : null;
+}
+
+// Delete a blob and its refset only when nothing references it anymore.
+async function gcBlobIfOrphaned(hash) {
+    if (!hash) return;
+    try {
+        var size = await redis.scard(key(blobRefsKey(hash)));
+        if (size === 0) {
+            await redis.del(key(blobContentKey(hash)), key(blobRefsKey(hash)));
+            console.log('[GC] hash ' + hash.slice(0, 8) + '... removed (no refs)');
+        }
+    } catch (e) {
+        console.error('[GC] orphan-check error:', e.message);
+    }
+}
+
+// Save the current rows as a new version. Returns the version number, or null on failure.
+async function snapshotHistory(fileId, action, rows) {
+    try {
+        var now = Date.now();
+        var meta = await getJSON(histMetaKey(fileId)) || [];
+        var v = meta.length ? meta[meta.length - 1].v + 1 : 1;
+        var rowsArr = Array.isArray(rows) ? rows : [];
+        var rowCount = rowsArr.length;
+        var hash = hashRows(rowsArr);
+        var isCheckpoint = (v === 1) || (v % HISTORY_CHECKPOINT_EVERY === 0);
+        var payload = null;
+
+        // Between checkpoints try a delta vs the parent version keep it smaller.
+        if (!isCheckpoint && meta.length) {
+            var prevRec = meta[meta.length - 1];
+            var prevRows = await materializeVersion(fileId, prevRec.v);
+            if (Array.isArray(prevRows)) {
+                var delta = computeDelta(prevRows, rowsArr);
+                var deltaObj = { type: 'delta', parentHash: prevRec.hash || hashRows(prevRows), changed: delta.changed, rowCount: rowCount };
+                if (JSON.stringify(deltaObj).length < JSON.stringify(rowsArr).length) {
+                    payload = deltaObj;
+                }
+            }
+        }
+
+        var type = payload ? 'delta' : 'full';
+        if (type === 'full') payload = { type: 'full', hash: hash, rows: rowsArr };
+
+        var rec = {
+            v: v, ts: now, action: action || 'edit', rowCount: rowCount,
+            parentV: meta.length ? meta[meta.length - 1].v : null,
+            type: type, hash: hash, name: null
+        };
+
+        var p = redis.pipeline();
+        p.set(key(histBlobKey(fileId, v)), JSON.stringify(payload));
+        if (type === 'full') {
+            var exists = await redis.exists(key(blobContentKey(hash)));
+            if (!exists) p.set(key(blobContentKey(hash)), JSON.stringify(rowsArr));
+            p.sadd(key(blobRefsKey(hash)), versionRef(fileId, v));
+        }
+        p.set(key(histMetaKey(fileId)), JSON.stringify(meta.concat([rec])));
+        await p.exec();
+        console.log('[Hist] snapshot v' + v + ' action=' + rec.action + ' type=' + type + ' rows=' + rowCount + ' file=' + fileId);
+        return v;
+    } catch(e) {
+        console.error('[Hist] snapshot error file=' + fileId + ':', e.message);
+        return null;
+    }
+}
+
+async function getHistoryMeta(fileId) {
+    return (await getJSON(histMetaKey(fileId)) || []).slice().reverse();
+}
+
+// Read the full rows of a version that carries a 'full' payload (or a legacy array payload).
+async function readFullRows(fileId, rec) {
+    if (!rec) return null;
+    var payload = await getJSON(histBlobKey(fileId, rec.v));
+    if (Array.isArray(payload)) return payload;
+    if (payload && payload.type === 'full') {
+        if (Array.isArray(payload.rows)) return payload.rows;
+        return await readBlobByHash(payload.hash);
+    }
+    return null;
+}
+
+// Rebuild the rows for a given version by walking back to the nearest 'full'
+// ancestor and applying deltas forward. Falls back to surfacing any surviving
+// full payload if intermediate versions are missing.
+async function materializeVersion(fileId, v) {
+    try {
+        var meta = await getJSON(histMetaKey(fileId)) || [];
+        var recIdx = -1;
+        for (var i = 0; i < meta.length; i++) { if (meta[i].v === v) { recIdx = i; break; } }
+        if (recIdx === -1) return null;
+
+        // Walk back for the nearest full ancestor (legacy array payloads count as full).
+        var baseIdx = -1;
+        for (var i = recIdx; i >= 0; i--) {
+            if (meta[i].type === 'full') { baseIdx = i; break; }
+            var probe = await getJSON(histBlobKey(fileId, meta[i].v));
+            if (Array.isArray(probe)) { baseIdx = i; break; }
+        }
+
+        if (baseIdx !== -1) {
+            if (baseIdx === recIdx) return await readFullRows(fileId, meta[recIdx]);
+            var rows = await readFullRows(fileId, meta[baseIdx]);
+            if (Array.isArray(rows)) {
+                var ok = true;
+                for (var j = baseIdx + 1; j <= recIdx; j++) {
+                    var pd = await getJSON(histBlobKey(fileId, meta[j].v));
+                    if (pd && pd.type === 'delta') {
+                        rows = applyDelta(rows, pd);
+                    } else if (Array.isArray(pd)) {
+                        rows = pd;
+                    } else if (pd && pd.type === 'full') {
+                        rows = Array.isArray(pd.rows) ? pd.rows : await readBlobByHash(pd.hash);
+                    } else {
+                        ok = false;
+                        break;
+                    }
+                    if (!Array.isArray(rows)) { ok = false; break; }
+                }
+                if (ok) return rows;
+            }
+        }
+
+        // Chain missing: try the content-addressed blob for the target hash...
+        if (meta[recIdx].hash) {
+            var direct = await readBlobByHash(meta[recIdx].hash);
+            if (Array.isArray(direct)) return direct;
+        }
+        // ...last resort: scan every surviving payload, newest first, for full rows.
+        var scanP = redis.pipeline();
+        meta.forEach(function (rec) { scanP.get(key(histBlobKey(fileId, rec.v))); });
+        var results = await scanP.exec();
+        for (var i = recIdx; i >= 0; i--) {
+            var raw = results[i][1];
+            if (!raw) continue;
+            try { var parsed = JSON.parse(raw); } catch (e) { continue; }
+            if (Array.isArray(parsed)) return parsed;
+            if (parsed && parsed.type === 'full' && Array.isArray(parsed.rows)) return parsed.rows;
+        }
+        return null;
+    } catch(e) {
+        console.error('[Hist] materialize error file=' + fileId + ' v' + v + ':', e.message);
+        return null;
+    }
+}
+
+// Age-only prune: drop versions (and their blobs) older than HISTORY_RETENTION_DAYS.
+// Also releases blob refs and garbage-collects orphaned content-addressed blobs.
+async function pruneHistory(fileId) {
+    try {
+        var meta = await getJSON(histMetaKey(fileId)) || [];
+        if (!meta.length) return 0;
+        var cutoff = Date.now() - HISTORY_RETENTION_DAYS * 86400000;
+        var kept = [];
+        var removed = [];
+        meta.forEach(function(rec) {
+            if (rec.ts < cutoff) removed.push(rec); else kept.push(rec);
+        });
+        if (!removed.length) return 0;
+
+        // If the oldest retained version is a delta, re-write it as a full snapshot
+        // BEFORE deleting the (older) versions it depends on, so the chain stays
+        // rebuildable after the prune.
+        var upgrade = null;
+        if (kept.length && kept[0].type !== 'full') {
+            var stableRows = await materializeVersion(fileId, kept[0].v);
+            if (Array.isArray(stableRows)) {
+                upgrade = { rec: kept[0], hash: hashRows(stableRows), rows: stableRows };
+            }
+        }
+
+        var p = redis.pipeline();
+        removed.forEach(function(rec) {
+            p.del(key(histBlobKey(fileId, rec.v)));
+            if (rec.type === 'full' && rec.hash) {
+                p.srem(key(blobRefsKey(rec.hash)), versionRef(fileId, rec.v));
+            }
+        });
+        if (upgrade) {
+            upgrade.rec.type = 'full';
+            upgrade.rec.hash = upgrade.hash;
+            upgrade.rec.rowCount = upgrade.rows.length;
+            p.set(key(blobContentKey(upgrade.hash)), JSON.stringify(upgrade.rows));
+            p.sadd(key(blobRefsKey(upgrade.hash)), versionRef(fileId, upgrade.rec.v));
+            p.set(key(histBlobKey(fileId, upgrade.rec.v)), JSON.stringify({ type: 'full', hash: upgrade.hash, rows: upgrade.rows }));
+        }
+        p.set(key(histMetaKey(fileId)), JSON.stringify(kept));
+        await p.exec();
+
+        var hashes = {};
+        removed.forEach(function(rec) {
+            if (rec.type === 'full' && rec.hash) hashes[rec.hash] = true;
+        });
+        for (var h in hashes) {
+            await gcBlobIfOrphaned(h);
+        }
+        console.log('[Hist] pruned ' + removed.length + ' version(s) older than ' + HISTORY_RETENTION_DAYS + 'd file=' + fileId);
+        return removed.length;
+    } catch(e) {
+        console.error('[Hist] prune error file=' + fileId + ':', e.message);
+        return 0;
+    }
+}
+
+// Remove the full history for a file (meta + every version blob). Used on permanent delete.
+async function delHistoryKeys(fileId) {
+    try {
+        var meta = await getJSON(histMetaKey(fileId)) || [];
+        var p = redis.pipeline();
+        p.del(key(histMetaKey(fileId)));
+        var hashes = {};
+        meta.forEach(function(rec) {
+            p.del(key(histBlobKey(fileId, rec.v)));
+            if (rec.type === 'full' && rec.hash) {
+                p.srem(key(blobRefsKey(rec.hash)), versionRef(fileId, rec.v));
+                hashes[rec.hash] = true;
+            }
+        });
+        await p.exec();
+        for (var h in hashes) {
+            await gcBlobIfOrphaned(h);
+        }
+        console.log('[Hist] deleted history file=' + fileId + ' versions=' + meta.length);
+    } catch(e) {
+        console.error('[Hist] delete error file=' + fileId + ':', e.message);
+        await delKey(histMetaKey(fileId));
+    }
+}
+
+// ── Global blob GC sweep (best-effort, ~every 6h) ──
+async function gcHistoryBlobs() {
+    try {
+        var cursor = '0';
+        var scanned = 0;
+        var deleted = 0;
+        do {
+            var res = await redis.scan(cursor, 'MATCH', 'ss:blobrefs:*', 'COUNT', 100);
+            cursor = res[0];
+            var keys = res[1] || [];
+            for (var i = 0; i < keys.length; i++) {
+                scanned++;
+                var hash = keys[i].slice('ss:blobrefs:'.length);
+                if (!hash) continue;
+                var size = await redis.scard(key(blobRefsKey(hash)));
+                if (size === 0) {
+                    await redis.del(key(blobContentKey(hash)), key(blobRefsKey(hash)));
+                    deleted++;
+                }
+            }
+        } while (cursor !== '0');
+        console.log('[GC] sweep scanned=' + scanned + ' refsets, deleted=' + deleted + ' orphan blob(s)');
+    } catch(e) {
+        console.error('[GC] sweep error:', e.message);
+    }
+}
+
+var historyGcTimer = setInterval(gcHistoryBlobs, HISTORY_GC_INTERVAL_MS);
+if (historyGcTimer && historyGcTimer.unref) historyGcTimer.unref();
+
+// Clone rows from a materialized version into a brand-new file for the user.
+// Mirrors the shape POST /api/files accepts ({id, name, type} + extras).
+async function createForkFile(srcFile, rows, ownerId) {
+    var type = (srcFile && srcFile.type) || 'ig_cookie';
+    var newId = genFileId();
+    var file = {
+        id: newId,
+        name: 'Fork of ' + ((srcFile && srcFile.name) || 'File'),
+        type: type,
+        userId: ownerId,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        rowCount: Array.isArray(rows) ? rows.length : 0,
+        columns: (srcFile && srcFile.columns) || null
+    };
+    var files = await getUserFiles(ownerId);
+    files.unshift(file);
+    await setJSON('files:' + ownerId, files);
+    await setJSON('rows:' + newId, rows || []);
+    await setJSON('undo:' + newId, []);
+    await setJSON('redo:' + newId, []);
+    return file;
+}
+
 function countDataRows(rows, columns) {
     if (!rows || !rows.length) return 0;
     var keys = columns ? columns.map(function(c) { return c.key; }) : null;
@@ -88,6 +434,10 @@ function countDataRows(rows, columns) {
 
 function generateToken() {
     return crypto.randomBytes(32).toString('hex');
+}
+
+function genFileId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
 // ── Session cache ──
@@ -326,7 +676,24 @@ app.delete('/api/files/:id', requireAuth, requireFileAccess, async function(req,
 app.put('/api/files/:id/persist', requireAuth, requireFileAccess, async function(req, res) {
     var body = req.body;
     var pipeline = redis.pipeline();
-    if (body.rows !== undefined) pipeline.set(key('rows:' + req.params.id), JSON.stringify(body.rows));
+    if (body.rows !== undefined) {
+        // Snapshot the *current* rows before overwriting, only when a discrete
+        // action finished (replace/append/merge/restore/check/sync/import).
+        // Plain cell typing has no action → no version noise.
+        if (body.action) {
+            var curRows = await getJSON('rows:' + req.params.id);
+            if (curRows === null || curRows.length === 0) {
+                // First action on a fresh/empty file: record the incoming data
+                // as the version so the very first import shows up in history.
+                await snapshotHistory(req.params.id, body.action, body.rows);
+            } else {
+                await snapshotHistory(req.params.id, body.action, curRows);
+            }
+            pruneHistory(req.params.id);
+        }
+        pipeline.set(key('rows:' + req.params.id), JSON.stringify(body.rows));
+    }
+    pipeline.set(key('meta:dirty'), String(Date.now()));
     if (body.logs !== undefined) {
         var logKey = key('logs:' + req.params.id);
         pipeline.del(logKey);
@@ -400,7 +767,14 @@ app.delete('/api/archive/:id', requireAuth, async function(req, res) {
     if (!existed) { res.status(404).json({ error: 'not found' }); return; }
     archived = archived.filter(function(f) { return f.id !== req.params.id; });
     await setJSON('archive:' + req.userId, archived);
-    redis.pipeline().del('rows:' + req.params.id, 'undo:' + req.params.id, 'redo:' + req.params.id, 'sync:' + req.params.id, 'logs:' + req.params.id).exec();
+    var delPromises = [];
+    delPromises.push(delKey('rows:' + req.params.id));
+    delPromises.push(delKey('undo:' + req.params.id));
+    delPromises.push(delKey('redo:' + req.params.id));
+    delPromises.push(delKey('sync:' + req.params.id));
+    delPromises.push(delKey('logs:' + req.params.id));
+    delPromises.push(delHistoryKeys(req.params.id));
+    await Promise.all(delPromises);
     res.json({ ok: true });
 });
 
@@ -410,18 +784,24 @@ app.post('/api/archive/batch-delete', requireAuth, async function(req, res) {
     var archived = await getJSON('archive:' + req.userId) || [];
     var idSet = {};
     ids.forEach(function(id) { idSet[id] = true; });
+    // Security fix: only delete data keys for files that actually exist in this
+    // user's archive. Deleting keys from raw request ids let any authenticated
+    // user wipe ss:rows:/undo:/redo:/sync:/logs:/hist: for arbitrary file ids
+    // (IDOR). Exact-key deletion stays prefix-safe too (id '7' never touches '70').
+    var ownedIds = archived.filter(function(f) { return idSet[f.id]; }).map(function(f) { return f.id; });
     archived = archived.filter(function(f) { return !idSet[f.id]; });
     await setJSON('archive:' + req.userId, archived);
     var delPromises = [];
-    ids.forEach(function(id) {
+    ownedIds.forEach(function(id) {
         delPromises.push(delKey('rows:' + id));
         delPromises.push(delKey('undo:' + id));
         delPromises.push(delKey('redo:' + id));
         delPromises.push(delKey('sync:' + id));
         delPromises.push(delKey('logs:' + id));
+        delPromises.push(delHistoryKeys(id));
     });
     await Promise.all(delPromises);
-    res.json({ deleted: ids.length });
+    res.json({ deleted: ownedIds.length });
 });
 
 // ── API: Rows (auth required) ──
@@ -434,6 +814,12 @@ app.get('/api/files/:id/rows', requireAuth, requireFileAccess, async function(re
 app.get('/api/files/:id/sync', requireAuth, requireFileAccess, async function(req, res) {
     var sync = await getJSON('sync:' + req.params.id);
     res.json(sync || { enabled: false });
+});
+
+app.get('/api/files/:id/undo', requireAuth, requireFileAccess, async function(req, res) {
+    var undo = await getJSON('undo:' + req.params.id);
+    var redo = await getJSON('redo:' + req.params.id);
+    res.json({ undo: undo || [], redo: redo || [] });
 });
 
 app.put('/api/files/:id/sync', requireAuth, requireFileAccess, async function(req, res) {
@@ -481,6 +867,90 @@ app.get('/api/files/:id/logs', requireAuth, requireFileAccess, async function(re
     } catch(e) {
         console.error('[Logs] Error:', e.message);
         res.status(500).json({ error: 'Failed to read logs' });
+    }
+});
+
+// ── API: Version history (auth required) ──
+app.get('/api/files/:id/history', requireAuth, requireFileAccess, async function(req, res) {
+    try {
+        var meta = await getHistoryMeta(req.params.id);
+        console.log('[Hist] list file=' + req.params.id + ' versions=' + meta.length);
+        res.json(meta);
+    } catch(e) {
+        console.error('[Hist] list error file=' + req.params.id + ':', e.message);
+        res.status(500).json({ error: 'Failed to read history' });
+    }
+});
+
+app.get('/api/files/:id/history/:v', requireAuth, requireFileAccess, async function(req, res) {
+    try {
+        var v = parseInt(req.params.v, 10);
+        if (isNaN(v)) { res.status(400).json({ error: 'invalid version' }); return; }
+        var rows = await materializeVersion(req.params.id, v);
+        if (rows === null) { res.status(404).json({ error: 'version not found' }); return; }
+        var meta = await getHistoryMeta(req.params.id);
+        var rec = meta.find(function(m) { return m.v === v; });
+        console.log('[Hist] materialize file=' + req.params.id + ' v' + v + ' rows=' + rows.length);
+        res.json({ v: v, rows: rows, action: rec ? rec.action : null, ts: rec ? rec.ts : null });
+    } catch(e) {
+        console.error('[Hist] materialize error file=' + req.params.id + ':', e.message);
+        res.status(500).json({ error: 'Failed to read version' });
+    }
+});
+
+app.post('/api/files/:id/history/:v/restore', requireAuth, requireFileAccess, async function(req, res) {
+    try {
+        var v = parseInt(req.params.v, 10);
+        if (isNaN(v)) { res.status(400).json({ error: 'invalid version' }); return; }
+        var rows = await materializeVersion(req.params.id, v);
+        if (rows === null) { res.status(404).json({ error: 'version not found' }); return; }
+        // Git-revert semantics: commit the *current* state as a new 'restore'
+        // version first, so the revert itself is always revertible.
+        var curRows = await getJSON('rows:' + req.params.id);
+        await snapshotHistory(req.params.id, 'restore', curRows);
+        await setJSON('rows:' + req.params.id, rows);
+        req.files[req.fileIdx].updatedAt = Date.now();
+        await setJSON('files:' + req.userId, req.files);
+        console.log('[Hist] restore file=' + req.params.id + ' v' + v + ' rows=' + rows.length);
+        res.json({ ok: true, v: v, rows: rows });
+    } catch(e) {
+        console.error('[Hist] restore error file=' + req.params.id + ':', e.message);
+        res.status(500).json({ error: 'Failed to restore version' });
+    }
+});
+
+app.post('/api/files/:id/history/:v/name', requireAuth, requireFileAccess, async function(req, res) {
+    try {
+        var v = parseInt(req.params.v, 10);
+        if (isNaN(v)) { res.status(400).json({ error: 'invalid version' }); return; }
+        var meta = await getJSON(histMetaKey(req.params.id)) || [];
+        var rec = null;
+        for (var i = 0; i < meta.length; i++) {
+            if (meta[i].v === v) { rec = meta[i]; break; }
+        }
+        if (!rec) { res.status(404).json({ error: 'version not found' }); return; }
+        rec.name = String(req.body.name || '');
+        await setJSON(histMetaKey(req.params.id), meta);
+        console.log('[Hist] name file=' + req.params.id + ' v' + v + ' name="' + rec.name + '"');
+        res.json({ ok: true, meta: meta });
+    } catch(e) {
+        console.error('[Hist] name error file=' + req.params.id + ':', e.message);
+        res.status(500).json({ error: 'Failed to name version' });
+    }
+});
+
+app.post('/api/files/:id/history/:v/fork', requireAuth, requireFileAccess, async function(req, res) {
+    try {
+        var v = parseInt(req.params.v, 10);
+        if (isNaN(v)) { res.status(400).json({ error: 'invalid version' }); return; }
+        var rows = await materializeVersion(req.params.id, v);
+        if (rows === null) { res.status(404).json({ error: 'version not found' }); return; }
+        var file = await createForkFile(req.file, rows, req.userId);
+        console.log('[Hist] fork file=' + req.params.id + ' v' + v + ' → ' + file.id + ' rows=' + rows.length);
+        res.json({ ok: true, file: file, rows: rows });
+    } catch(e) {
+        console.error('[Hist] fork error file=' + req.params.id + ':', e.message);
+        res.status(500).json({ error: 'Failed to fork version' });
     }
 });
 
@@ -734,7 +1204,14 @@ app.delete('/api/admin/user/:userId/archive/:fileId', requireAuth, requireAdmin,
     if (idx === -1) { res.status(404).json({ error: 'not found' }); return; }
     var file = archived.splice(idx, 1)[0];
     await setJSON('archive:' + req.params.userId, archived);
-    redis.pipeline().del('rows:' + file.id, 'undo:' + file.id, 'redo:' + file.id, 'sync:' + file.id, 'logs:' + file.id).exec();
+    var delPromises = [];
+    delPromises.push(delKey('rows:' + file.id));
+    delPromises.push(delKey('undo:' + file.id));
+    delPromises.push(delKey('redo:' + file.id));
+    delPromises.push(delKey('sync:' + file.id));
+    delPromises.push(delKey('logs:' + file.id));
+    delPromises.push(delHistoryKeys(file.id));
+    await Promise.all(delPromises);
     res.json({ ok: true });
 });
 
@@ -774,6 +1251,14 @@ app.delete('/api/admin/file/:fileId', requireAuth, requireAdmin, async function(
         archived.unshift(file);
         await setJSON('files:' + found.userId, found.files);
         await setJSON('archive:' + found.userId, archived);
+        var delPromises = [];
+        delPromises.push(delKey('rows:' + file.id));
+        delPromises.push(delKey('undo:' + file.id));
+        delPromises.push(delKey('redo:' + file.id));
+        delPromises.push(delKey('sync:' + file.id));
+        delPromises.push(delKey('logs:' + file.id));
+        delPromises.push(delHistoryKeys(file.id));
+        await Promise.all(delPromises);
         res.json({ ok: true });
     } catch(e) {
         console.error('[Admin Delete File] error:', e.message);
@@ -786,10 +1271,126 @@ app.get('/api/admin/file/:fileId/rows', requireAuth, requireAdmin, async functio
     res.json(rows || []);
 });
 
+app.get('/api/admin/file/:fileId/undo', requireAuth, requireAdmin, async function(req, res) {
+    var found = await findFileAcrossUsers(req.params.fileId);
+    if (!found) { res.status(404).json({ error: 'file not found' }); return; }
+    var undo = await getJSON('undo:' + req.params.fileId);
+    var redo = await getJSON('redo:' + req.params.fileId);
+    res.json({ undo: undo || [], redo: redo || [] });
+});
+
+app.get('/api/admin/file/:fileId/history', requireAuth, requireAdmin, async function(req, res) {
+    try {
+        var found = await findFileAcrossUsers(req.params.fileId);
+        if (!found) { res.status(404).json({ error: 'file not found' }); return; }
+        var meta = await getHistoryMeta(req.params.fileId);
+        console.log('[Hist] admin list file=' + req.params.fileId + ' versions=' + meta.length);
+        res.json(meta);
+    } catch(e) {
+        console.error('[Hist] admin list error file=' + req.params.fileId + ':', e.message);
+        res.status(500).json({ error: 'Failed to read history' });
+    }
+});
+
+app.get('/api/admin/file/:fileId/history/:v', requireAuth, requireAdmin, async function(req, res) {
+    try {
+        var found = await findFileAcrossUsers(req.params.fileId);
+        if (!found) { res.status(404).json({ error: 'file not found' }); return; }
+        var v = parseInt(req.params.v, 10);
+        if (isNaN(v)) { res.status(400).json({ error: 'invalid version' }); return; }
+        var rows = await materializeVersion(req.params.fileId, v);
+        if (rows === null) { res.status(404).json({ error: 'version not found' }); return; }
+        var meta = await getHistoryMeta(req.params.fileId);
+        var rec = meta.find(function(m) { return m.v === v; });
+        console.log('[Hist] admin materialize file=' + req.params.fileId + ' v' + v + ' rows=' + rows.length);
+        res.json({ v: v, rows: rows, action: rec ? rec.action : null, ts: rec ? rec.ts : null });
+    } catch(e) {
+        console.error('[Hist] admin materialize error file=' + req.params.fileId + ':', e.message);
+        res.status(500).json({ error: 'Failed to read version' });
+    }
+});
+
+app.post('/api/admin/file/:fileId/history/:v/restore', requireAuth, requireAdmin, async function(req, res) {
+    try {
+        var found = await findFileAcrossUsers(req.params.fileId);
+        if (!found) { res.status(404).json({ error: 'file not found' }); return; }
+        var v = parseInt(req.params.v, 10);
+        if (isNaN(v)) { res.status(400).json({ error: 'invalid version' }); return; }
+        var rows = await materializeVersion(req.params.fileId, v);
+        if (rows === null) { res.status(404).json({ error: 'version not found' }); return; }
+        var curRows = await getJSON('rows:' + req.params.fileId);
+        await snapshotHistory(req.params.fileId, 'restore', curRows);
+        await setJSON('rows:' + req.params.fileId, rows);
+        if (found.userId) {
+            var files = await getJSON('files:' + found.userId);
+            if (files) {
+                var idx = files.findIndex(function(f) { return f.id === req.params.fileId; });
+                if (idx !== -1) { files[idx].updatedAt = Date.now(); await setJSON('files:' + found.userId, files); }
+            }
+        }
+        console.log('[Hist] admin restore file=' + req.params.fileId + ' v' + v + ' rows=' + rows.length);
+        res.json({ ok: true, v: v, rows: rows });
+    } catch(e) {
+        console.error('[Hist] admin restore error file=' + req.params.fileId + ':', e.message);
+        res.status(500).json({ error: 'Failed to restore version' });
+    }
+});
+
+app.post('/api/admin/file/:fileId/history/:v/name', requireAuth, requireAdmin, async function(req, res) {
+    try {
+        var found = await findFileAcrossUsers(req.params.fileId);
+        if (!found) { res.status(404).json({ error: 'file not found' }); return; }
+        var v = parseInt(req.params.v, 10);
+        if (isNaN(v)) { res.status(400).json({ error: 'invalid version' }); return; }
+        var meta = await getJSON(histMetaKey(req.params.fileId)) || [];
+        var rec = null;
+        for (var i = 0; i < meta.length; i++) {
+            if (meta[i].v === v) { rec = meta[i]; break; }
+        }
+        if (!rec) { res.status(404).json({ error: 'version not found' }); return; }
+        rec.name = String(req.body.name || '');
+        await setJSON(histMetaKey(req.params.fileId), meta);
+        console.log('[Hist] admin name file=' + req.params.fileId + ' v' + v + ' name="' + rec.name + '"');
+        res.json({ ok: true, meta: meta });
+    } catch(e) {
+        console.error('[Hist] admin name error file=' + req.params.fileId + ':', e.message);
+        res.status(500).json({ error: 'Failed to name version' });
+    }
+});
+
+app.post('/api/admin/file/:fileId/history/:v/fork', requireAuth, requireAdmin, async function(req, res) {
+    try {
+        var found = await findFileAcrossUsers(req.params.fileId);
+        if (!found) { res.status(404).json({ error: 'file not found' }); return; }
+        var v = parseInt(req.params.v, 10);
+        if (isNaN(v)) { res.status(400).json({ error: 'invalid version' }); return; }
+        var rows = await materializeVersion(req.params.fileId, v);
+        if (rows === null) { res.status(404).json({ error: 'version not found' }); return; }
+        var file = await createForkFile(found.file, rows, req.userId);
+        console.log('[Hist] admin fork file=' + req.params.fileId + ' v' + v + ' → ' + file.id + ' rows=' + rows.length);
+        res.json({ ok: true, file: file, rows: rows });
+    } catch(e) {
+        console.error('[Hist] admin fork error file=' + req.params.fileId + ':', e.message);
+        res.status(500).json({ error: 'Failed to fork version' });
+    }
+});
+
 app.put('/api/admin/file/:fileId/persist', requireAuth, requireAdmin, async function(req, res) {
     var body = req.body;
     var promises = [];
-    if (body.rows !== undefined) promises.push(setJSON('rows:' + req.params.fileId, body.rows));
+    if (body.rows !== undefined) {
+        if (body.action) {
+            var curRows = await getJSON('rows:' + req.params.fileId);
+            if (curRows === null || curRows.length === 0) {
+                await snapshotHistory(req.params.fileId, body.action, body.rows);
+            } else {
+                await snapshotHistory(req.params.fileId, body.action, curRows);
+            }
+            pruneHistory(req.params.fileId);
+        }
+        promises.push(setJSON('rows:' + req.params.fileId, body.rows));
+    }
+    promises.push(redis.set(key('meta:dirty'), String(Date.now())));
     if (body.logs !== undefined) {
         var logKey = key('logs:' + req.params.fileId);
         var p = redis.pipeline();
@@ -871,6 +1472,7 @@ app.delete('/api/admin/user/:userId', requireAuth, requireAdmin, async function(
         delPromises.push(delKey('redo:' + f.id));
         delPromises.push(delKey('sync:' + f.id));
         delPromises.push(delKey('logs:' + f.id));
+        delPromises.push(delHistoryKeys(f.id));
     });
     delPromises.push(delKey('files:' + req.params.userId));
     delPromises.push(delKey('archive:' + req.params.userId));
@@ -1087,18 +1689,50 @@ app.post('/api/fb/wa-check', requireAuth, async function(req, res) {
         try { json = JSON.parse(jsonStr); } catch(e) { res.json({ eligible: false, banReason: null, linkedNumber: null, error: 'Invalid GraphQL JSON' }); return; }
         var eligibleData = json?.data?.xfb_is_page_eligible_for_wa_link;
         if (eligibleData === undefined || eligibleData === null) { res.json({ eligible: false, banReason: null, linkedNumber: null, error: 'Unexpected response structure' }); return; }
-        res.json({
+        var result = {
             eligible: eligibleData?.is_eligible === true,
             banReason: eligibleData?.ban_reason || null,
             linkedNumber: eligibleData?.page_whatsapp_number || null,
             error: null
-        });
+        };
+        if (cuser) {
+            await setJSON('wa:' + cuser, {
+                status: result.eligible ? 'eligible' : (result.error ? 'error' : 'ineligible'),
+                banReason: result.banReason || null,
+                error: result.error || null,
+                ts: Date.now(),
+                checkedAt: Date.now()
+            });
+        }
+        res.json(result);
     } catch(e) {
         if (e.name === 'AbortError' || e.name === 'TimeoutError' || (e.message && (e.message.includes('fetch') || e.message.includes('network')))) {
             res.json({ eligible: false, banReason: null, linkedNumber: null, error: 'Service unavailable' });
         } else {
             res.json({ eligible: false, banReason: null, linkedNumber: null, error: e.message });
         }
+    }
+});
+
+var WA_CACHE_TTL_MS = (parseInt(process.env.WA_CACHE_TTL_HOURS, 10) || 0) * 60 * 60 * 1000;
+
+app.get('/api/wa/cache', requireAuth, async function(req, res) {
+    try {
+        var uids = (req.query.uids || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+        var cache = {};
+        for (var i = 0; i < uids.length; i++) {
+            var val = await getJSON('wa:' + uids[i]);
+            if (!val) continue;
+            if (WA_CACHE_TTL_MS > 0 && val.ts && Date.now() - val.ts > WA_CACHE_TTL_MS) {
+                await delKey('wa:' + uids[i]);
+                continue;
+            }
+            cache[uids[i]] = { status: val.status || null, banReason: val.banReason || null, error: val.error || null, ts: val.ts || null };
+        }
+        res.json({ cache: cache });
+    } catch(e) {
+        console.error('[WaCache] error:', e.message);
+        res.status(500).json({ error: 'Failed to read wa cache' });
     }
 });
 

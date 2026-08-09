@@ -110,6 +110,10 @@ __ss.renderHome = async function(useCache) {
     dom.filesGrid.appendChild(fragment);
 };
 
+function resetCrossDupCounts() {
+    state.crossDupCounts = null;
+}
+
 function downloadFile(id, name) {
     Promise.all([api.getRows(id), api.getFile(id)]).then(function(results) {
         var rows = results[0];
@@ -198,6 +202,7 @@ async function deleteSelectedFiles() {
     var ok = await __ss.showConfirm('Move ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' to archive?', 'Archive');
     if (!ok) return;
     await Promise.all(ids.map(function(id) { return api.deleteFile(id); }));
+    resetCrossDupCounts();
     exitFileSelectionMode();
     __ss.renderHome();
     __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' archived');
@@ -233,6 +238,7 @@ __ss.deleteFile = async function(id) {
     var ok = await __ss.showConfirm('Move this file to archive?', 'Archive');
     if (!ok) return;
     await api.deleteFile(id);
+    resetCrossDupCounts();
     __ss.renderHome();
     __ss.showToast('File archived');
 };
@@ -433,6 +439,7 @@ if (dom.archiveSelDelete) {
         var ok = await __ss.showConfirm('Permanently delete ' + ids.length + ' file' + (ids.length > 1 ? 's' : '') + '?', 'Delete Forever');
         if (!ok) return;
         await api.batchDelete(ids);
+        resetCrossDupCounts();
         exitArchiveSelectionMode();
         renderArchive();
         __ss.showToast(ids.length + ' file' + (ids.length > 1 ? 's' : '') + ' permanently deleted');
@@ -440,40 +447,48 @@ if (dom.archiveSelDelete) {
 }
 
 // ── File type modal ──
-__ss.showTypeModal = function() {
-    dom.typeOptions.innerHTML = '';
+__ss.toggleFabMenu = function() {
+    var menu = dom.homeFabMenu;
+    var open = menu.classList.toggle('open');
+    if (!open) return;
+
+    menu.innerHTML = '';
 
     __ss.FILE_TYPE_KEYS.forEach(function(k) {
         var td = __ss.FILE_TYPES[k];
-        var opt = document.createElement('div');
-        opt.className = 'type-option';
-        opt.innerHTML =
-            '<div class="type-option-icon ' + td.badgeClass + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/><path d="M12 12v.01"/><path d="M11 17v.01"/><path d="M7 14v.01"/></svg></div>' +
-            '<div class="type-option-info">' +
-            '<div class="type-option-name">' + __ss.esc(td.label) + '</div>' +
-            '<div class="type-option-desc">' + __ss.esc(td.desc) + '</div></div>';
-        opt.addEventListener('click', function() {
-            dom.typeOverlay.classList.remove('open');
+        var item = document.createElement('button');
+        item.className = 'home-fab-item';
+        item.innerHTML =
+            '<span class="home-fab-ic ' + td.badgeClass + '"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/><path d="M12 12v.01"/><path d="M11 17v.01"/><path d="M7 14v.01"/></svg></span>' +
+            '<span><span class="home-fab-name">' + __ss.esc(td.label) + '</span><span class="home-fab-desc">' + __ss.esc(td.desc) + '</span></span>';
+        item.addEventListener('click', function() {
+            menu.classList.remove('open');
             __ss.createFile(k);
         });
-        dom.typeOptions.appendChild(opt);
+        menu.appendChild(item);
     });
 
-    var uploadOpt = document.createElement('div');
-    uploadOpt.className = 'type-option';
-    uploadOpt.innerHTML =
-        '<div class="type-option-icon" style="background:var(--bg3);color:var(--text2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>' +
-        '<div class="type-option-info">' +
-        '<div class="type-option-name">Upload xlsx</div>' +
-        '<div class="type-option-desc">Import data from a spreadsheet</div></div>';
-    uploadOpt.addEventListener('click', function() {
-        dom.typeOverlay.classList.remove('open');
+    var sep = document.createElement('div');
+    sep.className = 'home-fab-sep';
+    menu.appendChild(sep);
+
+    var up = document.createElement('button');
+    up.className = 'home-fab-item';
+    up.innerHTML =
+        '<span class="home-fab-ic" style="background:var(--bg3);color:var(--text2)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>' +
+        '<span><span class="home-fab-name">Upload xlsx</span><span class="home-fab-desc">Import data from a spreadsheet</span></span>';
+    up.addEventListener('click', function() {
+        menu.classList.remove('open');
         dom.xlsxFileInputHome.click();
     });
-    dom.typeOptions.appendChild(uploadOpt);
-
-    dom.typeOverlay.classList.add('open');
+    menu.appendChild(up);
 };
+
+document.addEventListener('click', function(e) {
+    if (dom.homeFabMenu.classList.contains('open') && e.target !== dom.homeFab && !dom.homeFabMenu.contains(e.target)) {
+        dom.homeFabMenu.classList.remove('open');
+    }
+});
 
 __ss.createFile = async function(typeKey) {
     if (navigator.clipboard && navigator.clipboard.read) {
@@ -489,6 +504,7 @@ __ss.createFile = async function(typeKey) {
     }
     var id = __ss.genId();
     await api.createFile({ id: id, name: name, type: typeKey });
+    resetCrossDupCounts();
     __ss.showToast(td.label + ' file created');
     __ss.openFile(id);
 };
@@ -506,10 +522,6 @@ dom.renameInput.addEventListener('keydown', function(e) {
 dom.renameOverlay.addEventListener('click', function(e) {
     if (e.target === dom.renameOverlay) { dom.renameOverlay.classList.remove('open'); state.renameFileId = null; }
 });
-
-// ── Type modal ──
-dom.typeCancel.addEventListener('click', function() { dom.typeOverlay.classList.remove('open'); });
-dom.typeOverlay.addEventListener('click', function(e) { if (e.target === dom.typeOverlay) dom.typeOverlay.classList.remove('open'); });
 
 // ── Escape exits file selection ──
 document.addEventListener('keydown', function(e) {
@@ -590,12 +602,14 @@ dom.xlsxFileInputHome.addEventListener('change', async function(e) {
             });
         }
         if (rows.length === 0) { __ss.showToast('No data rows found'); return; }
+        try { if (window.__ss && __ss.hydrateWaCache) { await __ss.hydrateWaCache(rows); } } catch (e) {}
         var name = file.name.replace(/\.xlsx?$/i, '') || 'Import ' + __ss.todayStr();
         var files = state.filesCache || await api.getFiles();
         if (files.some(function(f) { return f.name === name; })) name = name + ' (' + __ss.genId().slice(0, 4) + ')';
         var id = __ss.genId();
         await api.createFile({ id: id, name: name, type: typeKey, rowCount: rows.length });
-        await api.persist(id, { rows: rows, dataCount: rows.length });
+        await api.persist(id, { rows: rows, dataCount: rows.length, action: 'import' });
+        resetCrossDupCounts();
         __ss.showToast('Imported ' + rows.length + ' rows');
         __ss.openFile(id);
     };

@@ -3,3 +3,5 @@ package-lock.json
 node_modules
 .playwright-mcp
 .env
+server/server-log.txt
+server/server-err.txt

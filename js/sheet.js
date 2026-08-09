@@ -12,7 +12,7 @@ var _dotMap = new Map();
 __ss.openFile = async function(id) {
     state.isAdminFile = false;
     state.adminFileOwnerId = null;
-    var results = await Promise.all([api.getFile(id), api.getRows(id), api.getLogs(id)]);
+    var results = await Promise.all([api.getFile(id), api.getRows(id), api.getLogs(id), api.getUndo(id)]);
     var f = results[0];
     if (!f || !f.id) return;
     state.currentFileId = id;
@@ -25,8 +25,9 @@ __ss.openFile = async function(id) {
     }
     state.rows = results[1] || [];
     while (state.rows.length < 100) state.rows.push(__ss.makeEmptyRow(state.COLUMNS));
-    state.undoStack = [];
-    state.redoStack = [];
+    var undoData = results[3] || {};
+    state.undoStack = undoData.undo || [];
+    state.redoStack = undoData.redo || [];
     state.selectedCell = null;
     state.isDirty = false;
     state.syncRunning = false;
@@ -65,7 +66,7 @@ __ss.openFile = async function(id) {
 };
 
 __ss.openFileAdmin = async function(id) {
-    var results = await Promise.all([api.adminFile(id), api.adminFileRows(id), api.adminFileLogs(id)]);
+    var results = await Promise.all([api.adminFile(id), api.adminFileRows(id), api.adminFileLogs(id), api.adminUndo(id)]);
     var f = results[0];
     if (!f || !f.id) return;
     state.currentFileId = id;
@@ -78,8 +79,9 @@ __ss.openFileAdmin = async function(id) {
     }
     state.rows = results[1] || [];
     while (state.rows.length < 100) state.rows.push(__ss.makeEmptyRow(state.COLUMNS));
-    state.undoStack = [];
-    state.redoStack = [];
+    var undoData = results[3] || {};
+    state.undoStack = undoData.undo || [];
+    state.redoStack = undoData.redo || [];
     state.selectedCell = null;
     state.isDirty = false;
     state.syncRunning = false;
@@ -179,7 +181,8 @@ function apiAppendLog(fileId, data) {
 
 var _persistTimer = null;
 
-async function _persistImmediate() {
+async function _persistImmediate(action) {
+    if (!state.currentFileId) return;
     var td = __ss.getTypeDef(state.currentFileType);
     var lastData = -1;
     var dataCount = 0;
@@ -196,6 +199,7 @@ async function _persistImmediate() {
         redo: state.redoStack,
         dataCount: dataCount
     };
+    if (action) payload.action = action;
     if (state.isAdminFile) {
         payload.userId = state.adminFileOwnerId;
         await api.adminPersist(state.currentFileId, payload);
@@ -205,13 +209,21 @@ async function _persistImmediate() {
     state.isDirty = false;
 }
 
-function persist() {
+function persist(action) {
     if (_persistTimer) clearTimeout(_persistTimer);
     _persistTimer = setTimeout(function() {
         _persistTimer = null;
-        _persistImmediate();
+        _persistImmediate(action);
     }, 300);
 }
+
+window.addEventListener('beforeunload', function() {
+    if (state.currentFileId && state.isDirty) {
+        clearTimeout(_persistTimer);
+        _persistTimer = null;
+        _persistImmediate();
+    }
+});
 
 // ── Sync split button states ──
 function updateSyncState() {
@@ -251,7 +263,7 @@ async function runSync() {
     }
     state.syncRunning = false;
     updateSyncState();
-    persist();
+    persist('sync');
     __ss.showToast('Sync complete — ' + done + '/' + total);
 }
 
@@ -269,6 +281,7 @@ async function runCheck() {
     if (state.invalidCells && state.invalidCells.size > 0) { __ss.showToast('Fix invalid cell values first'); return; }
     var behavior = __ss.getFileBehavior(state.currentFileType);
     if (!behavior || !behavior.checkAccounts) return;
+    var preCheckRows = state.rows.map(function(r) { return Object.assign({}, r); });
     // Clear status for empty rows before check
     state.rows.forEach(function(row) {
         var isEmpty = state.COLUMNS.every(function(c) { return !row[c.key]; });
@@ -283,11 +296,15 @@ async function runCheck() {
         updateSyncState();
         state.rows.forEach(function(row, i) { updateDotStatus(i, row.status || ''); });
         // Silent WA onboarding check for fb_cookie alive rows
-        if (state.currentFileType === 'fb_cookie') {
+        if (state.currentFileType === 'fb_cookie' && waCheckOn) {
             console.log('[WA] triggering wa check');
             runWaChecks();
         }
-        persist();
+        persist('check');
+        state.undoStack.push({ type: 'rows', prevRows: preCheckRows });
+        if (state.undoStack.length > 100) state.undoStack.shift();
+        state.redoStack = [];
+        updateUndoRedo();
         findDuplicates();
         updateDuplicateState();
         __ss.showToast('Check done — ' + result.valid + ' valid, ' + result.dead + ' dead, ' + result.uncertain + ' uncertain');
@@ -310,6 +327,51 @@ async function runWaChecks() {
     });
     console.log('[WA] matched rows:', waRows.length);
     if (!waRows.length) return;
+    var cache = {};
+    try {
+        var uidArr = [];
+        waRows.forEach(function(w) {
+            var uid = w.row.uid;
+            if (!uid && w.row.cookies) {
+                var m = w.row.cookies.match(/c_user=(\d+)/);
+                if (m) uid = m[1];
+            }
+            if (uid) uidArr.push(uid);
+        });
+        if (uidArr.length && typeof api.getWaCache === 'function') {
+            var res = await api.getWaCache(uidArr);
+            cache = (res && res.cache) || {};
+        }
+    } catch(e) { cache = {}; }
+    var cachedApply = false;
+    waRows = waRows.filter(function(w) {
+        var uid = w.row.uid;
+        if (!uid && w.row.cookies) {
+            var m = w.row.cookies.match(/c_user=(\d+)/);
+            if (m) uid = m[1];
+        }
+        var hit = uid ? cache[uid] : null;
+        if (!hit || !hit.status) return true;
+        if (hit.status === 'eligible') {
+            w.row.wa_status = 'eligible';
+            w.row.wa_ban_reason = hit.banReason || null;
+            cachedApply = true;
+            updateDotStatus(w.idx, w.row.status || '');
+            return false;
+        }
+        if (hit.status === 'ineligible') {
+            w.row.wa_status = 'ineligible';
+            w.row.wa_ban_reason = hit.banReason || null;
+            cachedApply = true;
+            updateDotStatus(w.idx, w.row.status || '');
+            return false;
+        }
+        return true;
+    });
+    if (!waRows.length) {
+        if (cachedApply) { state.isDirty = true; persist(); }
+        return;
+    }
     var concurrency = 3, pos = 0;
     function nextBatch() {
         if (pos >= waRows.length) return Promise.resolve();
@@ -337,7 +399,43 @@ async function runWaChecks() {
         state.isDirty = true;
         persist();
     } catch(e) {}
+    if (cachedApply) persist();
 }
+
+__ss.hydrateWaCache = async function(rows) {
+    try {
+        if (!rows || !rows.length) return;
+        if (typeof api.getWaCache !== 'function') return;
+        var uidArr = [];
+        rows.forEach(function(row) {
+            var uid = row.uid;
+            if (!uid && row.cookies) {
+                var m = row.cookies.match(/c_user=(\d+)/);
+                if (m) uid = m[1];
+            }
+            if (uid) uidArr.push(uid);
+        });
+        if (!uidArr.length) return;
+        var res = await api.getWaCache(uidArr);
+        var cache = (res && res.cache) || {};
+        rows.forEach(function(row) {
+            var uid = row.uid;
+            if (!uid && row.cookies) {
+                var m = row.cookies.match(/c_user=(\d+)/);
+                if (m) uid = m[1];
+            }
+            var hit = uid ? cache[uid] : null;
+            if (!hit || !hit.status) return;
+            if (hit.status === 'eligible') {
+                row.wa_status = 'eligible';
+                row.wa_ban_reason = hit.banReason || null;
+            } else if (hit.status === 'ineligible') {
+                row.wa_status = 'ineligible';
+                row.wa_ban_reason = hit.banReason || null;
+            }
+        });
+    } catch(e) {}
+};
 
 if (dom.checkBtn) {
     dom.checkBtn.addEventListener('click', runCheck);
@@ -379,6 +477,22 @@ if (dom.autoCheckToggle) {
         dom.autoCheckToggle.classList.toggle('on', autoCheckOn);
         localStorage.setItem('ss_autoCheck', autoCheckOn ? 'true' : '');
         __ss.showToast('Auto-check ' + (autoCheckOn ? 'ON' : 'OFF'));
+    });
+}
+
+// ── Page check toggle (admin only) ──
+var waCheckOn = localStorage.getItem('ss_waCheck') === 'true';
+if (dom.waCheckSection) {
+    var waIsAdmin = !!(__ss.currentUser && __ss.currentUser.isAdmin);
+    dom.waCheckSection.style.display = waIsAdmin ? '' : 'none';
+}
+if (dom.waCheckToggle) {
+    if (waCheckOn) dom.waCheckToggle.classList.add('on');
+    dom.waCheckToggle.addEventListener('click', function() {
+        waCheckOn = !waCheckOn;
+        dom.waCheckToggle.classList.toggle('on', waCheckOn);
+        localStorage.setItem('ss_waCheck', waCheckOn ? 'true' : '');
+        __ss.showToast('Page Check ' + (waCheckOn ? 'ON' : 'OFF'));
     });
 }
 
@@ -533,6 +647,19 @@ function updateUndoRedo() {
 dom.undoBtn.addEventListener('click', function() {
     if (!state.undoStack.length) return;
     var delta = state.undoStack.pop();
+    if (delta.type === 'rows') {
+        state.redoStack.push({ type: 'rows', prevRows: state.rows.map(function(r) { return Object.assign({}, r); }) });
+        state.rows = delta.prevRows.map(function(r) { return Object.assign({}, r); });
+        state.isDirty = true;
+        renderSheet();
+        findDuplicates();
+        updateDuplicateState();
+        updateValidationState();
+        updateUndoRedo();
+        persist();
+        __ss.showToast('Undo');
+        return;
+    }
     var row = state.rows[delta.rowIdx];
     var currentVal = row ? (row[delta.colKey] || '') : '';
     state.redoStack.push({ rowIdx: delta.rowIdx, colKey: delta.colKey, prevVal: currentVal });
@@ -545,12 +672,26 @@ dom.undoBtn.addEventListener('click', function() {
     updateDuplicateState();
     updateValidationState();
     updateUndoRedo();
+    persist();
     __ss.showToast('Undo');
 });
 
 dom.redoBtn.addEventListener('click', function() {
     if (!state.redoStack.length) return;
     var delta = state.redoStack.pop();
+    if (delta.type === 'rows') {
+        state.undoStack.push({ type: 'rows', prevRows: state.rows.map(function(r) { return Object.assign({}, r); }) });
+        state.rows = delta.prevRows.map(function(r) { return Object.assign({}, r); });
+        state.isDirty = true;
+        renderSheet();
+        findDuplicates();
+        updateDuplicateState();
+        updateValidationState();
+        updateUndoRedo();
+        persist();
+        __ss.showToast('Redo');
+        return;
+    }
     var row = state.rows[delta.rowIdx];
     var currentVal = row ? (row[delta.colKey] || '') : '';
     state.undoStack.push({ rowIdx: delta.rowIdx, colKey: delta.colKey, prevVal: currentVal });
@@ -563,6 +704,7 @@ dom.redoBtn.addEventListener('click', function() {
     updateDuplicateState();
     updateValidationState();
     updateUndoRedo();
+    persist();
     __ss.showToast('Redo');
 });
 
@@ -1159,6 +1301,8 @@ function deleteSelectedCells() {
         var rowIdx = parseInt(parts[0]);
         var colKey = parts[1];
         if (state.rows[rowIdx]) {
+            var prevVal = state.rows[rowIdx][colKey] || '';
+            if (prevVal !== '') pushUndo(rowIdx, colKey, prevVal);
             state.rows[rowIdx][colKey] = '';
             updateCellInPlace(rowIdx, colKey, '');
             if (behavior && behavior.onCellChange) {
@@ -1292,24 +1436,35 @@ dom.menuDownload.addEventListener('click', function() {
     }
 
     var dlCols = state.COLUMNS.filter(function(c) { return c.key !== 'uid'; });
-    var total = 0, active = 0, wa = 0, activeNoWa = 0;
+    var total = 0, active = 0, wa = 0, activeNoWa = 0, combo = 0, onlyCookie = 0, only2fa = 0, dead = 0;
     state.rows.forEach(function(row) {
         var empty = dlCols.every(function(c) { return !row[c.key]; });
         if (!empty) total++;
         if (row.status === 'good') active++;
         if (row.wa_status === 'eligible') wa++;
         if (row.status === 'good' && row.wa_status !== 'eligible') activeNoWa++;
+        if (row.status === 'good' && row.cookies && row.twofakey) combo++;
+        if (row.status === 'good' && row.cookies && !row.twofakey) onlyCookie++;
+        if (row.status === 'good' && row.twofakey && !row.cookies) only2fa++;
+        if (row.status === 'bad') dead++;
     });
+
+    var opts = '';
+    if (total > 0) opts += '<button class="download-opt-btn primary" data-opt="all">All <span class="opt-count">' + total + '</span></button>';
+    if (active > 0) opts += '<button class="download-opt-btn btn-green" data-opt="valid">Alive <span class="opt-count">' + active + '</span></button>';
+    if (combo > 0) opts += '<button class="download-opt-btn btn-violet" data-opt="combo">Cookie + 2FA <span class="opt-count">' + combo + '</span></button>';
+    if (onlyCookie > 0) opts += '<button class="download-opt-btn btn-slate" data-opt="onlycookie">Only Cookie <span class="opt-count">' + onlyCookie + '</span></button>';
+    if (only2fa > 0) opts += '<button class="download-opt-btn btn-cyan" data-opt="only2fa">Only 2FA <span class="opt-count">' + only2fa + '</span></button>';
+    if (wa > 0) opts += '<button class="download-opt-btn btn-blue" data-opt="wa">FB Page <span class="opt-count">' + wa + '</span></button>';
+    if (activeNoWa > 0) opts += '<button class="download-opt-btn btn-amber" data-opt="valid-nwa">No Page <span class="opt-count">' + activeNoWa + '</span></button>';
+    if (dead > 0) opts += '<button class="download-opt-btn btn-red" data-opt="dead">Dead <span class="opt-count">' + dead + '</span></button>';
 
     var overlay = document.createElement('div');
     overlay.className = 'download-opt-overlay';
     overlay.innerHTML =
         '<div class="download-opt-box">' +
             '<div class="download-opt-title">Download</div>' +
-            '<button class="download-opt-btn' + (total === 0 ? ' disabled' : ' primary') + '" data-opt="all">All <span class="opt-count">' + total + '</span></button>' +
-            '<button class="download-opt-btn btn-green' + (active === 0 ? ' disabled' : '') + '" data-opt="valid">Alive <span class="opt-count">' + active + '</span></button>' +
-            '<button class="download-opt-btn btn-blue' + (wa === 0 ? ' disabled' : '') + '" data-opt="wa">FB Page <span class="opt-count">' + wa + '</span></button>' +
-            '<button class="download-opt-btn btn-amber' + (activeNoWa === 0 ? ' disabled' : '') + '" data-opt="valid-nwa">No FB Page <span class="opt-count">' + activeNoWa + '</span></button>' +
+            opts +
             '<button class="download-opt-cancel">Cancel</button>' +
         '</div>';
     document.body.appendChild(overlay);
@@ -1321,8 +1476,12 @@ dom.menuDownload.addEventListener('click', function() {
             switch (btn.dataset.opt) {
                 case 'all': _doDownload(null, ''); break;
                 case 'valid': _doDownload(function(row) { return row.status === 'good'; }, ' (Alive)'); break;
+                case 'combo': _doDownload(function(row) { return row.status === 'good' && row.cookies && row.twofakey; }, ' (Cookie + 2FA)'); break;
+                case 'onlycookie': _doDownload(function(row) { return row.status === 'good' && row.cookies && !row.twofakey; }, ' (Only Cookie)'); break;
+                case 'only2fa': _doDownload(function(row) { return row.status === 'good' && !row.cookies && row.twofakey; }, ' (Only 2FA)'); break;
                 case 'wa': _doDownload(function(row) { return row.wa_status === 'eligible'; }, ' (FB Page)'); break;
-                case 'valid-nwa': _doDownload(function(row) { return row.status === 'good' && row.wa_status !== 'eligible'; }, ' (No FB Page)'); break;
+                case 'valid-nwa': _doDownload(function(row) { return row.status === 'good' && row.wa_status !== 'eligible'; }, ' (No Page)'); break;
+                case 'dead': _doDownload(function(row) { return row.status === 'bad'; }, ' (Dead)'); break;
             }
         } else if (e.target.closest('.download-opt-cancel') || e.target === overlay) {
             overlay.remove();
@@ -1332,6 +1491,55 @@ dom.menuDownload.addEventListener('click', function() {
 
 // ── Upload xlsx (inside file) ──
 var pendingUploadData = null;
+var pendingMerge = false;
+
+function dedupKeyForRow(row) {
+    if (state.currentFileType === 'fb_cookie') {
+        if (row.uid) return row.uid;
+        if (row.cookies) { var m = row.cookies.match(/c_user=(\d+)/); if (m) return m[1]; }
+        return null;
+    }
+    if (state.currentFileType === 'ig_cookie') return row.username || null;
+    return null;
+}
+
+function mergeRows(incoming) {
+    var existing = {};
+    state.rows.forEach(function(row) {
+        var k = dedupKeyForRow(row);
+        if (k) existing[k] = true;
+    });
+    var added = [];
+    var skipped = 0;
+    incoming.forEach(function(row) {
+        var k = dedupKeyForRow(row);
+        if (k && existing[k]) { skipped++; return; }
+        if (k) existing[k] = true;
+        added.push(row);
+    });
+    if (added.length === 0) { __ss.showToast('Merged 0 (skipped ' + skipped + ')'); return; }
+    state.undoStack.push({ type: 'rows', prevRows: state.rows.map(function(r) { return Object.assign({}, r); }) });
+    state.redoStack = [];
+    state.rows = state.rows.concat(added);
+    state.isDirty = true;
+    renderSheet();
+    findDuplicates();
+    renderSheet();
+    persist('merge');
+    if (state.currentFileId && api.getCrossDups) {
+        api.getCrossDups(state.currentFileId).then(function(cd) {
+            if (cd) { state.crossDups = cd.dups; findDuplicates(); updateDuplicateState(); }
+        }).catch(function() {});
+    }
+    updateUndoRedo();
+    __ss.showToast('Merged ' + added.length + ' (skipped ' + skipped + ')');
+}
+
+dom.menuMerge.addEventListener('click', function() {
+    dom.sheetMoreMenu.classList.remove('open');
+    pendingMerge = true;
+    dom.xlsxFileInput.click();
+});
 
 dom.menuUpload.addEventListener('click', function() {
     dom.sheetMoreMenu.classList.remove('open');
@@ -1384,14 +1592,21 @@ dom.xlsxFileInput.addEventListener('change', function(e) {
                 }
             });
         }
+        if (pendingMerge) {
+            pendingMerge = false;
+            mergeRows(rows);
+            return;
+        }
         pendingUploadData = rows;
         dom.uploadModeOverlay.classList.add('open');
     };
     reader.readAsArrayBuffer(file);
 });
 
-dom.uploadReplace.addEventListener('click', function() {
+dom.uploadReplace.addEventListener('click', async function() {
     if (!pendingUploadData) return;
+    var ok = await __ss.showConfirm('Replace ALL ' + pendingUploadData.length + ' rows? Your file currently holds ' + state.rows.length + ' rows. Existing data will be **permanently replaced**. Continue?', 'Yes, replace');
+    if (!ok) return;
     dom.uploadModeOverlay.classList.remove('open');
     state.undoStack = []; state.redoStack = [];
     state.rows = pendingUploadData;
@@ -1400,7 +1615,12 @@ dom.uploadReplace.addEventListener('click', function() {
     renderSheet();
     findDuplicates();
     renderSheet();
-    persist();
+    persist('replace');
+    if (state.currentFileId && api.getCrossDups) {
+        api.getCrossDups(state.currentFileId).then(function(cd) {
+            if (cd) { state.crossDups = cd.dups; }
+        }).catch(function() {});
+    }
     __ss.showToast('Replaced with ' + pendingUploadData.length + ' rows');
     pendingUploadData = null;
 });
@@ -1414,7 +1634,12 @@ dom.uploadAppend.addEventListener('click', function() {
     renderSheet();
     findDuplicates();
     renderSheet();
-    persist();
+    persist('append');
+    if (state.currentFileId && api.getCrossDups) {
+        api.getCrossDups(state.currentFileId).then(function(cd) {
+            if (cd) { state.crossDups = cd.dups; }
+        }).catch(function() {});
+    }
     __ss.showToast('Appended ' + pendingUploadData.length + ' rows');
     pendingUploadData = null;
 });
@@ -1429,6 +1654,400 @@ dom.uploadModeOverlay.addEventListener('click', function(e) {
         dom.uploadModeOverlay.classList.remove('open');
         pendingUploadData = null;
     }
+});
+
+// ── Version history modal ──
+var ACTION_LABELS = {
+    edit: 'Edit',
+    replace: 'Replace',
+    append: 'Append',
+    merge: 'Merge',
+    restore: 'Restore',
+    check: 'Check',
+    sync: 'Sync',
+    import: 'Import'
+};
+
+var _versionMeta = null;
+var _versionShown = 0;
+var _versionPageSize = 50;
+var _versionGroupsOpen = {};
+var _versionRowCache = new Map();
+var _versionDayEls = {};
+var _versionSummaryEls = {};
+var _versionMoreBtn = null;
+var _WEEK = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function versionApiGetHistory(fileId) {
+    return state.isAdminFile ? api.adminGetHistory(fileId) : api.getHistory(fileId);
+}
+function versionApiGetVersion(fileId, v) {
+    return state.isAdminFile ? api.adminGetVersion(fileId, v) : api.getVersion(fileId, v);
+}
+function versionApiRestore(fileId, v) {
+    return state.isAdminFile ? api.adminRestoreVersion(fileId, v) : api.restoreVersion(fileId, v);
+}
+function versionApiName(fileId, v, name) {
+    return state.isAdminFile ? api.adminNameVersion(fileId, v, name) : api.nameVersion(fileId, v, name);
+}
+function versionApiFork(fileId, v) {
+    return state.isAdminFile ? api.adminForkVersion(fileId, v) : api.forkVersion(fileId, v);
+}
+
+function fmtVersionTime(ts) {
+    var d = new Date(ts);
+    var now = Date.now();
+    var diff = now - ts;
+    var rel;
+    if (diff < 60000) rel = 'just now';
+    else if (diff < 3600000) rel = Math.floor(diff / 60000) + ' min ago';
+    else if (diff < 86400000) rel = Math.floor(diff / 3600000) + ' hr ago';
+    else rel = Math.floor(diff / 86400000) + ' day' + (Math.floor(diff / 86400000) > 1 ? 's' : '') + ' ago';
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    return (d.getDate() + ' ' + _MONTHS[d.getMonth()] + ' ' + d.getFullYear() + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes())) + '  (' + rel + ')';
+}
+
+// Cached per-version row load (keys + rows). Never rejects; errors degrade to empty.
+function versionRows(v) {
+    v = Number(v);
+    var hit = _versionRowCache.get(v);
+    if (hit) return Promise.resolve(hit);
+    return versionApiGetVersion(state.currentFileId, v).then(function(data) {
+        var rows = (data && data.rows) ? data.rows : [];
+        var keys = new Set();
+        rows.forEach(function(r) {
+            var k = dedupKeyForRow(r);
+            if (k) keys.add(String(k));
+        });
+        var rec = { rows: rows, keys: keys, ok: !!(data && data.rows) };
+        _versionRowCache.set(v, rec);
+        return rec;
+    }).catch(function(e) {
+        console.error('[Versions] load v' + v + ' error:', e);
+        var rec = { rows: [], keys: new Set(), ok: false };
+        _versionRowCache.set(v, rec);
+        return rec;
+    });
+}
+
+// One-liner "what happened" per version.
+function versionSummary(rec, prev) {
+    if (!prev) return 'Created file with ' + rec.rowCount + ' row' + (rec.rowCount === 1 ? '' : 's');
+    var cur = _versionRowCache.get(Number(rec.v));
+    var old = _versionRowCache.get(Number(prev.v));
+    if (cur && old && cur.keys.size && old.keys.size) {
+        var added = 0, removed = 0;
+        cur.keys.forEach(function(k) { if (!old.keys.has(k)) added++; });
+        old.keys.forEach(function(k) { if (!cur.keys.has(k)) removed++; });
+        var waChanged = 0;
+        var oldByKey = {};
+        old.rows.forEach(function(r) {
+            var k = dedupKeyForRow(r);
+            if (k !== null && k !== undefined) oldByKey[String(k)] = r;
+        });
+        cur.rows.forEach(function(r) {
+            var k = dedupKeyForRow(r);
+            if (k === null || k === undefined) return;
+            var o = oldByKey[String(k)];
+            if (o && ((o.wa_status || '') !== (r.wa_status || ''))) waChanged++;
+        });
+        var delta = rec.rowCount - prev.rowCount;
+        var parts = [];
+        if (added) parts.push('Added ' + added + ' row' + (added === 1 ? '' : 's') + ' (' + added + ' new uid' + (added === 1 ? '' : 's') + ')');
+        if (removed) parts.push('Removed ' + removed + ' row' + (removed === 1 ? '' : 's'));
+        if (waChanged) parts.push('Changed wa_status on ' + waChanged + ' row' + (waChanged === 1 ? '' : 's'));
+        if (!parts.length) {
+            if (delta !== 0) return 'Full replace ' + prev.rowCount + '→' + rec.rowCount + ' rows';
+            return 'Same rows (' + rec.rowCount + ')';
+        }
+        return parts.join(', ');
+    }
+    if (rec.rowCount !== prev.rowCount) {
+        var d = rec.rowCount - prev.rowCount;
+        if (d > 0) return '+' + d + ' rows';
+        return d + ' rows';
+    }
+    return 'Same row count (' + rec.rowCount + ' rows)';
+}
+
+function dayKeyOf(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+}
+
+function fmtDayHeader(ts) {
+    var d = new Date(ts);
+    return _WEEK[d.getDay()] + ' ' + d.getDate() + ' ' + _MONTHS[d.getMonth()];
+}
+
+function insertVersionEl(el) {
+    if (_versionMoreBtn && _versionMoreBtn.parentNode) dom.versionList.insertBefore(el, _versionMoreBtn);
+    else dom.versionList.appendChild(el);
+}
+
+function dayBuildGroup(ts) {
+    var key = dayKeyOf(ts);
+    var grp = _versionDayEls[key];
+    if (!grp) {
+        grp = document.createElement('div');
+        grp.className = 'version-day-group open';
+        if (_versionGroupsOpen[key] === false) grp.classList.remove('open');
+        var head = document.createElement('div');
+        head.className = 'version-day';
+        head.textContent = fmtDayHeader(ts);
+        head.addEventListener('click', function() {
+            var open = grp.classList.contains('open');
+            grp.classList.toggle('open', !open);
+            _versionGroupsOpen[key] = !open;
+        });
+        grp.appendChild(head);
+        _versionDayEls[key] = grp;
+        insertVersionEl(grp);
+    }
+    return grp;
+}
+
+function ensureVersionMoreBtn() {
+    if (!_versionMoreBtn) {
+        _versionMoreBtn = document.createElement('button');
+        _versionMoreBtn.className = 'version-more-btn';
+        _versionMoreBtn.textContent = 'Show more';
+        _versionMoreBtn.addEventListener('click', appendVersionPage);
+    }
+    if (!_versionMoreBtn.parentNode) dom.versionList.appendChild(_versionMoreBtn);
+}
+
+function removeVersionMoreBtn() {
+    if (_versionMoreBtn) { _versionMoreBtn.remove(); _versionMoreBtn = null; }
+}
+
+function appendVersionPage() {
+    var meta = _versionMeta;
+    if (!meta || !meta.length) return;
+    var end = Math.min(_versionShown + _versionPageSize, meta.length);
+    for (var i = _versionShown; i < end; i++) {
+        buildVersionItem(meta[i], i);
+    }
+    _versionShown = end;
+    if (_versionShown < meta.length) ensureVersionMoreBtn();
+    else removeVersionMoreBtn();
+}
+
+// Fetch uid maps for the newest ~50 only (bounded), then refresh each summary in place.
+function prefetchVersionSummaries() {
+    var meta = _versionMeta || [];
+    var limit = Math.min(50, meta.length);
+    for (var i = 0; i < limit; i++) {
+        (function(idx) {
+            var rec = meta[idx];
+            versionRows(Number(rec.v)).then(function() {
+                var sumEl = _versionSummaryEls['v' + rec.v];
+                if (sumEl) sumEl.textContent = versionSummary(rec, meta[idx + 1]);
+            });
+        })(i);
+    }
+}
+
+function buildVersionItem(rec, idx) {
+    var prev = _versionMeta[idx + 1];
+    var delta = prev ? rec.rowCount - prev.rowCount : rec.rowCount;
+    var deltaTxt = prev ? (delta > 0 ? '+' + delta : String(delta)) : '=0';
+    var item = document.createElement('div');
+    item.className = 'version-item';
+    item.innerHTML =
+        '<div class="version-main">' +
+            (rec.name ? '<div class="version-name-row"><span class="version-name">' + __ss.esc(rec.name) + '</span><button class="version-rename-btn">Rename</button></div>' : '') +
+            '<div class="version-time">' + fmtVersionTime(rec.ts) + '</div>' +
+            '<div class="version-summary">' + __ss.esc(versionSummary(rec, prev)) + '</div>' +
+            '<div class="version-detail">' + (prev ? (delta >= 0 ? 'Added ' + delta + ' row' + (delta === 1 ? '' : 's') : 'Removed ' + (-delta) + ' row' + (delta === -1 ? '' : 's')) : 'Created file with ' + rec.rowCount + ' row' + (rec.rowCount === 1 ? '' : 's')) + ' · ' + rec.rowCount + ' rows</div>' +
+        '</div>' +
+        '<span class="version-badge ' + (rec.action === 'restore' ? 'restore' : (rec.action === 'replace' || rec.action === 'merge') ? 'replace' : '') + '">[' + (prev ? deltaTxt : 'New') + '] ' + (ACTION_LABELS[rec.action] || rec.action) + '</span>' +
+        '<div class="version-actions">' +
+            '<button class="version-fork-btn">Copy version</button>' +
+            '<button class="btn btn-ghost btn-sm version-preview-btn">Preview</button>' +
+            '<button class="btn btn-danger btn-sm version-restore-btn">Restore</button>' +
+        '</div>';
+    _versionSummaryEls['v' + rec.v] = item.querySelector('.version-summary');
+    var previewBtn = item.querySelector('.version-preview-btn');
+    var restoreBtn = item.querySelector('.version-restore-btn');
+    var forkBtn = item.querySelector('.version-fork-btn');
+    var renameBtn = item.querySelector('.version-rename-btn');
+    previewBtn.addEventListener('click', function(ev) {
+        ev.stopPropagation();
+        toggleVersionPreview(item, rec);
+    });
+    restoreBtn.addEventListener('click', function(ev) {
+        ev.stopPropagation();
+        confirmVersionRestore(rec);
+    });
+    forkBtn.addEventListener('click', function(ev) {
+        ev.stopPropagation();
+        forkVersion(rec);
+    });
+    if (renameBtn) {
+        renameBtn.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+            startVersionRename(item, rec);
+        });
+    }
+    dayBuildGroup(rec.ts).appendChild(item);
+}
+
+function renderVersionList(meta, preserveState) {
+    _versionMeta = meta;
+    if (!preserveState) {
+        _versionShown = 0;
+        _versionGroupsOpen = {};
+    }
+    _versionDayEls = {};
+    _versionSummaryEls = {};
+    removeVersionMoreBtn();
+    dom.versionList.innerHTML = '';
+    if (!meta || !meta.length) {
+        dom.versionEmpty.style.display = 'block';
+        return;
+    }
+    dom.versionEmpty.style.display = 'none';
+    appendVersionPage();
+    prefetchVersionSummaries();
+}
+
+var _versionPreviewOpen = null;
+function toggleVersionPreview(item, rec) {
+    var existing = item.querySelector('.version-preview');
+    if (existing) { existing.remove(); _versionPreviewOpen = null; return; }
+    if (_versionPreviewOpen) { _versionPreviewOpen.remove(); _versionPreviewOpen = null; }
+    var prev = document.createElement('div');
+    prev.className = 'version-preview';
+    prev.textContent = 'Loading preview…';
+    item.appendChild(prev);
+    _versionPreviewOpen = prev;
+    versionRows(Number(rec.v)).then(function(cached) {
+        if (!prev.parentNode) return;
+        if (!cached.ok) { prev.textContent = 'Could not load version'; console.error('[Versions] preview failed for v' + rec.v + ':', cached.rows); return; }
+        var cols = state.COLUMNS || [];
+        var shown = cached.rows.slice(0, 10).filter(function(r) { return cols.some(function(c) { return r[c.key]; }); });
+        prev.innerHTML = '';
+        var head = document.createElement('div');
+        head.textContent = shown.length ? 'Showing first ' + shown.length + ' rows with data' : 'No data rows in this version';
+        prev.appendChild(head);
+        shown.forEach(function(r) {
+            var row = document.createElement('div');
+            row.className = 'prev-row';
+            var cells = [];
+            cols.forEach(function(c) { if (r[c.key]) cells.push('<span class="prev-cell">' + __ss.esc(String(r[c.key])) + '</span>'); });
+            row.innerHTML = cells.join('');
+            prev.appendChild(row);
+        });
+    }).catch(function(e) {
+        if (prev.parentNode) { prev.textContent = 'Error loading preview'; console.error('[Versions] preview error v' + rec.v + ':', e); }
+    });
+}
+
+function startVersionRename(item, rec) {
+    var main = item.querySelector('.version-main');
+    if (!main) return;
+    var oldRow = main.querySelector('.version-name-row');
+    var row = document.createElement('div');
+    row.className = 'version-name-row';
+    var input = document.createElement('input');
+    input.className = 'version-name-input';
+    input.value = rec.name || '';
+    input.placeholder = 'Version name';
+    row.appendChild(input);
+    if (oldRow) main.replaceChild(row, oldRow);
+    else main.insertBefore(row, main.firstChild);
+    input.focus();
+    input.select();
+    var done = false;
+    function commit() {
+        if (done) return;
+        done = true;
+        var val = input.value;
+        versionApiName(state.currentFileId, rec.v, val).then(function() {
+            __ss.showToast(val ? 'Version renamed' : 'Version name cleared');
+            renderVersionList(_versionMeta, true);
+        }).catch(function(e) {
+            __ss.showToast('Rename failed');
+            console.error('[Versions] rename error v' + rec.v + ':', e);
+            renderVersionList(_versionMeta, true);
+        });
+    }
+    function cancel() {
+        if (done) return;
+        done = true;
+        renderVersionList(_versionMeta, true);
+    }
+    input.addEventListener('keydown', function(e) {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+    input.addEventListener('blur', commit);
+}
+
+async function forkVersion(rec) {
+    var ok = await __ss.showConfirm('Copy this version into a new file?', 'Copy');
+    if (!ok) return;
+    try {
+        var res = await versionApiFork(state.currentFileId, rec.v);
+        var newId = (res && res.file && res.file.id) || (res && res.fileId) || (res && res.id);
+        if (!newId) { __ss.showToast('Fork failed'); console.error('[Versions] fork failed:', res); return; }
+        dom.versionOverlay.classList.remove('open');
+        __ss.showToast('Forked to new file');
+        if (state.isAdminFile) __ss.openFileAdmin(newId);
+        else __ss.openFile(newId);
+    } catch(e) {
+        __ss.showToast('Fork failed');
+        console.error('[Versions] fork error:', e);
+    }
+}
+
+async function confirmVersionRestore(rec) {
+    var ok = await __ss.showConfirm(
+        'Restore version from ' + fmtVersionTime(rec.ts).split('  (')[0] + '? Current rows will be replaced.', 'Restore');
+    if (!ok) return;
+    try {
+        var res = await versionApiRestore(state.currentFileId, rec.v);
+        if (!res || !res.ok) { __ss.showToast('Restore failed'); console.error('[Versions] restore failed:', res); return; }
+        state.undoStack.push({ type: 'rows', prevRows: state.rows.map(function(r) { return Object.assign({}, r); }) });
+        state.redoStack = [];
+        state.rows = res.rows;
+        while (state.rows.length < 100) state.rows.push(__ss.makeEmptyRow(state.COLUMNS));
+        state.isDirty = true;
+        renderSheet();
+        findDuplicates();
+        renderSheet();
+        updateUndoRedo();
+        dom.versionOverlay.classList.remove('open');
+        __ss.showToast('Restored version v' + rec.v + ' (' + res.rows.length + ' rows)');
+    } catch(e) {
+        __ss.showToast('Restore failed');
+        console.error('[Versions] restore error:', e);
+    }
+}
+
+dom.menuVersions.addEventListener('click', function() {
+    dom.sheetMoreMenu.classList.remove('open');
+    if (!state.currentFileId) return;
+    dom.versionOverlay.classList.add('open');
+    dom.versionList.innerHTML = '<div class="version-empty">Loading…</div>';
+    dom.versionEmpty.style.display = 'none';
+    versionApiGetHistory(state.currentFileId).then(function(meta) {
+        renderVersionList(meta);
+    }).catch(function(e) {
+        dom.versionList.innerHTML = '<div class="version-empty">Could not load history</div>';
+        dom.versionEmpty.style.display = 'none';
+        console.error('[Versions] history error:', e);
+    });
+});
+
+if (dom.versionClose) dom.versionClose.addEventListener('click', function() {
+    dom.versionOverlay.classList.remove('open');
+});
+dom.versionOverlay.addEventListener('click', function(e) {
+    if (e.target === dom.versionOverlay) dom.versionOverlay.classList.remove('open');
 });
 
 // ── Keyboard ──

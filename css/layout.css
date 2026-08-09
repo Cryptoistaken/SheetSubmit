@@ -229,6 +229,8 @@
     z-index: 200;
     transition: background 0.15s, transform 0.1s;
     user-select: none;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .home-fab::before {

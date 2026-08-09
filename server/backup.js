@@ -2,7 +2,7 @@ var Redis = require('ioredis');
 
 var BACKUP_INTERVAL_MS = (parseInt(process.env.BACKUP_INTERVAL, 10) || 5) * 60 * 1000;
 var _backupRedis = null;
-var _lastKeyCount = -1;
+var _lastKeyCount = null;
 
 function getBackupRedis() {
     if (!_backupRedis && process.env.REDIS_BACKUP_URL) {
@@ -81,7 +81,7 @@ async function copyKeys(source, dest) {
         }
     } while (cursor !== '0');
     if (errors > 0) console.error('[Backup] ' + errors + ' key(s) failed to copy');
-    return count;
+    return { count: count, errors: errors };
 }
 
 async function createBackup(source) {
@@ -95,13 +95,31 @@ async function createBackup(source) {
             }
         }
 
-        var keyCount = await source.dbsize();
-        if (keyCount === _lastKeyCount) return 0;
+        var dirty = await source.get('ss:meta:dirty');
+        if (!dirty && _lastKeyCount !== null) return 0;
 
-        var count = await copyKeys(source, dest);
-        console.log('[Backup] Synced ' + count + ' ss:* keys' + (keyCount === _lastKeyCount ? '' : ' (' + _lastKeyCount + '→' + keyCount + ' total)'));
+        var keyCount = await source.dbsize();
+        var result = await copyKeys(source, dest);
+        if (result.errors > 0) {
+            console.error('[Backup] Copy had ' + result.errors + ' error(s), keeping dirty marker for retry');
+            return result.count;
+        }
+        var dirtyAfter = await source.get('ss:meta:dirty');
+        if (dirtyAfter && dirtyAfter !== dirty) {
+            console.log('[Backup] New write during copy, keeping dirty marker');
+            return result.count;
+        }
+        // Atomically delete the marker ONLY if it still holds the value we just
+        // observed. If a writer updated ss:meta:dirty between the read above and
+        // this delete, the compare-and-delete skips it and the next pass re-syncs.
+        // (Closes the read-then-delete TOCTOU window in the race fix.)
+        await source.eval(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+            1, 'ss:meta:dirty', dirtyAfter
+        );
+        console.log('[Backup] Synced ' + result.count + ' ss:* keys' + (keyCount === _lastKeyCount ? '' : ' (' + _lastKeyCount + '→' + keyCount + ' total)'));
         _lastKeyCount = keyCount;
-        return count;
+        return result.count;
     } catch (e) {
         console.error('[Backup] createBackup error: ' + e.message);
         return -1;
@@ -128,9 +146,9 @@ async function restoreFromBackup(dest) {
         var backupCount = await source.dbsize();
         if (backupCount === 0) return false;
 
-        var count = await copyKeys(source, dest);
-        console.log('[Backup] Restored ' + count + ' keys from backup Redis');
-        return count > 0;
+        var result = await copyKeys(source, dest);
+        console.log('[Backup] Restored ' + result.count + ' keys from backup Redis');
+        return result.count > 0;
     } catch (e) {
         console.error('[Backup] restoreFromBackup error: ' + e.message);
         return false;

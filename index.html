@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1.0,shrink-to-fit=no" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover,shrink-to-fit=no" />
     <title>Sheet Submit</title>
     <base href="/">
     <link rel="icon" type="image/svg+xml" href="public/favicon-dark.svg" />
@@ -31,16 +31,18 @@
         .file-type-badge.t-fb { color: #6366f1; background: #eef2ff; }
         [data-theme="dark"] .file-type-badge.t-fb { color: #818cf8; background: rgba(99,102,241,0.15); }
 
-        .type-option { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r); cursor: pointer; transition: background 0.1s, border-color 0.1s; margin-bottom: 8px; }
-        .type-option:hover { background: var(--bg3); border-color: var(--text3); }
-        .type-option:active { transform: scale(0.99); }
-        .type-option-icon { width: 32px; height: 32px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; font-weight: 600; }
-        .type-option-icon.t-ig { background: var(--blue-light); color: var(--blue); }
-        .type-option-icon.t-fb { background: #eef2ff; color: #6366f1; }
-        [data-theme="dark"] .type-option-icon.t-fb { background: rgba(99,102,241,0.15); color: #818cf8; }
-        .type-option-info { flex: 1; min-width: 0; }
-        .type-option-name { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
-        .type-option-desc { font-size: 12px; color: var(--text3); margin-top: 2px; }
+        .home-fab-menu { position: fixed; bottom: 84px; right: 24px; z-index: 600; background: var(--bg); border: 1px solid var(--border); border-radius: var(--rl); box-shadow: var(--shadow-lg); min-width: 210px; padding: 4px; display: none; flex-direction: column; }
+        .home-fab-menu.open { display: flex; animation: smIn 0.12s var(--ease-out); }
+        .home-fab-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; cursor: pointer; color: var(--text); transition: background 0.08s; border: none; background: none; text-align: left; width: 100%; }
+        .home-fab-item:hover { background: var(--bg3); }
+        .home-fab-item:active { transform: scale(0.99); }
+        .home-fab-ic { width: 30px; height: 30px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .home-fab-ic.t-ig { background: var(--blue-light); color: var(--blue); }
+        .home-fab-ic.t-fb { background: #eef2ff; color: #6366f1; }
+        [data-theme="dark"] .home-fab-ic.t-fb { background: rgba(99,102,241,0.15); color: #818cf8; }
+        .home-fab-name { display: block; font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
+        .home-fab-desc { display: block; font-size: 12px; color: var(--text3); margin-top: 1px; white-space: nowrap; }
+        .home-fab-sep { height: 1px; background: var(--border); margin: 4px 4px; }
 
         .conn-status { font-size: 11px; padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; }
         .conn-status.ok { color: var(--green); background: var(--green-bg); }
@@ -208,6 +210,13 @@
                     <span class="autocheck-track"></span>
                     Auto-check
                 </button>
+                <div id="waCheckSection" style="display:none">
+                    <div class="check-dropdown-label" style="margin-top:8px">Page Check</div>
+                    <button class="autocheck-toggle" id="waCheckToggle" style="width:100%">
+                        <span class="autocheck-track"></span>
+                        Page Check
+                    </button>
+                </div>
             </div>
 
             <button class="sheet-more-btn" id="sheetMoreBtn" title="More actions">&#8942;</button>
@@ -224,6 +233,14 @@
             <button class="sheet-more-item" id="menuUpload">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 Upload xlsx
+            </button>
+            <button class="sheet-more-item" id="menuMerge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+                Merge
+            </button>
+            <button class="sheet-more-item" id="menuVersions">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Versions
             </button>
             <div class="sheet-more-sep"></div>
             <div class="sheet-more-cols" id="sheetMoreCols"></div>
@@ -376,16 +393,6 @@
     </div>
 </div>
 
-<div class="modal-overlay" id="typeOverlay">
-    <div class="modal-box">
-        <div class="modal-title">Create file</div>
-        <div class="type-options" id="typeOptions"></div>
-        <div class="modal-footer">
-            <button class="btn btn-ghost" id="typeCancel">Cancel</button>
-        </div>
-    </div>
-</div>
-
 <div class="modal-overlay" id="uploadModeOverlay">
     <div class="modal-box">
         <div class="modal-title">Upload xlsx</div>
@@ -420,6 +427,27 @@
     </div>
 </div>
 
+<div class="modal-overlay" id="versionOverlay">
+    <div class="modal-box">
+        <div class="modal-title">Version history</div>
+        <div class="version-empty" id="versionEmpty">No versions yet — actions like replace, append, merge, check and sync are saved here.</div>
+        <div class="version-list" id="versionList"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" id="versionClose">Close</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="blameOverlay">
+    <div class="modal-box">
+        <div class="modal-title" id="blameTitle">Edit history</div>
+        <div id="blameList"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" id="blameClose">Close</button>
+        </div>
+    </div>
+</div>
+
 <input type="file" id="xlsxFileInput" accept=".xlsx,.xls" style="display:none" />
 <input type="file" id="xlsxFileInputHome" accept=".xlsx,.xls" style="display:none" />
 
@@ -436,6 +464,8 @@
 <button class="home-fab" id="homeFab" aria-label="Create file">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="12" y2="20"/><line x1="4" y1="12" x2="20" y2="12"/></svg>
 </button>
+
+<div class="home-fab-menu" id="homeFabMenu"></div>
 
 <div class="toast-wrap"><div class="toast" id="toast"></div></div>
 

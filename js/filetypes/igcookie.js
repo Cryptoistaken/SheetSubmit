@@ -22,7 +22,7 @@ __ss.registerFileBehavior('ig_cookie', {
     onCellChange: function(rowIdx, colKey, value, state) {
         if (colKey === 'username' && value) {
             var masterPass = state.rows[0] ? (state.rows[0].password || '') : '';
-            if (masterPass) {
+            if (masterPass && !state.rows[rowIdx].password) {
                 state.rows[rowIdx].password = masterPass;
             }
         }

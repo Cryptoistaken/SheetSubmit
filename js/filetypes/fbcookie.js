@@ -75,16 +75,14 @@ __ss.registerFileBehavior('fb_cookie', {
         var row = state.rows[rowIdx];
 
         if (colKey === 'cookies') {
-            if (value) {
-                var uid = _extractCUser(value);
-                if (uid) {
-                    if (row.uid && row.uid !== uid) {
-                        __ss.showToast('UID overwritten to match c_user in cookies');
-                    }
+            var uid = _extractCUser(value);
+            if (uid) {
+                if (!row.uid) {
                     row.uid = uid;
                 }
             } else {
                 row.wa_status = '';
+                row.wa_ban_reason = null;
             }
         }
 

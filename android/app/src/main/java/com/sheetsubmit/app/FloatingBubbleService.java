@@ -8,7 +8,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.res.Resources;
+import android.graphics.Point;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -16,12 +16,15 @@ import android.hardware.display.DisplayManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.SystemClock;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -30,9 +33,11 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class FloatingBubbleService extends Service {
 
+    private static final String TAG = "FloatingBubble";
     private static final String CHANNEL_ID = "bubble";
     private static final int NOTIFICATION_ID = 3;
     private static final String PREFS_NAME = "sheetsubmit";
@@ -50,6 +55,7 @@ public class FloatingBubbleService extends Service {
     private int initialBubbleX;
     private int initialBubbleY;
     private boolean dragging;
+    private long panelShownAt;
 
     public static void start(Context ctx) {
         Intent i = new Intent(ctx, FloatingBubbleService.class);
@@ -67,7 +73,8 @@ public class FloatingBubbleService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !SettingsHolder.canDrawOverlays(this)) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
+            Log.e(TAG, "overlay permission missing, stopping");
             stopSelf();
             return;
         }
@@ -82,12 +89,7 @@ public class FloatingBubbleService extends Service {
         touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
 
         addBubbleToWindow();
-    }
-
-    private static class SettingsHolder {
-        static boolean canDrawOverlays(Context ctx) {
-            return android.provider.Settings.canDrawOverlays(ctx);
-        }
+        Log.i(TAG, "service running, bubble visible");
     }
 
     @Override
@@ -106,12 +108,32 @@ public class FloatingBubbleService extends Service {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
+    @SuppressWarnings("deprecation")
     private int displayWidth() {
-        return windowManager.getCurrentWindowMetrics().getBounds().width();
+        try {
+            if (Build.VERSION.SDK_INT >= 30) {
+                return windowManager.getCurrentWindowMetrics().getBounds().width();
+            }
+            Point p = new Point();
+            windowManager.getDefaultDisplay().getSize(p);
+            return p.x;
+        } catch (Exception e) {
+            return getResources().getDisplayMetrics().widthPixels;
+        }
     }
 
+    @SuppressWarnings("deprecation")
     private int displayHeight() {
-        return windowManager.getCurrentWindowMetrics().getBounds().height();
+        try {
+            if (Build.VERSION.SDK_INT >= 30) {
+                return windowManager.getCurrentWindowMetrics().getBounds().height();
+            }
+            Point p = new Point();
+            windowManager.getDefaultDisplay().getSize(p);
+            return p.y;
+        } catch (Exception e) {
+            return getResources().getDisplayMetrics().heightPixels;
+        }
     }
 
     private int overlayType() {
@@ -157,6 +179,8 @@ public class FloatingBubbleService extends Service {
         try {
             windowManager.addView(bubbleView, bubbleParams);
         } catch (Exception e) {
+            Log.e(TAG, "addBubbleToWindow failed", e);
+            Toast.makeText(this, "Cannot display overlay — allow the permission", Toast.LENGTH_LONG).show();
             bubbleView = null;
             stopSelf();
         }
@@ -217,91 +241,115 @@ public class FloatingBubbleService extends Service {
     }
 
     private void showPanel() {
-        int scrW = displayWidth();
-        int scrH = displayHeight();
-        int panelW = Math.min(dp(240), Math.max(200, scrW - dp(16)));
-        int panelH = Math.min(dp(300), Math.max(240, scrH - dp(32)));
-
-        panelRoot = new FrameLayout(this);
-        panelRoot.setBackgroundColor(0x33000000);
-
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setColor(0xFFFFFFFF);
-        cardBg.setCornerRadius(dp(14));
-        card.setBackground(cardBg);
-        FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(panelW, panelH, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        int bubbleCenterY = bubbleParams.y + bubbleParams.height / 2;
-        cardParams.topMargin = clamp(bubbleCenterY - panelH / 2, dp(8), Math.max(dp(8), scrH - panelH - dp(8)));
-        card.setLayoutParams(cardParams);
-
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(14), dp(8), dp(4), dp(8));
-
-        TextView title = new TextView(this);
-        title.setText("SheetSubmit");
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        title.setTextColor(0xFF18181B);
-        title.setTypeface(title.getTypeface(), Typeface.BOLD);
-        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        title.setLayoutParams(tlp);
-        header.addView(title);
-
-        TextView close = new TextView(this);
-        close.setText("✕");
-        close.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-        close.setTextColor(0xFF71717A);
-        close.setPadding(dp(12), dp(4), dp(12), dp(4));
-        close.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                hidePanel();
-            }
-        });
-        header.addView(close);
-        card.addView(header);
-
-        miniWebView = new WebView(this);
-        WebSettings ws = miniWebView.getSettings();
-        ws.setJavaScriptEnabled(true);
-        ws.setDomStorageEnabled(true);
-        ws.setDatabaseEnabled(true);
-        ws.setLoadWithOverviewMode(true);
-        miniWebView.setWebViewClient(new WebViewClient());
-        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-        miniWebView.setLayoutParams(wlp);
-        card.addView(miniWebView);
-
-        panelRoot.addView(card);
-        panelRoot.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                hidePanel();
-            }
-        });
-        card.setClickable(true);
-
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
-                overlayType(), 0, PixelFormat.TRANSLUCENT);
-        lp.gravity = Gravity.TOP | Gravity.START;
-        lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
         try {
-            windowManager.addView(panelRoot, lp);
-        } catch (Exception e) {
-            panelRoot = null;
-            return;
-        }
+            int scrW = displayWidth();
+            int scrH = displayHeight();
+            int panelW = Math.min(dp(240), Math.max(200, scrW - dp(20)));
+            panelW = Math.min(panelW, scrW - dp(8));
+            int panelH = Math.min(dp(300), Math.max(240, scrH - dp(40)));
+            panelH = Math.min(panelH, scrH - dp(16));
 
-        miniWebView.onResume();
-        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        String fileId = prefs.getString(KEY_FILE, "");
-        if (!fileId.isEmpty()) {
-            miniWebView.loadUrl(HOME_URL + "/?bubble=1&file=" + Uri.encode(fileId));
+            panelRoot = new FrameLayout(this);
+            panelRoot.setBackgroundColor(0x33000000);
+
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            GradientDrawable cardBg = new GradientDrawable();
+            cardBg.setColor(0xFFFFFFFF);
+            cardBg.setCornerRadius(dp(14));
+            card.setBackground(cardBg);
+            FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(panelW, panelH, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+            int bubbleCenterY = bubbleParams.y + bubbleParams.height / 2;
+            cardParams.topMargin = clamp(bubbleCenterY - panelH / 2, dp(8), Math.max(dp(8), scrH - panelH - dp(8)));
+            card.setLayoutParams(cardParams);
+
+            LinearLayout header = new LinearLayout(this);
+            header.setOrientation(LinearLayout.HORIZONTAL);
+            header.setGravity(Gravity.CENTER_VERTICAL);
+            header.setPadding(dp(14), dp(8), dp(4), dp(8));
+
+            TextView title = new TextView(this);
+            title.setText("SheetSubmit");
+            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            title.setTextColor(0xFF18181B);
+            title.setTypeface(title.getTypeface(), Typeface.BOLD);
+            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            title.setLayoutParams(tlp);
+            header.addView(title);
+
+            TextView close = new TextView(this);
+            close.setText("✕");
+            close.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+            close.setTextColor(0xFF71717A);
+            close.setPadding(dp(12), dp(4), dp(12), dp(4));
+            close.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    hidePanel();
+                }
+            });
+            header.addView(close);
+            card.addView(header);
+
+            ensureMiniWebView();
+            if (miniWebView != null) {
+                ViewGroup oldParent = (ViewGroup) miniWebView.getParent();
+                if (oldParent != null) oldParent.removeView(miniWebView);
+                LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+                card.addView(miniWebView, wlp);
+                miniWebView.onResume();
+            }
+
+            panelRoot.addView(card);
+            panelRoot.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (SystemClock.elapsedRealtime() - panelShownAt > 350) {
+                        hidePanel();
+                    }
+                }
+            });
+            card.setClickable(true);
+
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+                    overlayType(), 0, PixelFormat.TRANSLUCENT);
+            lp.gravity = Gravity.TOP | Gravity.START;
+            lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+            windowManager.addView(panelRoot, lp);
+            panelShownAt = SystemClock.elapsedRealtime();
+            Log.i(TAG, "panel shown " + panelW + "x" + panelH);
+        } catch (Exception e) {
+            Log.e(TAG, "showPanel failed", e);
+            if (panelRoot != null) {
+                try { windowManager.removeView(panelRoot); } catch (Exception ignored) {}
+                panelRoot = null;
+            }
+        }
+    }
+
+    private void ensureMiniWebView() {
+        if (miniWebView != null) return;
+        try {
+            miniWebView = new WebView(this);
+            WebSettings ws = miniWebView.getSettings();
+            ws.setJavaScriptEnabled(true);
+            ws.setDomStorageEnabled(true);
+            ws.setDatabaseEnabled(true);
+            ws.setLoadWithOverviewMode(true);
+            ws.setUseWideViewPort(true);
+            miniWebView.setWebViewClient(new WebViewClient());
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            String fileId = prefs.getString(KEY_FILE, "");
+            if (!fileId.isEmpty()) {
+                String url = HOME_URL + "/?bubble=1&file=" + Uri.encode(fileId);
+                miniWebView.loadUrl(url);
+                Log.i(TAG, "mini webview loading " + url);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "ensureMiniWebView failed", e);
+            miniWebView = null;
         }
     }
 

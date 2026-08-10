@@ -485,7 +485,7 @@ __ss.toggleFabMenu = function() {
 };
 
 document.addEventListener('click', function(e) {
-    if (dom.homeFabMenu.classList.contains('open') && e.target !== dom.homeFab && !dom.homeFabMenu.contains(e.target)) {
+    if (dom.homeFabMenu.classList.contains('open') && !dom.homeFabMenu.contains(e.target) && !dom.homeFab.contains(e.target)) {
         dom.homeFabMenu.classList.remove('open');
     }
 });

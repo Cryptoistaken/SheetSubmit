@@ -29,6 +29,15 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ClipboardCaptureActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Transparent"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance" />
+
         <service
             android:name=".FloatingBubbleService"
             android:exported="false"

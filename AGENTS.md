@@ -131,11 +131,13 @@ git revert <commit-hash>
 | File | Responsibility |
 |---|---|
 | `MainActivity.java` | WebView host; loads `HOME_URL`; JS bridge `Android` (`readClipboard`, `writeClipboard`, `isBubbleEnabled`, `enableBubble`, `disableBubble`); device-login polling (`/api/auth/device` → session cookie via CookieManager); URL routing (tg:// and t.me open externally with device token, APP_HOST loads in-app) |
+| `ClipboardCaptureActivity.java` | **Transparent activity** — briefly takes foreground focus so the app may read the clipboard on Android 10+; stores primary clip in prefs (`bubble_clip` + `bubble_clip_at`), finishes instantly; launched by `FloatingBubbleService.showPanel` before bubble automation |
 | `FloatingBubbleService.java` | **Bubble** — 60dp draggable overlay (TYPE_APPLICATION_OVERLAY, display context), tap opens ~240×300dp mini panel with a WebView loading `HOME_URL/?bubble=1&file=<id>`; foreground service (specialUse), `START_STICKY`; file id from prefs key `bubble_file` |
 
 ### Manifest — `android/app/src/main/AndroidManifest.xml`
 - Permissions: INTERNET, VIBRATE, WRITE_EXTERNAL_STORAGE (maxSdk 28), SYSTEM_ALERT_WINDOW, FOREGROUND_SERVICE, FOREGROUND_SERVICE_SPECIAL_USE, POST_NOTIFICATIONS
 - `MainActivity`: exported=true, launcher, configChanges
+- `ClipboardCaptureActivity`: exported=false, transparent theme (`Theme.Transparent`), noHistory, excludeFromRecents, empty taskAffinity
 - `FloatingBubbleService`: exported=false, foregroundServiceType `specialUse` + `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`
 
 ### Resources — `android/app/src/main/res/`
@@ -176,6 +178,6 @@ git revert <commit-hash>
 - The mini window reuses the real site renderer: `?bubble=1&file=<id>` → `bubble.js` calls the existing `__ss.openFile`, CSS (`body.bubble-mode` in `bubble.css`) compacts it; up to 100 rows shown (padded; more can be added via + Add row); the whole page is zoomed `0.7` to fit.
 - The popup has NO header and NO file-name strip — the panel is closed only by tapping the scrim around the card.
 - A compact topbar stays visible in the mini window: only undo/redo/check/⋮ (`#sheetBtns`); logo, title, back, sheet name, conn status, profile, gear panel, and sync group are hidden.
-- Clipboard automation: on every bubble tap (`FloatingBubbleService.showPanel` → `evaluateJavascript` → `window.__ss.bubbleAutomate`), the clipboard is read via the `Android` bridge. A cookie (contains `c_user=` + `;`) is saved into the first empty `cookies` cell (or flagged as duplicate if the exact string already exists). A base32 2FA key is saved into the first empty `twofakey` cell (or flagged as duplicate), then a fresh TOTP code is generated via `fbcookie.js`'s `__ss.generateTOTP` and written back to the clipboard.
+- Clipboard automation: on every bubble tap (`FloatingBubbleService.showPanel`), a transparent `ClipboardCaptureActivity` briefly takes foreground focus and stores the primary clip in prefs (`bubble_clip`), then `evaluateJavascript` → `window.__ss.bubbleAutomate` reads it through the `Android` bridge (this indirection is REQUIRED — Android 10+ denies clipboard reads from unfocused overlay windows). A cookie (contains `c_user=` + `;`) is saved into the first empty `cookies` cell (or flagged as duplicate if the exact string already exists). A base32 2FA key is saved into the first empty `twofakey` cell (or flagged as duplicate), then a fresh TOTP code is generated via `fbcookie.js`'s `__ss.generateTOTP` and written back to the clipboard.
 - Session cookie is shared automatically via `CookieManager` — no separate login in the mini WebView.
 - Engine-adjacent code to treat carefully: `sheet.js` rendering/persist logic and `server/` persistence — the mini window depends on both.

@@ -42,6 +42,8 @@ public class FloatingBubbleService extends Service {
     private static final int NOTIFICATION_ID = 3;
     private static final String PREFS_NAME = "sheetsubmit";
     private static final String KEY_FILE = "bubble_file";
+    private static final String KEY_CLIP = "bubble_clip";
+    private static final String KEY_CLIP_AT = "bubble_clip_at";
     private static final String HOME_URL = "https://sheetsubmit.up.railway.app";
 
     private WindowManager windowManager;
@@ -271,9 +273,16 @@ public class FloatingBubbleService extends Service {
                         LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
                 card.addView(miniWebView, wlp);
                 miniWebView.onResume();
-                // Clipboard reads on Android 10+ need input focus, which the
-                // overlay window only gains a moment after addView — delay the
-                // automation trigger so getPrimaryClip() isn't empty.
+                // Android 10+ requires app focus to read the clipboard, so a
+                // transparent activity briefly grabs focus and stores the clip
+                // in prefs; the automation then reads it through the bridge.
+                try {
+                    Intent cap = new Intent(this, ClipboardCaptureActivity.class);
+                    cap.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(cap);
+                } catch (Exception ignored) {}
+                // Wait for the capture activity to finish, then trigger the
+                // automation in the mini window.
                 panelRoot.postDelayed(new Runnable() {
                     @Override
                     public void run() {
@@ -281,7 +290,7 @@ public class FloatingBubbleService extends Service {
                             miniWebView.evaluateJavascript("window.__ss&&window.__ss.bubbleAutomate&&window.__ss.bubbleAutomate();", null);
                         } catch (Exception ignored) {}
                     }
-                }, 450);
+                }, 700);
             }
 
             panelRoot.addView(card);
@@ -335,6 +344,14 @@ public class FloatingBubbleService extends Service {
                 @JavascriptInterface
                 public String readClipboard() {
                     try {
+                        // Android 10+ only lets focused apps read the clipboard —
+                        // prefer the value captured by ClipboardCaptureActivity.
+                        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+                        long at = prefs.getLong(KEY_CLIP_AT, 0);
+                        if (at > 0 && System.currentTimeMillis() - at < 15000) {
+                            String captured = prefs.getString(KEY_CLIP, null);
+                            if (captured != null) return captured;
+                        }
                         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                         if (cm != null && cm.hasPrimaryClip() && cm.getPrimaryClip() != null && cm.getPrimaryClip().getItemCount() > 0) {
                             CharSequence cs = cm.getPrimaryClip().getItemAt(0).getText();

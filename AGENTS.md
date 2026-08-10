@@ -39,8 +39,8 @@
   to update.
 
 ### Install flow
-1. Check if ADB device `localhost:5557` is alive (`adb devices` → shows `device`).
-2. If alive:
+1. Run `adb devices`.
+2. If a device is listed (`localhost:5557` shows `device`):
    - Install over the old app WITHOUT uninstalling:
      `adb -s localhost:5557 install -r <apk>`
    - Only uninstall first on:
@@ -48,9 +48,10 @@
      - `INSTALL_FAILED_VERSION_DOWNGRADE` → installed versionCode is higher; uninstall, or fetch the newer artifact.
    - If not installed, install directly.
    - Verify with `adb -s localhost:5557 shell dumpsys package com.sheetsubmit.app`.
-3. If NOT alive: download the APK anyway, then STOP and wait for the user. Do
-   NOT start any emulator/AVD on your own. When the user later says to install
-   after starting the device: `adb -s localhost:5557 install -r <apk>`.
+3. If NOT listed: skip the install (the APK is still available from the
+   `sheetsubmit-apk` artifact). Do NOT start any emulator/AVD on your own.
+   When the user later says to install after starting the device:
+   `adb -s localhost:5557 install -r <apk>`.
 
 ## Device notes
 - App package: `com.sheetsubmit.app`. Device ABI: `arm64-v8a`.
@@ -149,7 +150,7 @@ git revert <commit-hash>
 | `home.js` | Home grid, FAB create-file menu, xlsx import, archive |
 | `sheet.js` | Sheet engine: `openFile`, `renderSheet` (grid HTML), cell editing, check/sync, undo/redo, versions; `__ss.refreshSheet` (lightweight re-render) |
 | `app.js` | Auth check, gear/profile panel, health polling, deep-link restore |
-| `bubble.js` | **Bubble feature (Android-only)** — gear menu row (`#bubbleMenuRow`), FB Cookie file picker modal, `enableBubble` bridge calls; mini-window mode `?bubble=1&file=<id>`: sets `__ss.bubbleRowLimit = 10`, mini title bar, 6s auto-refresh |
+| `bubble.js` | **Bubble feature (Android-only)** — gear menu row (`#bubbleMenuRow`), FB Cookie file picker modal, `enableBubble` bridge calls; mini-window mode `?bubble=1&file=<id>`: sets `__ss.bubbleRowLimit = 10`, 6s auto-refresh (no file-name strip) |
 | `filetypes/` | `fbcookie.js` (cookie/2FA validation, TOTP SHA-1 30s 6-digit), `igcookie.js`, index |
 | `adapters/` | xlsx import adapters |
 
@@ -166,7 +167,14 @@ git revert <commit-hash>
   `.file-type-badge.t-fb`, `.gear-toggle-row`, `.toggle-switch`, grid cells `.rh/.ch/.dc/.row-dot`
 
 ## Floating bubble feature notes (do not regress)
-- Menu row only appears inside the Android app — gate is `window.Android && window.nativeClipboardReady` (bridge injected by `MainActivity`).
-- The mini window reuses the real site renderer: `?bubble=1&file=<id>` → `bubble.js` calls the existing `__ss.openFile`, CSS (`body.bubble-mode` in `bubble.css`) compacts it; only 10 rows shown.
+- Menu row only appears inside the Android app — gate is `window.Android`
+  (bridge registered by `MainActivity`; `nativeClipboardReady` is injected too
+  late for deferred scripts).
+- The mini WebView registers the SAME `Android` bridge (`isApp`,
+  `readClipboard`, `writeClipboard`) via `addJavascriptInterface`, so
+  `BUBBLE_MODE` activates in the mini window too.
+- The mini window reuses the real site renderer: `?bubble=1&file=<id>` → `bubble.js` calls the existing `__ss.openFile`, CSS (`body.bubble-mode` in `bubble.css`) compacts it; only 10 rows shown; the whole page is zoomed `0.7` to fit.
+- The popup has NO header and NO file-name strip — the panel is closed only by tapping the scrim around the card.
+- A compact topbar stays visible in the mini window: only undo/redo/check/⋮ (`#sheetBtns`); logo, title, back, sheet name, conn status, profile, gear panel, and sync group are hidden.
 - Session cookie is shared automatically via `CookieManager` — no separate login in the mini WebView.
 - Engine-adjacent code to treat carefully: `sheet.js` rendering/persist logic and `server/` persistence — the mini window depends on both.

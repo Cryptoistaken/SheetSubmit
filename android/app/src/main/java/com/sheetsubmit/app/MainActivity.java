@@ -195,6 +195,12 @@ public class MainActivity extends Activity {
 
         webView.loadUrl(HOME_URL);
         pollHandler.post(pollRunnable);
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+            if (getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString("bubble_file", null) != null) {
+                FloatingBubbleService.start(this);
+            }
+        }
     }
 
     private void injectClipboardBridge() {

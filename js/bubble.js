@@ -2,8 +2,10 @@
 var __ss = window.__ss;
 var dom = __ss.dom;
 
-// Only exists inside the Android WebView (bridge injected by the app)
-var APP = !!(window.Android && window.nativeClipboardReady);
+// Only exists inside the Android WebView (bridge registered by the app).
+// NOTE: gate on window.Android only — nativeClipboardReady is injected later
+// (onPageFinished), after deferred scripts already ran at DOMContentLoaded.
+var APP = !!window.Android;
 
 var QS = null;
 try { QS = new URLSearchParams(window.location.search); } catch(e) {}
@@ -23,6 +25,13 @@ if (APP && row && toggle) {
         } else {
             try { window.Android.disableBubble(); } catch(e) {}
             __ss.showToast('Floating bubble off');
+        }
+    });
+} else if (row) {
+    window.addEventListener('load', function() {
+        if (window.Android) {
+            row.style.display = '';
+            APP = true;
         }
     });
 }
@@ -111,13 +120,6 @@ if (BUBBLE_MODE) {
         }
         __ss.openFile(fileId).then(function() {
             __ss.bubbleRowLimit = 10;
-            var title = document.createElement('div');
-            title.className = 'bubble-mini-title';
-            title.innerHTML =
-                '<span class="bmt-name"></span>' +
-                '<span class="file-type-badge t-fb">FB Cookie</span>';
-            document.body.appendChild(title);
-            title.querySelector('.bmt-name').textContent = dom.sheetTitleBtn._fullName || 'Sheet';
             window.setInterval(function() {
                 if (__ss.refreshSheet) __ss.refreshSheet();
             }, 6000);

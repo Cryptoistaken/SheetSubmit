@@ -5,12 +5,13 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Point;
 import android.graphics.PixelFormat;
-import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.display.DisplayManager;
 import android.net.Uri;
@@ -18,7 +19,6 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.SystemClock;
 import android.util.Log;
-import android.util.TypedValue;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -26,13 +26,13 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.TextView;
 import android.widget.Toast;
 
 public class FloatingBubbleService extends Service {
@@ -263,34 +263,6 @@ public class FloatingBubbleService extends Service {
             cardParams.topMargin = clamp(bubbleCenterY - panelH / 2, dp(8), Math.max(dp(8), scrH - panelH - dp(8)));
             card.setLayoutParams(cardParams);
 
-            LinearLayout header = new LinearLayout(this);
-            header.setOrientation(LinearLayout.HORIZONTAL);
-            header.setGravity(Gravity.CENTER_VERTICAL);
-            header.setPadding(dp(14), dp(8), dp(4), dp(8));
-
-            TextView title = new TextView(this);
-            title.setText("SheetSubmit");
-            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            title.setTextColor(0xFF18181B);
-            title.setTypeface(title.getTypeface(), Typeface.BOLD);
-            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            title.setLayoutParams(tlp);
-            header.addView(title);
-
-            TextView close = new TextView(this);
-            close.setText("✕");
-            close.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-            close.setTextColor(0xFF71717A);
-            close.setPadding(dp(12), dp(4), dp(12), dp(4));
-            close.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    hidePanel();
-                }
-            });
-            header.addView(close);
-            card.addView(header);
-
             ensureMiniWebView();
             if (miniWebView != null) {
                 ViewGroup oldParent = (ViewGroup) miniWebView.getParent();
@@ -340,6 +312,28 @@ public class FloatingBubbleService extends Service {
             ws.setLoadWithOverviewMode(true);
             ws.setUseWideViewPort(true);
             miniWebView.setWebViewClient(new WebViewClient());
+            miniWebView.addJavascriptInterface(new Object() {
+                @JavascriptInterface
+                public boolean isApp() { return true; }
+                @JavascriptInterface
+                public String readClipboard() {
+                    try {
+                        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                        if (cm != null && cm.hasPrimaryClip() && cm.getPrimaryClip() != null && cm.getPrimaryClip().getItemCount() > 0) {
+                            CharSequence cs = cm.getPrimaryClip().getItemAt(0).getText();
+                            return cs != null ? cs.toString() : "";
+                        }
+                    } catch (Exception ignored) {}
+                    return "";
+                }
+                @JavascriptInterface
+                public void writeClipboard(String text) {
+                    try {
+                        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                        if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("sheetsubmit", text == null ? "" : text));
+                    } catch (Exception ignored) {}
+                }
+            }, "Android");
             SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
             String fileId = prefs.getString(KEY_FILE, "");
             if (!fileId.isEmpty()) {

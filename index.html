@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="css/touch.css" />
     <link rel="stylesheet" href="css/components.css" />
     <link rel="stylesheet" href="css/dashboard.css" />
+    <link rel="stylesheet" href="css/bubble.css" />
     <style>
         .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; }
         .empty-state svg { color: var(--text3); opacity: 0.3; margin-bottom: 16px; }
@@ -270,6 +271,17 @@
                 </label>
             </div>
             <div class="gear-divider"></div>
+            <div class="gear-toggle-row" id="bubbleMenuRow" style="display:none">
+                <div>
+                    <div class="gear-toggle-label">Floating bubble</div>
+                    <div class="gear-toggle-sub">Mini sheet over other apps</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="bubbleToggle" />
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+            <div class="gear-divider"></div>
             <button class="btn btn-ghost" id="logoutBtn" style="width:100%;justify-content:center">Logout</button>
         </div>
     </div>
@@ -482,6 +494,7 @@
     <script src="js/home.js" defer></script>
 <script src="js/sheet.js" defer></script>
 <script src="js/app.js" defer></script>
+<script src="js/bubble.js" defer></script>
 <script>
 (function() {
     var themeToggle = document.getElementById('themeToggle');

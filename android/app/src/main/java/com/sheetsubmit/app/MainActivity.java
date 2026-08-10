@@ -2,17 +2,20 @@ package com.sheetsubmit.app;
 
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.Manifest;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.provider.Settings;
 import android.util.Log;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
@@ -38,6 +41,8 @@ public class MainActivity extends Activity {
     private static final String APP_HOST = "sheetsubmit.up.railway.app";
     private static final String PREFS_NAME = "sheetsubmit";
     private static final String TAG = "SheetSubmit";
+    private static final int REQ_OVERLAY_PERMISSION = 2001;
+    private static final int REQ_NOTIFICATION_PERMISSION = 2002;
 
     private WebView webView;
     private String did;
@@ -157,6 +162,35 @@ public class MainActivity extends Activity {
                     }
                 } catch (Exception e) { Log.e(TAG, "writeClipboard: " + e.getMessage()); }
             }
+
+            @JavascriptInterface
+            public boolean isBubbleEnabled() {
+                SharedPreferences p = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+                return p.getString("bubble_file", null) != null;
+            }
+
+            @JavascriptInterface
+            public void enableBubble(String fileId) {
+                final String fid = fileId == null ? "" : fileId;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        requestEnableBubble(fid);
+                    }
+                });
+            }
+
+            @JavascriptInterface
+            public void disableBubble() {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                                .edit().remove("bubble_file").apply();
+                        FloatingBubbleService.stop(MainActivity.this);
+                    }
+                });
+            }
         }, "Android");
 
         webView.loadUrl(HOME_URL);
@@ -253,6 +287,36 @@ public class MainActivity extends Activity {
             startActivity(intent);
         } catch (Exception e) {
             if (webView != null) webView.loadUrl(url);
+        }
+    }
+
+    private void requestEnableBubble(String fileId) {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit().putString("bubble_file", fileId).apply();
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATION_PERMISSION);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                startActivityForResult(intent, REQ_OVERLAY_PERMISSION);
+            } catch (Exception e) {
+                FloatingBubbleService.start(this);
+            }
+            return;
+        }
+        FloatingBubbleService.start(this);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_OVERLAY_PERMISSION) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+                FloatingBubbleService.start(this);
+            }
         }
     }
 

@@ -2202,4 +2202,23 @@ dom.sheetTitleBtn.addEventListener('click', function() {
     if (state.currentFileId) __ss.promptRenameFile(state.currentFileId);
 });
 
+// ── Lightweight remote refresh (used by the floating mini window) ──
+__ss.refreshSheet = async function() {
+    var id = state.currentFileId;
+    if (!id) return;
+    try {
+        var rows = await api.getRows(id);
+        if (id !== state.currentFileId) return;
+        state.rows = rows || [];
+        while (state.rows.length < 100) state.rows.push(__ss.makeEmptyRow(state.COLUMNS));
+        var full = state.rows;
+        var limit = __ss.bubbleRowLimit || 0;
+        if (limit > 0) state.rows = full.slice(0, limit);
+        renderSheet();
+        findDuplicates();
+        renderSheet();
+        state.rows = full;
+    } catch(e) {}
+};
+
 })();

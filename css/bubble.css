@@ -1,0 +1,73 @@
+/* ── Floating bubble mini-window (Android overlay) ── */
+
+body.bubble-mode {
+    background: var(--bg);
+}
+
+body.bubble-mode .topbar,
+body.bubble-mode #homeFab,
+body.bubble-mode #homeView,
+body.bubble-mode .qeb-bar,
+body.bubble-mode .sel-bar,
+body.bubble-mode .conn-status,
+body.bubble-mode #loginScreen { display: none !important; }
+
+body.bubble-mode #sheetView {
+    display: flex !important;
+    flex-direction: column;
+    position: fixed;
+    inset: 0;
+}
+
+body.bubble-mode #sheetView .sheet-wrap { flex: 1; }
+
+.bubble-mini-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    flex-shrink: 0;
+}
+
+.bubble-mini-title .bmt-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.bubble-mini-title .file-type-badge { margin-top: 0; flex-shrink: 0; }
+
+/* Compact grid for the small window */
+body.bubble-mode table.grid tbody tr { contain-intrinsic-size: 24px; }
+body.bubble-mode table.grid th.corner,
+body.bubble-mode table.grid th.rh { width: 26px; min-width: 26px; height: 24px; font-size: 10px; }
+body.bubble-mode table.grid th.ch { height: 24px; font-size: 10px; }
+body.bubble-mode table.grid th.ch-dot { width: 26px; min-width: 26px; height: 24px; font-size: 10px; }
+body.bubble-mode table.grid td.dc { height: 24px; }
+body.bubble-mode table.grid td.dc .cell-text { font-size: 11px; line-height: 1.2; }
+body.bubble-mode table.grid td.dot-cell { padding: 0 6px; }
+body.bubble-mode .row-dot { width: 8px; height: 8px; }
+body.bubble-mode tr.add-row td { height: 24px; }
+body.bubble-mode tr.add-row .add-col { font-size: 11px; }
+
+/* File picker list inside the bubble modal (reuses .home-fab-item rows) */
+.bubble-picker {
+    max-height: 45vh;
+    overflow-y: auto;
+    margin: 2px -4px;
+}
+
+.bubble-picker-empty {
+    font-size: 13px;
+    color: var(--text3);
+    text-align: center;
+    padding: 14px 4px;
+}

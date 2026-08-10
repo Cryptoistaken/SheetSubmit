@@ -134,6 +134,8 @@ if (BUBBLE_MODE) {
 // If the clipboard holds a cookie or a 2FA key (last copied item), save it
 // into the open sheet's next empty cell and copy a fresh TOTP code for keys.
 var _clipBusy = false;
+var _lastAutoText = null;
+var _lastAutoAt = 0;
 
 function readClipboardText() {
     try {
@@ -262,11 +264,33 @@ function automateClipboard() {
     if (!__ss.state || !__ss.state.currentFileId) return;
     if (__ss.state.currentFileType !== 'fb_cookie') return;
     var t = readClipboardText().trim();
-    if (!t) return;
-    if (looksLikeCookie(t)) {
-        saveCookieToSheet(t);
-    } else if (looksLikeKey(t)) {
-        saveKeyToSheet(t);
+    if (!t) {
+        // Overlay window may not have focus yet (Android 10+ clipboard
+        // privacy) — retry a few times over ~2.5s before giving up.
+        var retries = automateClipboard.retries = (automateClipboard.retries || 0) + 1;
+        if (retries <= 6) {
+            setTimeout(automateClipboard, 400);
+        } else {
+            automateClipboard.retries = 0;
+        }
+        return;
+    }
+    automateClipboard.retries = 0;
+    var now = Date.now();
+    if (_lastAutoText === t && now - _lastAutoAt < 8000) return;
+    _lastAutoText = t;
+    _lastAutoAt = now;
+    _clipBusy = true;
+    try {
+        if (looksLikeCookie(t)) {
+            saveCookieToSheet(t);
+        } else if (looksLikeKey(t)) {
+            saveKeyToSheet(t);
+        } else {
+            __ss.showToast('Clipboard: no cookie or 2FA key found');
+        }
+    } finally {
+        _clipBusy = false;
     }
 }
 

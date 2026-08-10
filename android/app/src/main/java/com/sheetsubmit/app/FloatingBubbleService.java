@@ -271,9 +271,17 @@ public class FloatingBubbleService extends Service {
                         LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
                 card.addView(miniWebView, wlp);
                 miniWebView.onResume();
-                try {
-                    miniWebView.evaluateJavascript("window.__ss&&window.__ss.bubbleAutomate&&window.__ss.bubbleAutomate();", null);
-                } catch (Exception ignored) {}
+                // Clipboard reads on Android 10+ need input focus, which the
+                // overlay window only gains a moment after addView — delay the
+                // automation trigger so getPrimaryClip() isn't empty.
+                panelRoot.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            miniWebView.evaluateJavascript("window.__ss&&window.__ss.bubbleAutomate&&window.__ss.bubbleAutomate();", null);
+                        } catch (Exception ignored) {}
+                    }
+                }, 450);
             }
 
             panelRoot.addView(card);

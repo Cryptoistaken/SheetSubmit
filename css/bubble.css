@@ -7,7 +7,6 @@ body.bubble-mode {
 
 body.bubble-mode #homeFab,
 body.bubble-mode #homeView,
-body.bubble-mode .qeb-bar,
 body.bubble-mode .sel-bar,
 body.bubble-mode .conn-status,
 body.bubble-mode #loginScreen { display: none !important; }
@@ -35,6 +34,18 @@ body.bubble-mode #sheetView {
 }
 
 body.bubble-mode #sheetView .sheet-wrap { flex: 1; }
+
+/* ⋮ menu must stay inside the small mini window */
+body.bubble-mode .sheet-more-menu {
+    top: 52px !important;
+    bottom: auto !important;
+    right: 8px !important;
+    max-height: calc(100vh - 64px) !important;
+    overflow-y: auto !important;
+}
+
+/* Quick-edit pill keeps working inside the popup */
+body.bubble-mode .qeb-bar { z-index: 700; }
 
 /* Compact grid for the small window */
 body.bubble-mode table.grid tbody tr { contain-intrinsic-size: 24px; }

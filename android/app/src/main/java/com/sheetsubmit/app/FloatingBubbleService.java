@@ -281,16 +281,20 @@ public class FloatingBubbleService extends Service {
                     cap.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     startActivity(cap);
                 } catch (Exception ignored) {}
-                // Wait for the capture activity to finish, then trigger the
-                // automation in the mini window.
-                panelRoot.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            miniWebView.evaluateJavascript("window.__ss&&window.__ss.bubbleAutomate&&window.__ss.bubbleAutomate();", null);
-                        } catch (Exception ignored) {}
-                    }
-                }, 700);
+// Wait for the capture activity to finish, then hand input focus
+            // back to the panel (typing in the mini WebView needs it) and
+            // trigger the automation in the mini window.
+            panelRoot.setFocusableInTouchMode(true);
+            panelRoot.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        panelRoot.requestFocus();
+                        if (miniWebView != null) miniWebView.requestFocus();
+                        miniWebView.evaluateJavascript("window.__ss&&window.__ss.bubbleAutomate&&window.__ss.bubbleAutomate();", null);
+                    } catch (Exception ignored) {}
+                }
+            }, 700);
             }
 
             panelRoot.addView(card);

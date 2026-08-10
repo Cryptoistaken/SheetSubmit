@@ -1135,6 +1135,7 @@ function openQuickEdit(rowIdx, colKey) {
     dom.qebChip.textContent = col ? col.label : colKey;
     dom.qebInput.value = row[colKey] || '';
     dom.qebBar.classList.add('open');
+    setTimeout(function() { dom.qebInput.focus(); }, 50);
     var td = _cellMap.get(rowIdx + ':' + colKey);
     state.selectedCell.domText = td ? td.querySelector('.cell-text') : null;
     __ss.highlightCell(td);

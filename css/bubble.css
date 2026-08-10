@@ -44,8 +44,20 @@ body.bubble-mode .sheet-more-menu {
     overflow-y: auto !important;
 }
 
-/* Quick-edit pill keeps working inside the popup */
-body.bubble-mode .qeb-bar { z-index: 700; }
+/* Quick-edit pill keeps working inside the popup — counter-scale the 0.7
+   page zoom so it renders at the same size as the real site, pinned to the
+   bottom edge of the mini window like the main app */
+body.bubble-mode .qeb-bar {
+    left: 4px !important;
+    right: 4px !important;
+    bottom: 4px !important;
+    top: auto !important;
+    max-width: none !important;
+    zoom: 1.4285;
+    z-index: 700;
+}
+body.bubble-mode .qeb-input { font-size: 13px; }
+body.bubble-mode .qeb-chip { font-size: 10px; }
 
 /* Compact grid for the small window */
 body.bubble-mode table.grid tbody tr { contain-intrinsic-size: 24px; }

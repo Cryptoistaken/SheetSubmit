@@ -150,7 +150,7 @@ git revert <commit-hash>
 | `home.js` | Home grid, FAB create-file menu, xlsx import, archive |
 | `sheet.js` | Sheet engine: `openFile`, `renderSheet` (grid HTML), cell editing, check/sync, undo/redo, versions; `__ss.refreshSheet` (lightweight re-render) |
 | `app.js` | Auth check, gear/profile panel, health polling, deep-link restore |
-| `bubble.js` | **Bubble feature (Android-only)** — gear menu row (`#bubbleMenuRow`), FB Cookie file picker modal, `enableBubble` bridge calls; mini-window mode `?bubble=1&file=<id>`: sets `__ss.bubbleRowLimit = 10`, 6s auto-refresh (no file-name strip) |
+| `bubble.js` | **Bubble feature (Android-only)** — gear menu row (`#bubbleMenuRow`), FB Cookie file picker modal, `enableBubble` bridge calls; mini-window mode `?bubble=1&file=<id>`: sets `__ss.bubbleRowLimit = 100`, 6s auto-refresh (no file-name strip); clipboard automation (`__ss.bubbleAutomate` — saves cookie/2FA from clipboard, copies fresh TOTP code) |
 | `filetypes/` | `fbcookie.js` (cookie/2FA validation, TOTP SHA-1 30s 6-digit), `igcookie.js`, index |
 | `adapters/` | xlsx import adapters |
 
@@ -173,8 +173,9 @@ git revert <commit-hash>
 - The mini WebView registers the SAME `Android` bridge (`isApp`,
   `readClipboard`, `writeClipboard`) via `addJavascriptInterface`, so
   `BUBBLE_MODE` activates in the mini window too.
-- The mini window reuses the real site renderer: `?bubble=1&file=<id>` → `bubble.js` calls the existing `__ss.openFile`, CSS (`body.bubble-mode` in `bubble.css`) compacts it; only 10 rows shown; the whole page is zoomed `0.7` to fit.
+- The mini window reuses the real site renderer: `?bubble=1&file=<id>` → `bubble.js` calls the existing `__ss.openFile`, CSS (`body.bubble-mode` in `bubble.css`) compacts it; up to 100 rows shown (padded; more can be added via + Add row); the whole page is zoomed `0.7` to fit.
 - The popup has NO header and NO file-name strip — the panel is closed only by tapping the scrim around the card.
 - A compact topbar stays visible in the mini window: only undo/redo/check/⋮ (`#sheetBtns`); logo, title, back, sheet name, conn status, profile, gear panel, and sync group are hidden.
+- Clipboard automation: on every bubble tap (`FloatingBubbleService.showPanel` → `evaluateJavascript` → `window.__ss.bubbleAutomate`), the clipboard is read via the `Android` bridge. A cookie (contains `c_user=` + `;`) is saved into the first empty `cookies` cell (or flagged as duplicate if the exact string already exists). A base32 2FA key is saved into the first empty `twofakey` cell (or flagged as duplicate), then a fresh TOTP code is generated via `fbcookie.js`'s `__ss.generateTOTP` and written back to the clipboard.
 - Session cookie is shared automatically via `CookieManager` — no separate login in the mini WebView.
 - Engine-adjacent code to treat carefully: `sheet.js` rendering/persist logic and `server/` persistence — the mini window depends on both.

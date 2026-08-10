@@ -3,6 +3,10 @@ var __ss = window.__ss;
 var _totpCache = new Map();
 
 // ── TOTP (same algorithm as IG) ──
+__ss.generateTOTP = function(secret) {
+    return _generateTOTP(secret);
+};
+
 function _generateTOTP(secret) {
     if (!secret) return '';
     secret = secret.replace(/\s/g, '').toUpperCase();

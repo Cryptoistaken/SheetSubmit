@@ -119,7 +119,8 @@ if (BUBBLE_MODE) {
             return;
         }
         __ss.openFile(fileId).then(function() {
-            __ss.bubbleRowLimit = 10;
+            __ss.bubbleRowLimit = 100;
+            automateClipboard();
             window.setInterval(function() {
                 if (__ss.refreshSheet) __ss.refreshSheet();
             }, 6000);
@@ -127,6 +128,146 @@ if (BUBBLE_MODE) {
     }
 
     boot();
+}
+
+// ── Clipboard automation ──
+// If the clipboard holds a cookie or a 2FA key (last copied item), save it
+// into the open sheet's next empty cell and copy a fresh TOTP code for keys.
+var _clipBusy = false;
+
+function readClipboardText() {
+    try {
+        if (window.Android && window.Android.readClipboard) {
+            return window.Android.readClipboard() || '';
+        }
+    } catch (e) {}
+    return '';
+}
+
+function writeClipboardText(t) {
+    try {
+        if (window.Android && window.Android.writeClipboard) {
+            window.Android.writeClipboard(String(t));
+            return true;
+        }
+    } catch (e) {}
+    return false;
+}
+
+function looksLikeCookie(t) {
+    return t.indexOf('c_user=') !== -1 && t.indexOf(';') !== -1 && t.indexOf('=') !== -1;
+}
+
+function looksLikeKey(t) {
+    var cleaned = (t || '').replace(/[\s\-]/g, '').toUpperCase();
+    return cleaned.length >= 10 && /^[A-Z2-7]+$/.test(cleaned);
+}
+
+function normalizeKey(t) {
+    return (t || '').replace(/[\s\-]/g, '').toUpperCase();
+}
+
+function findEmptyCell(colKey) {
+    var rows = __ss.state.rows || [];
+    for (var i = 0; i < rows.length; i++) {
+        if (!rows[i][colKey]) return i;
+    }
+    return -1;
+}
+
+function findValueCell(colKey, value) {
+    var rows = __ss.state.rows || [];
+    for (var i = 0; i < rows.length; i++) {
+        if (rows[i][colKey] && rows[i][colKey] === value) return i;
+    }
+    return -1;
+}
+
+function persistBubbleRows() {
+    var payload = {
+        rows: __ss.cloneRows(__ss.state.rows),
+        logs: __ss.state.apiLogs || [],
+        undo: __ss.state.undoStack || [],
+        redo: __ss.state.redoStack || [],
+        action: 'bubble'
+    };
+    return __ss.api.persist(__ss.state.currentFileId, payload);
+}
+
+function refreshBubbleWidgets() {
+    if (__ss.refreshSheet) __ss.refreshSheet();
+}
+
+function saveCookieToSheet(text) {
+    var dupe = findValueCell('cookies', text);
+    if (dupe !== -1) {
+        __ss.showToast('Duplicate cookie — already at row ' + (dupe + 1));
+        return;
+    }
+    var idx = findEmptyCell('cookies');
+    if (idx === -1) {
+        __ss.showToast('No empty cookie row');
+        return;
+    }
+    __ss.state.rows[idx].cookies = text;
+    var behavior = __ss.getFileBehavior(__ss.state.currentFileType);
+    if (behavior && behavior.onCellChange) {
+        behavior.onCellChange(idx, 'cookies', text, __ss.state);
+    }
+    __ss.vibrate(15);
+    __ss.showToast('Cookie saved at row ' + (idx + 1));
+    persistBubbleRows().catch(function() {});
+    refreshBubbleWidgets(idx + ':cookies');
+}
+
+function saveKeyToSheet(text) {
+    var key = normalizeKey(text);
+    var dupe = null;
+    var rows = __ss.state.rows || [];
+    for (var i = 0; i < rows.length; i++) {
+        if (rows[i].twofakey && normalizeKey(rows[i].twofakey) === key) { dupe = i; break; }
+    }
+    if (dupe !== null) {
+        __ss.showToast('Duplicate 2FA key — already at row ' + (dupe + 1));
+        return;
+    }
+    var idx = findEmptyCell('twofakey');
+    if (idx === -1) {
+        __ss.showToast('No empty 2FA row');
+        return;
+    }
+    __ss.state.rows[idx].twofakey = key;
+    var behavior = __ss.getFileBehavior(__ss.state.currentFileType);
+    if (behavior && behavior.onCellChange) {
+        behavior.onCellChange(idx, 'twofakey', key, __ss.state);
+    }
+    __ss.vibrate(15);
+    __ss.showToast('2FA key saved at row ' + (idx + 1));
+    persistBubbleRows().catch(function() {});
+    refreshBubbleWidgets(idx + ':twofakey');
+    if (__ss.generateTOTP) {
+        __ss.generateTOTP(key).then(function(code) {
+            if (code) {
+                writeClipboardText(code);
+                __ss.showToast('2FA code copied: ' + code);
+            }
+        }).catch(function() {});
+    }
+}
+
+__ss.bubbleAutomate = automateClipboard;
+
+function automateClipboard() {
+    if (_clipBusy) return;
+    if (!__ss.state || !__ss.state.currentFileId) return;
+    if (__ss.state.currentFileType !== 'fb_cookie') return;
+    var t = readClipboardText().trim();
+    if (!t) return;
+    if (looksLikeCookie(t)) {
+        saveCookieToSheet(t);
+    } else if (looksLikeKey(t)) {
+        saveKeyToSheet(t);
+    }
 }
 
 })();

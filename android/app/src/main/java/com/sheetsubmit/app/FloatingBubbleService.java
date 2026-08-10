@@ -271,6 +271,9 @@ public class FloatingBubbleService extends Service {
                         LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
                 card.addView(miniWebView, wlp);
                 miniWebView.onResume();
+                try {
+                    miniWebView.evaluateJavascript("window.__ss&&window.__ss.bubbleAutomate&&window.__ss.bubbleAutomate();", null);
+                } catch (Exception ignored) {}
             }
 
             panelRoot.addView(card);
@@ -311,7 +314,13 @@ public class FloatingBubbleService extends Service {
             ws.setDatabaseEnabled(true);
             ws.setLoadWithOverviewMode(true);
             ws.setUseWideViewPort(true);
-            miniWebView.setWebViewClient(new WebViewClient());
+            miniWebView.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+                    injectClipboardBridge(view);
+                }
+            });
             miniWebView.addJavascriptInterface(new Object() {
                 @JavascriptInterface
                 public boolean isApp() { return true; }
@@ -345,6 +354,17 @@ public class FloatingBubbleService extends Service {
             Log.e(TAG, "ensureMiniWebView failed", e);
             miniWebView = null;
         }
+    }
+
+    private void injectClipboardBridge(WebView view) {
+        String shim = "(function(){" +
+            "if(window.Android&&window.Android.readClipboard&&window.Android.writeClipboard){" +
+            "navigator.clipboard.readText=function(){return new Promise(function(res,rej){try{res(window.Android.readClipboard());}catch(e){rej(e);}});};" +
+            "navigator.clipboard.writeText=function(t){window.Android.writeClipboard(String(t));return Promise.resolve();};" +
+            "navigator.clipboard.read=function(){return Promise.reject(new Error('not supported'));};" +
+            "window.nativeClipboardReady=true;}" +
+            "})();";
+        view.evaluateJavascript(shim, null);
     }
 
     private void hidePanel() {

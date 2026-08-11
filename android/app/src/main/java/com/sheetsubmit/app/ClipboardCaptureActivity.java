@@ -39,11 +39,13 @@ public class ClipboardCaptureActivity extends Activity {
                 CharSequence cs = cm.getPrimaryClip().getItemAt(0).getText();
                 if (cs != null) text = cs.toString();
             }
-            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                    .edit()
-                    .putString(KEY_CLIP, text)
-                    .putLong(KEY_CLIP_AT, System.currentTimeMillis())
-                    .apply();
+            if (!text.isEmpty()) {
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                        .edit()
+                        .putString(KEY_CLIP, text)
+                        .putLong(KEY_CLIP_AT, System.currentTimeMillis())
+                        .apply();
+            }
         } catch (Exception e) {
             // transient; automation falls back to a direct read which may fail
             // without focus — acceptable

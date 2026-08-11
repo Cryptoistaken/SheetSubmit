@@ -119,6 +119,7 @@ git revert <commit-hash>
 | `package.json` | `bun run server/index.js` (start), `bun --watch` (dev) |
 | `.github/workflows/build-android.yml` | **ONLY** Android APK build (CI; `main` + `android/**`) |
 | `android/` | Android app (WebView wrapper + bubble service) |
+| `docs/` | Documentation (`bubble-analysis.md` — bubble edge cases & fixes) |
 
 ### `android/app/build.gradle` (app module)
 - compileSdk 34, minSdk 26, targetSdk 34; namespace/applicationId `com.sheetsubmit.app`
@@ -130,9 +131,9 @@ git revert <commit-hash>
 ### Java source — `android/app/src/main/java/com/sheetsubmit/app/`
 | File | Responsibility |
 |---|---|
-| `MainActivity.java` | WebView host; loads `HOME_URL`; JS bridge `Android` (`readClipboard`, `writeClipboard`, `isBubbleEnabled`, `enableBubble`, `disableBubble`); device-login polling (`/api/auth/device` → session cookie via CookieManager); URL routing (tg:// and t.me open externally with device token, APP_HOST loads in-app) |
+| `MainActivity.java` | WebView host; loads `HOME_URL`; JS bridge `Android` (`readClipboard`, `writeClipboard`, `isBubbleEnabled`, `enableBubble`, `disableBubble`, `getBubbleFile`); device-login polling (`/api/auth/device` → session cookie via CookieManager); URL routing (tg:// and t.me open externally with device token, APP_HOST loads in-app) |
 | `ClipboardCaptureActivity.java` | **Transparent activity** — briefly takes foreground focus so the app may read the clipboard on Android 10+; stores primary clip in prefs (`bubble_clip` + `bubble_clip_at`), finishes instantly; launched by `FloatingBubbleService.showPanel` before bubble automation |
-| `FloatingBubbleService.java` | **Bubble** — 60dp draggable overlay (TYPE_APPLICATION_OVERLAY, display context), tap opens ~240×300dp mini panel with a WebView loading `HOME_URL/?bubble=1&file=<id>`; foreground service (specialUse), `START_STICKY`; file id from prefs key `bubble_file` |
+| `FloatingBubbleService.java` | **Bubble** — 60dp draggable overlay (TYPE_APPLICATION_OVERLAY, display context), tap opens ~240×300dp mini panel with a WebView loading `HOME_URL/?bubble=1&file=<id>`; foreground service (specialUse), `START_STICKY`; file id from prefs key `bubble_file`; validates file exists on start; saves/restores bubble position; rapid-tap guard; polls clipboard capture instead of fixed delay; checks WebView usability before reuse |
 
 ### Manifest — `android/app/src/main/AndroidManifest.xml`
 - Permissions: INTERNET, VIBRATE, WRITE_EXTERNAL_STORAGE (maxSdk 28), SYSTEM_ALERT_WINDOW, FOREGROUND_SERVICE, FOREGROUND_SERVICE_SPECIAL_USE, POST_NOTIFICATIONS
@@ -152,7 +153,7 @@ git revert <commit-hash>
 | `home.js` | Home grid, FAB create-file menu, xlsx import, archive |
 | `sheet.js` | Sheet engine: `openFile`, `renderSheet` (grid HTML), cell editing, check/sync, undo/redo, versions; `__ss.refreshSheet` (lightweight re-render) |
 | `app.js` | Auth check, gear/profile panel, health polling, deep-link restore |
-| `bubble.js` | **Bubble feature (Android-only)** — gear menu row (`#bubbleMenuRow`), FB Cookie file picker modal, `enableBubble` bridge calls; mini-window mode `?bubble=1&file=<id>`: sets `__ss.bubbleRowLimit = 100`, 6s auto-refresh (no file-name strip); clipboard automation (`__ss.bubbleAutomate` — saves cookie/2FA from clipboard, copies fresh TOTP code) |
+| `bubble.js` | **Bubble feature (Android-only)** — gear menu row (`#bubbleMenuRow`), FB Cookie file picker modal, `enableBubble` bridge calls; mini-window mode `?bubble=1&file=<id>`: sets `__ss.bubbleRowLimit = 100`, 6s auto-refresh; clipboard automation (`__ss.bubbleAutomate` — saves cookie/2FA from clipboard, copies fresh TOTP code); boot validates file type; auto-extends rows when full; links 2FA keys to existing cookie rows; 15s dedup with feedback toast |
 | `filetypes/` | `fbcookie.js` (cookie/2FA validation, TOTP SHA-1 30s 6-digit), `igcookie.js`, index |
 | `adapters/` | xlsx import adapters |
 

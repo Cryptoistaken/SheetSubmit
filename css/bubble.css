@@ -43,14 +43,15 @@ body.bubble-mode .sheet-more-menu {
     overflow-y: auto !important;
 }
 
-/* Quick-edit pill — no zoom hacks, just pin to the bottom edge of the
-   mini window at native scale so it matches the grid above it */
+/* Quick-edit pill — 30% smaller (scaled down) in bubble mode */
 body.bubble-mode .qeb-bar {
-    left: 4px !important;
-    right: 4px !important;
-    bottom: 4px !important;
+    left: auto !important;
+    right: 8px !important;
+    bottom: 8px !important;
     top: auto !important;
     z-index: 700;
+    transform: scale(0.7);
+    transform-origin: bottom right;
 }
 
 /* Compact grid for the small window — native scale, sized to fit */

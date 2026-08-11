@@ -454,6 +454,10 @@ if (dom.checkArrowBtn && dom.checkDropdown) {
             dom.checkDropdown.style.right = (window.innerWidth - rect.right) + 'px';
             dom.checkDropdown.classList.add('open');
             dom.checkArrowBtn.classList.add('open');
+            if (dom.waCheckSection) {
+                var waIsAdmin = !!(__ss.currentUser && __ss.currentUser.isAdmin);
+                dom.waCheckSection.style.display = waIsAdmin ? '' : 'none';
+            }
         }
     });
 }
@@ -483,8 +487,7 @@ if (dom.autoCheckToggle) {
 // ── Page check toggle (admin only) ──
 var waCheckOn = localStorage.getItem('ss_waCheck') === 'true';
 if (dom.waCheckSection) {
-    var waIsAdmin = !!(__ss.currentUser && __ss.currentUser.isAdmin);
-    dom.waCheckSection.style.display = waIsAdmin ? '' : 'none';
+    dom.waCheckSection.style.display = 'none';
 }
 if (dom.waCheckToggle) {
     if (waCheckOn) dom.waCheckToggle.classList.add('on');
@@ -845,14 +848,16 @@ function setupGridDelegation() {
 
         if (rh && state.currentFileId) { toggleSelection('row', parseInt(rh.dataset.row)); return; }
         if (dot && state.currentFileId) {
-            var behavior = __ss.getFileBehavior(state.currentFileType);
-            if (behavior && behavior.onDotDoubleTap) {
-                var row = state.rows[parseInt(dot.dataset.row)];
-                behavior.onDotDoubleTap(row).then(function(result) {
-                    if (result && result.action === 'totp_copied') {
-                        __ss.showToast('TOTP ' + result.code + ' copied');
-                    }
-                });
+            if (!window.__ss || !window.__ss.bubbleGetActiveRow) {
+                var behavior = __ss.getFileBehavior(state.currentFileType);
+                if (behavior && behavior.onDotDoubleTap) {
+                    var row = state.rows[parseInt(dot.dataset.row)];
+                    behavior.onDotDoubleTap(row).then(function(result) {
+                        if (result && result.action === 'totp_copied') {
+                            __ss.showToast('TOTP ' + result.code + ' copied');
+                        }
+                    });
+                }
             }
             return;
         }
@@ -1135,7 +1140,6 @@ function openQuickEdit(rowIdx, colKey) {
     dom.qebChip.textContent = col ? col.label : colKey;
     dom.qebInput.value = row[colKey] || '';
     dom.qebBar.classList.add('open');
-    setTimeout(function() { dom.qebInput.focus(); }, 50);
     var td = _cellMap.get(rowIdx + ':' + colKey);
     state.selectedCell.domText = td ? td.querySelector('.cell-text') : null;
     __ss.highlightCell(td);

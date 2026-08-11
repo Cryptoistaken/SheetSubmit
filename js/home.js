@@ -237,6 +237,15 @@ __ss.showConfirm = function(message, okText) {
 __ss.deleteFile = async function(id) {
     var ok = await __ss.showConfirm('Move this file to archive?', 'Archive');
     if (!ok) return;
+    if (window.Android) {
+        try {
+            var bubbleFile = window.Android.getBubbleFile();
+            if (bubbleFile === id) {
+                window.Android.disableBubble();
+                __ss.showToast('Floating bubble disabled — file archived');
+            }
+        } catch(e) {}
+    }
     await api.deleteFile(id);
     resetCrossDupCounts();
     __ss.renderHome();

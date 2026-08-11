@@ -46,6 +46,13 @@ function closePicker(ov) {
     ov.classList.remove('open');
     setTimeout(function() {
         if (ov.parentNode) ov.parentNode.removeChild(ov);
+        if (toggle && toggle.checked) {
+            try {
+                if (!window.Android.isBubbleEnabled()) {
+                    toggle.checked = false;
+                }
+            } catch(e) {}
+        }
     }, 150);
 }
 
@@ -119,23 +126,74 @@ if (BUBBLE_MODE) {
             return;
         }
         __ss.openFile(fileId).then(function() {
+            if (__ss.state.currentFileType !== 'fb_cookie') {
+                __ss.showToast('Bubble file must be FB Cookie type — please re-enable bubble');
+                return;
+            }
             __ss.bubbleRowLimit = 100;
+            getActiveRow();
             automateClipboard();
             window.setInterval(function() {
                 if (__ss.refreshSheet) __ss.refreshSheet();
             }, 6000);
+            setupBubbleDotHandler();
+        }).catch(function() {
+            __ss.showToast('Failed to load bubble file');
+        });
+    }
+
+    function setupBubbleDotHandler() {
+        var _dotTapCount = 0, _dotTimer = null;
+        dom.grid.addEventListener('click', function(e) {
+            var dot = e.target.closest('.dot-cell');
+            if (!dot) return;
+            var rowIdx = parseInt(dot.dataset.row);
+            if (rowIdx !== getActiveRow()) return;
+            _dotTapCount++;
+            if (_dotTimer) clearTimeout(_dotTimer);
+            if (_dotTapCount >= 2) {
+                _dotTapCount = 0;
+                skipNo2FA();
+                return;
+            }
+            _dotTimer = setTimeout(function() { _dotTapCount = 0; }, 400);
         });
     }
 
     boot();
 }
 
-// ── Clipboard automation ──
-// If the clipboard holds a cookie or a 2FA key (last copied item), save it
-// into the open sheet's next empty cell and copy a fresh TOTP code for keys.
+// ── Clipboard automation — single-account flow ──
+// One active row at a time. Cookie fills active row's cookies cell.
+// 2FA key fills active row's twofakey cell then advances.
+// Double-tap dot on active row = skip 2FA, advance to next account.
 var _clipBusy = false;
 var _lastAutoText = null;
 var _lastAutoAt = 0;
+var _bubbleActiveRow = -1;
+
+function getActiveRow() {
+    var rows = __ss.state.rows || [];
+    if (_bubbleActiveRow >= 0 && _bubbleActiveRow < rows.length && !rows[_bubbleActiveRow].cookies) {
+        return _bubbleActiveRow;
+    }
+    for (var i = 0; i < rows.length; i++) {
+        if (!rows[i].cookies) { _bubbleActiveRow = i; return i; }
+    }
+    _bubbleActiveRow = rows.length;
+    __ss.state.rows.push(__ss.makeEmptyRow(__ss.state.COLUMNS));
+    return _bubbleActiveRow;
+}
+
+function advanceActiveRow() {
+    _bubbleActiveRow++;
+    var rows = __ss.state.rows || [];
+    while (_bubbleActiveRow >= rows.length) {
+        __ss.state.rows.push(__ss.makeEmptyRow(__ss.state.COLUMNS));
+        rows = __ss.state.rows;
+    }
+    refreshBubbleWidgets();
+}
 
 function readClipboardText() {
     try {
@@ -179,8 +237,9 @@ function findEmptyCell(colKey) {
 
 function findValueCell(colKey, value) {
     var rows = __ss.state.rows || [];
+    var normalized = (value || '').trim();
     for (var i = 0; i < rows.length; i++) {
-        if (rows[i][colKey] && rows[i][colKey] === value) return i;
+        if (rows[i][colKey] && (rows[i][colKey] || '').trim() === normalized) return i;
     }
     return -1;
 }
@@ -206,18 +265,14 @@ function saveCookieToSheet(text) {
         __ss.showToast('Duplicate cookie — already at row ' + (dupe + 1));
         return;
     }
-    var idx = findEmptyCell('cookies');
-    if (idx === -1) {
-        __ss.showToast('No empty cookie row');
-        return;
-    }
+    var idx = getActiveRow();
     __ss.state.rows[idx].cookies = text;
     var behavior = __ss.getFileBehavior(__ss.state.currentFileType);
     if (behavior && behavior.onCellChange) {
         behavior.onCellChange(idx, 'cookies', text, __ss.state);
     }
     __ss.vibrate(15);
-    __ss.showToast('Cookie saved at row ' + (idx + 1));
+    __ss.showToast('Cookie ' + (idx + 1) + ' saved — now copy 2FA key or double-tap dot to skip');
     persistBubbleRows().catch(function() {});
     refreshBubbleWidgets(idx + ':cookies');
 }
@@ -233,18 +288,18 @@ function saveKeyToSheet(text) {
         __ss.showToast('Duplicate 2FA key — already at row ' + (dupe + 1));
         return;
     }
-    var idx = findEmptyCell('twofakey');
-    if (idx === -1) {
-        __ss.showToast('No empty 2FA row');
+    var idx = getActiveRow();
+    if (!rows[idx].cookies) {
+        __ss.showToast('Copy cookie first for account ' + (idx + 1));
         return;
     }
-    __ss.state.rows[idx].twofakey = key;
+    rows[idx].twofakey = key;
     var behavior = __ss.getFileBehavior(__ss.state.currentFileType);
     if (behavior && behavior.onCellChange) {
         behavior.onCellChange(idx, 'twofakey', key, __ss.state);
     }
     __ss.vibrate(15);
-    __ss.showToast('2FA key saved at row ' + (idx + 1));
+    __ss.showToast('2FA ' + (idx + 1) + ' saved ✓ — next account');
     persistBubbleRows().catch(function() {});
     refreshBubbleWidgets(idx + ':twofakey');
     if (__ss.generateTOTP) {
@@ -255,9 +310,18 @@ function saveKeyToSheet(text) {
             }
         }).catch(function() {});
     }
+    advanceActiveRow();
+}
+
+function skipNo2FA() {
+    var idx = getActiveRow();
+    __ss.showToast('Account ' + (idx + 1) + ' — no 2FA, skipped');
+    __ss.vibrate(15);
+    advanceActiveRow();
 }
 
 __ss.bubbleAutomate = automateClipboard;
+__ss.bubbleGetActiveRow = getActiveRow;
 
 function automateClipboard() {
     if (_clipBusy) return;
@@ -265,19 +329,21 @@ function automateClipboard() {
     if (__ss.state.currentFileType !== 'fb_cookie') return;
     var t = readClipboardText().trim();
     if (!t) {
-        // Overlay window may not have focus yet (Android 10+ clipboard
-        // privacy) — retry a few times over ~2.5s before giving up.
         var retries = automateClipboard.retries = (automateClipboard.retries || 0) + 1;
         if (retries <= 6) {
             setTimeout(automateClipboard, 400);
         } else {
             automateClipboard.retries = 0;
+            __ss.showToast('Clipboard is empty — copy a cookie or 2FA key first');
         }
         return;
     }
     automateClipboard.retries = 0;
     var now = Date.now();
-    if (_lastAutoText === t && now - _lastAutoAt < 8000) return;
+    if (_lastAutoText === t && now - _lastAutoAt < 15000) {
+        __ss.showToast('Already processed — copy something new');
+        return;
+    }
     _lastAutoText = t;
     _lastAutoAt = now;
     _clipBusy = true;

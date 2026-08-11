@@ -44,6 +44,8 @@ public class FloatingBubbleService extends Service {
     private static final String KEY_FILE = "bubble_file";
     private static final String KEY_CLIP = "bubble_clip";
     private static final String KEY_CLIP_AT = "bubble_clip_at";
+    private static final String KEY_BUBBLE_X = "bubble_x";
+    private static final String KEY_BUBBLE_Y = "bubble_y";
     private static final String HOME_URL = "https://sheetsubmit.up.railway.app";
 
     private WindowManager windowManager;
@@ -58,6 +60,7 @@ public class FloatingBubbleService extends Service {
     private int initialBubbleY;
     private boolean dragging;
     private long panelShownAt;
+    private boolean panelShowing;
 
     public static void start(Context ctx) {
         Intent i = new Intent(ctx, FloatingBubbleService.class);
@@ -77,6 +80,13 @@ public class FloatingBubbleService extends Service {
         super.onCreate();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
             Log.e(TAG, "overlay permission missing, stopping");
+            stopSelf();
+            return;
+        }
+
+        String bubbleFileId = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_FILE, "");
+        if (bubbleFileId.isEmpty()) {
+            Log.i(TAG, "No bubble file set, stopping");
             stopSelf();
             return;
         }
@@ -173,8 +183,9 @@ public class FloatingBubbleService extends Service {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT);
         bubbleParams.gravity = Gravity.TOP | Gravity.START;
-        bubbleParams.x = Math.max(0, displayWidth() - windowSize - dp(16));
-        bubbleParams.y = dp(220);
+        SharedPreferences posPrefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        bubbleParams.x = posPrefs.getInt(KEY_BUBBLE_X, Math.max(0, displayWidth() - windowSize - dp(16)));
+        bubbleParams.y = posPrefs.getInt(KEY_BUBBLE_Y, dp(220));
 
         root.setOnTouchListener(bubbleTouchListener);
         bubbleView = root;
@@ -214,6 +225,10 @@ public class FloatingBubbleService extends Service {
                     return true;
                 case MotionEvent.ACTION_UP:
                     v.animate().scaleX(1f).scaleY(1f).setDuration(150).start();
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                            .putInt(KEY_BUBBLE_X, bubbleParams.x)
+                            .putInt(KEY_BUBBLE_Y, bubbleParams.y)
+                            .apply();
                     if (!dragging) {
                         v.performClick();
                         togglePanel();
@@ -235,7 +250,7 @@ public class FloatingBubbleService extends Service {
     // ── Mini panel ──
 
     private void togglePanel() {
-        if (panelRoot != null) {
+        if (panelRoot != null || panelShowing) {
             hidePanel();
         } else {
             showPanel();
@@ -243,6 +258,8 @@ public class FloatingBubbleService extends Service {
     }
 
     private void showPanel() {
+        if (panelShowing) return;
+        panelShowing = true;
         try {
             int scrW = displayWidth();
             int scrH = displayHeight();
@@ -258,7 +275,7 @@ public class FloatingBubbleService extends Service {
             card.setOrientation(LinearLayout.VERTICAL);
             GradientDrawable cardBg = new GradientDrawable();
             cardBg.setColor(0xFFFFFFFF);
-            cardBg.setCornerRadius(dp(14));
+            cardBg.setCornerRadius(dp(18));
             card.setBackground(cardBg);
             FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(panelW, panelH, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
             int bubbleCenterY = bubbleParams.y + bubbleParams.height / 2;
@@ -273,28 +290,46 @@ public class FloatingBubbleService extends Service {
                         LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
                 card.addView(miniWebView, wlp);
                 miniWebView.onResume();
-                // Android 10+ requires app focus to read the clipboard, so a
-                // transparent activity briefly grabs focus and stores the clip
-                // in prefs; the automation then reads it through the bridge.
                 try {
                     Intent cap = new Intent(this, ClipboardCaptureActivity.class);
                     cap.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     startActivity(cap);
-                } catch (Exception ignored) {}
-// Wait for the capture activity to finish, then hand input focus
-            // back to the panel (typing in the mini WebView needs it) and
-            // trigger the automation in the mini window.
-            panelRoot.setFocusableInTouchMode(true);
-            panelRoot.postDelayed(new Runnable() {
-                @Override
-                public void run() {
+                } catch (Exception e) {
+                    Log.w(TAG, "ClipboardCaptureActivity failed, using fallback", e);
                     try {
-                        panelRoot.requestFocus();
-                        if (miniWebView != null) miniWebView.requestFocus();
-                        miniWebView.evaluateJavascript("window.__ss&&window.__ss.bubbleAutomate&&window.__ss.bubbleAutomate();", null);
+                        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                        if (cm != null && cm.hasPrimaryClip() && cm.getPrimaryClip() != null && cm.getPrimaryClip().getItemCount() > 0) {
+                            CharSequence cs = cm.getPrimaryClip().getItemAt(0).getText();
+                            String text = cs != null ? cs.toString() : "";
+                            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                                .edit()
+                                .putString(KEY_CLIP, text)
+                                .putLong(KEY_CLIP_AT, System.currentTimeMillis())
+                                .apply();
+                        }
                     } catch (Exception ignored) {}
                 }
-            }, 700);
+            panelRoot.setFocusableInTouchMode(true);
+            final int[] pollCount = {0};
+            final Runnable pollRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    pollCount[0]++;
+                    SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+                    long clipAt = prefs.getLong(KEY_CLIP_AT, 0);
+                    boolean captured = clipAt > 0 && System.currentTimeMillis() - clipAt < 2000;
+                    if (captured || pollCount[0] >= 10) {
+                        try {
+                            panelRoot.requestFocus();
+                            if (miniWebView != null) miniWebView.requestFocus();
+                            miniWebView.evaluateJavascript("window.__ss&&window.__ss.bubbleAutomate&&window.__ss.bubbleAutomate();", null);
+                        } catch (Exception ignored) {}
+                    } else {
+                        panelRoot.postDelayed(this, 200);
+                    }
+                }
+            };
+            panelRoot.postDelayed(pollRunnable, 200);
             }
 
             panelRoot.addView(card);
@@ -318,6 +353,7 @@ public class FloatingBubbleService extends Service {
             Log.i(TAG, "panel shown " + panelW + "x" + panelH);
         } catch (Exception e) {
             Log.e(TAG, "showPanel failed", e);
+            panelShowing = false;
             if (panelRoot != null) {
                 try { windowManager.removeView(panelRoot); } catch (Exception ignored) {}
                 panelRoot = null;
@@ -326,7 +362,15 @@ public class FloatingBubbleService extends Service {
     }
 
     private void ensureMiniWebView() {
-        if (miniWebView != null) return;
+        if (miniWebView != null) {
+            try {
+                miniWebView.getUrl();
+                return;
+            } catch (Exception e) {
+                try { miniWebView.destroy(); } catch (Exception ignored) {}
+                miniWebView = null;
+            }
+        }
         try {
             miniWebView = new WebView(this);
             WebSettings ws = miniWebView.getSettings();
@@ -398,6 +442,7 @@ public class FloatingBubbleService extends Service {
 
     private void hidePanel() {
         if (miniWebView != null) {
+            try { miniWebView.loadUrl("about:blank"); } catch (Exception ignored) {}
             try { miniWebView.onPause(); } catch (Exception ignored) {}
         }
         if (panelRoot != null) {

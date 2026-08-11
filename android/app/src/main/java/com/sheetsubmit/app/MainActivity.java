@@ -48,6 +48,8 @@ public class MainActivity extends Activity {
     private String did;
     private boolean sessionApplied = false;
     private final Handler pollHandler = new Handler(Looper.getMainLooper());
+    private ValueCallback<Uri[]> filePathCallback;
+    private static final int REQ_FILE_CHOOSER = 2003;
 
     private final Runnable pollRunnable = new Runnable() {
         @Override
@@ -123,6 +125,22 @@ public class MainActivity extends Activity {
                 resultMsg.sendToTarget();
                 return true;
             }
+
+            @Override
+            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+                if (MainActivity.this.filePathCallback != null) {
+                    MainActivity.this.filePathCallback.onReceiveValue(null);
+                }
+                MainActivity.this.filePathCallback = filePathCallback;
+                try {
+                    Intent intent = fileChooserParams.createIntent();
+                    startActivityForResult(intent, REQ_FILE_CHOOSER);
+                    return true;
+                } catch (Exception e) {
+                    MainActivity.this.filePathCallback = null;
+                    return false;
+                }
+            }
         });
 
         webView.setDownloadListener(new DownloadListener() {
@@ -190,6 +208,11 @@ public class MainActivity extends Activity {
                         FloatingBubbleService.stop(MainActivity.this);
                     }
                 });
+            }
+
+            @JavascriptInterface
+            public String getBubbleFile() {
+                return getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString("bubble_file", "");
             }
         }, "Android");
 
@@ -322,6 +345,26 @@ public class MainActivity extends Activity {
         if (requestCode == REQ_OVERLAY_PERMISSION) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
                 FloatingBubbleService.start(this);
+            }
+        }
+        if (requestCode == REQ_FILE_CHOOSER) {
+            Uri[] results = null;
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                String dataString = data.getDataString();
+                if (dataString != null) {
+                    results = new Uri[]{Uri.parse(dataString)};
+                }
+                if (data.getClipData() != null) {
+                    int count = data.getClipData().getItemCount();
+                    results = new Uri[count];
+                    for (int i = 0; i < count; i++) {
+                        results[i] = data.getClipData().getItemAt(i).getUri();
+                    }
+                }
+            }
+            if (filePathCallback != null) {
+                filePathCallback.onReceiveValue(results);
+                filePathCallback = null;
             }
         }
     }

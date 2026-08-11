@@ -848,7 +848,6 @@ function setupGridDelegation() {
 
         if (rh && state.currentFileId) { toggleSelection('row', parseInt(rh.dataset.row)); return; }
         if (dot && state.currentFileId) {
-            if (window.__ss && window.__ss.bubbleSuppressDotTap) return;
             var behavior = __ss.getFileBehavior(state.currentFileType);
             if (behavior && behavior.onDotDoubleTap) {
                 var row = state.rows[parseInt(dot.dataset.row)];

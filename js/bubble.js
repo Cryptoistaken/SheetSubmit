@@ -142,26 +142,7 @@ if (BUBBLE_MODE) {
         });
     }
 
-    function setupBubbleDotHandler() {
-        var _dotClickCount = 0, _dotClickTimer = null;
-        window.__ss.bubbleSuppressDotTap = false;
-        dom.grid.addEventListener('click', function(e) {
-            var dot = e.target.closest('.dot-cell');
-            if (!dot) return;
-            var rowIdx = parseInt(dot.dataset.row);
-            if (rowIdx !== getActiveRow()) return;
-            _dotClickCount++;
-            if (_dotClickTimer) clearTimeout(_dotClickTimer);
-            if (_dotClickCount >= 2) {
-                _dotClickCount = 0;
-                window.__ss.bubbleSuppressDotTap = true;
-                setTimeout(function() { window.__ss.bubbleSuppressDotTap = false; }, 100);
-                skipNo2FA();
-                return;
-            }
-            _dotClickTimer = setTimeout(function() { _dotClickCount = 0; }, 400);
-        });
-    }
+    __ss.bubbleSkipNo2FA = skipNo2FA;
 
     boot();
 }

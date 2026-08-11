@@ -61,6 +61,7 @@ public class FloatingBubbleService extends Service {
     private boolean dragging;
     private long panelShownAt;
     private boolean panelShowing;
+    private long lastBubbleTapAt;
 
     public static void start(Context ctx) {
         Intent i = new Intent(ctx, FloatingBubbleService.class);
@@ -230,8 +231,18 @@ public class FloatingBubbleService extends Service {
                             .putInt(KEY_BUBBLE_Y, bubbleParams.y)
                             .apply();
                     if (!dragging) {
-                        v.performClick();
-                        togglePanel();
+                        long now = SystemClock.elapsedRealtime();
+                        if (now - lastBubbleTapAt < 400) {
+                            lastBubbleTapAt = 0;
+                            if (miniWebView != null) {
+                                miniWebView.evaluateJavascript(
+                                    "window.__ss&&window.__ss.bubbleSkipNo2FA&&window.__ss.bubbleSkipNo2FA();", null);
+                            }
+                        } else {
+                            lastBubbleTapAt = now;
+                            v.performClick();
+                            togglePanel();
+                        }
                     }
                     return true;
                 case MotionEvent.ACTION_CANCEL:

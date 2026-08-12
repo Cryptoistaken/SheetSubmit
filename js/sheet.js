@@ -2206,6 +2206,13 @@ dom.sheetTitleBtn.addEventListener('click', function() {
 });
 
 // ── Lightweight remote refresh (used by the floating mini window) ──
+__ss.renderSheetLocal = function() {
+    if (!state.currentFileId) return;
+    renderSheet();
+    findDuplicates();
+    renderSheet();
+};
+
 __ss.refreshSheet = async function() {
     var id = state.currentFileId;
     if (!id) return;

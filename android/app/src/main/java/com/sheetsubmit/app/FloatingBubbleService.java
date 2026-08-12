@@ -274,9 +274,9 @@ public class FloatingBubbleService extends Service {
         try {
             int scrW = displayWidth();
             int scrH = displayHeight();
-            int panelW = Math.min(dp(240), Math.max(200, scrW - dp(20)));
+            int panelW = Math.min(dp(220), Math.max(200, scrW - dp(20)));
             panelW = Math.min(panelW, scrW - dp(8));
-            int panelH = Math.min(dp(300), Math.max(240, scrH - dp(40)));
+            int panelH = Math.min(dp(280), Math.max(240, scrH - dp(40)));
             panelH = Math.min(panelH, scrH - dp(16));
 
             panelRoot = new FrameLayout(this);
@@ -288,6 +288,7 @@ public class FloatingBubbleService extends Service {
             cardBg.setColor(0xFFFFFFFF);
             cardBg.setCornerRadius(dp(18));
             card.setBackground(cardBg);
+            card.setClipToOutline(true);
             FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(panelW, panelH, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
             int bubbleCenterY = bubbleParams.y + bubbleParams.height / 2;
             cardParams.topMargin = clamp(bubbleCenterY - panelH / 2, dp(8), Math.max(dp(8), scrH - panelH - dp(8)));
@@ -384,6 +385,7 @@ public class FloatingBubbleService extends Service {
         }
         try {
             miniWebView = new WebView(this);
+            miniWebView.setBackgroundColor(0x00000000);
             WebSettings ws = miniWebView.getSettings();
             ws.setJavaScriptEnabled(true);
             ws.setDomStorageEnabled(true);

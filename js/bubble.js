@@ -240,7 +240,10 @@ function persistBubbleRows() {
 }
 
 function refreshBubbleWidgets() {
-    if (__ss.refreshSheet) __ss.refreshSheet();
+    // Re-render from local state instantly — the remote refresh races the
+    // fire-and-forget persist and only lands on the next 6s poll.
+    if (__ss.renderSheetLocal) __ss.renderSheetLocal();
+    else if (__ss.refreshSheet) __ss.refreshSheet();
 }
 
 function saveCookieToSheet(text) {

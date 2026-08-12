@@ -318,6 +318,16 @@ public class MainActivity extends Activity {
             }
         }, "Android");
 
+    webView.loadUrl(HOME_URL);
+        pollHandler.post(pollRunnable);
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+            if (getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString("bubble_file", null) != null) {
+                FloatingBubbleService.start(this);
+            }
+        }
+    }
+
     private interface ReleaseListener {
         void onResult(JSONObject release);
         void onError();
@@ -354,16 +364,6 @@ public class MainActivity extends Activity {
                 }
             }
         }).start();
-    }
-
-        webView.loadUrl(HOME_URL);
-        pollHandler.post(pollRunnable);
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
-            if (getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString("bubble_file", null) != null) {
-                FloatingBubbleService.start(this);
-            }
-        }
     }
 
     private void injectClipboardBridge() {

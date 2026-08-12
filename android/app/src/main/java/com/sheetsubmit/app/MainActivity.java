@@ -283,6 +283,20 @@ public class MainActivity extends Activity {
             }
 
             @JavascriptInterface
+            public void openSupport() {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/Cryptoistaken")));
+                        } catch (Exception e) {
+                            Log.e(TAG, "openSupport: " + e.getMessage());
+                        }
+                    }
+                });
+            }
+
+            @JavascriptInterface
             public void whatsNew() {
                 fetchLatestRelease(new ReleaseListener() {
                     @Override

@@ -58,6 +58,17 @@ if (APP && wnRow) {
     });
 }
 
+// ── Report-an-issue menu row (Android only) ──
+var supRow = document.getElementById('supportMenuRow');
+
+if (APP && supRow) {
+    supRow.style.display = '';
+    supRow.style.cursor = 'pointer';
+    supRow.addEventListener('click', function() {
+        try { window.Android.openSupport(); } catch(e) {}
+    });
+}
+
 function enableBubble(id, name) {
     try { window.Android.enableBubble(id); } catch(e) {}
     if (toggle) toggle.checked = true;

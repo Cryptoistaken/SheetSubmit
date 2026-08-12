@@ -376,8 +376,12 @@ public class FloatingBubbleService extends Service {
     private void ensureMiniWebView() {
         if (miniWebView != null) {
             try {
-                miniWebView.getUrl();
-                return;
+                String url = miniWebView.getUrl();
+                // hidePanel() unloads about:blank — a reused WebView would
+                // show a blank page on the next open, so recreate it.
+                if (url != null && !url.equals("about:blank")) return;
+                try { miniWebView.destroy(); } catch (Exception ignored) {}
+                miniWebView = null;
             } catch (Exception e) {
                 try { miniWebView.destroy(); } catch (Exception ignored) {}
                 miniWebView = null;
@@ -462,6 +466,9 @@ public class FloatingBubbleService extends Service {
             try { windowManager.removeView(panelRoot); } catch (Exception ignored) {}
             panelRoot = null;
         }
+        // MUST reset — otherwise togglePanel() never opens the panel again
+        // after the first close (panelShowing remains true forever).
+        panelShowing = false;
     }
 
     // ── Foreground notification ──

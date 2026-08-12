@@ -38,6 +38,12 @@
             android:taskAffinity=""
             android:launchMode="singleInstance" />
 
+        <provider
+            android:name=".ApkProvider"
+            android:authorities="com.sheetsubmit.app.apk"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <service
             android:name=".FloatingBubbleService"
             android:exported="false"

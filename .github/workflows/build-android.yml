@@ -9,7 +9,7 @@ on:
       - '.github/workflows/build-android.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -53,3 +53,13 @@ jobs:
           name: sheetsubmit-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+
+      - name: Publish GitHub Release (v${{ github.run_number }})
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: v${{ github.run_number }}
+          body: |
+            SheetSubmit build v${{ github.run_number }} (CI run ${{ github.run_number }}).
+            Install over the previous version — app data is preserved.
+          files: android/app/build/outputs/apk/release/app-release.apk

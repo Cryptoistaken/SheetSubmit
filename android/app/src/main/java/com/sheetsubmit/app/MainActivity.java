@@ -1,11 +1,13 @@
 package com.sheetsubmit.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.Manifest;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -25,10 +27,14 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Toast;
 
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -214,6 +220,73 @@ public class MainActivity extends Activity {
             public String getBubbleFile() {
                 return getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString("bubble_file", "");
             }
+
+            @JavascriptInterface
+            public void checkForUpdates() {
+                final String releasesUrl = "https://api.github.com/repos/Cryptoistaken/SheetSubmit/releases/latest";
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Toast.makeText(MainActivity.this, "Checking for updates…", Toast.LENGTH_SHORT).show();
+                    }
+                });
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        HttpURLConnection conn = null;
+                        try {
+                            URL u = new URL(releasesUrl);
+                            conn = (HttpURLConnection) u.openConnection();
+                            conn.setConnectTimeout(8000);
+                            conn.setReadTimeout(8000);
+                            conn.setRequestProperty("User-Agent", "SheetSubmit-Updater");
+                            conn.setRequestMethod("GET");
+                            if (conn.getResponseCode() != 200) return;
+                            InputStream is = conn.getInputStream();
+                            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+                            StringBuilder sb = new StringBuilder();
+                            String line;
+                            while ((line = reader.readLine()) != null) sb.append(line);
+                            JSONObject json = new JSONObject(sb.toString());
+                            final String tag = json.optString("tag_name");
+                            if (!tag.matches("v\\d+")) return;
+                            int installed = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+                            if (Integer.parseInt(tag.substring(1)) <= installed) {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        Toast.makeText(MainActivity.this, "You're up to date (v" + tag + ")", Toast.LENGTH_SHORT).show();
+                                    }
+                                });
+                                return;
+                            }
+                            JSONObject asset = json.getJSONArray("assets").optJSONObject(0);
+                            final String apkUrl = asset.getString("browser_download_url");
+                            final long mb = asset.getLong("size") / (1024L * 1024L);
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    AlertDialog.Builder b = new AlertDialog.Builder(MainActivity.this);
+                                    b.setTitle("Update available");
+                                    b.setMessage("v" + tag + " · " + mb + " MB — install over the current version, data preserved");
+                                    b.setPositiveButton("Update", new DialogInterface.OnClickListener() {
+                                        @Override
+                                        public void onClick(DialogInterface d, int which) {
+                                            downloadUpdate(apkUrl);
+                                        }
+                                    });
+                                    b.setNegativeButton("Later", null);
+                                    b.show();
+                                }
+                            });
+                        } catch (Exception e) {
+                            Log.e(TAG, "checkForUpdates: " + e.getMessage());
+                        } finally {
+                            if (conn != null) conn.disconnect();
+                        }
+                    }
+                }).start();
+            }
         }, "Android");
 
         webView.loadUrl(HOME_URL);
@@ -337,6 +410,67 @@ public class MainActivity extends Activity {
             return;
         }
         FloatingBubbleService.start(this);
+    }
+
+    private void downloadUpdate(final String apkUrl) {
+        final File target = new File(getCacheDir(), "apk/update.apk");
+        Toast.makeText(this, "Downloading…", Toast.LENGTH_SHORT).show();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                HttpURLConnection conn = null;
+                InputStream is = null;
+                FileOutputStream fos = null;
+                try {
+                    URL u = new URL(apkUrl);
+                    conn = (HttpURLConnection) u.openConnection();
+                    conn.setConnectTimeout(8000);
+                    conn.setReadTimeout(8000);
+                    conn.setRequestProperty("User-Agent", "SheetSubmit-Updater");
+                    conn.setRequestMethod("GET");
+                    if (conn.getResponseCode() != 200) throw new IOException("HTTP " + conn.getResponseCode());
+                    is = conn.getInputStream();
+                    File dir = target.getParentFile();
+                    if (dir != null && !dir.exists()) dir.mkdirs();
+                    if (target.exists()) target.delete();
+                    fos = new FileOutputStream(target);
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = is.read(buf)) != -1) fos.write(buf, 0, n);
+                    fos.flush();
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                Intent intent = new Intent(Intent.ACTION_VIEW);
+                                intent.setDataAndType(ApkProvider.uriFor(MainActivity.this, target), "application/vnd.android.package-archive");
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                startActivity(intent);
+                            } catch (Exception e) {
+                                Toast.makeText(MainActivity.this, "Cannot open installer", Toast.LENGTH_LONG).show();
+                            }
+                        }
+                    });
+                } catch (Exception e) {
+                    Log.e(TAG, "update download: " + e.getMessage());
+                    final String err = e.getMessage() == null ? "Download failed" : e.getMessage();
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(MainActivity.this, err, Toast.LENGTH_LONG).show();
+                        }
+                    });
+                } finally {
+                    if (fos != null) {
+                        try { fos.close(); } catch (Exception ignored) {}
+                    }
+                    if (is != null) {
+                        try { is.close(); } catch (Exception ignored) {}
+                    }
+                    if (conn != null) conn.disconnect();
+                }
+            }
+        }).start();
     }
 
     @Override

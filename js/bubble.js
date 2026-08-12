@@ -36,6 +36,17 @@ if (APP && row && toggle) {
     });
 }
 
+// ── Check-for-updates menu row (Android only) ──
+var updRow = document.getElementById('updateMenuRow');
+
+if (APP && updRow) {
+    updRow.style.display = '';
+    updRow.style.cursor = 'pointer';
+    updRow.addEventListener('click', function() {
+        try { window.Android.checkForUpdates(); } catch(e) {}
+    });
+}
+
 function enableBubble(id, name) {
     try { window.Android.enableBubble(id); } catch(e) {}
     if (toggle) toggle.checked = true;

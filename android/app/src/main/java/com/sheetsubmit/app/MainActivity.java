@@ -223,33 +223,18 @@ public class MainActivity extends Activity {
 
             @JavascriptInterface
             public void checkForUpdates() {
-                final String releasesUrl = "https://api.github.com/repos/Cryptoistaken/SheetSubmit/releases/latest";
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
                         Toast.makeText(MainActivity.this, "Checking for updates…", Toast.LENGTH_SHORT).show();
                     }
                 });
-                new Thread(new Runnable() {
+                fetchLatestRelease(new ReleaseListener() {
                     @Override
-                    public void run() {
-                        HttpURLConnection conn = null;
+                    public void onResult(final JSONObject json) {
+                        final String tag = json.optString("tag_name");
+                        if (!tag.matches("v\\d+")) return;
                         try {
-                            URL u = new URL(releasesUrl);
-                            conn = (HttpURLConnection) u.openConnection();
-                            conn.setConnectTimeout(8000);
-                            conn.setReadTimeout(8000);
-                            conn.setRequestProperty("User-Agent", "SheetSubmit-Updater");
-                            conn.setRequestMethod("GET");
-                            if (conn.getResponseCode() != 200) return;
-                            InputStream is = conn.getInputStream();
-                            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-                            StringBuilder sb = new StringBuilder();
-                            String line;
-                            while ((line = reader.readLine()) != null) sb.append(line);
-                            JSONObject json = new JSONObject(sb.toString());
-                            final String tag = json.optString("tag_name");
-                            if (!tag.matches("v\\d+")) return;
                             int installed = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
                             if (Integer.parseInt(tag.substring(1)) <= installed) {
                                 runOnUiThread(new Runnable() {
@@ -261,14 +246,20 @@ public class MainActivity extends Activity {
                                 return;
                             }
                             JSONObject asset = json.getJSONArray("assets").optJSONObject(0);
+                            if (asset == null) return;
                             final String apkUrl = asset.getString("browser_download_url");
                             final long mb = asset.getLong("size") / (1024L * 1024L);
+                            final String body = json.optString("body", "").trim();
                             runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
                                     AlertDialog.Builder b = new AlertDialog.Builder(MainActivity.this);
                                     b.setTitle("Update available");
-                                    b.setMessage("v" + tag + " · " + mb + " MB — install over the current version, data preserved");
+                                    String msg = "v" + tag + " · " + mb + " MB — install over the current version, data preserved";
+                                    if (!body.isEmpty()) {
+                                        msg += "\n\n" + body;
+                                    }
+                                    b.setMessage(msg);
                                     b.setPositiveButton("Update", new DialogInterface.OnClickListener() {
                                         @Override
                                         public void onClick(DialogInterface d, int which) {
@@ -281,13 +272,89 @@ public class MainActivity extends Activity {
                             });
                         } catch (Exception e) {
                             Log.e(TAG, "checkForUpdates: " + e.getMessage());
-                        } finally {
-                            if (conn != null) conn.disconnect();
                         }
                     }
-                }).start();
+
+                    @Override
+                    public void onError() {
+                        // silent — keep pre-existing behavior on fetch failure
+                    }
+                });
+            }
+
+            @JavascriptInterface
+            public void whatsNew() {
+                fetchLatestRelease(new ReleaseListener() {
+                    @Override
+                    public void onResult(final JSONObject json) {
+                        final String tag = json.optString("tag_name");
+                        final String body = json.optString("body", "").trim();
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (tag.isEmpty()) {
+                                    Toast.makeText(MainActivity.this, R.string.whats_new_error, Toast.LENGTH_LONG).show();
+                                    return;
+                                }
+                                AlertDialog.Builder b = new AlertDialog.Builder(MainActivity.this);
+                                b.setTitle(getString(R.string.whats_new_title) + " in " + tag);
+                                b.setMessage(body.isEmpty() ? getString(R.string.whats_new_empty) : body);
+                                b.setPositiveButton("OK", null);
+                                b.show();
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError() {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, R.string.whats_new_error, Toast.LENGTH_LONG).show();
+                            }
+                        });
+                    }
+                });
             }
         }, "Android");
+
+    private interface ReleaseListener {
+        void onResult(JSONObject release);
+        void onError();
+    }
+
+    private void fetchLatestRelease(final ReleaseListener listener) {
+        final String releasesUrl = "https://api.github.com/repos/Cryptoistaken/SheetSubmit/releases/latest";
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                HttpURLConnection conn = null;
+                try {
+                    URL u = new URL(releasesUrl);
+                    conn = (HttpURLConnection) u.openConnection();
+                    conn.setConnectTimeout(8000);
+                    conn.setReadTimeout(8000);
+                    conn.setRequestProperty("User-Agent", "SheetSubmit-Updater");
+                    conn.setRequestMethod("GET");
+                    if (conn.getResponseCode() != 200) {
+                        listener.onError();
+                        return;
+                    }
+                    InputStream is = conn.getInputStream();
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) sb.append(line);
+                    listener.onResult(new JSONObject(sb.toString()));
+                } catch (Exception e) {
+                    Log.e(TAG, "fetchLatestRelease: " + e.getMessage());
+                    listener.onError();
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+            }
+        }).start();
+    }
 
         webView.loadUrl(HOME_URL);
         pollHandler.post(pollRunnable);

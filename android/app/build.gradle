@@ -10,8 +10,11 @@ android {
         applicationId "com.sheetsubmit.app"
         minSdk 26
         targetSdk 34
-        versionCode (System.getenv("VERSION_CODE") ? Integer.parseInt(System.getenv("VERSION_CODE")) : 1)
-        versionName "1.0"
+        def buildNumber = System.getenv("VERSION_CODE") ? Integer.parseInt(System.getenv("VERSION_CODE")) : 1
+        versionCode buildNumber
+        // Version name follows the CI run number so each build is identifiable
+        // (e.g. 1.0.20).
+        versionName "1.0.${buildNumber}"
     }
 
     signingConfigs {

@@ -47,6 +47,17 @@ if (APP && updRow) {
     });
 }
 
+// ── What's-new menu row (Android only) ──
+var wnRow = document.getElementById('whatsNewMenuRow');
+
+if (APP && wnRow) {
+    wnRow.style.display = '';
+    wnRow.style.cursor = 'pointer';
+    wnRow.addEventListener('click', function() {
+        try { window.Android.whatsNew(); } catch(e) {}
+    });
+}
+
 function enableBubble(id, name) {
     try { window.Android.enableBubble(id); } catch(e) {}
     if (toggle) toggle.checked = true;

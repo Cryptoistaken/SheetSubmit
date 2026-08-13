@@ -102,6 +102,10 @@ public class FloatingBubbleService extends Service {
         touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
 
         addBubbleToWindow();
+        // Preload the selected file's mini-window page now (right after the
+        // bubble is enabled) instead of lazily on the first tap — the panel
+        // then shows the already-loaded sheet when the user opens it.
+        ensureMiniWebView();
         Log.i(TAG, "service running, bubble visible");
     }
 

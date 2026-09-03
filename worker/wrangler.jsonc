@@ -1,6 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "sheetsubmit-worker",
+  "name": "sheetsubmit-api",
   "main": "src/index.ts",
-  "compatibility_date": "2026-08-22"
+  "compatibility_date": "2026-08-22",
+  "durable_objects": {
+    "bindings": [
+      { "name": "INDEX", "class_name": "IndexDO" },
+      { "name": "FILES", "class_name": "FileDO" },
+      { "name": "POOLS", "class_name": "PoolDO" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["IndexDO", "FileDO", "PoolDO"] }],
+  "triggers": { "crons": ["0 */6 * * *"] },
+  "vars": { "FRONTEND_URL": "", "HITOOLS_CHECK_URL": "https://hitools.pro/api/check-live-uid" }
 }

@@ -1,0 +1,1 @@
+export async function rpc(namespace: DurableObjectNamespace, name: string, op: string, args: Record<string, unknown> = {}) { const response = await namespace.get(namespace.idFromName(name)).fetch("https://do/", { method: "POST", body: JSON.stringify({ op, args }) }); if (!response.ok) throw new Error(`DO ${response.status}`); return response.json<any>(); }

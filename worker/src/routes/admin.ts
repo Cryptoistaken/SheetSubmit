@@ -1,0 +1,12 @@
+import { Hono } from "hono";
+import type { Env } from "../lib/shared";
+import { requireAuth, isAdmin } from "../lib/session";
+import { rpc } from "../lib/do";
+export const admin = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
+admin.use("/*", requireAuth);
+admin.use("/*", async (c, next) => isAdmin(c.env, c.get("uid")) ? next() : c.json({ error: "admin access required" }, 403));
+admin.get("/stats", async (c) => c.json(await rpc(c.env.INDEX, "global", "stats")));
+admin.get("/users", async (c) => c.json(await rpc(c.env.INDEX, "global", "users")));
+admin.get("/user/:id", async (c) => c.json(await rpc(c.env.INDEX, "global", "user", { id: c.req.param("id") })));
+admin.post("/user/:id/:action", async (c) => { const action = c.req.param("action"); if (action !== "ban" && action !== "unban") return c.json({ error: "unsupported action" }, 400); return c.json(await rpc(c.env.INDEX, "global", "ban", { id: c.req.param("id"), banned: action === "ban" })); });
+admin.get("/file/:id", async (c) => { const r: any = await rpc(c.env.INDEX, "global", "file", { id: c.req.param("id") }); return r ? c.json(JSON.parse(r.data)) : c.json({ error: "file not found" }, 404); });

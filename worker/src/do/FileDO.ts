@@ -1,0 +1,18 @@
+import type { Row, SheetFile } from "../lib/shared";
+export class FileDO {
+  constructor(private readonly state: DurableObjectState) { state.blockConcurrencyWhile(async () => { const s = state.storage.sql; s.exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY,v TEXT NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS rows (idx INTEGER PRIMARY KEY,data TEXT NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS versions (version INTEGER PRIMARY KEY,ts INTEGER NOT NULL,action TEXT NOT NULL,label TEXT)"); s.exec("CREATE TABLE IF NOT EXISTS version_rows (version INTEGER NOT NULL,idx INTEGER NOT NULL,data TEXT NOT NULL,PRIMARY KEY(version,idx)) WITHOUT ROWID"); }); }
+  private rows() { return this.state.storage.sql.exec("SELECT idx,data FROM rows ORDER BY idx").toArray().map((r: any) => JSON.parse(r.data)) as Row[]; }
+  async fetch(req: Request): Promise<Response> { const { op, args = {} } = await req.json() as { op: string; args?: any }; const s = this.state.storage.sql; switch (op) {
+    case "init": s.exec("DELETE FROM meta; DELETE FROM rows"); s.exec("INSERT INTO meta(k,v) VALUES('file',?)", JSON.stringify(args.file)); (args.rows || []).forEach((r: Row, i: number) => s.exec("INSERT INTO rows(idx,data) VALUES(?,?)", i, JSON.stringify(r))); return Response.json({ ok: true });
+    case "meta": { const r: any = s.exec("SELECT v FROM meta WHERE k='file'").toArray()[0]; return Response.json(r ? JSON.parse(r.v) : null); }
+    case "rows": return Response.json(this.rows());
+    case "save": { const current = this.rows(); const version = Number(s.exec("SELECT COALESCE(MAX(version),0)+1 v FROM versions").toArray()[0].v); s.exec("INSERT INTO versions(version,ts,action,label) VALUES(?,?,?,NULL)", version, Date.now(), args.action || "edit"); current.forEach((r, i) => s.exec("INSERT INTO version_rows(version,idx,data) VALUES(?,?,?)", version, i, JSON.stringify(r))); s.exec("DELETE FROM rows"); (args.rows as Row[]).forEach((r, i) => s.exec("INSERT INTO rows(idx,data) VALUES(?,?)", i, JSON.stringify(r))); if (args.file) s.exec("INSERT OR REPLACE INTO meta(k,v) VALUES('file',?)", JSON.stringify(args.file)); await this.state.storage.setAlarm(Date.now() + 86400000); return Response.json({ ok: true, seq: version, rows: args.rows }); }
+    case "history": return Response.json(s.exec("SELECT version v,ts,action,label FROM versions ORDER BY version DESC").toArray());
+    case "version": { const m: any = s.exec("SELECT version v,ts,action,label FROM versions WHERE version=?", args.v).toArray()[0]; if (!m) return Response.json(null); return Response.json({ ...m, rows: s.exec("SELECT data FROM version_rows WHERE version=? ORDER BY idx", args.v).toArray().map((r: any) => JSON.parse(r.data)) }); }
+    case "name": s.exec("UPDATE versions SET label=? WHERE version=?", String(args.label || ""), args.v); return Response.json({ ok: true });
+    case "restore": { const rows = s.exec("SELECT data FROM version_rows WHERE version=? ORDER BY idx", args.v).toArray().map((r: any) => JSON.parse(r.data)); if (!rows.length) return Response.json(null); return (await this.fetch(new Request("https://x", { method: "POST", body: JSON.stringify({ op: "save", args: { rows, action: "restore" } }) }))).clone(); }
+    case "prune": s.exec("DELETE FROM versions WHERE version NOT IN (SELECT version FROM versions ORDER BY version DESC LIMIT ?)", Math.max(1, Number(args.keep || 100))); s.exec("DELETE FROM version_rows WHERE version NOT IN (SELECT version FROM versions)"); return Response.json({ ok: true });
+    default: return Response.json({ error: "unknown operation" }, { status: 400 });
+  } }
+  async alarm() { await this.fetch(new Request("https://x", { method: "POST", body: JSON.stringify({ op: "prune", args: { keep: 100 } }) })); }
+}

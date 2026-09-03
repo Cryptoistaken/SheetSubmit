@@ -6,6 +6,8 @@ import { rpc } from "../lib/do";
 export const files = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 const fileId = () => crypto.randomUUID().replaceAll("-", "").slice(0, 12);
 async function owned(c: any, id: string) { const found = await rpc(c.env.INDEX, "global", "file", { id }); return found && found.owner_id === c.get("uid") && !found.archived ? JSON.parse(found.data) as SheetFile : null; }
+async function ownedArchived(c: any, id: string) { const found = await rpc(c.env.INDEX, "global", "file", { id }); return found && found.owner_id === c.get("uid") && found.archived ? JSON.parse(found.data) as SheetFile : null; }
+const poolId = (r: Row) => String(r.uid || (String(r.cookies || "").match(/c_user=(\d+)/)?.[1] || ""));
 files.use("/*", requireAuth);
 files.get("/", async (c) => c.json(await rpc(c.env.INDEX, "global", "files", { uid: c.get("uid") })));
 files.post("/", async (c) => { const body = await c.req.json<Partial<SheetFile>>(); const file: SheetFile = { id: fileId(), name: String(body.name || "Untitled"), type: body.type === "fb_cookie" ? "fb_cookie" : "fb_cookie", password: String(body.password || "dgddigital"), poolEnabled: body.poolEnabled !== false, createdAt: Date.now(), updatedAt: Date.now(), rowCount: 0, dataCount: 0 }; await rpc(c.env.INDEX, "global", "register", { uid: c.get("uid"), file }); await rpc(c.env.FILES, file.id, "init", { file, rows: [] }); return c.json(file); });
@@ -13,6 +15,51 @@ files.put("/:id", async (c) => { const file = await owned(c, c.req.param("id"));
 files.delete("/:id", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); file.deletedAt = Date.now(); await rpc(c.env.INDEX, "global", "archive", { id: file.id, archived: true, file }); return c.json({ ok: true }); });
 files.get("/:id/rows", async (c) => { const file = await owned(c, c.req.param("id")); return file ? c.json(await rpc(c.env.FILES, file.id, "rows")) : c.json({ error: "file not found" }, 404); });
 files.get("/:id/full", async (c) => { const file = await owned(c, c.req.param("id")); return file ? c.json({ file, rows: await rpc(c.env.FILES, file.id, "rows"), logs: [], undo: [], redo: [], seq: (await rpc(c.env.FILES, file.id, "seq")).seq ?? 0 }) : c.json({ error: "file not found" }, 404); });
-files.put("/:id/persist", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const body = await c.req.json<{ rows?: Row[]; action?: string; dataCount?: number }>(); const rows = body.rows || []; if (body.dataCount !== undefined) file.dataCount = body.dataCount; file.rowCount = rows.length; file.updatedAt = Date.now(); const saved = await rpc(c.env.FILES, file.id, "save", { file, rows, action: body.action || "edit" }); await rpc(c.env.INDEX, "global", "register", { uid: c.get("uid"), file }); return c.json({ ok: true, seq: saved.seq, file }); });
-files.put("/:id/append", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const body = await c.req.json<{ base: number; ops: { rowIdx: number; cols: Record<string, string> }[]; dataCount?: number; action?: string }>(); if (!Number.isInteger(body.base) || !Array.isArray(body.ops) || body.ops.length > 10000) return c.json({ error: "invalid append payload" }, 400); const rows = await rpc(c.env.FILES, file.id, "rows") as Row[]; if (body.base !== (await rpc(c.env.FILES, file.id, "seq")).seq) return c.json({ error: "version conflict" }, 409); for (const op of body.ops) { while (rows.length <= op.rowIdx) rows.push({}); rows[op.rowIdx] = { ...rows[op.rowIdx], ...op.cols }; } file.rowCount = rows.length; file.updatedAt = Date.now(); const saved = await rpc(c.env.FILES, file.id, "save", { file, rows, action: body.action || "append" }); await rpc(c.env.INDEX, "global", "register", { uid: c.get("uid"), file }); return c.json({ ok: true, seq: saved.seq, file }); });
+// ponytail: pool feed runs inline on save; move to waitUntil/queue if save latency matters
+async function feedPools(env: Env, file: SheetFile, rows: Row[], uid: string) { if (file.poolEnabled === false || !file.password) return; await rpc(env.POOLS, file.password, "add", { rows, uid }).catch(() => {}); }
+files.put("/:id/persist", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const body = await c.req.json<{ rows?: Row[]; action?: string; dataCount?: number }>(); const rows = body.rows || []; if (body.dataCount !== undefined) file.dataCount = body.dataCount; file.rowCount = rows.length; file.updatedAt = Date.now(); const saved = await rpc(c.env.FILES, file.id, "save", { file, rows, action: body.action || "edit" }); await rpc(c.env.INDEX, "global", "register", { uid: c.get("uid"), file }); await feedPools(c.env, file, rows, c.get("uid")); return c.json({ ok: true, seq: saved.seq, file }); });
+files.put("/:id/append", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const body = await c.req.json<{ base: number; ops: { rowIdx: number; cols: Record<string, string> }[]; dataCount?: number; action?: string }>(); if (!Number.isInteger(body.base) || !Array.isArray(body.ops) || body.ops.length > 10000) return c.json({ error: "invalid append payload" }, 400); const rows = await rpc(c.env.FILES, file.id, "rows") as Row[]; if (body.base !== (await rpc(c.env.FILES, file.id, "seq")).seq) return c.json({ error: "version conflict" }, 409); for (const op of body.ops) { while (rows.length <= op.rowIdx) rows.push({}); rows[op.rowIdx] = { ...rows[op.rowIdx], ...op.cols }; } file.rowCount = rows.length; file.updatedAt = Date.now(); const saved = await rpc(c.env.FILES, file.id, "save", { file, rows, action: body.action || "append" }); await rpc(c.env.INDEX, "global", "register", { uid: c.get("uid"), file }); await feedPools(c.env, file, rows, c.get("uid")); return c.json({ ok: true, seq: saved.seq, file }); });
+
+// ── Archive (mounted at /api/archive) ──
+export const archive = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
+archive.use("/*", requireAuth);
+// ponytail: permanently deleted rows stay in pools if claimed (matches backend taken-block); available rows are removed
+async function purgeFile(env: Env, file: SheetFile, uid: string) { await rpc(env.INDEX, "global", "purge", { id: file.id }); await rpc(env.FILES, file.id, "wipe").catch(() => {}); if (file.password) { const rows = await rpc(env.FILES, file.id, "rows").catch(() => [] as Row[]); const keys = [...new Set(rows.map(poolId).filter(Boolean))]; if (keys.length) await rpc(env.POOLS, file.password!, "removeAvailable", { keys, uid }).catch(() => {}); } }
+archive.get("/", async (c) => c.json(await rpc(c.env.INDEX, "global", "files", { uid: c.get("uid"), archived: 1 })));
+archive.post("/:id/restore", async (c) => { const file = await ownedArchived(c, c.req.param("id")); if (!file) return c.json({ error: "not found" }, 404); delete (file as any).deletedAt; await rpc(c.env.INDEX, "global", "archive", { id: file.id, archived: false, file }); return c.json({ ok: true }); });
+archive.post("/batch-restore", async (c) => { const ids = (await c.req.json<{ ids?: string[] }>().catch(() => ({}) as { ids?: string[] })).ids || []; const archived = await rpc(c.env.INDEX, "global", "files", { uid: c.get("uid"), archived: 1 }) as SheetFile[]; let restored = 0; for (const f of archived.filter((f) => ids.includes(f.id))) { delete (f as any).deletedAt; await rpc(c.env.INDEX, "global", "archive", { id: f.id, archived: false, file: f }); restored++; } return c.json({ restored }); });
+archive.delete("/:id", async (c) => { const file = await ownedArchived(c, c.req.param("id")); if (!file) return c.json({ error: "not found" }, 404); await purgeFile(c.env, file, c.get("uid")); return c.json({ ok: true }); });
+archive.post("/batch-delete", async (c) => { const ids = (await c.req.json<{ ids?: string[] }>().catch(() => ({}) as { ids?: string[] })).ids || []; const archived = await rpc(c.env.INDEX, "global", "files", { uid: c.get("uid"), archived: 1 }) as SheetFile[]; const owned = archived.filter((f) => ids.includes(f.id)); for (const f of owned) await purgeFile(c.env, f, c.get("uid")); return c.json({ deleted: owned.length }); });
+
+// ── Cross-file duplicates (mounted at /api/cross-dups) ──
+// ponytail: O(n·rows) scan with one rpc per file; 50-subrequest cap ≈ 45 files/user
+export const crossDups = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
+crossDups.use("/*", requireAuth);
+crossDups.get("/", async (c) => {
+  const uid = c.get("uid");
+  const files = await rpc(c.env.INDEX, "global", "files", { uid }) as SheetFile[];
+  const fileId = c.req.query("fileId") || null;
+  const targetType = fileId ? files.find((f) => f.id === fileId)?.type ?? null : null;
+  const counts: Record<string, number> = {};
+  files.forEach((f) => { counts[f.id] = 0; });
+  const allDups: Record<string, { fileId: string; fileName: string; rowIdx: number }[]> = {};
+  const byType: Record<string, SheetFile[]> = {};
+  for (const f of files) { (byType[f.type] ||= []).push(f); }
+  for (const typeKey in byType) {
+    if (targetType && typeKey !== targetType) continue;
+    const tf = byType[typeKey];
+    if (tf.length < 2) continue;
+    const uidMap: Record<string, { fileId: string; fileName: string; rowIdx: number }[]> = {};
+    for (const f of tf) {
+      const rows = await rpc(c.env.FILES, f.id, "rows") as Row[];
+      rows.forEach((row, ri) => { const dk = poolId(row); if (!dk) return; (uidMap[dk] ||= []).push({ fileId: f.id, fileName: f.name, rowIdx: ri }); });
+    }
+    for (const dk in uidMap) {
+      if (uidMap[dk].length > 1) { allDups[dk] = uidMap[dk]; for (const e of uidMap[dk]) counts[e.fileId]++; }
+    }
+  }
+  if (fileId) { const filtered: typeof allDups = {}; for (const dk in allDups) if (allDups[dk].some((e) => e.fileId === fileId)) filtered[dk] = allDups[dk]; return c.json({ counts, dups: filtered }); }
+  return c.json({ counts, dups: {} });
+});
+
 export { owned };

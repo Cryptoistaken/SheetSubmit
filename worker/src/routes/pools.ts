@@ -25,6 +25,12 @@ const isPool = (v: string): v is PoolId => (POOL_IDS as readonly string[]).inclu
 const detailRows = async (c: any, password: string, pool: string) => rpc(c.env.POOLS, password, "detail", { pool }) as Promise<any[]>;
 
 pools.use("/*", requireAuth);
+const DL_PASSWORDS = ["dgddigital", "L0VE@12345"];
+const dlMeta = (m: any) => ({ id: m.id, at: m.ts, claimedBy: m.claimedBy, password: m.password, poolId: m.poolId, claimed: m.claimed, filename: m.filename, reverted: !!m.reverted });
+const findDownload = async (c: any, id: string) => { for (const pwd of DL_PASSWORDS) { const d: any = await rpc(c.env.POOLS, pwd, "download", { id }).catch(() => null); if (d) return { ...d, password: pwd }; } return null; };
+pools.get("/downloads", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const all: any[] = []; for (const pwd of DL_PASSWORDS) { const r = await rpc(c.env.POOLS, pwd, "downloads").catch(() => ({ downloads: [] })); for (const d of r.downloads || []) all.push(dlMeta({ ...d, password: pwd })); } all.sort((a, b) => b.at - a.at); return c.json(all.slice(0, 50)); });
+pools.get("/downloads/:id", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findDownload(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); if (c.req.query("format") === "json") return c.json(dlMeta({ ...d, rows: d.rows })); const pid = d.poolId as PoolId; const cols = META[pid]?.cols || ["cookies"]; const XLSX = await import("xlsx"); const ws = XLSX.utils.aoa_to_sheet(d.rows.map((r: any) => cols.map((k) => String(r[k] ?? "")))); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "pool"); const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as unknown as Uint8Array; return new Response(buf, { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${String(d.filename || "download.xlsx").replace(/["\r\n]/g, "_")}"` } }); });
+pools.post("/downloads/:id/revert", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findDownload(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); return c.json(await rpc(c.env.POOLS, d.password, "revertDownload", { id: d.id, uid: c.get("uid") })); });
 pools.get("/", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const out: any[] = [];
@@ -62,9 +68,10 @@ pools.post("/:password/:pool/claim", async (c) => {
   const pid = c.req.param("pool");
   if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
   const body = await c.req.json<{ count?: number | "all" }>().catch(() => ({}) as { count?: number | "all" });
-  const out = await rpc(c.env.POOLS, c.req.param("password"), "claim", { pool: pid, uid: c.get("uid"), count: body.count });
-  // no downloadId: frontend falls back to client-side xlsx generation from rows
-  return c.json({ password: c.req.param("password"), poolId: pid, claimed: out.claimed, rows: out.rows });
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const filename = `${META[pid].label.toLowerCase().replace(/\s+/g, "_")}_${c.req.param("password").replace(/[^A-Za-z0-9_-]/g, "_")}_${new Date().toISOString().slice(0, 10)}_${id.slice(-4)}.xlsx`;
+  const out = await rpc(c.env.POOLS, c.req.param("password"), "claim", { pool: pid, uid: c.get("uid"), count: body.count, downloadId: id, filename });
+  return c.json({ password: c.req.param("password"), poolId: pid, claimed: out.claimed, rows: out.rows, downloadId: out.downloadId, filename: out.filename });
 });
 pools.post("/:password/:pool/revert", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);

@@ -272,6 +272,6 @@ export const api = {
   },
   logout: () => request<{ ok: boolean }>("/auth/logout"),
   botInfo: () => request<{ username: string }>("/bot/info"),
-  claimDeviceSession: (token: string) =>
-    request<{ ok: boolean }>(`/auth/device/claim?token=${encodeURIComponent(token)}`),
+  claimDeviceSession: (token: string, turnstileToken?: string | null) =>
+    request<{ ok: boolean }>(`/auth/device/claim?token=${encodeURIComponent(token)}${turnstileToken ? `&turnstile=${encodeURIComponent(turnstileToken)}` : ""}`),
 };

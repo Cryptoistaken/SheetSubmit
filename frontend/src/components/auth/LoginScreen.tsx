@@ -36,6 +36,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
   const [dark] = useState(() => getInitialTheme() === "dark");
   const didRef = useRef<string | null>(null);
   const [turnstileReady, setTurnstileReady] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<string | null>(null);
   const turnstileBoxRef = useRef<HTMLDivElement>(null);
 
@@ -54,8 +55,8 @@ export default function LoginScreen({ notice }: { notice?: string }) {
     if (!turnstileReady || !turnstileBoxRef.current || turnstileRef.current) return;
     turnstileRef.current = window.turnstile!.render(turnstileBoxRef.current, {
       sitekey: TURNSTILE_SITE_KEY,
-      callback: () => {},
-      "error-callback": () => {},
+      callback: (token: string) => setTurnstileToken(token),
+      "error-callback": () => setTurnstileToken(null),
     });
   }, [turnstileReady]);
 
@@ -88,7 +89,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
       if (!document.hasFocus()) return;
       setChecking(true);
       attempts++;
-      api.claimDeviceSession(didRef.current ?? "").then((res) => {
+      api.claimDeviceSession(didRef.current ?? "", turnstileToken).then((res) => {
         if (stop) return;
         if (res.ok) { stop = true; localStorage.setItem(HAD_SESSION, "1"); setWaiting(true); window.location.href = "/"; return; }
         if (attempts >= MAX_ATTEMPTS) { stop = true; if (iv) clearInterval(iv); setChecking(false); setShowRecheck(true); }
@@ -117,10 +118,10 @@ export default function LoginScreen({ notice }: { notice?: string }) {
             <>
               <div ref={turnstileBoxRef} style={{ marginBottom: 12 }} />
               <a
-                className={`login-btn${href && turnstileReady ? " ready" : " loading"}${checking ? " checking" : ""}`}
-                href={href && turnstileReady ? href : "#"}
+                className={`login-btn${href && turnstileToken ? " ready" : " loading"}${checking ? " checking" : ""}`}
+                href={href && turnstileToken ? href : "#"}
                 onClick={(e) => {
-                  if (!href || !turnstileReady) { e.preventDefault(); return; }
+                  if (!href || !turnstileToken) { e.preventDefault(); return; }
                   setShowFallback(true);
                 }}
               >

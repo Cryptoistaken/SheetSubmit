@@ -3,7 +3,7 @@
 ## Project quick facts
 - Cloudflare Worker (`sheetsubmit.traderspopy.workers.dev`) + Pages (`sheetsubmit.pages.dev`).
 - Git-connected Pages auto-deploys on push. Worker deploys via `.github/workflows/deploy-worker.yml` (no native git deploy via API).
-- Package manager **bun**. Run `bun install` in `worker/` and `frontend/` if `node_modules` missing.
+- Package manager **bun**. Run `bun install` in `worker/` and `Pages/` if `node_modules` missing.
 - Frontend: React 19 + TypeScript + Vite 8 + Tailwind v4 + shadcn/ui (Nova, neutral, lucide, Geist) + Zustand.
 - Worker: Hono + Durable Objects (SQLite) + `xlsx`. No Redis, no KV, no D1.
 - Auth: Telegram bot login → HMAC session cookie (`ss_session`). Stateless verify via `crypto.subtle`.
@@ -21,10 +21,9 @@
     deploy-worker.yml     # CI: worker typecheck + deploy via wrangler
     build-android.yml     # APK CI only (JDK17, assembleRelease)
   worker/                 # Cloudflare Worker (Hono + DO)
-  frontend/               # React SPA (Vite)
+  Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = sheetsubmit.pages.dev
   scripts/TestApi.ts      # live API test suite (57 checks) — run: TEST_SESSION_SECRET=<secret> bun scripts/TestApi.ts
-  backend/                # LEGACY reference only (old Express+Redis server). Do not run or deploy; worker/ is the live API.
 ```
 
 ### Worker — `worker/src/` (Hono, entry `src/index.ts`)
@@ -56,7 +55,7 @@ scheduled.ts          # cron: ensureWebhook
 wrangler.jsonc         # DO bindings INDEX/FILES/POOLS, cron 0 */6 * * *, vars
 ```
 
-### Frontend — `frontend/src/` (Vite 8, entry `main.tsx`)
+### Pages — `Pages/src/` (Vite 8, entry `main.tsx`)
 ```
 main.tsx              # StrictMode, Toast>Confirm>Auth>App
 App.tsx               # createBrowserRouter: Layout (Topbar+Outlet); gate: bubble mode vs LoginScreen vs RouterProvider

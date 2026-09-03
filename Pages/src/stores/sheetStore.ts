@@ -681,7 +681,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     persistTimer = setTimeout(() => {
       persistTimer = null;
       void get().flushPersist(action);
-    }, 300);
+    }, action ? 0 : 300);
   },
 
   flushPersist: async (action, viaUnload) => {

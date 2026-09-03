@@ -132,7 +132,7 @@ export const api = {
     request<{ file: SheetFile; rows: Row[]; logs: unknown[]; undo: unknown[]; redo: unknown[]; seq?: number }>(
       `/files/${id}/full`,
     ),
-  createFile: (data: { id: string; name: string; type: FileType; password?: string; poolEnabled?: boolean }) =>
+  createFile: (data: { id: string; name: string; type: FileType; password?: string; poolEnabled?: boolean; rows?: Row[]; dataCount?: number }) =>
     request<SheetFile>("/files", { method: "POST", body: JSON.stringify(data) }),
   updateFile: (id: string, data: Record<string, unknown>) =>
     request<SheetFile>(`/files/${id}`, { method: "PUT", body: JSON.stringify(data) }),

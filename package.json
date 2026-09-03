@@ -2,12 +2,11 @@
   "name": "sheetsubmit-testmycode",
   "version": "0.1.0",
   "private": true,
-  "description": "SheetSubmit test deployment — fully isolated frontend/ + backend/ (no workspaces)",
+  "description": "SheetSubmit test deployment with Pages and Worker (no workspaces)",
   "scripts": {
-    "dev:web": "bun run --cwd frontend dev",
-    "dev:server": "bun run --cwd backend dev",
-    "build": "bun run --cwd frontend build",
-    "typecheck": "bun run --cwd frontend typecheck && bun run --cwd backend typecheck",
+    "dev:web": "bun run --cwd Pages dev",
+    "build": "bun run --cwd Pages build",
+    "typecheck": "bun run --cwd Pages typecheck && bun run --cwd worker typecheck",
     "test": "bun test"
   }
 }

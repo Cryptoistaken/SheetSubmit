@@ -292,26 +292,19 @@ export default function HomePage() {
 
   const createFile = async (type: FileType) => openCreatePw(type);
 
-  const [uploadPending, setUploadPending] = useState<null | { id: string; name: string; type: FileType; rows: import("@/lib/types").Row[]; dataCount: number }>(null);
+  const [uploadPending, setUploadPending] = useState<null | { id: string; name: string; type: FileType; rows: import("@/lib/types").Row[]; dataCount: number; cacheReady: Promise<void> }>(null);
 
   const doUploadWithPassword = async (password: string) => {
     if (!uploadPending) return;
     const { id, name, type, rows, dataCount } = uploadPending;
     setUploadPending(null);
     setPwModal(null);
-    await hydrateWaCache(rows);
+    await uploadPending.cacheReady;
     let created: import("@/lib/types").SheetFile;
     try {
-      created = await api.createFile({ id, name, type, password, poolEnabled: password === "dgddigital" });
+      created = await api.createFile({ id, name, type, password, poolEnabled: password === "dgddigital", rows, dataCount });
     } catch {
       showToast("Import failed");
-      return;
-    }
-    try {
-      await api.persist(created.id, { rows, dataCount, action: "import" });
-    } catch {
-      try { await api.deleteFile(created.id); } catch {}
-      showToast("Import failed — rolled back");
       return;
     }
     showToast("Imported " + dataCount + " rows");
@@ -326,7 +319,8 @@ export default function HomePage() {
       const result = await importXlsx(buf, file.name, current);
       const isLoveName = result.name.toLowerCase().includes("love");
       // ask password before creating uploaded file — 2 cards, auto-pick L0VE if name contains Love
-      setUploadPending({ id: result.id, name: result.name, type: result.type, rows: result.rows, dataCount: result.dataCount });
+       const cacheReady = hydrateWaCache(result.rows);
+       setUploadPending({ id: result.id, name: result.name, type: result.type, rows: result.rows, dataCount: result.dataCount, cacheReady });
       setPwModal({ type: result.type, choice: isLoveName ? "L0VE@12345" : "dgddigital", custom: "" });
     } catch {
       showToast("Import failed");

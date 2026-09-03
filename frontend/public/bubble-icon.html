@@ -1,0 +1,234 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0;background:transparent;overflow:visible;width:100%;height:100%}#a{position:relative;width:var(--box,48%);height:var(--box,48%);display:grid;place-items:center;overflow:visible}#a .state{position:absolute;inset:0;display:block}#a svg{width:100%;height:100%;display:block;overflow:visible;transform-origin:center}#idle svg{transform:scale(1.25);transform-origin:center}</style>
+<div id="a"></div>
+<script>
+const ICON_CLAUDE=`<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><rect width="1024" height="1024" rx="230" fill="currentColor"/><g fill="#111111"><rect x="250" y="350" width="120" height="240" rx="20"/><rect x="650" y="350" width="120" height="240" rx="20"/></g><g fill="#FFFFFF"><rect x="270" y="380" width="40" height="60" rx="10"/><rect x="670" y="380" width="40" height="60" rx="10"/></g><path d="M -50 600 L 150 600 L 150 800 L -50 800 Z" fill="#C46044"/><path d="M 874 600 L 1074 600 L 1074 800 L 874 800 Z" fill="#C46044"/></svg>`;
+const ICON_PACMAN=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="100%" height="100%"><path fill="currentColor" d="M 150,150 L 236.6,100 A 100 100 0 1 0 236.6,200 Z"/><circle cx="180" cy="110" r="12" fill="#000"/><circle cx="183" cy="106" r="3.5" fill="#fff" opacity="0.9"/></svg>`;
+const ICON_LOGO=`<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><rect x="2" y="2" width="20" height="20" rx="5" fill="currentColor"/><path d="M7 8h10M7 12h10M7 16h7" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+const ICON_APP=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="100%" height="100%"><image href="/app-icon.webp" x="0" y="0" width="300" height="300" preserveAspectRatio="xMidYMid meet"/></svg>`;
+const MAP={claude:ICON_CLAUDE,pacman:ICON_PACMAN,logo:ICON_LOGO,appIcon:ICON_APP,claudeCodePlayful:ICON_CLAUDE};
+const REG_IDLE=`<svg style="display:block" xmlns="http://www.w3.org/2000/svg" viewBox="-3 1 20 18" width="100%" height="100%">
+  <defs>
+    <style>
+      /* 16-Second Master Sequence for Idle Actions */
+      .action-body {
+        transform-origin: 7.5px 13px; /* Pivot at the base of the torso */
+        animation: action-body 16s infinite ease-in-out;
+      }
+      
+      /* Continuous Subtle Breathing (Syncs exactly 5 times per 16s loop) */
+      .breathe-anim {
+        transform-origin: 7.5px 13px;
+        animation: breathe 3.2s infinite ease-in-out;
+      }
+
+      /* Shadow shrinking and shifting matching actions */
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-action 16s infinite ease-in-out;
+      }
+
+      /* Left Arm (Scratching and Yawn Stretching) */
+      .arm-l {
+        transform-origin: 1px 10px;
+        animation: arm-l-idle 16s infinite ease-in-out;
+      }
+
+      /* Right Arm (Yawn Stretching) */
+      .arm-r {
+        transform-origin: 14px 10px;
+        animation: arm-r-idle 16s infinite ease-in-out;
+      }
+
+      /* Eye Tracking (Looking around) */
+      .eyes-look {
+        animation: eye-track 16s infinite ease-in-out;
+      }
+
+      /* Occasional Blinks and shutting during Yawn */
+      .eyes-blink {
+        transform-origin: 7.5px 9px;
+        animation: eye-blink 16s infinite linear;
+      }
+
+      /* Yawn Mouth Appearance */
+      .yawn-mouth {
+        transform-origin: 7.5px 11px;
+        animation: yawn-mouth-anim 16s infinite ease-in-out;
+        opacity: 0;
+      }
+
+      /* Tiny tear that appears during the big yawn */
+      .yawn-tear {
+        animation: tear-fall 16s infinite ease-in-out;
+        opacity: 0;
+      }
+
+      /* --- Keyframes --- */
+
+      @keyframes breathe {
+        0%, 100% { transform: scale(1, 1) translate(0, 0); }
+        50% { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+      }
+
+      @keyframes action-body {
+        0%, 8%, 26%, 38%, 55%, 80%, 100% { transform: scale(1, 1) translate(0, 0); }
+        /* Look Right Tilt */
+        12%, 22% { transform: scale(1, 1) translate(1px, 0); }
+        /* Look Left Tilt */
+        42%, 50% { transform: scale(1, 1) translate(-1px, 0); }
+        /* Scratching Lean */
+        30%, 36% { transform: scale(1, 1) translate(0.5px, 0); } 
+        /* Deep Yawn Stretch */
+        60% { transform: scale(0.95, 1.05) translate(0px, -1px); } /* Stretch up */
+        65% { transform: scale(0.9, 1.1) translate(0px, -2px); }   /* Peak stretch */
+        72% { transform: scale(1.05, 0.95) translate(0px, 1px); }  /* Heavy sigh / squash down */
+        76% { transform: scale(1, 1) translate(0px, 0px); }        /* Recover */
+      }
+
+      @keyframes shadow-action {
+        0%, 8%, 26%, 38%, 55%, 80%, 100% { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        12%, 22% { transform: scaleX(1) translate(1px, 0); opacity: 0.5; }
+        42%, 50% { transform: scaleX(1) translate(-1px, 0); opacity: 0.5; }
+        30%, 36% { transform: scaleX(1) translate(0.5px, 0); opacity: 0.5; }
+        60% { transform: scaleX(0.95) translate(0, 0); opacity: 0.45; }
+        65% { transform: scaleX(0.9) translate(0, 0); opacity: 0.4; }
+        72% { transform: scaleX(1.05) translate(0, 0); opacity: 0.55; }
+        76% { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+      }
+
+      @keyframes eye-track {
+        0%, 10%, 25%, 38%, 52%, 58%, 80%, 100% { transform: translate(0px, 0px); }
+        12%, 22% { transform: translate(3px, 0px); } /* Look Right */
+        42%, 50% { transform: translate(-3px, 0px); } /* Look Left */
+        60%, 75% { transform: translate(0px, -1px); } /* Look slightly up during yawn */
+      }
+
+      @keyframes eye-blink {
+        0%, 3%, 7%, 18%, 22%, 43%, 47%, 56%, 83%, 87%, 100% { transform: scaleY(1); }
+        5%, 20%, 45%, 85% { transform: scaleY(0.1); } /* Quick Blinks */
+        /* Yawn Closed Eyes */
+        60% { transform: scaleY(1); }
+        62%, 72% { transform: scaleY(0.1); } /* Eyes completely shut */
+        75% { transform: scaleY(1); }
+      }
+
+      @keyframes arm-l-idle {
+        0%, 28% { transform: translate(0, 0) rotate(0deg); }
+        
+        /* Occasional Scratching Sequence (Left Arm) */
+        30% { transform: translate(1px, -3px) rotate(15deg); }
+        31% { transform: translate(1.5px, -4px) rotate(35deg); } /* Up */
+        32% { transform: translate(0.5px, -2.5px) rotate(0deg); } /* Down */
+        33% { transform: translate(1.5px, -4px) rotate(35deg); }
+        34% { transform: translate(0.5px, -2.5px) rotate(0deg); }
+        35% { transform: translate(1.5px, -4px) rotate(35deg); }
+        36% { transform: translate(0.5px, -2.5px) rotate(0deg); }
+        
+        38%, 58% { transform: translate(0, 0) rotate(0deg); }
+        
+        /* Yawn Stretch */
+        62% { transform: translate(-1px, -2px) rotate(45deg); }
+        65% { transform: translate(-2px, -3px) rotate(80deg); } /* Full outward stretch */
+        72% { transform: translate(0px, 1px) rotate(-15deg); } /* Relax down */
+        76%, 100% { transform: translate(0, 0) rotate(0deg); }
+      }
+
+      @keyframes arm-r-idle {
+        0%, 58% { transform: translate(0, 0) rotate(0deg); }
+        /* Yawn Stretch */
+        62% { transform: translate(1px, -2px) rotate(-45deg); }
+        65% { transform: translate(2px, -3px) rotate(-80deg); } /* Full outward stretch */
+        72% { transform: translate(0px, 1px) rotate(15deg); } /* Relax down */
+        76%, 100% { transform: translate(0, 0) rotate(0deg); }
+      }
+
+      @keyframes yawn-mouth-anim {
+        0%, 58%, 76%, 100% { opacity: 0; transform: scale(0.1); }
+        60% { opacity: 1; transform: scale(0.5, 0.2); }
+        65% { opacity: 1; transform: scale(1.1, 1.4); } /* Wide Open */
+        72% { opacity: 1; transform: scale(0.6, 0.4); } /* Shrinking */
+        75% { opacity: 0; transform: scale(0.1); }
+      }
+
+      @keyframes tear-fall {
+        0%, 64%, 80%, 100% { opacity: 0; transform: translateY(0); }
+        66% { opacity: 1; transform: translateY(0); } /* Appears at corner of eye */
+        72% { opacity: 1; transform: translateY(2.5px); } /* Slides down cheek */
+        75% { opacity: 0; transform: translateY(3px); } /* Fades out */
+      }
+    </style>
+  </defs>
+
+  <!-- Ground Shadow -->
+  <rect id="ground-shadow" class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+
+  <!-- Static Character Legs (Planted firmly while the body stretches above) -->
+  <g id="legs" fill="#DE886D">
+    <rect id="outer-left-leg" x="3" y="13" width="1" height="2"/>
+    <rect id="inner-left-leg" x="5" y="13" width="1" height="2"/>
+    <rect id="inner-right-leg" x="9" y="13" width="1" height="2"/>
+    <rect id="outer-right-leg" x="11" y="13" width="1" height="2"/>
+  </g>
+
+  <!-- Animated Upper Body (Combines occasional actions + continuous breathing) -->
+  <g class="action-body">
+    <g class="breathe-anim">
+      
+      <!-- Torso -->
+      <rect id="torso" x="2" y="6" width="11" height="7" fill="#DE886D"/>
+      
+      <!-- Arms -->
+      <g class="arm-l">
+        <rect id="left-arm" x="0" y="9" width="2" height="2" fill="#DE886D"/>
+      </g>
+      <g class="arm-r">
+        <rect id="right-arm" x="13" y="9" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Yawning Mouth (Hidden usually) -->
+      <rect class="yawn-mouth" x="6" y="10" width="3" height="2" fill="#000000"/>
+
+      <!-- Eyes Group -->
+      <g class="eyes-look" fill="#000000">
+        <g class="eyes-blink">
+          <rect id="left-eye" x="4" y="8" width="1" height="2"/>
+          <rect id="right-eye" x="10" y="8" width="1" height="2"/>
+        </g>
+      </g>
+
+      <!-- Yawn Tear Drop (A tiny detail for the big stretch) -->
+      <rect class="yawn-tear" x="3.5" y="10" width="1" height="1" fill="#40C4FF"/>
+      
+    </g>
+  </g>
+</svg>`;
+const PLAY_IDLE=`<svg style="display:block" xmlns="http://www.w3.org/2000/svg" viewBox="-7 -2 27 20" width="100%" height="100%" shape-rendering="crispEdges"><defs><style>.shadow-sway{transform-box:fill-box;transform-origin:50% 50%;animation:shadow-sway 1.6s infinite ease-in-out}.body-sway{transform-origin:7.5px 13px;animation:body-sway 1.6s infinite ease-in-out}.leg-left-inner,.leg-left-outer,.leg-right-inner,.leg-right-outer{transform-box:fill-box;transform-origin:50% 0%}.leg-left-inner{animation:leg-left-inner 1.6s infinite ease-in-out}.leg-left-outer{animation:leg-left-outer 1.6s infinite ease-in-out}.leg-right-inner{animation:leg-right-inner 1.6s infinite ease-in-out}.leg-right-outer{animation:leg-right-outer 1.6s infinite ease-in-out}.arm-left-dance{transform-box:fill-box;transform-origin:100% 0%;animation:arm-left-dance 1.6s infinite ease-in-out}.arm-right-dance{transform-box:fill-box;transform-origin:0% 0%;animation:arm-right-dance 1.6s infinite ease-in-out}.earcup-left{transform-box:fill-box;transform-origin:100% 50%;animation:earcup-squeeze 1.6s infinite ease-in-out}.earcup-right{transform-box:fill-box;transform-origin:0% 50%;animation:earcup-squeeze 1.6s infinite ease-in-out}.note-left{animation:note-left 1.6s infinite ease-out}.note-right{animation:note-right 1.6s infinite ease-out}@keyframes shadow-sway{0%,100%{transform:translateX(0) scaleX(1);opacity:0.5}22%,30%{transform:translateX(-0.5px) scaleX(0.85);opacity:0.45}50%{transform:translateX(0) scaleX(1);opacity:0.5}70%,78%{transform:translateX(0.5px) scaleX(0.85);opacity:0.45}}@keyframes body-sway{0%,100%{transform:rotate(0deg) translateY(0)}22%,30%{transform:rotate(-6deg) translateY(0.3px)}50%{transform:rotate(0deg) translateY(-0.2px)}70%,78%{transform:rotate(6deg) translateY(0.3px)}}@keyframes leg-right-inner{0%,100%{transform:rotate(0deg) translateY(0)}22%,30%{transform:rotate(-12deg) translateY(-0.2px)}50%,70%,78%{transform:rotate(0deg) translateY(0)}}@keyframes leg-right-outer{0%,100%{transform:rotate(0deg) translateY(0)}22%,30%{transform:rotate(-22deg) translateY(-0.3px)}50%,70%,78%{transform:rotate(0deg) translateY(0)}}@keyframes leg-left-inner{0%,22%,30%,50%,100%{transform:rotate(0deg) translateY(0)}70%,78%{transform:rotate(12deg) translateY(-0.2px)}}@keyframes leg-left-outer{0%,22%,30%,50%,100%{transform:rotate(0deg) translateY(0)}70%,78%{transform:rotate(22deg) translateY(-0.3px)}}@keyframes arm-left-dance{0%,100%{transform:rotate(0deg)}22%,30%{transform:rotate(-30deg)}50%{transform:rotate(0deg)}70%,78%{transform:rotate(20deg)}}@keyframes arm-right-dance{0%,100%{transform:rotate(0deg)}22%,30%{transform:rotate(-20deg)}50%{transform:rotate(0deg)}70%,78%{transform:rotate(30deg)}}@keyframes earcup-squeeze{0%,100%{transform:scaleX(1)}22%,30%{transform:scaleX(0.85)}50%{transform:scaleX(1.02)}70%,78%{transform:scaleX(0.85)}}@keyframes note-left{0%,14%,42%,100%{opacity:0;transform:translate(0,0)}22%{opacity:1;transform:translate(-0.4px,-1.2px)}38%{opacity:0;transform:translate(-1.6px,-3.5px)}}@keyframes note-right{0%,62%,82%,100%{opacity:0;transform:translate(0,0)}70%{opacity:1;transform:translate(0.4px,-1.2px)}78%{opacity:0;transform:translate(1.6px,-3.5px)}}</style><g id="music-noteB" fill="#FFE066"><rect x="0" y="2" width="1" height="1"/><rect x="1" y="0" width="1" height="3"/><rect x="2" y="0" width="1" height="1"/></g></defs><rect class="shadow-sway" x="3" y="15" width="9" height="1" fill="#000000"/><g fill="#DE886D"><rect class="leg-left-outer" x="3" y="13" width="1" height="2"/><rect class="leg-left-inner" x="5" y="13" width="1" height="2"/><rect class="leg-right-inner" x="9" y="13" width="1" height="2"/><rect class="leg-right-outer" x="11" y="13" width="1" height="2"/></g><g class="body-sway"><rect x="2" y="6" width="11" height="7" fill="#DE886D"/><g fill="#1D5C83"><rect x="4.9" y="2.85" width="5.05" height="0.75"/><rect x="4.46" y="2.93" width="0.75" height="0.75"/><rect x="9.66" y="2.93" width="0.75" height="0.75"/><rect x="4.03" y="3.1" width="0.75" height="0.75"/><rect x="10.11" y="3.09" width="0.75" height="0.75"/><rect x="3.59" y="3.34" width="0.75" height="0.75"/><rect x="10.57" y="3.33" width="0.75" height="0.75"/><rect x="3.15" y="3.63" width="0.75" height="0.75"/><rect x="11.02" y="3.61" width="0.75" height="0.75"/><rect x="2.71" y="3.98" width="0.75" height="0.75"/><rect x="11.48" y="3.96" width="0.75" height="0.75"/><rect x="2.28" y="4.37" width="0.75" height="0.75"/><rect x="11.94" y="4.34" width="0.75" height="0.75"/><rect x="1.84" y="4.82" width="0.75" height="0.75"/><rect x="12.39" y="4.78" width="0.75" height="0.75"/><rect x="1.4" y="5.3" width="0.75" height="0.75"/><rect x="12.85" y="5.25" width="0.75" height="0.75"/></g><g class="earcup-left"><rect x="0.2" y="7" width="0.6" height="2.4" fill="#1D5C83"/><rect x="0.8" y="6.5" width="0.6" height="3.25" fill="#256891"/><rect x="1.4" y="6" width="0.6" height="4.05" fill="#2E7AA8"/></g><g class="earcup-right"><rect x="14.2" y="7" width="0.6" height="2.4" fill="#1D5C83"/><rect x="13.6" y="6.5" width="0.6" height="3.25" fill="#256891"/><rect x="13" y="6" width="0.6" height="4.05" fill="#2E7AA8"/></g><g class="arm-left-dance"><rect x="-1" y="9" width="2" height="2" fill="#DE886D"/></g><g class="arm-right-dance"><rect x="14" y="9" width="2" height="2" fill="#DE886D"/></g><g fill="none" stroke="#000000" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3.5,8.5 4.5,9.5 5.5,8.5"/><polyline points="9.5,8.5 10.5,9.5 11.5,8.5"/></g></g><g transform="translate(-5 4)"><g class="note-left"><use href="#music-noteB"/></g></g><g transform="translate(15 4)"><g class="note-right"><use href="#music-noteB"/></g></g></svg>`;
+const REG={idle:REG_IDLE};
+const PLAY={idle:PLAY_IDLE};
+function render(){
+  const q=new URLSearchParams(location.search);
+  const icon=(q.get('icon')||'claudeCodePlayful');
+  const color=(q.get('color')||'#ef4444');
+  const box=q.get('box');
+  const a=document.getElementById('a');
+  a.style.color=color;
+  // Native passes box=<icon size as % of this now-larger WebView> so the
+  // animated frames (which intentionally scale/translate past the icon's
+  // rest size) have real headroom instead of being clipped at the WebView's
+  // own edge — see FloatingBubbleService's windowSize-sized WebView.
+  if(box) document.documentElement.style.setProperty('--box', box+'%');
+  if(icon==='claudeCode'||icon==='claudeCodePlayful'){
+    const M=icon==='claudeCodePlayful'?PLAY:REG;
+    a.innerHTML='<div class="state" id="idle">'+M.idle+'</div>';
+    a.querySelectorAll('[fill="#DE886D"]').forEach(e=>e.setAttribute('fill','currentColor'));
+  } else {
+    const html=MAP[icon]||MAP.logo;
+    a.innerHTML=html;
+  }
+  window.update=(o)=>{ if(o.icon!==undefined||o.color!==undefined){ const qq=new URLSearchParams(location.search); if(o.icon) qq.set('icon',o.icon); if(o.color) qq.set('color',o.color); history.replaceState(null,'','?'+qq.toString()); render(); } };
+}
+render();
+</script>

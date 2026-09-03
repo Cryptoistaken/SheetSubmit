@@ -29,7 +29,6 @@ android/android-release.keystore
 # Playwright MCP artifacts (screenshots/snapshots — local only)
 .playwright-mcp/
 tmp_artifact*/
-bubble-*.html
 compare-*.html
 
 # Re-include project .bat files hidden by global gitignore (*.bat)

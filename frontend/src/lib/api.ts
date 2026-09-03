@@ -148,7 +148,7 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(data),
     }, opts),
-  health: () => request<{ status: string }>("/health"),
+  health: () => request<{ ok: boolean }>("/health"),
   getArchive: () => request<ArchiveFile[]>("/archive"),
   restoreFile: (id: string) => request<{ ok: boolean }>(`/archive/${id}/restore`, { method: "POST" }),
   permanentDelete: (id: string) => request<{ ok: boolean }>(`/archive/${id}`, { method: "DELETE" }),

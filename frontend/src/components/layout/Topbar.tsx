@@ -85,8 +85,7 @@ export default function Topbar() {
         .then((h) => {
           interval = 30000;
           if (cancelled) return;
-          const ok = h.status === "ok" || h.status === "ready";
-          setConn(ok ? { cls: "ok", text: "Connected" } : { cls: "", text: "Reconnecting..." });
+          setConn(h.ok ? { cls: "ok", text: "Connected" } : { cls: "", text: "Reconnecting..." });
         })
         .catch(() => {
           if (cancelled) return;

@@ -7,7 +7,7 @@ export class IndexDO {
     case "user": return Response.json(s.exec("SELECT * FROM users WHERE user_id=?", args.id).toArray()[0] || null);
     case "users": return Response.json(s.exec("SELECT * FROM users ORDER BY created_at DESC").toArray());
     case "ban": s.exec("UPDATE users SET banned=? WHERE user_id=?", args.banned ? 1 : 0, args.id); return Response.json({ ok: true });
-    case "register": s.exec("INSERT OR REPLACE INTO file_index(file_id,owner_id,archived,data) VALUES(?,?,?,?,?)", args.file.id, args.uid, 0, JSON.stringify(args.file)); return Response.json({ ok: true });
+    case "register": s.exec("INSERT OR REPLACE INTO file_index(file_id,owner_id,archived,data) VALUES(?,?,?,?)", args.file.id, args.uid, 0, JSON.stringify(args.file)); return Response.json({ ok: true });
     case "file": return Response.json(s.exec("SELECT data,owner_id,archived FROM file_index WHERE file_id=?", args.id).toArray()[0] || null);
     case "files": return Response.json(s.exec("SELECT data FROM file_index WHERE owner_id=? AND archived=0", args.uid).toArray().map((r: any) => JSON.parse(r.data)));
     case "archive": s.exec("UPDATE file_index SET archived=?,data=? WHERE file_id=?", args.archived ? 1 : 0, JSON.stringify(args.file), args.id); return Response.json({ ok: true });

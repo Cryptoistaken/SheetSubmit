@@ -27,7 +27,10 @@ export interface SheetFile {
   deletedAt?: number;
   password?: string;
   poolEnabled?: boolean;
+  columns?: ColumnDef[];
 }
+
+export type FilePreset = "cookie" | "combo" | "page";
 
 /** A grid row — cookie cells are plain string keys.
  * Augmentations: _pool?: string; _taken?: boolean; _takenAt?: number; wa_status?: string */
@@ -46,6 +49,19 @@ export const FILE_TYPE_DEFS: Record<FileType, FileTypeDef> = {
       { key: "uid", label: "uid", width: 120 },
     ],
   },
+};
+
+export const COLUMN_PRESETS: Record<FilePreset, ColumnDef[]> = {
+  cookie: [
+    { key: "cookies", label: "cookies", width: 340 },
+    { key: "uid", label: "uid", width: 120 },
+  ],
+  combo: [
+    { key: "cookies", label: "cookies", width: 340 },
+    { key: "twofakey", label: "2fa key", width: 200 },
+    { key: "uid", label: "uid", width: 120 },
+  ],
+  page: [...FILE_TYPE_DEFS.fb_cookie.columns],
 };
 
 /** Safe FILE_TYPE_DEFS lookup — falls back to fb_cookie for missing/unknown

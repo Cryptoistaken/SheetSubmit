@@ -11,8 +11,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
-import { fileTypeDef } from "@/lib/types";
-import type { FileType, SheetFile } from "@/lib/types";
+import { COLUMN_PRESETS, fileTypeDef } from "@/lib/types";
+import type { FilePreset, FileType, SheetFile } from "@/lib/types";
 import { downloadXlsx, genId, hydrateWaCache, importXlsx, todayStr } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
 
@@ -156,7 +156,7 @@ export default function HomePage() {
       return;
     }
     try {
-      await downloadXlsx(rows, fileTypeDef(f.type).columns, f.name);
+      await downloadXlsx(rows, f.columns ?? fileTypeDef(f.type).columns, f.name);
       showToast("Downloaded");
     } catch {
       showToast("Download failed");
@@ -260,13 +260,14 @@ export default function HomePage() {
     showToast(ids.length + " file" + (ids.length > 1 ? "s" : "") + " archived");
   };
 
-  const [pwModal, setPwModal] = useState<null | { type: FileType; choice: string; custom: string }>(null);
+  const [pwModal, setPwModal] = useState<null | { type: FileType; preset: FilePreset; choice: string; custom: string }>(null);
 
-  const openCreatePw = (type: FileType) => setPwModal({ type, choice: "dgddigital", custom: "" });
+  const openCreatePw = (type: FileType, preset: FilePreset) => setPwModal({ type, preset, choice: "dgddigital", custom: "" });
 
   const createWithPassword = async (password: string) => {
     if (!pwModal) return;
     const type = pwModal.type;
+    const columns = COLUMN_PRESETS[pwModal.preset];
     const poolEnabled = password === "dgddigital";
     setPwModal(null);
     const name = fileTypeDef(type).label + " " + todayStr();
@@ -280,7 +281,7 @@ export default function HomePage() {
     const id = genId();
     let created: import("@/lib/types").SheetFile;
     try {
-      created = await api.createFile({ id, name: finalName, type, password, poolEnabled });
+      created = await api.createFile({ id, name: finalName, type, password, poolEnabled, columns });
     } catch {
       showToast("Failed to create file");
       return;
@@ -290,7 +291,7 @@ export default function HomePage() {
     navigate("/file/" + created.id);
   };
 
-  const createFile = async (type: FileType) => openCreatePw(type);
+  const createFile = async (preset: FilePreset) => openCreatePw("fb_cookie", preset);
 
   const [uploadPending, setUploadPending] = useState<null | { id: string; name: string; type: FileType; rows: import("@/lib/types").Row[]; dataCount: number; cacheReady: Promise<void> }>(null);
 
@@ -321,7 +322,7 @@ export default function HomePage() {
       // ask password before creating uploaded file — 2 cards, auto-pick L0VE if name contains Love
        const cacheReady = hydrateWaCache(result.rows);
        setUploadPending({ id: result.id, name: result.name, type: result.type, rows: result.rows, dataCount: result.dataCount, cacheReady });
-      setPwModal({ type: result.type, choice: isLoveName ? "L0VE@12345" : "dgddigital", custom: "" });
+      setPwModal({ type: result.type, preset: "page", choice: isLoveName ? "L0VE@12345" : "dgddigital", custom: "" });
     } catch {
       showToast("Import failed");
     }

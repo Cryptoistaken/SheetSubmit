@@ -2,11 +2,10 @@ import { Plus, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
-import { FILE_TYPE_DEFS } from "@/lib/types";
-import type { FileType } from "@/lib/types";
+import type { FilePreset } from "@/lib/types";
 
 interface FabProps {
-  onCreate: (type: FileType) => void;
+  onCreate: (preset: FilePreset) => void;
   onUpload: (file: File) => void;
 }
 
@@ -32,8 +31,6 @@ export default function Fab({ onCreate, onUpload }: FabProps) {
     return () => document.removeEventListener("click", onDoc);
   }, []);
 
-  const fb = FILE_TYPE_DEFS.fb_cookie;
-
   const handleUploadClick = () => {
     setOpen(false);
     fileRef.current?.click();
@@ -56,28 +53,19 @@ export default function Fab({ onCreate, onUpload }: FabProps) {
         <Plus size={24} strokeWidth={3} />
       </button>
       <div ref={menuRef} className={`home-fab-menu${open ? " open" : ""}`}>
-        <button
-          className="home-fab-item"
-          onClick={() => {
-            setOpen(false);
-            onCreate("fb_cookie");
-          }}
-        >
-          <span className="home-fab-ic t-fb">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5" />
-              <path d="M8.5 8.5v.01" />
-              <path d="M16 15.5v.01" />
-              <path d="M12 12v.01" />
-              <path d="M11 17v.01" />
-              <path d="M7 14v.01" />
-            </svg>
-          </span>
-          <span>
-            <span className="home-fab-name">{fb.label}</span>
-            <span className="home-fab-desc">{fb.desc}</span>
-          </span>
-        </button>
+        <div className="home-fab-platform">Facebook</div>
+        {([
+          ["cookie", "Cookie Only", "cookies + uid"],
+          ["combo", "Combo", "cookies + 2fa + uid"],
+          ["page", "Page", "full columns"],
+        ] as const).map(([preset, name, desc]) => (
+          <button className="home-fab-item home-fab-subitem" key={preset} onClick={() => { setOpen(false); onCreate(preset); }}>
+            <span>
+              <span className="home-fab-name">{name}</span>
+              <span className="home-fab-desc">{desc}</span>
+            </span>
+          </button>
+        ))}
         <div className="home-fab-sep"></div>
         <button className="home-fab-item" onClick={handleUploadClick}>
           <span className="home-fab-ic" style={{ background: "var(--bg3)", color: "var(--text2)" }}>

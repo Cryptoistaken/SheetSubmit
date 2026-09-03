@@ -164,12 +164,12 @@ export default function PoolsView() {
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setReDownloading(null); }
   };
   const doRevert = async (id: string) => {
-    const ok = await confirm("Give back this download? Items will return to pool and Taken will be cleared.", "Give back");
+    const ok = await confirm("Return this to pool?", "Give back");
     if (!ok) return;
     setReverting(id);
     try {
-      const res = await api.revertDownload(id) as unknown as { reverted?: number };
-      showToast(`Reverted ${res.reverted ?? ""} items — returned to pool`);
+      await api.revertDownload(id);
+      showToast("Returned to pool");
       await load();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setReverting(null); }
   };
@@ -182,7 +182,7 @@ export default function PoolsView() {
       const fid = first?.["srcFileId"] as string | undefined;
       if (fid) { navigate(`/admin/user/${u.userId}/file/${fid}`); return; }
     } catch {}
-    showToast("No file found for this user in this pool");
+    showToast("No file found");
   };
 
   return (
@@ -204,8 +204,7 @@ export default function PoolsView() {
       {/* header + switches — purely pools */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-.02em" }}>Pools <span style={{ fontWeight: 500, color: "var(--text3)", fontSize: 13 }}>— admin only</span></div>
-          <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 4 }}>Auto-pooling: every save auto-classifies rows (Cookies = 1-col, 2FA/Page = 2-col). Promotion Cookies→2FA→Page is automatic.</div>
+          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-.02em" }}>Pools</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <div className="pool-switch" style={{ background: "#eef2ff", borderColor: "#ddd6fe" }}>
@@ -222,24 +221,23 @@ export default function PoolsView() {
           </div>
         </div>
       </div>
-      <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>Password switch is simple as you asked: <b>dgddigital | L0VE@12345</b> (Custom hidden in UI). File creation shows 2 cards only.</div>
+
 
       {/* stats */}
       <div className="pools-stats" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 16 }}>
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Available in {poolMeta.label}</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{totals.available}</div>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>Pool: {cur === "cookies_only" ? "cookies valid, 2FA empty" : cur === "cookies_2fa" ? "cookies + 2FA" : "cookies + 2FA + green dot"}</div>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>{cur === "cookies_only" ? "Cookies only" : cur === "cookies_2fa" ? "Cookies + 2FA" : "Full"}</div>
         </div>
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Claimed (Taken)</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{totals.claimed}</div>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>Removed from pool · blue lock in owner's file</div>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>Claimed by users</div>
         </div>
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Users in pool</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{totals.users}</div>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>Per-user breakdown below</div>
         </div>
       </div>
 
@@ -264,13 +262,12 @@ export default function PoolsView() {
           <button className="btn btn-primary pools-download" disabled={downloading || !totals.available} onClick={doPoolClaim} style={{ boxShadow: "0 1px 6px rgba(0,112,243,.18)", fontWeight: 600 }}>Download {customQty ? Number(customQty) || 0 : poolQty === "all" ? "All" : poolQty} from {poolMeta.label}</button>
         </div>
       </div>
-      <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 8 }}>You will claim <b>{customQty ? Number(customQty) || 0 : poolQty === "all" ? totals.available : poolQty as number}</b> of <b>{totals.available}</b> — {Math.max(0, totals.available - (customQty ? Number(customQty) || 0 : poolQty === "all" ? totals.available : poolQty as number))} will remain. {poolMeta.label === "Cookies" ? "1-col XLSX (cookies)" : "2-col XLSX (cookies+2fa)"} • file: {cur === "cookies_only" ? "cookies_pool.xlsx" : cur === "cookies_2fa" ? "2fa_pool.xlsx" : "page_pool.xlsx"}</div>
 
       {/* search — at top of users list, separate from download */}
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, marginBottom: 8 }}>
         <label style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: "absolute", left: 10, color: "var(--text3)", pointerEvents: "none" }}><circle cx="11" cy="11" r="7" /><path d="M20 20L16 16" /></svg>
-          <input className="admin-search-input" placeholder="Search user…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search users" style={{ width: 240, maxWidth: "48vw", paddingLeft: 32 }} />
+          <input className="admin-search-input" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search users" style={{ width: 240, maxWidth: "48vw", paddingLeft: 32 }} />
         </label>
       </div>
 
@@ -279,7 +276,7 @@ export default function PoolsView() {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 520 }}>
           <thead><tr style={{ borderBottom: "1px solid var(--border)", textAlign: "left", color: "var(--text3)" }}><th style={{ padding: "10px 12px" }}>User</th><th style={{ padding: "10px 12px" }}>Available</th><th style={{ padding: "10px 12px" }}>Claimed</th><th style={{ width: 44 }}></th></tr></thead>
           <tbody>
-            {filtered.length === 0 ? <tr><td colSpan={4} style={{ padding: 24, textAlign: "center", color: "var(--text3)" }}>No users in this pool</td></tr> : filtered.map((u) => {
+            {filtered.length === 0 ? <tr><td colSpan={4} style={{ padding: 24, textAlign: "center", color: "var(--text3)" }}>No users yet</td></tr> : filtered.map((u) => {
               const d = displayName(u);
               const isAdmin = (u as unknown as Record<string, unknown>)["isAdmin"] as boolean | undefined;
               return (
@@ -304,7 +301,7 @@ export default function PoolsView() {
                       <div style={{ position: "absolute", right: 8, top: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--rl)", boxShadow: "var(--shadow-lg)", zIndex: 10, minWidth: 160, padding: 4 }}>
                         <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", borderRadius: 6, fontWeight: 500 }} onClick={() => openFile(u)}>View file</button>
                         <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "var(--blue)", color: "#fff", cursor: "pointer", borderRadius: 6, fontWeight: 700, marginTop: 4 }} onClick={() => { setMenuUser(null); setDlUser(u); setPerQty(10); setPerCustom(""); }}>Download</button>
-                        {isAdmin ? <div style={{ fontSize: 11, color: "var(--text3)", padding: "6px 10px" }}>No delete/ban for admin</div> : null}
+                        {isAdmin ? <div style={{ fontSize: 11, color: "var(--text3)", padding: "6px 10px" }}>Admin account</div> : null}
                       </div>
                     ) : null}
                   </td>
@@ -317,10 +314,9 @@ export default function PoolsView() {
 
       {/* download history — below user table, above fileView */}
       <div style={{ marginTop: 16, border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)", padding: 14, overflow: "auto" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Recent downloads — re-download or give back</div>
-        <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 10 }}>Up to 10 most recent claims. Re-download if file missed; <b>Give back</b> returns items to pool and clears Taken.</div>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Recent downloads</div>
         {!downloads || downloads.length === 0 ? (
-          <div style={{ fontSize: 13, color: "var(--text3)", padding: "12px 0", textAlign: "center" }}>{downloads === null ? "Loading…" : "No downloads yet — claim from the pool above."}</div>
+          <div style={{ fontSize: 13, color: "var(--text3)", padding: "12px 0", textAlign: "center" }}>{downloads === null ? "Loading..." : "No downloads yet"}</div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640 }}>
             <thead><tr style={{ borderBottom: "1px solid var(--border)", textAlign: "left", color: "var(--text3)", fontSize: 12 }}><th style={{ padding: "8px 8px" }}>Date</th><th style={{ padding: "8px 8px" }}>Pool</th><th style={{ padding: "8px 8px" }}>Password</th><th style={{ padding: "8px 8px" }}>Claimed</th><th style={{ padding: "8px 8px" }}>Filename</th><th style={{ width: 200 }}></th></tr></thead>
@@ -350,8 +346,8 @@ export default function PoolsView() {
       {dlUser ? (
         <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) setDlUser(null); }}>
           <div className="modal-box" role="dialog" aria-modal="true" style={{ width: 360 }}>
-            <div className="modal-title">Download from {displayName(dlUser).line1}</div>
-            <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>Available: {dlUser.available} · Claimed: {dlUser.claimed}</div>
+            <div className="modal-title">Download</div>
+            <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>{displayName(dlUser).line1} &middot; {dlUser.available} available</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
               {[10, 50].map((n) => <button key={n} className={`btn ${perQty === n && !perCustom ? "btn-primary" : ""}`} onClick={() => { setPerQty(n); setPerCustom(""); }}>{n}</button>)}
               <button className={`btn ${perQty === "all" && !perCustom ? "btn-primary" : ""}`} onClick={() => { setPerQty("all"); setPerCustom(""); }}>All</button>

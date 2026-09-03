@@ -417,7 +417,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       const f = full.file;
       if (!f?.id) throw new Error("File not found");
       if (seq !== openSeq) return;
-      const columns = fileTypeDef(f.type).columns;
+      const columns = f.columns ?? fileTypeDef(f.type).columns;
       let visibleCols = new Set<string>(columns.map((c) => c.key));
       try {
         const saved = localStorage.getItem(`ss_cols_${id}`);
@@ -527,7 +527,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       ]);
       if (!f?.id) throw new Error("File not found");
       if (seq !== openSeq) return;
-      const columns = fileTypeDef(f.type).columns;
+      const columns = f.columns ?? fileTypeDef(f.type).columns;
       let visibleCols = new Set<string>(columns.map((c) => c.key));
       try {
         const saved = localStorage.getItem(`ss_cols_${id}`);

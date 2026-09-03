@@ -38,7 +38,7 @@ jobs:
 
       - name: Build Worker
         working-directory: worker
-        run: bun run build
+        run: bunx wrangler deploy --dry-run
 
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4

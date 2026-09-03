@@ -7,7 +7,7 @@ import { history } from "./routes/history";
 import { pools } from "./routes/pools";
 import { admin } from "./routes/admin";
 import { wa } from "./routes/wa";
-import { bot } from "./routes/bot";
+import { bot, ensureWebhook } from "./routes/bot";
 import { scheduled } from "./scheduled";
 import { IndexDO } from "./do/IndexDO";
 import { FileDO } from "./do/FileDO";
@@ -23,10 +23,20 @@ app.route("/api/pools", pools);
 app.route("/api/admin", admin);
 app.route("/api", wa);
 app.route("/", bot);
-app.get("/api/auth/me", requireAuth, async (c) => { const uid = c.get("uid"); const user = await rpc(c.env.INDEX, "global", "user", { id: uid }); return c.json(user || null); });
+app.get("/api/auth/me", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (!token) return c.json({ error: "not_authenticated" }, 401); const session = await verifySession(token, c.env.SESSION_SECRET); if (!session) return c.json({ error: "session_expired" }, 401); const user = await rpc(c.env.INDEX, "global", "user", { id: session.uid }); return c.json(user || null); });
 app.get("/api/auth/logout", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (token) await rpc(c.env.INDEX, "global", "deleteSession", { token }); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": "ss_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0" } }); });
 app.get("/api/auth/device/claim", async (c) => { const did = c.req.query("token") || ""; if (!/^[A-Za-z0-9-]{8,64}$/.test(did)) return c.json({ ok: false }); const info: any = await rpc(c.env.INDEX, "global", "deviceGet", { did }); if (!info?.chatId || !info.chatId.includes(".")) return c.json({ ok: false }); await rpc(c.env.INDEX, "global", "deviceDelete", { did }); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": cookie(info.chatId) } }); });
 app.get("/api/bot/info", async (c) => { if (!c.env.TG_BOT_TOKEN) return c.json({ username: "" }); const r = await fetch(`https://api.telegram.org/bot${c.env.TG_BOT_TOKEN}/getMe`); const j = await r.json() as any; return c.json({ username: j.result?.username || "" }); });
 
 export { IndexDO, FileDO, PoolDO };
-export default { fetch: app.fetch, scheduled };
+let webhookChecked = false;
+export default {
+  fetch: (req: Request, env: Env, ctx: ExecutionContext) => {
+    if (!webhookChecked) {
+      webhookChecked = true;
+      ctx.waitUntil(ensureWebhook(env));
+    }
+    return app.fetch(req, env, ctx);
+  },
+  scheduled,
+};

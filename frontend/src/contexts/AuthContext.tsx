@@ -7,24 +7,47 @@ import type { User } from "@/lib/types";
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
+  sessionExpired: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const CACHE_KEY = "ss_auth_user";
+// Set when a session cookie has ever been issued to this browser; cleared on
+// logout/expiry. Lets us skip the /auth/me round-trip entirely for first-time
+// visitors (no cookie yet) instead of firing a doomed 401 call on every load.
+const HAD_SESSION = "ss_had_session";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const retryRef = useRef(0);
 
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
+
+    // No cookie has ever been issued to this browser → skip the /me call.
+    if (localStorage.getItem(HAD_SESSION) !== "1") {
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
     const load = async () => {
       try {
-        const u = await api.me();
+        const { user: u, expired } = await api.me();
         if (!active) return;
+        if (expired) {
+          localStorage.removeItem(HAD_SESSION);
+          localStorage.removeItem(CACHE_KEY);
+          setSessionExpired(true);
+          setUser(null);
+          setLoading(false);
+          return;
+        }
         setUser(u);
         if (u) {
           localStorage.setItem(CACHE_KEY, JSON.stringify(u));
@@ -34,8 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       } catch {
         // Transient failure (redeploy / network blip). Keep the app usable with the
-        // last known user and retry a couple of times; a definitive /auth/me (200 +
-        // null) still logs out correctly.
+        // last known user and retry a couple of times.
         const cached = localStorage.getItem(CACHE_KEY);
         if (cached) {
           try {
@@ -61,7 +83,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return <AuthContext.Provider value={{ user, loading }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, loading, sessionExpired }}>{children}</AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextValue {

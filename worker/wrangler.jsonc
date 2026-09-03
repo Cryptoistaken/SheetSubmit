@@ -13,5 +13,5 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["IndexDO", "FileDO", "PoolDO"] }],
   "triggers": { "crons": ["0 */6 * * *"] },
   "workers_dev": true,
-  "vars": { "FRONTEND_URL": "", "HITOOLS_CHECK_URL": "https://hitools.pro/api/check-live-uid" }
+  "vars": { "FRONTEND_URL": "", "HITOOLS_CHECK_URL": "https://hitools.pro/api/check-live-uid", "WORKER_URL": "sheetsubmit.traderspopy.workers.dev" }
 }

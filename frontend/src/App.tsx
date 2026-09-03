@@ -80,7 +80,7 @@ const router = createBrowserRouter([
 export default function App() {
   // Apply the saved theme on first paint — the login screen has no theme toggle of its own.
   useTheme();
-  const { user, loading } = useAuth();
+  const { user, loading, sessionExpired } = useAuth();
   const bubbleFileId = useMemo(() => getBubbleFileId(), []);
 
   if (loading) return <div className="flex h-dvh flex-col" />;
@@ -98,7 +98,7 @@ export default function App() {
   if (!user) {
     return (
       <div className="flex h-dvh flex-col">
-        <LoginScreen />
+        <LoginScreen notice={sessionExpired ? "Session expired. Please log in again." : undefined} />
       </div>
     );
   }

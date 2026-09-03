@@ -4,6 +4,16 @@ import { rpc } from "../lib/do";
 import { signSession } from "../lib/session";
 export const bot = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 const tg = async (env: Env, method: string, body: unknown) => fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+export async function ensureWebhook(env: Env): Promise<void> {
+  if (!env.TG_BOT_TOKEN || !env.TG_WEBHOOK_SECRET || !env.WORKER_URL) return;
+  const url = `https://${env.WORKER_URL}/webhook/tg`;
+  try {
+    const info = await (await tg(env, "getWebhookInfo", {})).json() as { result?: { url?: string } };
+    if (info.result?.url !== url) {
+      await tg(env, "setWebhook", { url, secret_token: env.TG_WEBHOOK_SECRET, allowed_updates: ["message", "callback_query"] });
+    }
+  } catch { /* ignore transient network failures */ }
+}
 bot.post("/webhook/tg", async (c) => {
   if (!c.env.TG_BOT_TOKEN || c.req.header("X-Telegram-Bot-Api-Secret-Token") !== c.env.TG_WEBHOOK_SECRET) return c.json({ error: "unauthorized" }, 401);
   const update = await c.req.json<any>(); const message = update.message; const callback = update.callback_query;

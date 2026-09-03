@@ -295,7 +295,15 @@ export const api = {
   downloadByIdBlob: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
 
   // ── Auth & bot (not in old api.js; used directly by the UI) ──
-  me: () => request<User | null>("/auth/me"),
+  me: async (): Promise<{ user: User | null; expired: boolean }> => {
+    const res = await fetch(BASE + "/auth/me", { credentials: "include" });
+    if (res.status === 401) {
+      const body = await res.json().catch(() => ({}) as { error?: string });
+      return { user: null, expired: body?.error === "session_expired" };
+    }
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return { user: (await res.json()) as User | null, expired: false };
+  },
   logout: () => request<{ ok: boolean }>("/auth/logout"),
   botInfo: () => request<{ username: string }>("/bot/info"),
   claimDeviceSession: (token: string) =>

@@ -15,6 +15,7 @@ export interface Env {
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   TG_WEBHOOK_SECRET?: string;
+  WORKER_URL?: string;
   FRONTEND_URL?: string;
   HITOOLS_CHECK_URL?: string;
 }

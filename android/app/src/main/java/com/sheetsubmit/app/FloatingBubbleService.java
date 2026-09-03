@@ -181,6 +181,7 @@ private String claudeCodeHtml(String color) {
             int iconPx = dp(sz * 0.95f);
             if (bubbleView instanceof FrameLayout) {
                 FrameLayout root = (FrameLayout) bubbleView;
+                root.setBackgroundColor(Color.TRANSPARENT);
                 if (claudeCodeView != null) { try { claudeCodeView.destroy(); } catch (Exception ignored) {} claudeCodeView = null; }
                 root.removeAllViews();
                 // Website-driven bubble: single WebView loads /bubble-icon.html?icon=&color= — future icons need only website update
@@ -306,6 +307,7 @@ private String claudeCodeHtml(String color) {
         int windowSize = size + margin * 2;
 
         FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.TRANSPARENT);
         root.setClipChildren(false);
         root.setClipToPadding(false);
 

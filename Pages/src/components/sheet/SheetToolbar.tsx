@@ -48,7 +48,6 @@ export default function SheetToolbar() {
   const columns = useSheetStore((s) => s.columns);
   const visibleCols = useSheetStore((s) => s.visibleCols);
   const checkRunning = useSheetStore((s) => s.checkRunning);
-  const isDirty = useSheetStore((s) => s.isDirty);
   const { user } = useAuth();
 
   const [open, setOpen] = useState(false);

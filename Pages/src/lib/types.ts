@@ -32,6 +32,12 @@ export interface SheetFile {
 
 export type FilePreset = "cookie" | "combo" | "page";
 
+export const FILE_PRESET_NAMES: Record<FilePreset, string> = {
+  cookie: "Cookie",
+  combo: "2fa",
+  page: "Page",
+};
+
 /** A grid row — cookie cells are plain string keys.
  * Augmentations: _pool?: string; _taken?: boolean; _takenAt?: number; wa_status?: string */
 export type Row = Record<string, any>;

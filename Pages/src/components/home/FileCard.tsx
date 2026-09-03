@@ -1,4 +1,4 @@
-import { Download, Pencil, Trash2 } from "lucide-react";
+import { Cookie, Download, FileText, KeyRound, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { fileTypeDef } from "@/lib/types";
@@ -96,6 +96,13 @@ export default function FileCard({
   const isCustom = pw !== "dgddigital" && pw !== "L0VE@12345";
   const pwLabel = pw === "dgddigital" ? "dgd" : pw === "L0VE@12345" ? "L0VE" : pw.slice(0, 8);
   const pwTitle = pw;
+  const FileIcon = file.name.toLowerCase().startsWith("cookie")
+    ? Cookie
+    : file.name.toLowerCase().startsWith("2fa")
+      ? KeyRound
+      : file.name.toLowerCase().startsWith("page")
+        ? FileText
+        : Cookie;
   const pwStyle: React.CSSProperties = isCustom
     ? { background: "var(--fb-bg)", color: "var(--fb)" }
     : pw === "L0VE@12345"
@@ -123,14 +130,7 @@ export default function FileCard({
       }}
     >
       <div className="file-card-icon">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5" />
-          <path d="M8.5 8.5v.01" />
-          <path d="M16 15.5v.01" />
-          <path d="M12 12v.01" />
-          <path d="M11 17v.01" />
-          <path d="M7 14v.01" />
-        </svg>
+        <FileIcon size={16} />
       </div>
       <div className="file-card-name">{file.name}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2 }}>

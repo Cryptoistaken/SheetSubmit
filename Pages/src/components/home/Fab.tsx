@@ -1,4 +1,4 @@
-import { Plus, Upload } from "lucide-react";
+import { Cookie, FileText, KeyRound, Plus, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
@@ -55,11 +55,12 @@ export default function Fab({ onCreate, onUpload }: FabProps) {
       <div ref={menuRef} className={`home-fab-menu${open ? " open" : ""}`}>
         <div className="home-fab-platform">Facebook</div>
         {([
-          ["cookie", "Cookie Only", "cookies + uid"],
-          ["combo", "Combo", "cookies + 2fa + uid"],
-          ["page", "Page", "full columns"],
-        ] as const).map(([preset, name, desc]) => (
+          ["cookie", "Cookie", "cookies and uid", Cookie],
+          ["combo", "2fa", "cookies and 2fa and uid", KeyRound],
+          ["page", "Page", "full columns", FileText],
+        ] as const).map(([preset, name, desc, Icon]) => (
           <button className="home-fab-item home-fab-subitem" key={preset} onClick={() => { setOpen(false); onCreate(preset); }}>
+            <span className="home-fab-ic t-fb"><Icon size={15} /></span>
             <span>
               <span className="home-fab-name">{name}</span>
               <span className="home-fab-desc">{desc}</span>

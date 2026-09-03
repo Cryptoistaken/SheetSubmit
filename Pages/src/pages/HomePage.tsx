@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
-import { COLUMN_PRESETS, fileTypeDef } from "@/lib/types";
+import { COLUMN_PRESETS, fileTypeDef, FILE_PRESET_NAMES } from "@/lib/types";
 import type { FilePreset, FileType, SheetFile } from "@/lib/types";
 import { downloadXlsx, genId, hydrateWaCache, importXlsx, todayStr } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
@@ -270,7 +270,7 @@ export default function HomePage() {
     const columns = COLUMN_PRESETS[pwModal.preset];
     const poolEnabled = password === "dgddigital";
     setPwModal(null);
-    const name = fileTypeDef(type).label + " " + todayStr();
+    const name = FILE_PRESET_NAMES[pwModal.preset] + " " + todayStr();
     const current = files ?? (await api.getFiles());
     let finalName = name;
     if (current.some((f) => f.name === name)) {

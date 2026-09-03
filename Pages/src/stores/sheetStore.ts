@@ -2243,10 +2243,11 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       return;
     }
     const idx = get().bubbleGetActiveRow();
+    if (!s.rows[idx].cookies) {
+      toast("Paste cookie first");
+      return;
+    }
     if (s.rows[idx].twofakey) {
-      // Row already has a 2FA key — this paste was NOT saved (it's a key,
-      // not a cookie). Keep it short: the bubble popup has no room for a
-      // long toast.
       toast("Need cookie");
       return;
     }

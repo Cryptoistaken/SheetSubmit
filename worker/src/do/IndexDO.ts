@@ -11,7 +11,9 @@ export class IndexDO {
     case "file": return Response.json(s.exec("SELECT data,owner_id,archived FROM file_index WHERE file_id=?", args.id).toArray()[0] || null);
     case "files": { const where = args.archived === "all" ? "" : args.archived === 1 ? " AND archived=1" : " AND archived=0"; return Response.json(s.exec(`SELECT data FROM file_index WHERE owner_id=?${where}`, args.uid).toArray().map((r: any) => JSON.parse(r.data))); }
     case "archive": s.exec("UPDATE file_index SET archived=?,data=? WHERE file_id=?", args.archived ? 1 : 0, JSON.stringify(args.file), args.id); return Response.json({ ok: true });
+    case "batchArchive": for (const file of args.files as SheetFile[]) s.exec("UPDATE file_index SET archived=0,data=? WHERE file_id=?", JSON.stringify(file), file.id); return Response.json({ ok: true });
     case "purge": s.exec("DELETE FROM file_index WHERE file_id=?", args.id); return Response.json({ ok: true });
+    case "batchPurge": for (const id of args.ids as string[]) s.exec("DELETE FROM file_index WHERE file_id=?", id); return Response.json({ ok: true });
     case "deleteUser": s.exec("DELETE FROM users WHERE user_id=?", args.id); s.exec("DELETE FROM file_index WHERE owner_id=?", args.id); return Response.json({ ok: true });
     case "adminUsers": { const rows = s.exec("SELECT * FROM users ORDER BY created_at DESC").toArray() as any[]; const counts = s.exec("SELECT owner_id, SUM(CASE WHEN archived=0 THEN 1 ELSE 0 END) fc, SUM(CASE WHEN archived=1 THEN 1 ELSE 0 END) ac FROM file_index GROUP BY owner_id").toArray() as any[]; const byOwner = new Map(counts.map((r: any) => [r.owner_id, { fc: Number(r.fc), ac: Number(r.ac) }])); return Response.json(rows.map((u) => ({ ...u, fileCount: byOwner.get(u.user_id)?.fc || 0, archivedCount: byOwner.get(u.user_id)?.ac || 0 }))); }
     case "metaSet": s.exec("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)", args.k, JSON.stringify(args.v)); return Response.json({ ok: true });

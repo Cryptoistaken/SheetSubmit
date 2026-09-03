@@ -37,12 +37,12 @@ lib/session.ts        # signSession, verifySession (HMAC SHA-256), requireAuth, 
 lib/do.ts             # rpc(namespace, name, op, args) — single fetch to DO
 lib/ids.ts            # genFileId, generateToken
 do/IndexDO.ts         # singleton global: users, file_index, sessions, device tokens, meta KV (SQLite).
-                      #   ops: ensureUser/user/users/adminUsers(file+archive counts)/ban/deleteUser/register/file/files(archived filter)/archive/purge/session*/device*/metaSet/metaGet/metaDel/stats
-do/FileDO.ts          # per-file: meta, rows, logs (cap 200) (SQLite). save increments seq counter. ops: init/meta/seq/rows/save/getLogs/wipe
+                      #   ops: ensureUser/user/users/adminUsers(file+archive counts)/ban/deleteUser/register/file/files(archived filter)/archive/batchArchive/purge/batchPurge/session*/device*/metaSet/metaGet/metaDel/stats
+do/FileDO.ts          # per-file: meta, rows, logs (cap 200) (SQLite). save increments seq counter. wipe returns rows before deletion for pool cleanup
 do/PoolDO.ts          # per-pool-password: pool_rows, ledger, downloads (SQLite).
                       #   ops: add/counts/detail/claim(records download, returns downloadId)/downloads/download/revertDownload/revert/removeAvailable/ledger
 routes/files.ts       # files router (GET/POST /, PUT/:id, DELETE/:id=archive, PUT/:id/persist|append (feeds pools), GET/:id/rows|full)
-                      #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — purge+wipe+pool cleanup)
+                      #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup)
                       #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
 routes/pools.ts       # admin: GET / (PoolSummary[]), GET|POST /downloads, GET|POST /downloads/:id (xlsx blob / revert),
                       #   GET /:pwd/:pool (PoolDetail), /rows (paginated), /ledger, POST /:pwd/:pool/claim (→ downloadId+filename)

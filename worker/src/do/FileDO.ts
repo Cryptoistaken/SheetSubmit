@@ -10,7 +10,7 @@ export class FileDO {
     case "rows": return Response.json(this.rows());
     case "save": { const newSeq = this.seq() + 1; s.exec("UPDATE meta SET v=? WHERE k='seq'", String(newSeq)); s.exec("DELETE FROM rows"); (args.rows as Row[]).forEach((r, i) => s.exec("INSERT INTO rows(idx,data) VALUES(?,?)", i, JSON.stringify(r))); if (args.file) s.exec("INSERT OR REPLACE INTO meta(k,v) VALUES('file',?)", JSON.stringify(args.file)); s.exec("INSERT INTO logs(ts,action,seq) VALUES(?,?,?)", Date.now(), String(args.action || "edit"), newSeq); s.exec("DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY id DESC LIMIT 200)"); return Response.json({ ok: true, seq: newSeq, rows: args.rows }); }
     case "getLogs": return Response.json(s.exec("SELECT id, ts, action, seq FROM logs ORDER BY id DESC LIMIT 200").toArray());
-    case "wipe": s.exec("DELETE FROM meta; DELETE FROM rows; DELETE FROM logs"); return Response.json({ ok: true });
+    case "wipe": { const rows = this.rows(); s.exec("DELETE FROM meta; DELETE FROM rows; DELETE FROM logs"); return Response.json({ ok: true, rows }); }
     default: return Response.json({ error: "unknown operation" }, { status: 400 });
   } }
 }

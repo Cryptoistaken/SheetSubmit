@@ -22,23 +22,35 @@
     build-android.yml     # APK CI only (JDK17, assembleRelease)
   worker/                 # Cloudflare Worker (Hono + DO)
   frontend/               # React SPA (Vite)
-  android/                # CI-only wrapper (never build locally)
+  android/                # CI-only wrapper (never build locally). Config.java BASE_URL = sheetsubmit.pages.dev
+  scripts/TestApi.ts      # live API test suite (57 checks) — run: TEST_SESSION_SECRET=<secret> bun scripts/TestApi.ts
+  backend/                # LEGACY reference only (old Express+Redis server). Do not run or deploy; worker/ is the live API.
 ```
 
 ### Worker — `worker/src/` (Hono, entry `src/index.ts`)
 ```
-index.ts              # app setup, routes, /api/auth/me (verifySession), /api/auth/logout, /api/auth/device/claim, /api/bot/info, ensureWebhook on first request
-lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, WORKER_URL, FRONTEND_URL, HITOOLS_CHECK_URL, DO bindings INDEX/FILES/POOLS)
+index.ts              # app setup, routes, /api/auth/me (verifySession, adds photoUrl+isAdmin), /api/auth/logout,
+                      #   /api/auth/device/claim, /api/auth/photo/:userId (Telegram getUserProfilePhotos→getFile, 24h meta cache),
+                      #   /api/auth/turnstile-verify, /api/bot/info, ensureWebhook on first request
+lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, WORKER_URL, FRONTEND_URL, HITOOLS_CHECK_URL, TURNSTILE_SECRET, DO bindings INDEX/FILES/POOLS)
 lib/session.ts        # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
 lib/do.ts             # rpc(namespace, name, op, args) — single fetch to DO
 lib/ids.ts            # genFileId, generateToken
-do/IndexDO.ts         # singleton global: users, file_index, sessions, device tokens (SQLite)
-do/FileDO.ts          # per-file: meta, rows (SQLite). save increments seq counter
-do/PoolDO.ts          # per-pool-password: pool_rows, ledger (SQLite)
-routes/files.ts       # GET/POST /, PUT/:id, DELETE/:id, PUT/:id/persist, PUT/:id/append, GET/:id/rows|full
-routes/pools.ts       # admin: GET / (counts), GET /:poolId detail, POST /*/claim, GET /*/ledger, etc.
-routes/admin.ts       # GET /stats, /users, /user/:id, POST /user/:id/:action, GET /file/:id
-routes/wa.ts          # POST /fb/check, /fb/page-check, /fb/wa-check, GET /wa/cache
+do/IndexDO.ts         # singleton global: users, file_index, sessions, device tokens, meta KV (SQLite).
+                      #   ops: ensureUser/user/users/adminUsers(file+archive counts)/ban/deleteUser/register/file/files(archived filter)/archive/purge/session*/device*/metaSet/metaGet/metaDel/stats
+do/FileDO.ts          # per-file: meta, rows, logs (cap 200) (SQLite). save increments seq counter. ops: init/meta/seq/rows/save/getLogs/wipe
+do/PoolDO.ts          # per-pool-password: pool_rows, ledger, downloads (SQLite).
+                      #   ops: add/counts/detail/claim(records download, returns downloadId)/downloads/download/revertDownload/revert/removeAvailable/ledger
+routes/files.ts       # files router (GET/POST /, PUT/:id, DELETE/:id=archive, PUT/:id/persist|append (feeds pools), GET/:id/rows|full)
+                      #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — purge+wipe+pool cleanup)
+                      #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
+routes/pools.ts       # admin: GET / (PoolSummary[]), GET|POST /downloads, GET|POST /downloads/:id (xlsx blob / revert),
+                      #   GET /:pwd/:pool (PoolDetail), /rows (paginated), /ledger, POST /:pwd/:pool/claim (→ downloadId+filename)
+routes/admin.ts       # GET /stats, /users, /users/search, /user/:id (+files), /user/:id/archive, /file/:id,
+                      #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist,
+                      #   POST /user/:id/ban|unban, POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id
+routes/wa.ts          # POST /fb/check (check.fb.tools proxy), /fb/page-check + /fb/wa-check (FB graphql ports),
+                      #   GET /wa/cache?uids= (meta-backed, eligible-only, 24h TTL)
 routes/bot.ts         # ensureWebhook, POST /webhook/tg (handleBotUpdate), GET /bot/info
 scheduled.ts          # cron: ensureWebhook
 wrangler.jsonc         # DO bindings INDEX/FILES/POOLS, cron 0 */6 * * *, vars
@@ -96,6 +108,7 @@ functions/webhook/[[path]].ts
 5. No versioning — save increments `seq` counter in meta. Undo/redo is client-side only (Zustand in-memory).
 6. Worker CPU limit: 10ms per request. Keep operations lightweight.
 7. No KV/D1/R2 bindings. Storage is Durable Objects + SQLite only.
+8. After changing worker APIs: `bun run typecheck` + `bun run test` in `worker/`, deploy, then re-run `scripts/TestApi.ts` (all 57 must pass) before pushing.
 
 ## Capacity
 | Resource | Limit |

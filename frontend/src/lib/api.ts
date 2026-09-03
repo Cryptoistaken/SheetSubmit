@@ -7,7 +7,6 @@ import type {
   Row,
   SheetFile,
   User,
-  VersionMeta,
 } from "./types";
 
 // Base URL of the backend API. The static server injects it at container start via
@@ -85,13 +84,6 @@ export interface AppendPayload {
   redoNew?: unknown[];
   dataCount?: number;
   action?: string;
-}
-
-interface VersionResult {
-  v: number;
-  rows: Row[];
-  action: string | null;
-  ts: number | null;
 }
 
 export interface PoolSummary {
@@ -204,32 +196,6 @@ export const api = {
   adminFileLogs: (fileId: string) => request<unknown[]>(`/admin/file/${fileId}/logs`),
   adminUndo: (fileId: string) => request<HistoryResult>(`/admin/file/${fileId}/undo`),
 
-  // ── Version history ──
-  getHistory: (id: string) => request<VersionMeta[]>(`/files/${id}/history`),
-  getVersion: (id: string, v: number) => request<VersionResult>(`/files/${id}/history/${v}`),
-  restoreVersion: (id: string, v: number) =>
-    request<{ ok: boolean; v: number; rows: Row[] }>(`/files/${id}/history/${v}/restore`, { method: "POST" }),
-  adminGetHistory: (fileId: string) => request<VersionMeta[]>(`/admin/file/${fileId}/history`),
-  adminGetVersion: (fileId: string, v: number) =>
-    request<VersionResult>(`/admin/file/${fileId}/history/${v}`),
-  adminRestoreVersion: (fileId: string, v: number) =>
-    request<{ ok: boolean; v: number; rows: Row[] }>(`/admin/file/${fileId}/history/${v}/restore`, {
-      method: "POST",
-    }),
-  nameVersion: (id: string, v: number, name: string) =>
-    request<{ ok: boolean; meta: VersionMeta[] }>(`/files/${id}/history/${v}/name`, {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    }),
-  adminNameVersion: (fileId: string, v: number, name: string) =>
-    request<{ ok: boolean; meta: VersionMeta[] }>(`/admin/file/${fileId}/history/${v}/name`, {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    }),
-  adminForkVersion: (fileId: string, v: number) =>
-    request<{ ok: boolean; file: SheetFile; rows: Row[] }>(`/admin/file/${fileId}/history/${v}/fork`, {
-      method: "POST",
-    }),
   adminDeleteUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}`, { method: "DELETE" }),
   adminBanUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}/ban`, { method: "POST" }),
   adminUnbanUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}/unban`, { method: "POST" }),

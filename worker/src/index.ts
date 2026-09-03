@@ -1,9 +1,8 @@
 import { Hono } from "hono";
 import type { Env } from "./lib/shared";
-import { requireAuth, isAdmin, cookie } from "./lib/session";
+import { requireAuth, isAdmin, cookie, verifySession } from "./lib/session";
 import { rpc } from "./lib/do";
 import { files } from "./routes/files";
-import { history } from "./routes/history";
 import { pools } from "./routes/pools";
 import { admin } from "./routes/admin";
 import { wa } from "./routes/wa";
@@ -18,7 +17,6 @@ app.onError((err, c) => { console.error(err); return c.json({ error: "Internal s
 app.use("/api/*", async (c, next) => { const n = Number(c.req.header("content-length") || 0); if (n > 4_000_000) return c.json({ error: "payload too large" }, 413); return next(); });
 app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now() }));
 app.route("/api/files", files);
-app.route("/api/files", history);
 app.route("/api/pools", pools);
 app.route("/api/admin", admin);
 app.route("/api", wa);
@@ -27,6 +25,7 @@ app.get("/api/auth/me", async (c) => { const token = c.req.header("Cookie")?.mat
 app.get("/api/auth/logout", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (token) await rpc(c.env.INDEX, "global", "deleteSession", { token }); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": "ss_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0" } }); });
 app.get("/api/auth/device/claim", async (c) => { const did = c.req.query("token") || ""; if (!/^[A-Za-z0-9-]{8,64}$/.test(did)) return c.json({ ok: false }); const info: any = await rpc(c.env.INDEX, "global", "deviceGet", { did }); if (!info?.chatId || !info.chatId.includes(".")) return c.json({ ok: false }); await rpc(c.env.INDEX, "global", "deviceDelete", { did }); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": cookie(info.chatId) } }); });
 app.get("/api/bot/info", async (c) => { if (!c.env.TG_BOT_TOKEN) return c.json({ username: "" }); const r = await fetch(`https://api.telegram.org/bot${c.env.TG_BOT_TOKEN}/getMe`); const j = await r.json() as any; return c.json({ username: j.result?.username || "" }); });
+app.post("/api/auth/turnstile-verify", async (c) => { const secret = c.env.TURNSTILE_SECRET; if (!secret) return c.json({ ok: true }); const { token } = await c.req.json<{ token?: string }>(); if (!token || token.length > 2048) return c.json({ ok: false }, 403); try { const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: AbortSignal.timeout(10000), body: new URLSearchParams({ secret, response: token }) }); if (!r.ok) return c.json({ ok: false }, 403); const result = await r.json() as { success: boolean; "error-codes"?: string[] }; return result.success ? c.json({ ok: true }) : c.json({ ok: false }, 403); } catch { return c.json({ ok: false }, 403); } });
 
 export { IndexDO, FileDO, PoolDO };
 let webhookChecked = false;

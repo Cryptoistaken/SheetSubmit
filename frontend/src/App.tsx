@@ -16,7 +16,6 @@ import HomePage from "@/pages/HomePage";
 import SheetPage from "@/pages/SheetPage";
 
 const BubbleMode = lazy(() => import("@/components/bubble/BubbleMode"));
-const VersionDiffPage = lazy(() => import("@/pages/VersionDiffPage"));
 const BubbleDesignPage = lazy(() => import("@/pages/BubbleDesignPage"));
 
 function getBubbleFileId(): string | null {
@@ -69,9 +68,7 @@ const router = createBrowserRouter([
       { path: "admin/user/:userId", element: <HomePage /> },
       { path: "admin/user/:userId/file", element: <AdminFileFallback /> },
       { path: "admin/user/:userId/file/:fileId", element: <SheetPage /> },
-      { path: "admin/user/:userId/file/:fileId/version/:v", element: <VersionDiffPage /> },
       { path: "file/:id", element: <SheetPage /> },
-      { path: "file/:id/version/:v", element: <VersionDiffPage /> },
       { path: "bubble-design", element: <BubbleDesignPage /> },
     ],
   },

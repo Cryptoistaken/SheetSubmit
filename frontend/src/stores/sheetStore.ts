@@ -1971,42 +1971,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     get().persist();
   },
 
-  restoreVersion: async (v) => {
-    const s = get();
-    if (!s.fileId) return false;
-    try {
-      const res = s.adminMode
-        ? await api.adminRestoreVersion(s.fileId, v)
-        : await api.restoreVersion(s.fileId, v);
-      if (!res?.ok) {
-        toast("Restore failed");
-        return false;
-      }
-      const rows = [...(res.rows ?? [])];
-      while (rows.length < 100) rows.push(makeEmptyRow(s.columns));
-      const undoStack: UndoEntry[] = [
-        ...s.undoStack,
-        { type: "rows", prevRows: s.rows.map((r) => ({ ...r })) },
-      ];
-      if (undoStack.length > 100) undoStack.shift();
-      set({
-        rows,
-        undoStack,
-        redoStack: [],
-        isDirty: true,
-        dirtyStructural: true,
-        structuralVersion: ++structuralCounter,
-        selectedCell: null,
-        qebOpen: false,
-      inlineEdit: false,
-        ...recomputeMarks(rows, s.crossDups, s.columns),
-      });
-      toast(`Restored version v${v} (${res.rows?.length ?? 0} rows)`);
-      return true;
-    } catch {
-      toast("Restore failed");
-      return false;
-    }
+  restoreVersion: async () => {
+    toast("Version history removed");
+    return false;
   },
 
   mergeRows: (incoming) => {

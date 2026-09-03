@@ -102,17 +102,6 @@ export interface CrossDupResult {
 
 export type ArchiveFile = SheetFile & { deletedAt?: number };
 
-export interface VersionMeta {
-  v: number;
-  ts: number;
-  action: string;
-  name?: string | null;
-  rowCount?: number;
-  parentV?: number | null;
-  type?: string;
-  hash?: string;
-}
-
 export interface WaCacheEntry {
   status: string | null;
   banReason: string | null;

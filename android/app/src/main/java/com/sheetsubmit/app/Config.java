@@ -6,7 +6,7 @@ public final class Config {
     }
 
     // Single source of truth for the app URL. Change BASE_URL only.
-    public static final String BASE_URL = "https://sheetsubmit.up.railway.app";
+    public static final String BASE_URL = "https://sheetsubmit.pages.dev";
     public static final String HOME_URL = BASE_URL;
     public static final String APP_HOST = BASE_URL.replaceFirst("^https?://", "");
 

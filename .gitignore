@@ -31,3 +31,7 @@ android/android-release.keystore
 tmp_artifact*/
 bubble-*.html
 compare-*.html
+
+# Re-include project .bat files hidden by global gitignore (*.bat)
+!redeploy.bat
+!android/gradlew.bat

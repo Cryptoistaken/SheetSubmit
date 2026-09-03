@@ -125,6 +125,16 @@ export interface PoolRowsResult {
 }
 export type PoolClaimResult = { password: string; poolId: string; claimed: number; rows: unknown[]; downloadId?: string; filename?: string };
 export type PoolClaimResultWithMeta = PoolClaimResult;
+export interface PoolUserFile {
+  userId: string;
+  files: { fileId: string; available: number; claimed: number }[];
+  totalAvailable: number;
+  totalClaimed: number;
+}
+export interface PoolUserFilesResult {
+  users: PoolUserFile[];
+  noSrcAvail: number;
+}
 
 export const api = {
   // ── Files ──
@@ -253,6 +263,17 @@ export const api = {
     }
   },
   getDownloads: () => request<unknown[]>("/pools/downloads"),
+  getUserFiles: async (password: string, poolId: string): Promise<PoolUserFilesResult> => {
+    const enc = (s: string) => encodeURIComponent(s);
+    try {
+      return await request<PoolUserFilesResult>(`/pools/${enc(password)}/${enc(poolId)}/user-files`);
+    } catch (e) {
+      if (password === "dgddigital" && String(e).includes("404")) {
+        return request<PoolUserFilesResult>(`/pools/${enc(poolId)}/user-files`);
+      }
+      throw e;
+    }
+  },
   getDownloadBlob: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
   revertDownload: (id: string) => request<{ ok: boolean; reverted: number }>(`/pools/downloads/${encodeURIComponent(id)}/revert`, { method: "POST" }),
   // aliases for spec compatibility

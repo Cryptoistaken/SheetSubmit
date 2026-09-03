@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { api } from "@/lib/api";
-import type { PoolDetail, PoolSummary } from "@/lib/api";
+import type { PoolDetail, PoolSummary, PoolUserFile } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 
@@ -71,6 +71,9 @@ export default function PoolsView() {
   const [downloads, setDownloads] = useState<unknown[] | null>(null);
   const [reDownloading, setReDownloading] = useState<string | null>(null);
   const [reverting, setReverting] = useState<string | null>(null);
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [userFiles, setUserFiles] = useState<PoolUserFile[] | null>(null);
+  const [loadingFiles, setLoadingFiles] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -84,6 +87,10 @@ export default function PoolsView() {
         const arr: unknown[] = Array.isArray(dls) ? dls : ((dls as { downloads?: unknown[] })?.downloads ?? []);
         setDownloads((arr as unknown[]).slice(0, 10));
       } catch { /* ignore history */ }
+      try {
+        const uf = await api.getUserFiles(curPwd, cur);
+        setUserFiles(uf.users);
+      } catch { setUserFiles(null); }
     } catch {
       showToast("Failed to load pools");
     }
@@ -106,6 +113,21 @@ export default function PoolsView() {
 
   const go = (pwd: string, pid: string) => navigate(`/pools/${pwd}/${pid}`);
 
+  const toggleExpand = async (userId: string) => {
+    if (expandedUser === userId) { setExpandedUser(null); return; }
+    setExpandedUser(userId);
+    if (!userFiles) {
+      setLoadingFiles(true);
+      try {
+        const uf = await api.getUserFiles(curPwd, cur);
+        setUserFiles(uf.users);
+      } catch { /* ignore */ }
+      setLoadingFiles(false);
+    }
+  };
+
+  const getUserFilesFor = (userId: string) => userFiles?.find((u) => u.userId === userId);
+
   const doPoolClaim = async () => {
     const n = customQty ? Number(customQty) : poolQty;
     if (!totals.available) return showToast("No available rows");
@@ -119,7 +141,6 @@ export default function PoolsView() {
         const blob = await api.getDownloadBlob(downloadId);
         triggerBlobDownload(blob, filename);
       } else {
-        // fallback: client-side generation if server didn't return downloadId
         const XLSX = await import("xlsx");
         const cols = cur === "cookies_only" ? ["cookies"] : ["cookies", "twofakey"];
         const data = (res.rows as Record<string, unknown>[]).map((r) => cols.map((c) => String(r[c] ?? "")));
@@ -198,10 +219,16 @@ export default function PoolsView() {
         .admin-dot{position:absolute;right:-3px;bottom:-3px;width:14px;height:14px;border-radius:50%;background:var(--blue);border:2px solid var(--bg);display:grid;place-items:center;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
         .taken-row td{position:relative}
         .taken-row td .cell-text{color:rgba(255,255,255,.72)!important}
+        .user-row{cursor:pointer;transition:background .1s}
+        .user-row:hover{background:var(--bg2)}
+        .expand-icon{transition:transform .15s;display:inline-flex}
+        .expand-icon.open{transform:rotate(90deg)}
+        .file-row{background:var(--bg2);animation:fadeIn .15s}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
         @media(max-width:640px){.pools-stack{flex-direction:column;align-items:stretch}.pools-switch{width:100%}.pools-switch button{flex:1;justify-content:center}.pools-toolbar{flex-direction:column;align-items:stretch}.pools-qty{width:100%}.pools-qty button{flex:1}.pools-download{width:100%;height:44px;justify-content:center}.pools-stats{grid-template-columns:1fr!important}}
       `}</style>
 
-      {/* header + switches — purely pools */}
+      {/* header + switches */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-.02em" }}>Pools</div>
@@ -222,7 +249,6 @@ export default function PoolsView() {
         </div>
       </div>
 
-
       {/* stats */}
       <div className="pools-stats" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 16 }}>
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
@@ -241,7 +267,7 @@ export default function PoolsView() {
         </div>
       </div>
 
-      {/* toolbar — download qty only */}
+      {/* toolbar */}
       <div className="pools-toolbar pools-stack" style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end", marginTop: 16 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <div className="pools-qty" style={{ display: "inline-flex", border: "1px solid var(--border2)", borderRadius: 8, overflow: "hidden" }}>
@@ -263,7 +289,7 @@ export default function PoolsView() {
         </div>
       </div>
 
-      {/* search — at top of users list, separate from download */}
+      {/* search */}
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, marginBottom: 8 }}>
         <label style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: "absolute", left: 10, color: "var(--text3)", pointerEvents: "none" }}><circle cx="11" cy="11" r="7" /><path d="M20 20L16 16" /></svg>
@@ -271,7 +297,7 @@ export default function PoolsView() {
         </label>
       </div>
 
-      {/* user table */}
+      {/* user table with expandable file rows */}
       <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", overflow: "auto", background: "var(--bg)", marginTop: 12 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 520 }}>
           <thead><tr style={{ borderBottom: "1px solid var(--border)", textAlign: "left", color: "var(--text3)" }}><th style={{ padding: "10px 12px" }}>User</th><th style={{ padding: "10px 12px" }}>Available</th><th style={{ padding: "10px 12px" }}>Claimed</th><th style={{ width: 44 }}></th></tr></thead>
@@ -279,40 +305,75 @@ export default function PoolsView() {
             {filtered.length === 0 ? <tr><td colSpan={4} style={{ padding: 24, textAlign: "center", color: "var(--text3)" }}>No users yet</td></tr> : filtered.map((u) => {
               const d = displayName(u);
               const isAdmin = (u as unknown as Record<string, unknown>)["isAdmin"] as boolean | undefined;
+              const expanded = expandedUser === u.userId;
+              const uf = getUserFilesFor(u.userId);
               return (
-                <tr key={u.userId} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ padding: "10px 12px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span className="admin-wrap">
-                        {u.photoUrl ? <img src={u.photoUrl} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", border: "1px solid var(--border)" }} /> : <span style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--bg3)", display: "grid", placeItems: "center", fontWeight: 700, border: "1px solid var(--border)" }}>{d.line1.charAt(0).toUpperCase()}</span>}
-                        {isAdmin ? <span className="admin-dot"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M5 13l4 4L19 7" /></svg></span> : null}
-                      </span>
-                      <span style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.line1}</div>
-                        {d.line2 ? <div style={{ fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.line2}</div> : null}
-                      </span>
-                    </div>
-                  </td>
-                  <td style={{ fontFamily: "var(--mono)", padding: "10px 12px" }}>{u.available}</td>
-                  <td style={{ padding: "10px 12px" }}><span className="badge taken">{u.claimed} Taken</span></td>
-                  <td style={{ padding: "8px", position: "relative" }}>
-                    <button className="btn" style={{ width: 32, height: 32, padding: 0, justifyContent: "center" }} onClick={() => setMenuUser(menuUser === u.userId ? null : u.userId)}>⋯</button>
-                    {menuUser === u.userId ? (
-                      <div style={{ position: "absolute", right: 8, top: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--rl)", boxShadow: "var(--shadow-lg)", zIndex: 10, minWidth: 160, padding: 4 }}>
-                        <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", borderRadius: 6, fontWeight: 500 }} onClick={() => openFile(u)}>View file</button>
-                        <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "var(--blue)", color: "#fff", cursor: "pointer", borderRadius: 6, fontWeight: 700, marginTop: 4 }} onClick={() => { setMenuUser(null); setDlUser(u); setPerQty(10); setPerCustom(""); }}>Download</button>
-                        {isAdmin ? <div style={{ fontSize: 11, color: "var(--text3)", padding: "6px 10px" }}>Admin account</div> : null}
+                <>
+                  <tr key={u.userId} className="user-row" style={{ borderBottom: "1px solid var(--border)" }} onClick={() => toggleExpand(u.userId)}>
+                    <td style={{ padding: "10px 12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span className={`expand-icon ${expanded ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0 }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6" /></svg>
+                        </span>
+                        <span className="admin-wrap">
+                          {u.photoUrl ? <img src={u.photoUrl} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", border: "1px solid var(--border)" }} /> : <span style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--bg3)", display: "grid", placeItems: "center", fontWeight: 700, border: "1px solid var(--border)" }}>{d.line1.charAt(0).toUpperCase()}</span>}
+                          {isAdmin ? <span className="admin-dot"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M5 13l4 4L19 7" /></svg></span> : null}
+                        </span>
+                        <span style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.line1}</div>
+                          {d.line2 ? <div style={{ fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.line2}</div> : null}
+                        </span>
+                        {uf ? <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: 4, whiteSpace: "nowrap" }}>{uf.files.length} file{uf.files.length !== 1 ? "s" : ""}</span> : null}
                       </div>
-                    ) : null}
-                  </td>
-                </tr>
+                    </td>
+                    <td style={{ fontFamily: "var(--mono)", padding: "10px 12px" }}>{u.available}</td>
+                    <td style={{ padding: "10px 12px" }}><span className="badge taken">{u.claimed} Taken</span></td>
+                    <td style={{ padding: "8px", position: "relative" }} onClick={(e) => e.stopPropagation()}>
+                      <button className="btn" style={{ width: 32, height: 32, padding: 0, justifyContent: "center" }} onClick={() => setMenuUser(menuUser === u.userId ? null : u.userId)}>⋯</button>
+                      {menuUser === u.userId ? (
+                        <div style={{ position: "absolute", right: 8, top: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--rl)", boxShadow: "var(--shadow-lg)", zIndex: 10, minWidth: 160, padding: 4 }}>
+                          <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", borderRadius: 6, fontWeight: 500 }} onClick={() => openFile(u)}>View file</button>
+                          <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "var(--blue)", color: "#fff", cursor: "pointer", borderRadius: 6, fontWeight: 700, marginTop: 4 }} onClick={() => { setMenuUser(null); setDlUser(u); setPerQty(10); setPerCustom(""); }}>Download</button>
+                          {isAdmin ? <div style={{ fontSize: 11, color: "var(--text3)", padding: "6px 10px" }}>Admin account</div> : null}
+                        </div>
+                      ) : null}
+                    </td>
+                  </tr>
+                  {expanded && (
+                    <tr key={`${u.userId}-files`} className="file-row">
+                      <td colSpan={4} style={{ padding: "0 12px 12px 44px" }}>
+                        {loadingFiles && !uf ? (
+                          <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>Loading files...</div>
+                        ) : !uf || uf.files.length === 0 ? (
+                          <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>No files tracked for this user</div>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 2 }}>
+                              Files in pool — {uf.files.length} total
+                            </div>
+                            {uf.files.map((f) => (
+                              <div key={f.fileId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer" }} onClick={() => navigate(`/admin/user/${u.userId}/file/${f.fileId}`)}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--text3)", flexShrink: 0 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>
+                                <span style={{ fontSize: 12, fontFamily: "var(--mono)", color: "var(--text2)", flexShrink: 0 }}>#{f.fileId.slice(-8)}</span>
+                                <span style={{ flex: 1 }} />
+                                <span style={{ fontSize: 12, color: "var(--green)", fontWeight: 600 }}>{f.available} avail</span>
+                                <span style={{ fontSize: 12, color: "var(--text3)" }}>/</span>
+                                <span style={{ fontSize: 12, color: "var(--red)", fontWeight: 600 }}>{f.claimed} taken</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </>
               );
             })}
           </tbody>
         </table>
       </div>
 
-      {/* download history — below user table, above fileView */}
+      {/* download history */}
       <div style={{ marginTop: 16, border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)", padding: 14, overflow: "auto" }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Recent downloads</div>
         {!downloads || downloads.length === 0 ? (

@@ -73,6 +73,13 @@ pools.post("/:password/:pool/claim", async (c) => {
   const out = await rpc(c.env.POOLS, c.req.param("password"), "claim", { pool: pid, uid: c.get("uid"), count: body.count, downloadId: id, filename });
   return c.json({ password: c.req.param("password"), poolId: pid, claimed: out.claimed, rows: out.rows, downloadId: out.downloadId, filename: out.filename });
 });
+pools.get("/:password/:pool/user-files", async (c) => {
+  if (!admin(c)) return c.json({ error: "admin access required" }, 403);
+  const pid = c.req.param("pool");
+  if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
+  const r = await rpc(c.env.POOLS, c.req.param("password"), "userFiles", { pool: pid });
+  return c.json(r);
+});
 pools.post("/:password/:pool/revert", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const body = await c.req.json<{ id?: string }>().catch(() => ({}) as { id?: string });

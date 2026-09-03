@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cell Toolbar — Demo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+  :root {
+    --bg: #ffffff; --bg2: #fafafa; --bg3: #f5f5f5; --bg4: #eaeaea;
+    --text: #000000; --text2: #666666; --text3: #999999;
+    --border: #eaeaea; --border2: #d4d4d4;
+    --blue: #0070f3; --blue-light: rgba(0,112,243,0.08);
+    --r: 6px; --rl: 8px; --sans: 'Geist', -apple-system, sans-serif; --mono: 'Geist Mono', monospace;
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg3);font-family:var(--sans);display:flex;align-items:center;justify-content:center;padding:24px}
+  /* header */
+  .demo-wrap{width:100%;max-width:480px}
+  .demo-label{font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+  .demo-title{font-size:15px;font-weight:700;letter-spacing:-0.02em;margin-bottom:14px;color:var(--text)}
+  .demo-title span{font-weight:400;color:var(--text2);font-size:13px}
+  /* ——— Card — not rounded, input stays rounded */
+  .cell-card{
+    width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:0;
+    padding:6px 12px 10px;box-shadow:var(--shadow-lg);position:relative;
+  }
+  /* cell bar — short top-bottom, long left-right */
+  .formula-bar{
+    display:flex;align-items:center;background:var(--bg);border:1px solid var(--border);
+    border-radius:32px;padding:10px 20px;
+  }
+  .formula-input{
+    border:none;outline:none;width:100%;background:transparent;
+    font-size:16px;line-height:1.4;font-family:var(--mono);color:var(--text);
+  }
+  .formula-input::placeholder{color:var(--text3)}
+  /* toolbar — bigger buttons */
+  .toolbar{display:flex;align-items:center;gap:10px;padding:10px 4px 0;flex-wrap:wrap}
+  .icon-btn{
+    display:flex;align-items:center;justify-content:center;
+    width:42px;height:42px;border-radius:11px;color:var(--text2);
+    background:transparent;border:none;cursor:pointer;position:relative;
+    transition:background .12s ease,color .12s ease;
+  }
+  .icon-btn:hover{background:var(--bg3);color:var(--text)}
+  .icon-btn.active{background:var(--blue-light);color:var(--blue)}
+  .icon-btn:active{transform:scale(0.97)}
+  .bold-icon{font-size:18px;font-weight:800;font-family:var(--sans);line-height:1}
+  .color-bar{
+    position:absolute;bottom:2px;left:50%;transform:translateX(-50%);
+    width:18px;height:3px;border-radius:1px;background:var(--text);pointer-events:none;
+  }
+  .toolbar-divider{width:1px;height:28px;background:var(--border);margin:0 4px;flex-shrink:0}
+  .icon-btn .lbl{font-size:11px;font-weight:600;margin-left:4px;display:none}
+  /* tooltip via title, no extra css */
+  /* picker — compact, full width overlay, uses space well, not too long */
+  .picker{
+    display:none;position:absolute;top:0;left:0;right:0;
+    background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:10px 12px 10px;
+    box-shadow:var(--shadow-lg);z-index:20;
+  }
+  .picker.open{display:block;animation:pickerIn .18s cubic-bezier(0.16,1,0.3,1) both;transform-origin:28% 32%}
+  #pickerCell.open{transform-origin:38% 32%}
+  @keyframes pickerIn{from{opacity:0;transform:scale(0.94) translateY(4px)}to{opacity:1;transform:scale(1) translateY(0)}}
+  @keyframes pop{from{opacity:0;transform:translateY(6px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+  .cell-card{animation:barIn .22s cubic-bezier(0.16,1,0.3,1) both}
+  @keyframes barIn{from{opacity:0;transform:scale(0.96) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+  .picker-tabs{display:flex;background:var(--bg3);border-radius:7px;padding:2px;gap:1px;margin-bottom:6px !important}
+  .picker-tab{flex:1;text-align:center;padding:4px 0;border-radius:5px;font-size:10px;font-weight:600;color:var(--text2);cursor:pointer;border:none;background:none;transition:all .12s;line-height:1}
+  .picker-tab.active{background:var(--bg);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,0.08)}
+  .preview-row{display:none}
+  .preview-swatch{width:18px;height:18px;border-radius:5px;border:1px solid var(--border);flex-shrink:0}
+  .preview-label{display:none}
+  .hex-input{
+    display:none;flex:1;border:1px solid var(--border2);border-radius:7px;padding:5px 7px;
+    font-size:11px;font-family:var(--mono);outline:none;color:var(--text);background:var(--bg);
+  }
+  .hex-input.open{display:block}
+  .hex-input:focus{border-color:var(--text)}
+  .swatch-grid{display:flex;gap:0;margin-bottom:6px;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  .swatch-dot{flex:1;min-width:0;height:32px;border-radius:0;cursor:pointer;border:none;border-right:1px solid rgba(255,255,255,0.5);transition:opacity .08s}
+  .swatch-dot:hover{opacity:0.85}
+  .swatch-dot:last-child{border-right:none}
+  .swatch-dot.none{background:var(--bg);position:relative;display:flex;align-items:center;justify-content:center}
+  .swatch-dot.none::after{content:'✕';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text2);background:transparent;width:auto;height:auto;left:0;top:0;transform:none;border:none}
+  .swatch-dot.selected{outline:2.5px solid var(--text);outline-offset:-1px;box-shadow:0 0 0 3px var(--blue-light);z-index:2}
+  .custom-btn{
+    width:100%;padding:8px 10px;border-radius:8px;border:1px dashed var(--border2);background:var(--bg2);
+    font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+    transition:background .12s, border-color .12s, color .12s;
+  }
+  .custom-btn:hover{background:var(--bg3);border-color:var(--text3);color:var(--text)}
+  .custom-color-input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
+  /* toolbar animations */
+  @keyframes copyPop{0%{transform:scale(1)}30%{transform:scale(1.18)}60%{transform:scale(0.92)}100%{transform:scale(1)}}
+  @keyframes pasteSlide{0%{transform:translateY(0)}30%{transform:translateY(3px)}60%{transform:translateY(-1px)}100%{transform:translateY(0)}}
+  @keyframes shake{0%,100%{transform:translateX(0) rotate(0)}20%{transform:translateX(-2px) rotate(-6deg)}40%{transform:translateX(2px) rotate(6deg)}60%{transform:translateX(-1px) rotate(-3deg)}80%{transform:translateX(1px) rotate(3deg)}}
+  .anim-copy{animation:copyPop .35s cubic-bezier(0.34,1.56,0.64,1)}
+  .anim-paste{animation:pasteSlide .36s ease}
+  .anim-clear{animation:shake .42s ease}
+  .icon-btn.copied{color:var(--blue) !important;background:var(--blue-light) !important}
+  .handle{width:72px;height:4px;border-radius:2px;background:var(--border2);margin:12px auto 0}
+  /* demo actual cell — shows real cell formatting, not the bar */
+  .demo-grid{margin-top:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg)}
+  .demo-grid-label{font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);padding:7px 10px;background:var(--bg2);border-bottom:1px solid var(--border)}
+  .demo-cell{height:42px;display:flex;align-items:center;justify-content:center;padding:0 10px;background:var(--bg);transition:background .12s, color .12s}
+  .demo-cell-text{font-size:13px;font-family:var(--mono);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  /* meta */
+  .demo-note{margin-top:14px;font-size:12px;line-height:1.5;color:var(--text3);text-align:center}
+  .demo-actions{margin-top:14px;display:flex;gap:8px;justify-content:center}
+  .demo-btn{padding:6px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--bg);font-size:12px;cursor:pointer}
+  .demo-btn:hover{background:var(--bg3)}
+</style>
+</head>
+<body>
+<div class="demo-wrap">
+  <div class="demo-label">SheetSubmit — Cell Toolbar</div>
+  <div class="demo-title">Cell toolbar card <span>· not a pill · site tokens</span></div>
+
+  <div class="cell-card" id="card">
+    <!-- bar — just input (no fx/pc) -->
+    <div class="formula-bar" id="cellBox">
+      <input class="formula-input" id="cellInput" type="text" placeholder="Enter cell value" autocomplete="off" spellcheck="false">
+    </div>
+
+    <!-- toolbar: bold · text color · cell fill · | · copy · paste · clear -->
+    <div class="toolbar">
+      <button class="icon-btn" id="boldBtn" title="Bold (⌘B)"><span class="bold-icon">B</span></button>
+      <div class="toolbar-divider"></div>
+      <button class="icon-btn" id="textColorBtn" title="Text color">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 16l4-12h4l4 12"/><path d="M8 12h8"/></svg>
+        <span class="color-bar" id="textBar"></span>
+      </button>
+      <button class="icon-btn" id="cellColorBtn" title="Cell fill">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l7 7-8 8-7-7 8-8Z"/><path d="M5 19l3-3"/><path d="M14 14l3 3 -1 1 -3 -3"/><path d="M9.5 9.5l1.8 1.8" stroke-width="1.2" opacity="0.6"/><path d="M10.8 7.2l1.2 1.2" stroke-width="1" opacity="0.4"/></svg>
+        <span class="color-bar" id="cellBar" style="background:transparent"></span>
+      </button>
+      <div class="toolbar-divider"></div>
+      <button class="icon-btn" id="copyBtn" title="Copy">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V7a2 2 0 0 1 2-2h8"/></svg>
+      </button>
+      <button class="icon-btn" id="pasteBtn" title="Paste">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/><rect x="9" y="3" width="8" height="6" rx="1.5"/></svg>
+      </button>
+      <button class="icon-btn" id="clearBtn" title="Clear">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+      </button>
+    </div>
+
+    <div class="handle"></div>
+
+    <!-- separate popups: Basic vs Custom — full overlay on bar -->
+    <div class="picker" id="pickerText">
+      <div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Text color</div>
+      <div class="picker-tabs" style="margin-bottom:8px">
+        <button class="picker-tab active" id="tabBasicText">Basic</button>
+        <button class="picker-tab" id="tabCustomText">Custom</button>
+      </div>
+      <div id="secBasicText">
+        <div class="preview-row">
+          <div class="preview-swatch" id="previewText" style="background:#000000"></div>
+          <div class="preview-label" id="previewTextLabel">#000000</div>
+        </div>
+        <div class="swatch-grid" id="swatchGridText"></div>
+      </div>
+      <div id="secCustomText" style="display:none">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="nativeText" type="color" value="#000000" style="width:44px;height:32px;border:1px solid var(--border);border-radius:8px;padding:2px;background:var(--bg);cursor:pointer;flex-shrink:0">
+          <input class="hex-input open" id="hexText" type="text" value="#000000" maxlength="7" spellcheck="false" placeholder="#000000" style="display:block;flex:1">
+          <div class="preview-swatch" id="previewTextCustom" style="background:#000000;width:22px;height:22px;border-radius:6px;flex-shrink:0"></div>
+        </div>
+      </div>
+    </div>
+    <div class="picker" id="pickerCell">
+      <div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Cell fill</div>
+      <div class="picker-tabs" style="margin-bottom:8px">
+        <button class="picker-tab active" id="tabBasicCell">Basic</button>
+        <button class="picker-tab" id="tabCustomCell">Custom</button>
+      </div>
+      <div id="secBasicCell">
+        <div class="swatch-grid" id="swatchGridCell"></div>
+      </div>
+      <div id="secCustomCell" style="display:none">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="nativeCell" type="color" value="#ffffff" style="width:44px;height:32px;border:1px solid var(--border);border-radius:8px;padding:2px;background:var(--bg);cursor:pointer;flex-shrink:0">
+          <input class="hex-input open" id="hexCell" type="text" value="#ffffff" maxlength="7" spellcheck="false" placeholder="#RRGGBB" style="display:block;flex:1">
+          <div class="preview-swatch" id="previewCellCustom" style="background:#ffffff;width:22px;height:22px;border-radius:6px;flex-shrink:0"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- actual cell preview — stays visible below bar, not covered by overlay -->
+  <div class="demo-grid" style="margin-top:12px">
+    <div class="demo-grid-label">Actual cell preview</div>
+    <div class="demo-cell" id="demoCell"><span class="demo-cell-text" id="demoCellText">Sample cell A12</span></div>
+  </div>
+
+  <div class="demo-note">Keeps: <b>Bold</b> · Text color · Cell fill · Copy · Paste · Clear — <code>fx</code> kept, no column name. Site tokens only.</div>
+  <div class="demo-actions">
+    <button class="demo-btn" onclick="document.getElementById('cellInput').focus()">Focus input</button>
+    <button class="demo-btn" onclick="navigator.clipboard.writeText(document.documentElement.outerHTML)">Copy HTML</button>
+  </div>
+</div>
+
+<script>
+  const input = document.getElementById('cellInput');
+  const demoCell = document.getElementById('demoCell');
+  const demoCellText = document.getElementById('demoCellText');
+  const boldBtn = document.getElementById('boldBtn');
+  const textColorBtn = document.getElementById('textColorBtn');
+  const cellColorBtn = document.getElementById('cellColorBtn');
+  const textBar = document.getElementById('textBar');
+  const cellBar = document.getElementById('cellBar');
+  const pickerText = document.getElementById('pickerText');
+  const pickerCell = document.getElementById('pickerCell');
+  const previewText = document.getElementById('previewText');
+  const previewCell = document.getElementById('previewCell');
+  const previewTextLabel = document.getElementById('previewTextLabel');
+  const previewCellLabel = document.getElementById('previewCellLabel');
+  const previewTextCustom = document.getElementById('previewTextCustom');
+  const previewTextLabelCustom = document.getElementById('previewTextLabelCustom');
+  const previewCellCustom = document.getElementById('previewCellCustom');
+  const previewCellLabelCustom = document.getElementById('previewCellLabelCustom');
+  const hexText = document.getElementById('hexText');
+  const hexCell = document.getElementById('hexCell');
+  const nativeText = document.getElementById('nativeText');
+  const nativeCell = document.getElementById('nativeCell');
+  const tabBasicText = document.getElementById('tabBasicText');
+  const tabCustomText = document.getElementById('tabCustomText');
+  const tabBasicCell = document.getElementById('tabBasicCell');
+  const tabCustomCell = document.getElementById('tabCustomCell');
+  const secBasicText = document.getElementById('secBasicText');
+  const secCustomText = document.getElementById('secCustomText');
+  const secBasicCell = document.getElementById('secBasicCell');
+  const secCustomCell = document.getElementById('secCustomCell');
+  const swatchGridText = document.getElementById('swatchGridText');
+  const swatchGridCell = document.getElementById('swatchGridCell');
+  const copyBtn = document.getElementById('copyBtn');
+  const pasteBtn = document.getElementById('pasteBtn');
+  const clearBtn = document.getElementById('clearBtn');
+
+  const palette = ['#000000','#434343','#666666','#999999','#B7B7B7','#CCCCCC','#D9D9D9','#FFFFFF','#ee0000','#ff6d00','#fbbc04','#16a34a','#00acc1','#0070f3','#6366f1','#795548'];
+  let textColor='#000000', cellColor='transparent', bold=false;
+
+  function buildTextGrid(){
+    swatchGridText.innerHTML='';
+    palette.forEach(hex=>{
+      const d=document.createElement('div');
+      d.className='swatch-dot'; d.style.background=hex; d.dataset.color=hex;
+      d.onclick=()=>selectTextColor(hex);
+      swatchGridText.appendChild(d);
+    });
+    markTextSelected();
+  }
+  function buildCellGrid(){
+    swatchGridCell.innerHTML='';
+    const none=document.createElement('div');
+    none.className='swatch-dot none'; none.title='No fill';
+    none.onclick=()=>selectCellColor('transparent');
+    swatchGridCell.appendChild(none);
+    palette.forEach(hex=>{
+      const d=document.createElement('div');
+      d.className='swatch-dot'; d.style.background=hex; d.dataset.color=hex;
+      d.onclick=()=>selectCellColor(hex);
+      swatchGridCell.appendChild(d);
+    });
+    markCellSelected();
+  }
+  function markTextSelected(){
+    swatchGridText.querySelectorAll('.swatch-dot').forEach(d=>{
+      d.classList.toggle('selected',d.dataset.color===textColor);
+    });
+  }
+  function markCellSelected(){
+    swatchGridCell.querySelectorAll('.swatch-dot').forEach(d=>{
+      d.classList.toggle('selected',(d.dataset.color||'transparent')===cellColor);
+    });
+  }
+  function selectTextColor(hex){
+    textColor=hex; demoCellText.style.color=hex; textBar.style.background=hex;
+    if(previewText) previewText.style.background=hex; if(previewTextCustom) previewTextCustom.style.background=hex;
+    if(previewTextLabel) previewTextLabel.textContent=hex.toUpperCase(); if(previewTextLabelCustom) previewTextLabelCustom.textContent=hex.toUpperCase();
+    hexText.value=hex.toUpperCase(); nativeText.value=hex;
+    markTextSelected();
+  }
+  function selectCellColor(hex){
+    cellColor=hex; demoCell.style.background=hex==='transparent'?'#ffffff':hex;
+    cellBar.style.background=hex==='transparent'?'transparent':hex;
+    if(previewCell) previewCell.style.background=hex==='transparent'?'#fff':hex; if(previewCellCustom) previewCellCustom.style.background=hex==='transparent'?'#fff':hex;
+    if(previewCellLabel) previewCellLabel.textContent=hex==='transparent'?'None':hex.toUpperCase(); if(previewCellLabelCustom) previewCellLabelCustom.textContent=hex==='transparent'?'None':hex.toUpperCase();
+    hexCell.value=hex==='transparent'?'None':hex.toUpperCase(); if(hex!=='transparent') nativeCell.value=hex;
+    markCellSelected();
+  }
+  function showTextSection(which){
+    const isBasic = which==='basic';
+    tabBasicText.classList.toggle('active',isBasic); tabCustomText.classList.toggle('active',!isBasic);
+    secBasicText.style.display=isBasic?'block':'none'; secCustomText.style.display=isBasic?'none':'block';
+  }
+  function showCellSection(which){
+    const isBasic = which==='basic';
+    tabBasicCell.classList.toggle('active',isBasic); tabCustomCell.classList.toggle('active',!isBasic);
+    secBasicCell.style.display=isBasic?'block':'none'; secCustomCell.style.display=isBasic?'none':'block';
+  }
+  boldBtn.onclick=()=>{
+    bold=!bold; boldBtn.classList.toggle('active',bold);
+    demoCellText.style.fontWeight=bold?'700':'400';
+  };
+  // typing in bar updates the preview cell
+  input.addEventListener('input',()=>{
+    const v=input.value.trim();
+    demoCellText.textContent = v ? v : 'Sample cell A12';
+  });
+  textColorBtn.onclick=e=>{ e.stopPropagation(); const open=pickerText.classList.contains('open'); pickerCell.classList.remove('open'); pickerText.classList.toggle('open',!open); if(!open) showTextSection('basic'); };
+  cellColorBtn.onclick=e=>{ e.stopPropagation(); const open=pickerCell.classList.contains('open'); pickerText.classList.remove('open'); pickerCell.classList.toggle('open',!open); if(!open) showCellSection('basic'); };
+  tabBasicText.onclick=()=> showTextSection('basic');
+  tabCustomText.onclick=()=> showTextSection('custom');
+  tabBasicCell.onclick=()=> showCellSection('basic');
+  tabCustomCell.onclick=()=> showCellSection('custom');
+  nativeText.oninput=e=> selectTextColor(e.target.value);
+  nativeCell.oninput=e=> selectCellColor(e.target.value);
+  hexText.onchange=()=>{
+    let v=hexText.value.trim(); if(!v.startsWith('#')) v='#'+v;
+    if(/^#[0-9A-Fa-f]{6}$/.test(v)) selectTextColor(v);
+  };
+  hexCell.onchange=()=>{
+    let v=hexCell.value.trim(); if(!v.startsWith('#')) v='#'+v;
+    if(/^#[0-9A-Fa-f]{6}$/.test(v)) selectCellColor(v);
+  };
+  document.addEventListener('click',e=>{
+    if(!pickerText.contains(e.target) && !pickerCell.contains(e.target) && !textColorBtn.contains(e.target) && !cellColorBtn.contains(e.target)){
+      pickerText.classList.remove('open'); pickerCell.classList.remove('open');
+    }
+  });
+  function trigger(el, cls){ el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); el.addEventListener('animationend',()=>el.classList.remove(cls),{once:true}); }
+  // animated copy / paste / clear — real interacting feedback
+  copyBtn.onclick=async()=>{
+    trigger(copyBtn,'anim-copy');
+    try{ await navigator.clipboard.writeText(input.value); copyBtn.classList.add('copied'); demoCellText.textContent=input.value||'Sample cell A12'; setTimeout(()=>copyBtn.classList.remove('copied'),900);}catch{ input.select(); document.execCommand('copy'); }
+  };
+  pasteBtn.onclick=async()=>{
+    trigger(pasteBtn,'anim-paste');
+    try{
+      const t=await navigator.clipboard.readText();
+      const s=input.selectionStart??input.value.length, e=input.selectionEnd??input.value.length;
+      input.value=input.value.slice(0,s)+t+input.value.slice(e);
+      demoCellText.textContent = input.value || 'Sample cell A12';
+      input.focus(); input.setSelectionRange(s+t.length,s+t.length);
+    }catch{ input.focus(); }
+  };
+  clearBtn.onclick=()=>{ trigger(clearBtn,'anim-clear'); input.value=''; demoCellText.textContent='Sample cell A12'; input.focus(); };
+
+  buildTextGrid(); buildCellGrid(); input.focus();
+</script>
+</body>
+</html>

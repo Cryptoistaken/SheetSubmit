@@ -1,0 +1,8 @@
+{
+  "routes": ["/file/smoke"],
+  "auth": {
+    "cookies": [
+      { "name": "session", "value": "smoke", "domain": "localhost", "path": "/" }
+    ]
+  }
+}

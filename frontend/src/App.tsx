@@ -8,7 +8,7 @@ import {
 } from "react-router";
 
 import LoginScreen from "@/components/auth/LoginScreen";
-import OfflineBanner from "@/components/layout/OfflineBanner";
+
 import Topbar from "@/components/layout/Topbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/lib/theme";
@@ -41,7 +41,6 @@ function Layout() {
           <Outlet />
         </Suspense>
       </div>
-      <OfflineBanner />
     </>
   );
 }

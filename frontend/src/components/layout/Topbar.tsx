@@ -366,7 +366,7 @@ export default function Topbar() {
               <a
                 className="gear-toggle-row"
                 style={{ cursor: "pointer", textDecoration: "none" }}
-                href="https://github.com/Cryptoistaken/SheetSubmit-testmycode/releases/latest/download/SheetSubmit.apk"
+                href="https://github.com/Cryptoistaken/SheetSubmit/releases/latest/download/SheetSubmit.apk"
                 target="_blank"
                 rel="noopener noreferrer"
               >

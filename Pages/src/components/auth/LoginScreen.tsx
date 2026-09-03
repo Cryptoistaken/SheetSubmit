@@ -37,6 +37,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
   const didRef = useRef<string | null>(null);
   const [turnstileReady, setTurnstileReady] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileTokenRef = useRef<string | null>(null);
   const turnstileRef = useRef<string | null>(null);
   const turnstileBoxRef = useRef<HTMLDivElement>(null);
 
@@ -55,7 +56,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
     if (!turnstileReady || !turnstileBoxRef.current || turnstileRef.current) return;
     turnstileRef.current = window.turnstile!.render(turnstileBoxRef.current, {
       sitekey: TURNSTILE_SITE_KEY,
-      callback: (token: string) => setTurnstileToken(token),
+      callback: (token: string) => { turnstileTokenRef.current = token; setTurnstileToken(token); },
       "error-callback": () => setTurnstileToken(null),
     });
   }, [turnstileReady]);
@@ -80,7 +81,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
 
   // Claim polling
   useEffect(() => {
-    if (!href) return;
+    if (!href || !turnstileToken) return;
     let stop = false;
     let iv: ReturnType<typeof setInterval> | null = null;
     let attempts = 0;
@@ -89,7 +90,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
       if (!document.hasFocus()) return;
       setChecking(true);
       attempts++;
-      api.claimDeviceSession(didRef.current ?? "", turnstileToken).then((res) => {
+      api.claimDeviceSession(didRef.current ?? "", turnstileTokenRef.current).then((res) => {
         if (stop) return;
         if (res.ok) { stop = true; localStorage.setItem(HAD_SESSION, "1"); setWaiting(true); window.location.href = "/"; return; }
         if (attempts >= MAX_ATTEMPTS) { stop = true; if (iv) clearInterval(iv); setChecking(false); setShowRecheck(true); }
@@ -97,7 +98,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
     };
     const first = setTimeout(() => { if (stop) return; iv = setInterval(tick, POLL_MS); tick(); }, INITIAL_DELAY_MS);
     return () => { stop = true; clearTimeout(first); if (iv) clearInterval(iv); };
-  }, [href]);
+  }, [href, turnstileToken]);
 
   const recheck = () => { localStorage.removeItem("ss_login_did"); window.location.href = "/"; };
 

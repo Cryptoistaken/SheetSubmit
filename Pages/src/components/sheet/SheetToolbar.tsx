@@ -205,20 +205,7 @@ export default function SheetToolbar() {
 
   return (
     <>
-      <span
-        className={
-          "save-status" +
-          (isDirty ? " save-pending" : " save-ok")
-        }
-        title={
-          isDirty
-            ? "Saving…"
-            : "All changes saved"
-        }
-      >
-        <span className="save-dot" />
-        {isDirty ? "Saving…" : "Saved"}
-      </span>
+
       <button
         className="undo-redo-btn"
         title="Undo"

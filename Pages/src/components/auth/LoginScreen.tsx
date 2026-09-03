@@ -117,7 +117,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
             </button>
           ) : (
             <>
-              <div ref={turnstileBoxRef} style={{ marginBottom: 12 }} />
+              <div ref={turnstileBoxRef} style={{ marginBottom: 12, display: turnstileToken ? "none" : undefined }} />
               <a
                 className={`login-btn${href && turnstileToken ? " ready" : " loading"}${checking ? " checking" : ""}`}
                 href={href && turnstileToken ? href : "#"}

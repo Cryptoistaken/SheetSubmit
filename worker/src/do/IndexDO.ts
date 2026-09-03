@@ -24,10 +24,10 @@ export class IndexDO {
     case "session": s.exec("INSERT OR REPLACE INTO sessions(token,user_id,exp) VALUES(?,?,?)", args.token, args.uid, args.exp); return Response.json({ ok: true });
     case "getSession": return Response.json(s.exec("SELECT * FROM sessions WHERE token=? AND exp>?", args.token, Date.now()).toArray()[0] || null);
     case "deleteSession": s.exec("DELETE FROM sessions WHERE token=?", args.token); return Response.json({ ok: true });
-    case "deviceSet": s.exec("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)", `device:${args.did}`, JSON.stringify({ chatId: args.chatId })); return Response.json({ ok: true });
+     case "deviceSet": { const current: any = s.exec("SELECT v FROM meta WHERE k=?", `device:${args.did}`).toArray()[0]; if (current) s.exec("DELETE FROM meta WHERE k=?", `deviceByChat:${JSON.parse(current.v).chatId}`); const previous: any = s.exec("SELECT v FROM meta WHERE k=?", `deviceByChat:${args.chatId}`).toArray()[0]; if (previous) s.exec("DELETE FROM meta WHERE k=?", `device:${JSON.parse(previous.v).did}`); s.exec("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)", `device:${args.did}`, JSON.stringify({ chatId: args.chatId })); s.exec("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)", `deviceByChat:${args.chatId}`, JSON.stringify({ did: args.did })); return Response.json({ ok: true }); }
     case "deviceGet": { const r: any = s.exec("SELECT v FROM meta WHERE k=?", `device:${args.did}`).toArray()[0]; return Response.json(r ? JSON.parse(r.v) : null); }
-    case "deviceDelete": s.exec("DELETE FROM meta WHERE k=?", `device:${args.did}`); return Response.json({ ok: true });
-    case "deviceByChat": { const r: any = s.exec("SELECT k,v FROM meta WHERE k LIKE 'device:%'").toArray().find((x: any) => JSON.parse(x.v).chatId === String(args.chatId)); return Response.json(r ? { did: r.k.slice(7) } : null); }
+     case "deviceDelete": { const r: any = s.exec("SELECT v FROM meta WHERE k=?", `device:${args.did}`).toArray()[0]; if (r) s.exec("DELETE FROM meta WHERE k=?", `deviceByChat:${JSON.parse(r.v).chatId}`); s.exec("DELETE FROM meta WHERE k=?", `device:${args.did}`); return Response.json({ ok: true }); }
+     case "deviceByChat": { const r: any = s.exec("SELECT v FROM meta WHERE k=?", `deviceByChat:${args.chatId}`).toArray()[0]; return Response.json(r ? JSON.parse(r.v) : null); }
     default: return Response.json({ error: "unknown operation" }, { status: 400 });
   } }
 }

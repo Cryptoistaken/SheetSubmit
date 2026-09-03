@@ -72,10 +72,6 @@ export default function SheetPage() {
   }, [fileName]);
 
   useEffect(() => {
-    void import("@/bones/registry");
-  }, []);
-
-  useEffect(() => {
     if (!fileId) return;
     if (ownerId) void useSheetStore.getState().openFileAdmin(fileId, ownerId);
     else void useSheetStore.getState().openFile(fileId);

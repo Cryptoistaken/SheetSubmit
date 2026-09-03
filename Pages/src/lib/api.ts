@@ -270,8 +270,8 @@ export const api = {
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     return { user: (await res.json()) as User | null, expired: false };
   },
-  logout: () => request<{ ok: boolean }>("/auth/logout"),
+  logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   botInfo: () => request<{ username: string }>("/bot/info"),
   claimDeviceSession: (token: string, turnstileToken?: string | null) =>
-    request<{ ok: boolean }>(`/auth/device/claim?token=${encodeURIComponent(token)}${turnstileToken ? `&turnstile=${encodeURIComponent(turnstileToken)}` : ""}`),
+    request<{ ok: boolean }>("/auth/device/claim", { method: "POST", body: JSON.stringify({ token, turnstile: turnstileToken || undefined }) }),
 };

@@ -23,12 +23,13 @@ files.put("/:id/append", async (c) => { const file = await owned(c, c.req.param(
 export const archive = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 archive.use("/*", requireAuth);
 // ponytail: permanently deleted rows stay in pools if claimed (matches backend taken-block); available rows are removed
-async function purgeFile(env: Env, file: SheetFile, uid: string) { const wiped = await rpc(env.FILES, file.id, "wipe").catch(() => ({ rows: [] as Row[] })); const keys = [...new Set((wiped.rows as Row[]).map(poolId).filter(Boolean))]; await rpc(env.INDEX, "global", "purge", { id: file.id }); if (keys.length && file.password) await rpc(env.POOLS, file.password, "removeAvailable", { keys, uid }).catch(() => {}); }
+async function removePoolRows(env: Env, password: string, rows: Row[], uid: string) { const byPool = new Map<string, Set<string>>(); rows.forEach((row) => { const pool = row.twofakey || row["2fa key"] ? (String(row.wa_status || row.waStatus || "") === "eligible" ? "page" : "cookies_2fa") : "cookies_only"; const key = poolId(row); if (key) (byPool.get(pool) || byPool.set(pool, new Set()).get(pool)!).add(key); }); await Promise.all([...byPool].map(([pool, keys]) => rpc(env.POOLS, password, "removeAvailable", { pool, keys: [...keys], uid }).catch(() => {}))); }
+async function purgeFile(env: Env, file: SheetFile, uid: string) { const wiped = await rpc(env.FILES, file.id, "wipe").catch(() => ({ rows: [] as Row[] })); await rpc(env.INDEX, "global", "purge", { id: file.id }); if (file.password) await removePoolRows(env, file.password, wiped.rows as Row[], uid); }
 archive.get("/", async (c) => c.json(await rpc(c.env.INDEX, "global", "files", { uid: c.get("uid"), archived: 1 })));
 archive.post("/:id/restore", async (c) => { const file = await ownedArchived(c, c.req.param("id")); if (!file) return c.json({ error: "not found" }, 404); delete (file as any).deletedAt; await rpc(c.env.INDEX, "global", "archive", { id: file.id, archived: false, file }); return c.json({ ok: true }); });
 archive.post("/batch-restore", async (c) => { const body = await c.req.json<{ ids?: unknown }>().catch(() => ({ ids: undefined })); const ids = [...new Set(Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string") : [])]; if (!ids.length) return c.json({ error: "no ids" }, 400); if (ids.length > 40) return c.json({ error: "too many ids" }, 400); const archived = await rpc(c.env.INDEX, "global", "files", { uid: c.get("uid"), archived: 1 }) as SheetFile[]; const files = archived.filter((f) => ids.includes(f.id)); files.forEach((f) => delete (f as any).deletedAt); if (files.length) await rpc(c.env.INDEX, "global", "batchArchive", { files }); return c.json({ restored: files.length }); });
 archive.delete("/:id", async (c) => { const file = await ownedArchived(c, c.req.param("id")); if (!file) return c.json({ error: "not found" }, 404); await purgeFile(c.env, file, c.get("uid")); return c.json({ ok: true }); });
-archive.post("/batch-delete", async (c) => { const body = await c.req.json<{ ids?: unknown }>().catch(() => ({ ids: undefined })); const ids = [...new Set(Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string") : [])]; if (!ids.length) return c.json({ error: "no ids" }, 400); if (ids.length > 20) return c.json({ error: "too many ids" }, 400); const archived = await rpc(c.env.INDEX, "global", "files", { uid: c.get("uid"), archived: 1 }) as SheetFile[]; const owned = archived.filter((f) => ids.includes(f.id)); if (!owned.length) return c.json({ deleted: 0 }); const wiped = await Promise.all(owned.map((f) => rpc(c.env.FILES, f.id, "wipe").catch(() => ({ rows: [] as Row[] })))); const pools = new Map<string, Set<string>>(); owned.forEach((f, i) => { if (!f.password) return; const keys = pools.get(f.password) || new Set<string>(); (wiped[i].rows as Row[]).map(poolId).filter(Boolean).forEach((key) => keys.add(key)); pools.set(f.password, keys); }); await rpc(c.env.INDEX, "global", "batchPurge", { ids: owned.map((f) => f.id) }); await Promise.all([...pools].filter(([, keys]) => keys.size).map(([password, keys]) => rpc(c.env.POOLS, password, "removeAvailable", { keys: [...keys], uid: c.get("uid") }).catch(() => {}))); return c.json({ deleted: owned.length }); });
+archive.post("/batch-delete", async (c) => { const body = await c.req.json<{ ids?: unknown }>().catch(() => ({ ids: undefined })); const ids = [...new Set(Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string") : [])]; if (!ids.length) return c.json({ error: "no ids" }, 400); if (ids.length > 20) return c.json({ error: "too many ids" }, 400); const archived = await rpc(c.env.INDEX, "global", "files", { uid: c.get("uid"), archived: 1 }) as SheetFile[]; const owned = archived.filter((f) => ids.includes(f.id)); if (!owned.length) return c.json({ deleted: 0 }); const wiped = await Promise.all(owned.map((f) => rpc(c.env.FILES, f.id, "wipe").catch(() => ({ rows: [] as Row[] })))); await rpc(c.env.INDEX, "global", "batchPurge", { ids: owned.map((f) => f.id) }); await Promise.all(owned.map((f, i) => f.password ? removePoolRows(c.env, f.password, wiped[i].rows as Row[], c.get("uid")) : Promise.resolve())); return c.json({ deleted: owned.length }); });
 
 // ── Cross-file duplicates (mounted at /api/cross-dups) ──
 // ponytail: O(n·rows) scan with one rpc per file; 50-subrequest cap ≈ 45 files/user
@@ -44,15 +45,15 @@ crossDups.get("/", async (c) => {
   const allDups: Record<string, { fileId: string; fileName: string; rowIdx: number }[]> = {};
   const byType: Record<string, SheetFile[]> = {};
   for (const f of files) { (byType[f.type] ||= []).push(f); }
+  const selected = Object.entries(byType).filter(([typeKey, tf]) => (!targetType || typeKey === targetType) && tf.length > 1).flatMap(([, tf]) => tf);
+  if (selected.length > 40) return c.json({ error: "too many files" }, 400);
   for (const typeKey in byType) {
     if (targetType && typeKey !== targetType) continue;
     const tf = byType[typeKey];
     if (tf.length < 2) continue;
     const uidMap: Record<string, { fileId: string; fileName: string; rowIdx: number }[]> = {};
-    for (const f of tf) {
-      const rows = await rpc(c.env.FILES, f.id, "rows") as Row[];
-      rows.forEach((row, ri) => { const dk = poolId(row); if (!dk) return; (uidMap[dk] ||= []).push({ fileId: f.id, fileName: f.name, rowIdx: ri }); });
-    }
+    const rowsByFile = await Promise.all(tf.map((f) => rpc(c.env.FILES, f.id, "rows") as Promise<Row[]>));
+    rowsByFile.forEach((rows, i) => rows.forEach((row, ri) => { const dk = poolId(row); if (!dk) return; (uidMap[dk] ||= []).push({ fileId: tf[i].id, fileName: tf[i].name, rowIdx: ri }); }));
     for (const dk in uidMap) {
       if (uidMap[dk].length > 1) { allDups[dk] = uidMap[dk]; for (const e of uidMap[dk]) counts[e.fileId]++; }
     }

@@ -537,7 +537,7 @@ const run = async () => {
   });
 
   await test("GET /api/auth/logout (clears cookie)", async () => {
-    const r = await api("/auth/logout", { headers: { Cookie: cookie } });
+    const r = await api("/auth/logout", { method: "POST", headers: { Cookie: cookie } });
     return r.status === 200 && r.json?.ok === true && /ss_session=.*Max-Age=0/.test(r.headers.get("set-cookie") || "")
       ? { ok: true }
       : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };

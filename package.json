@@ -7,6 +7,6 @@
     "dev:web": "bun run --cwd Pages dev",
     "build": "bun run --cwd Pages build",
     "typecheck": "bun run --cwd Pages typecheck && bun run --cwd worker typecheck",
-    "test": "bun test"
+    "test": "bun run --cwd Pages test && bun run --cwd worker test"
   }
 }

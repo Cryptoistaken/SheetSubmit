@@ -1,0 +1,45 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.sheetsubmit.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "org.brilliant.android"
+        minSdk 26
+        targetSdk 29
+        def buildNumber = System.getenv("VERSION_CODE") ? Integer.parseInt(System.getenv("VERSION_CODE")) : 1
+        versionCode buildNumber
+        // Version name follows the CI run number so each build is identifiable
+        // (e.g. 1.0.20).
+        versionName "1.0.${buildNumber}"
+    }
+
+    signingConfigs {
+        release {
+            storeFile rootProject.file("android-release.keystore")
+            storePassword System.getenv("KEYSTORE_PASSWORD")
+            keyAlias "sheetsubmit"
+            keyPassword System.getenv("KEYSTORE_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig rootProject.file("android-release.keystore").exists() ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}

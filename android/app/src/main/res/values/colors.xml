@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ss_dialog_bg">#FFFFFF</color>
+    <color name="ss_dialog_border">#E4E4E7</color>
+    <color name="ss_btn_primary_bg">#000000</color>
+    <color name="ss_btn_primary_text">#FFFFFF</color>
+    <color name="ss_btn_ghost_border">#DDDDDD</color>
+    <color name="ss_btn_ghost_text">#333333</color>
+    <color name="ss_title_text">#111111</color>
+    <color name="ss_body_text">#666666</color>
+    <color name="ss_blue">#0070F3</color>
+    <color name="ss_progress_track">#E4E4E7</color>
+</resources>

@@ -1,0 +1,26 @@
+{
+	"version": 1,
+	"ports": {
+		"preview": 5173,
+		"additional": {}
+	},
+	"scripts": {
+		"setup": {
+			"enabled": true,
+			"command": "command -v git-lfs >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq git-lfs)"
+		},
+		"run": {
+			"enabled": true,
+			"command": "bun run --cwd frontend dev"
+		},
+		"archive": {
+			"enabled": true,
+			"command": null
+		},
+		"check": {
+			"enabled": true,
+			"command": null
+		}
+	},
+	"mcpServers": []
+}

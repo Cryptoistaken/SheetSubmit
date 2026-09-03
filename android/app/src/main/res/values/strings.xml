@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SheetSubmit</string>
+    <string name="menu_whats_new">What\'s new</string>
+    <string name="whats_new_title">What\'s new</string>
+    <string name="whats_new_error">Couldn\'t load release notes</string>
+    <string name="whats_new_empty">No release notes yet</string>
+</resources>

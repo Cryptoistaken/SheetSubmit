@@ -379,7 +379,7 @@ button, input, select, textarea {
     position: relative;
     display: inline-flex;
     align-items: center;
-    height: 34px;
+    height: 30px;
     border-radius: 999px;
     border: 1.5px solid var(--border);
     background: var(--bg3);
@@ -397,10 +397,10 @@ button, input, select, textarea {
 .profile-currency {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 0 10px 0 10px;
+    gap: 4px;
+    padding: 0 8px 0 8px;
     height: 100%;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     line-height: 1;
     color: var(--text);
@@ -409,7 +409,7 @@ button, input, select, textarea {
 }
 .profile-pill-divider {
     width: 1px;
-    height: 18px;
+    height: 16px;
     background: var(--border);
     flex-shrink: 0;
     order: 2;
@@ -426,12 +426,12 @@ button, input, select, textarea {
     display: none;
 }
 .user-btn-avatar {
-    width: 30px;
-    height: 30px;
+    width: 26px;
+    height: 26px;
     object-fit: cover;
     display: none;
     border-radius: 50%;
-    border: 1.5px solid var(--green);
+    border: 2px solid var(--green);
     flex-shrink: 0;
     margin: 2px 2px 2px 0;
     order: 3;

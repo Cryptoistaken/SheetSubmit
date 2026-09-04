@@ -1,4 +1,4 @@
-import { Archive, Files, Layers, ShieldCheck, Wrench } from "lucide-react";
+import { Archive, Layers } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { ComponentType } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
@@ -51,6 +51,37 @@ function getAndroid(): AndroidBridge | null {
     return null;
   }
 }
+
+const ReplitIcon = ({ size = 14, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 128 128" aria-hidden="true" {...props}>
+    <title>replit</title>
+    <path fill="#f26207" d="M11 8c0-2.122.845-4.157 2.35-5.657A8.04 8.04 0 0 1 19.026 0h37.45a8.04 8.04 0 0 1 5.675 2.343A8 8 0 0 1 64.5 8v34.667H19.025a8.04 8.04 0 0 1-5.674-2.343A8 8 0 0 1 11 34.666zm53.5 34.667h45.475a8.04 8.04 0 0 1 5.675 2.343a8 8 0 0 1 2.35 5.657v26.666a8 8 0 0 1-2.35 5.657a8.04 8.04 0 0 1-5.675 2.343H64.5zM11 93.333c0-2.121.845-4.156 2.35-5.656a8.04 8.04 0 0 1 5.675-2.344H64.5V120a8 8 0 0 1-2.35 5.657A8.04 8.04 0 0 1 56.475 128h-37.45a8.04 8.04 0 0 1-5.674-2.343A8 8 0 0 1 11 120z" />
+  </svg>
+);
+
+const WakuIcon = ({ size = 14, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 128 128" aria-hidden="true" {...props}>
+    <title>waku</title>
+    <path fill="#dd2e44" d="M10.666 16a7.114 7.114 0 0 0-7.111 7.111c0 3.926 2.61 6.166 7.111 7.112c0 0 2.003.607 7.111 1.316V48H7.111A7.114 7.114 0 0 0 0 55.111a7.114 7.114 0 0 0 7.111 7.112h10.666v53.332a7.114 7.114 0 0 0 7.112 7.111A7.114 7.114 0 0 0 32 115.555V62.223h64v53.332a7.114 7.114 0 0 0 7.111 7.111a7.114 7.114 0 0 0 7.112-7.111V62.223h10.666A7.114 7.114 0 0 0 128 55.11a7.114 7.114 0 0 0-7.111-7.11h-10.666V31.54c5.108-.71 7.111-1.317 7.111-1.317c4.334-1 7.111-3.186 7.111-7.112A7.114 7.114 0 0 0 117.334 16zM32 32.902c6.412.412 14.564.735 24.889.838V48H32zm64 0V48H71.111V33.74c10.325-.103 18.477-.426 24.889-.838" />
+    <path fill="#292f33" d="M127.666 12.444c0 3.926-2.343 6.39-6.784 7.112c0 0-14.222 3.555-56.886 3.555c-42.66 0-56.878-3.555-56.878-3.555c-4.163-.669-6.73-3.15-6.73-7.076c0-3.929-.75-10.702 3.175-10.702c0 0 14.218 7.11 60.433 7.11s60.438-7.11 60.438-7.11c3.929 0 3.232 6.738 3.232 10.666M39.111 119.111A7.114 7.114 0 0 1 32 126.222H17.778a7.114 7.114 0 0 1-7.111-7.11a7.114 7.114 0 0 1 7.11-7.112H32a7.114 7.114 0 0 1 7.111 7.111m78.222 0a7.114 7.114 0 0 1-7.11 7.111H96a7.114 7.114 0 0 1-7.111-7.11A7.114 7.114 0 0 1 96 112h14.222a7.114 7.114 0 0 1 7.111 7.111" />
+  </svg>
+);
+
+const RedisIcon = ({ size = 14, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 128 128" aria-hidden="true" {...props}>
+    <title>redis</title>
+    <path fill="#a41e11" d="M121.8 93.1c-6.7 3.5-41.4 17.7-48.8 21.6s-11.5 3.8-17.3 1S13 98.1 6.3 94.9c-3.3-1.6-5-2.9-5-4.2V78s48-10.5 55.8-13.2c7.8-2.8 10.4-2.9 17-.5s46.1 9.5 52.6 11.9v12.5c0 1.3-1.5 2.7-4.9 4.4" />
+    <path fill="#d82c20" d="M121.8 80.5C115.1 84 80.4 98.2 73 102.1s-11.5 3.8-17.3 1S13 85.4 6.3 82.2C-.3 79-.5 76.8 6 74.3c6.5-2.6 43.2-17 51-19.7c7.8-2.8 10.4-2.9 17-.5s41.1 16.1 47.6 18.5c6.7 2.4 6.9 4.4.2 7.9" />
+    <path fill="#a41e11" d="M121.8 72.5C115.1 76 80.4 90.2 73 94.1c-7.4 3.8-11.5 3.8-17.3 1S13 77.4 6.3 74.2c-3.3-1.6-5-2.9-5-4.2V57.3s48-10.5 55.8-13.2c7.8-2.8 10.4-2.9 17-.5s46.1 9.5 52.6 11.9V68c0 1.3-1.5 2.7-4.9 4.5" />
+    <path fill="#d82c20" d="M121.8 59.8c-6.7 3.5-41.4 17.7-48.8 21.6c-7.4 3.8-11.5 3.8-17.3 1S13 64.7 6.3 61.5s-6.8-5.4-.3-7.9c6.5-2.6 43.2-17 51-19.7c7.8-2.8 10.4-2.9 17-.5s41.1 16.1 47.6 18.5c6.7 2.4 6.9 4.4.2 7.9" />
+    <path fill="#a41e11" d="M121.8 51c-6.7 3.5-41.4 17.7-48.8 21.6c-7.4 3.8-11.5 3.8-17.3 1C49.9 70.9 13 56 6.3 52.8c-3.3-1.6-5.1-2.9-5.1-4.2V35.9s48-10.5 55.8-13.2c7.8-2.8 10.4-2.9 17-.5s46.1 9.5 52.6 11.9v12.5c.1 1.3-1.4 2.6-4.8 4.4" />
+    <path fill="#d82c20" d="M121.8 38.3C115.1 41.8 80.4 56 73 59.9c-7.4 3.8-11.5 3.8-17.3 1S13 43.3 6.3 40.1s-6.8-5.4-.3-7.9c6.5-2.6 43.2-17 51-19.7c7.8-2.8 10.4-2.9 17-.5s41.1 16.1 47.6 18.5c6.7 2.4 6.9 4.4.2 7.8" />
+    <path fill="#fff" d="m80.4 26.1l-10.8 1.2l-2.5 5.8l-3.9-6.5l-12.5-1.1l9.3-3.4l-2.8-5.2l8.8 3.4l8.2-2.7L72 23zM66.5 54.5l-20.3-8.4l29.1-4.4z" />
+    <ellipse cx="38.4" cy="35.4" fill="#fff" rx="15.5" ry="6" />
+    <path fill="#7a0c00" d="m93.3 27.7l17.2 6.8l-17.2 6.8z" />
+    <path fill="#ad2115" d="m74.3 35.3l19-7.6v13.6l-1.9.8z" />
+  </svg>
+);
 
 function ToolsList({ onOpenSplitter }: { onOpenSplitter: () => void }) {
   return (
@@ -358,7 +389,7 @@ export default function HomePage() {
           aria-selected={tab === "files"}
           onClick={() => goTab("/")}
         >
-          <Files size={14} aria-hidden="true" />
+          <RedisIcon size={14} aria-hidden="true" />
           My Files
         </button>
         <button
@@ -388,7 +419,7 @@ export default function HomePage() {
             aria-selected={tab === "admin"}
             onClick={() => goTab("/admin")}
           >
-            <ShieldCheck size={14} aria-hidden="true" />
+            <WakuIcon size={14} aria-hidden="true" />
             Admin
           </button>
         ) : null}
@@ -399,7 +430,7 @@ export default function HomePage() {
             aria-selected={tab === "tools"}
             onClick={() => goTab("/tools")}
           >
-            <Wrench size={14} aria-hidden="true" />
+            <ReplitIcon size={14} aria-hidden="true" />
             Tools
           </button>
         ) : null}

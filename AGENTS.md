@@ -22,7 +22,7 @@
   worker/                 # Cloudflare Worker (Hono + DO)
   Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = sheetsubmit.pages.dev
-  scripts/TestApi.ts      # live API test suite (mirrors every worker route, all must pass) — run: TEST_SESSION_SECRET=<secret> bun scripts/TestApi.ts
+  scripts/TestApi.ts      # live API test suite (mirrors every worker route, all must pass) — run: bun scripts/TestApi.ts (secret auto-loads from scripts/.env)
                         #   subset: append filter — number (59), range (55-70), or name substring (claim) — e.g. `bun scripts/TestApi.ts 90-97`, `--help` for usage
 ```
 
@@ -108,7 +108,7 @@ functions/webhook/[[path]].ts
 5. No versioning — save increments `seq` counter in meta. Undo/redo is client-side only (Zustand in-memory).
 6. Worker CPU limit: 10ms per request. Keep operations lightweight.
 7. No KV/D1/R2 bindings. Storage is Durable Objects + SQLite only.
-8. Worker API change flow (TestApi.ts hits the LIVE worker, so order matters): bump `API_VERSION` in `worker/src/index.ts` → `bun run typecheck` + `bun run test` in `worker/` → push so Cloudflare auto-deploys → confirm via `GET /api/health` `version` → then run `TEST_SESSION_SECRET=<secret> EXPECT_VERSION=<new> bun scripts/TestApi.ts` (all must pass).
+8. Worker API change flow (TestApi.ts hits the LIVE worker, so order matters): bump `API_VERSION` in `worker/src/index.ts` → `bun run typecheck` + `bun run test` in `worker/` → push so Cloudflare auto-deploys → confirm via `GET /api/health` `version` → then run `EXPECT_VERSION=<new> bun scripts/TestApi.ts` (secret auto-loads from `scripts/.env`, all must pass).
 9. New API endpoint → new `test()` in `scripts/TestApi.ts` in the same change (happy path + 400/401/404). Never ship an untested route.
 
 ## Capacity

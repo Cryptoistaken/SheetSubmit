@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Preview</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23ef2b0d' d='M21.194 0H2.806A2.01 2.01 0 0 0 .8 2v20c0 1.1.903 2 2.006 2h18.388a2.01 2.01 0 0 0 2.006-2v-.933c-.033-1.2-.067-3.7-.067-4.834c0-.633-.468-1.166-1.07-1.166c-.668 0-1.103.4-1.437.733c-1.003.9-2.508 1.067-3.812.833c-.601-.133-1.17-.3-1.638-.6c-1.438-.833-2.374-2.4-2.374-4.066c0-1.667.936-3.2 2.374-4.067c.502-.3 1.07-.467 1.638-.6c1.27-.233 2.809-.067 3.812.833c.367.334.802.734 1.437.734c.602 0 1.07-.534 1.07-1.167c0-1.1.034-3.633.067-4.833V2c0-1.1-.903-2-2.006-2'/%3E%3C/svg%3E" />
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+:root{--bg:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--bg4:#eaeaea;--text:#000000;--text2:#666666;--text3:#999999;--border:#eaeaea;--border2:#d4d4d4;--r:6px;--rl:8px;--sans:'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;--mono:'Geist Mono', monospace;--shadow-md:0 4px 12px rgba(0,0,0,0.08)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);background:#fafafa;color:#000;-webkit-font-smoothing:antialiased}
+.page{max-width:1040px;margin:0 auto;padding:28px 24px 40px}
+.hero{background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:22px 24px;margin-bottom:22px}
+.hero h1{font-size:20px;font-weight:700;letter-spacing:-0.03em}
+.hero p{margin-top:8px;font-size:13px;line-height:1.6;color:#666}
+.hero code{font-family:var(--mono);font-size:12px;background:#f5f5f5;padding:2px 6px;border-radius:4px;border:1px solid #eaeaea}
+.section{background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:22px 24px;margin-bottom:22px}
+.section h2{font-size:15px;font-weight:700;letter-spacing:-0.02em}
+.section .sub{margin-top:4px;font-size:12px;color:#999}
+.files-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:16px}
+.file-card{border:1px solid #eaeaea;border-radius:8px;background:#ffffff;padding:16px;display:flex;flex-direction:column;gap:8px;cursor:pointer;transition:border-color 0.15s, transform 0.1s, box-shadow 0.15s;position:relative;min-height:110px}
+@media (hover:hover) and (pointer:fine){.file-card:hover{border-color:#999;box-shadow:0 4px 12px rgba(0,0,0,0.08);transform:translateY(-1px)}}
+.file-card:active{transform:scale(0.99)}
+.file-card-icon{width:32px;height:32px;background:#f5f5f5;color:#000;border-radius:6px;display:flex;align-items:center;justify-content:center}
+.file-card-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.01em;color:#000}
+.file-type-badge{font-size:10px;font-weight:600;color:#999;background:#f5f5f5;padding:2px 6px;border-radius:4px;display:inline-block;letter-spacing:-0.01em;margin-top:2px}
+.file-card-meta{font-size:12px;color:#999}
+.file-card-actions{display:flex;align-items:center;gap:2px;position:absolute;top:7px;right:7px}
+.file-card-btn{width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#999;cursor:pointer;background:transparent;border:none;transition:background 0.1s,color 0.1s;padding:0}
+.file-card-btn:hover{background:#f5f5f5;color:#000}
+.file-card-del:hover{color:#ee0000;background:rgba(238,0,0,0.08)}
+.spec{margin-top:14px;background:#fafafa;border:1px solid #eaeaea;border-radius:8px;padding:12px 14px;font-size:11px;line-height:1.6;color:#666;font-family:var(--mono)}
+.spec b{color:#000;font-family:var(--sans);font-size:12px}
+.pill{display:inline-flex;align-items:center;gap:6px;background:#f5f5f5;border:1px solid #eaeaea;border-radius:999px;padding:4px 10px;font-size:11px;color:#666;margin-top:10px}
+  @media(max-width:900px){.sideways{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hero">
+    <h1>Preview</h1>
+    </div>
+  <div class="sideways" style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+<div class="section" id="beforeSection">
+    <h2>Before</h2>
+<div class="files-grid">
+      <div class="file-card" role="button" tabindex="0" data-card="before">
+  <div class="file-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><title>coda</title><path fill="#ef2b0d" d="M21.194 0H2.806A2.01 2.01 0 0 0 .8 2v20c0 1.1.903 2 2.006 2h18.388a2.01 2.01 0 0 0 2.006-2v-.933c-.033-1.2-.067-3.7-.067-4.834c0-.633-.468-1.166-1.07-1.166c-.668 0-1.103.4-1.437.733c-1.003.9-2.508 1.067-3.812.833c-.601-.133-1.17-.3-1.638-.6c-1.438-.833-2.374-2.4-2.374-4.066c0-1.667.936-3.2 2.374-4.067c.502-.3 1.07-.467 1.638-.6c1.27-.233 2.809-.067 3.812.833c.367.334.802.734 1.437.734c.602 0 1.07-.534 1.07-1.167c0-1.1.034-3.633.067-4.833V2c0-1.1-.903-2-2.006-2"></path></svg></div>
+  <div class="file-card-name">Cookie 2026-09-05</div>
+  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px">
+    <span class="file-type-badge" title="Facebook" aria-label="Facebook" style="display:inline-flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 666.667 666.667" aria-hidden="true"><title>facebook</title><defs><clipPath id="SVGtqzMtbni" clipPathUnits="userSpaceOnUse"><path d="M0 700h700V0H0Z"></path></clipPath></defs><g clip-path="url(#SVGtqzMtbni)" transform="matrix(1.33333 0 0 -1.33333 -133.333 800)"><path fill="#0866ff" d="M600 350c0 138.071-111.929 250-250 250S100 488.071 100 350c0-117.245 80.715-215.622 189.606-242.638v166.242h-51.552V350h51.552v32.919c0 85.092 38.508 124.532 122.048 124.532c15.838 0 43.167-3.105 54.347-6.211v-69.254c-5.901.621-16.149.932-28.882.932c-40.993 0-56.832-15.528-56.832-55.9V350h81.659l-14.028-76.396h-67.631V101.831C504.073 116.782 600 222.182 600 350"></path><path fill="#fff" d="M447.918 273.604L461.947 350h-81.659v27.019c0 40.372 15.838 55.899 56.831 55.899c12.733 0 22.981-.31 28.882-.931v69.253c-11.18 3.106-38.509 6.212-54.347 6.212c-83.539 0-122.048-39.441-122.048-124.533V350h-51.552v-76.396h51.552V107.362A250.6 250.6 0 0 1 350 100c10.254 0 20.358.632 30.288 1.831v171.773Z"></path></g></svg></span>
+    <span class="file-type-badge" style="background:#f5f5f5;color:#666;font-size:10px;padding:2px 6px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center" title="L0VE@12345"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 121 122" aria-hidden="true"><title>lovable</title><mask id="SVGTzFcucvl" width="121" height="122" x="0" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="url(#SVGkAaPycER)" fill-rule="evenodd" d="M36.069 0c19.92 0 36.068 16.155 36.068 36.084v13.713h12.004c19.92 0 36.069 16.156 36.069 36.084s-16.149 36.083-36.069 36.083H0v-85.88C0 16.155 16.148 0 36.069 0" clip-rule="evenodd"></path></mask><g fill="none"><g mask="url(#SVGTzFcucvl)"><g filter="url(#SVGisokdbCk)"><ellipse cx="52.738" cy="65.101" fill="#4b73ff" rx="81.373" ry="81.192"></ellipse></g><g filter="url(#SVGaTNKjcdw)"><ellipse cx="61.673" cy="20.547" fill="#ff66f4" rx="104.216" ry="81.192"></ellipse></g><g filter="url(#SVGyQjXYdZi)"><ellipse cx="78.666" cy="5.268" fill="#ff0105" rx="81.373" ry="71.304"></ellipse></g><g filter="url(#SVG4UcRldRB)"><ellipse cx="63.121" cy="20.527" fill="#fe7b02" rx="48.937" ry="48.829"></ellipse></g></g><defs><filter id="SVGisokdbCk" width="235.52" height="235.159" x="-65.022" y="-52.478" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_572_319" stdDeviation="18.194"></feGaussianBlur></filter><filter id="SVGaTNKjcdw" width="281.208" height="235.159" x="-78.93" y="-97.032" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_572_319" stdDeviation="18.194"></feGaussianBlur></filter><filter id="SVGyQjXYdZi" width="235.52" height="215.383" x="-39.094" y="-102.423" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_572_319" stdDeviation="18.194"></feGaussianBlur></filter><filter id="SVG4UcRldRB" width="170.649" height="170.432" x="-22.204" y="-64.688" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_572_319" stdDeviation="18.194"></feGaussianBlur></filter><linearGradient id="SVGkAaPycER" x1="40.453" x2="76.933" y1="21.433" y2="121.971" gradientUnits="userSpaceOnUse"><stop offset=".025" stop-color="#ff8e63"></stop><stop offset=".56" stop-color="#ff7eb0"></stop><stop offset=".95" stop-color="#4b73ff"></stop></linearGradient></defs></g></svg></span>
+    <span class="file-card-meta">48 rows</span>
+  </div>
+  <div class="file-card-actions">
+    <button class="file-card-btn file-card-dl" title="Download" aria-label="Download"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></button>
+    <button class="file-card-btn file-card-rename" title="Rename" aria-label="Rename"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg></button>
+    <button class="file-card-btn file-card-del" title="Delete" aria-label="Delete"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
+  </div>
+</div>
+    </div>
+    <details class="agent-spec" style="margin-top:10px;border:1px dashed #ddd;border-radius:6px;padding:6px 8px;background:#fff;font-size:10px;line-height:1.5;color:#999;font-family:var(--mono)">
+    <summary style="cursor:pointer;font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999">Spec Before agent (collapsed)</summary>
+    <div style="margin-top:6px;background:#fafafa;border:1px solid #eaeaea;border-radius:6px;padding:6px 8px;font-size:10px;line-height:1.5;color:#666"><b>Spec Before</b><br/>
+      source: <code>FileCard.tsx:108 badge=fileTypeDef(file.type).badge</code> · <code>FileCard.tsx:114-126 FileIcon=CookieIcon</code> · <code>FileCard.tsx:109-131 pw=&quot;L0VE@12345&quot; pwStyle=&#123;bg:var(--bg3) #f5f5f5, color:var(--text2) #666&#125;</code> · <code>app.css:.file-card border 1px #eaeaea radius 8px (--rl) bg #fff pad 16 gap 8 min-h 110 hover #999+shadow</code> · <code>app.css:.file-card-icon 32×32 bg #f5f5f5 radius 6px</code> · <code>app.css:.file-card-name 13px/600 -0.01em #000 ellipsis</code> · <code>app.css:.file-type-badge 10px/600 #999 bg #f5f5f5 radius 4 pad 2×6</code> · <code>app.css:.file-card-meta 12px #999</code> · <code>app.css:.file-card-actions top 7 right 7</code> · <code>app.css:.files-grid auto-fill minmax(180px,1fr) gap12</code><br/>
+      name: <code>Cookie 2026-09-05</code> = <code>FILE_PRESET_NAMES[&quot;cookie&quot;] + &quot; &quot; + todayStr()</code> (HomePage.tsx:290) · badge: FB <code>FacebookIcon 12px clipPath SVGtqzMtbni #0866ff</code> + love <code>PasswordIcon L0VE@12345 14px mask SVGTzFcucvl filters SVGisokdbCk SVGaTNKjcdw SVGyQjXYdZi SVG4UcRldRB gradient SVGkAaPycER</code> icon-only · meta <code>48 rows</code> · actions <code>Download/Pencil/Trash2 14px #999</code>
+    </div>
+  </details>
+  </div>
+  <div class="section" id="afterSection">
+    <h2>After</h2>
+<div class="files-grid">
+      <div class="file-card" role="button" tabindex="0" data-card="after">
+  <div class="file-card-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><title>coda</title><path fill="#ef2b0d" d="M21.194 0H2.806A2.01 2.01 0 0 0 .8 2v20c0 1.1.903 2 2.006 2h18.388a2.01 2.01 0 0 0 2.006-2v-.933c-.033-1.2-.067-3.7-.067-4.834c0-.633-.468-1.166-1.07-1.166c-.668 0-1.103.4-1.437.733c-1.003.9-2.508 1.067-3.812.833c-.601-.133-1.17-.3-1.638-.6c-1.438-.833-2.374-2.4-2.374-4.066c0-1.667.936-3.2 2.374-4.067c.502-.3 1.07-.467 1.638-.6c1.27-.233 2.809-.067 3.812.833c.367.334.802.734 1.437.734c.602 0 1.07-.534 1.07-1.167c0-1.1.034-3.633.067-4.833V2c0-1.1-.903-2-2.006-2"></path></svg></div>
+  <div class="file-card-name">Cookie 2026-09-05</div>
+  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px">
+    <span class="file-type-badge" title="Facebook" aria-label="Facebook" style="display:inline-flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 666.667 666.667" aria-hidden="true"><title>facebook</title><defs><clipPath id="SVGtqzMtbni" clipPathUnits="userSpaceOnUse"><path d="M0 700h700V0H0Z"></path></clipPath></defs><g clip-path="url(#SVGtqzMtbni)" transform="matrix(1.33333 0 0 -1.33333 -133.333 800)"><path fill="#0866ff" d="M600 350c0 138.071-111.929 250-250 250S100 488.071 100 350c0-117.245 80.715-215.622 189.606-242.638v166.242h-51.552V350h51.552v32.919c0 85.092 38.508 124.532 122.048 124.532c15.838 0 43.167-3.105 54.347-6.211v-69.254c-5.901.621-16.149.932-28.882.932c-40.993 0-56.832-15.528-56.832-55.9V350h81.659l-14.028-76.396h-67.631V101.831C504.073 116.782 600 222.182 600 350"></path><path fill="#fff" d="M447.918 273.604L461.947 350h-81.659v27.019c0 40.372 15.838 55.899 56.831 55.899c12.733 0 22.981-.31 28.882-.931v69.253c-11.18 3.106-38.509 6.212-54.347 6.212c-83.539 0-122.048-39.441-122.048-124.533V350h-51.552v-76.396h51.552V107.362A250.6 250.6 0 0 1 350 100c10.254 0 20.358.632 30.288 1.831v171.773Z"></path></g></svg></span>
+    <span class="file-type-badge" style="background:#f5f5f5;color:#666;font-size:10px;padding:2px 6px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center" title="L0VE@12345"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 121 122" aria-hidden="true"><title>lovable</title><mask id="SVGTzFcucvl" width="121" height="122" x="0" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="url(#SVGkAaPycER)" fill-rule="evenodd" d="M36.069 0c19.92 0 36.068 16.155 36.068 36.084v13.713h12.004c19.92 0 36.069 16.156 36.069 36.084s-16.149 36.083-36.069 36.083H0v-85.88C0 16.155 16.148 0 36.069 0" clip-rule="evenodd"></path></mask><g fill="none"><g mask="url(#SVGTzFcucvl)"><g filter="url(#SVGisokdbCk)"><ellipse cx="52.738" cy="65.101" fill="#4b73ff" rx="81.373" ry="81.192"></ellipse></g><g filter="url(#SVGaTNKjcdw)"><ellipse cx="61.673" cy="20.547" fill="#ff66f4" rx="104.216" ry="81.192"></ellipse></g><g filter="url(#SVGyQjXYdZi)"><ellipse cx="78.666" cy="5.268" fill="#ff0105" rx="81.373" ry="71.304"></ellipse></g><g filter="url(#SVG4UcRldRB)"><ellipse cx="63.121" cy="20.527" fill="#fe7b02" rx="48.937" ry="48.829"></ellipse></g></g><defs><filter id="SVGisokdbCk" width="235.52" height="235.159" x="-65.022" y="-52.478" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_572_319" stdDeviation="18.194"></feGaussianBlur></filter><filter id="SVGaTNKjcdw" width="281.208" height="235.159" x="-78.93" y="-97.032" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_572_319" stdDeviation="18.194"></feGaussianBlur></filter><filter id="SVGyQjXYdZi" width="235.52" height="215.383" x="-39.094" y="-102.423" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_572_319" stdDeviation="18.194"></feGaussianBlur></filter><filter id="SVG4UcRldRB" width="170.649" height="170.432" x="-22.204" y="-64.688" colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"></feBlend><feGaussianBlur result="effect1_foregroundBlur_572_319" stdDeviation="18.194"></feGaussianBlur></filter><linearGradient id="SVGkAaPycER" x1="40.453" x2="76.933" y1="21.433" y2="121.971" gradientUnits="userSpaceOnUse"><stop offset=".025" stop-color="#ff8e63"></stop><stop offset=".56" stop-color="#ff7eb0"></stop><stop offset=".95" stop-color="#4b73ff"></stop></linearGradient></defs></g></svg></span>
+    <span class="file-card-meta">48 rows</span>
+  </div>
+  <div class="file-card-actions">
+    <button class="file-card-btn file-card-dl" title="Download" aria-label="Download"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></button>
+    <button class="file-card-btn file-card-rename" title="Rename" aria-label="Rename"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg></button>
+    <button class="file-card-btn file-card-del" title="Delete" aria-label="Delete"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
+  </div>
+</div>
+    </div>
+    <details class="agent-spec" style="margin-top:10px;border:1px dashed #ddd;border-radius:6px;padding:6px 8px;background:#fff;font-size:10px;line-height:1.5;color:#999;font-family:var(--mono)">
+    <summary style="cursor:pointer;font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999">Spec After agent (collapsed)</summary>
+    <div style="margin-top:6px;background:#fafafa;border:1px solid #eaeaea;border-radius:6px;padding:6px 8px;font-size:10px;line-height:1.5;color:#666"><b>Spec After</b> (identical to Before; user will say what to change)<br/>
+      source: same as Before <code>FileCard.tsx + app.css + FileTypeIcons.tsx PasswordIcon L0VE full SVG</code> · <code>FacebookIcon.tsx clipPath SVGtqzMtbni</code> · copy is byte-identical until you reply “change X in After”.<br/>
+      name: <code>Cookie 2026-09-05</code> · same badges, colors, spacing, hover, icon box.
+    </div>
+  </details>
+  </div>
+  </div>
+<details id="agent-source-map" style="margin-top:18px;border:1px dashed #ddd;border-radius:8px;padding:8px 10px;background:#fff;font-size:10px;line-height:1.5;color:#999;font-family:var(--mono)">
+    <summary style="cursor:pointer;font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999">Agent Source Map Pages/ files for file view (collapsed)</summary>
+    <div style="margin-top:8px;overflow:auto">
+      <code style="white-space:pre;display:block;background:#fafafa;border:1px solid #eaeaea;border-radius:6px;padding:8px 10px;font-size:10px;line-height:1.6;color:#666">Card/grid: Pages/src/app.css:697 .files-grid | app.css:702 .file-card | app.css:739 .file-card-icon | app.css:749 .file-card-name | app.css:757 .file-card-meta | app.css:771 .file-card-actions
+JSX/badges: Pages/src/components/home/FileCard.tsx:1 imports | FileCard.tsx:106 count | FileCard.tsx:108 badge | FileCard.tsx:109-131 pwStyle (L0VE bg #f5f5f5 #666) | FileCard.tsx:114-126 FileIcon | FileCard.tsx:153-175 JSX
+Grid: Pages/src/components/home/FileGrid.tsx:35
+Name: Pages/src/pages/HomePage.tsx:290 FILE_PRESET_NAMES+" "+todayStr() -> "Cookie 2026-09-05" | HomePage.tsx:296 dup " ("+suffix+")" | Pages/src/lib/types.ts:37 FILE_PRESET_NAMES | Pages/src/lib/xlsx.ts:9 todayStr() | xlsx.ts:106 upload name
+Icons: Pages/src/components/icons/FileTypeIcons.tsx:1 CookieIcon #ef2b0d 16px | FileTypeIcons.tsx:64 PasswordIcon L0VE 14px mask SVGTzFcucvl | Pages/src/components/icons/FacebookIcon.tsx:1 FB 12px clipPath SVGtqzMtbni #0866ff
+Tokens: Pages/src/index.css:8 | Pages/src/app.css:2 :root --bg --bg3 --border --text --r --rl --sans Geist
+Shape: Pages/src/lib/types.ts:19 SheetFile
+Backend: worker/src/routes/files.ts:7 fileId | files.ts:13 resolvePreset | files.ts:42 POST / create
+Apply: edit After card in this HTML -> copy same change to file:line above -> bun run typecheck in Pages/ -> push (auto-deploy)</code>
+    </div>
+  </details>
+
+</div>
+</body>
+</html>

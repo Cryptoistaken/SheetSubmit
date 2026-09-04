@@ -100,7 +100,7 @@ export default function HomePage() {
       setDupCounts(cd.counts ?? {});
     } catch {
       setFiles([]);
-      showToast("Could not load files");
+      showToast("Could not load files. Check your connection.");
     }
   }, [showToast]);
 
@@ -108,7 +108,7 @@ export default function HomePage() {
     try {
       setFiles(await api.getFiles());
     } catch {
-      showToast("Could not load files");
+      showToast("Could not load files. Check your connection.");
     }
   }, [showToast]);
 
@@ -159,7 +159,7 @@ export default function HomePage() {
       await downloadXlsx(rows, f.columns ?? fileTypeDef(f.type).columns, f.name);
       showToast("Downloaded");
     } catch {
-      showToast("Download failed");
+      showToast("Could not download file. Check your connection.");
     }
   };
 
@@ -181,7 +181,7 @@ export default function HomePage() {
     try {
       await api.deleteFile(f.id);
     } catch {
-      showToast("Failed to archive file");
+      showToast("Could not archive file. Check your connection.");
       return;
     }
     loadFiles();
@@ -208,7 +208,7 @@ export default function HomePage() {
     try {
       await api.updateFile(renameFileId, { name });
     } catch {
-      showToast("Rename failed");
+      showToast("Could not rename file. Try again.");
       return;
     }
     closeRename();
@@ -252,7 +252,7 @@ export default function HomePage() {
     try {
       await Promise.all(ids.map((id) => api.deleteFile(id)));
     } catch {
-      showToast("Failed to archive files");
+      showToast("Could not archive files. Check your connection.");
       return;
     }
     setSelected(new Set());
@@ -283,7 +283,7 @@ export default function HomePage() {
     try {
       created = await api.createFile({ id, name: finalName, type, password, poolEnabled, columns });
     } catch {
-      showToast("Failed to create file");
+      showToast("Could not create file. Check your connection.");
       return;
     }
     showToast(fileTypeDef(type).label + " file created");
@@ -305,7 +305,7 @@ export default function HomePage() {
     try {
       created = await api.createFile({ id, name, type, password, poolEnabled: password === "dgddigital", rows, dataCount });
     } catch {
-      showToast("Import failed");
+      showToast("Could not import file. Check your file and try again.");
       return;
     }
     showToast("Imported " + dataCount + " rows");
@@ -324,7 +324,7 @@ export default function HomePage() {
        setUploadPending({ id: result.id, name: result.name, type: result.type, rows: result.rows, dataCount: result.dataCount, cacheReady });
       setPwModal({ type: result.type, preset: "page", choice: isLoveName ? "L0VE@12345" : "dgddigital", custom: "" });
     } catch {
-      showToast("Import failed");
+      showToast("Could not import file. Check your file and try again.");
     }
   };
 

@@ -48,6 +48,7 @@ export default function Fab({ onCreate, onUpload }: FabProps) {
         ref={fabRef}
         className="home-fab"
         aria-label="Create file"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
         <Plus size={24} strokeWidth={3} />
@@ -74,7 +75,7 @@ export default function Fab({ onCreate, onUpload }: FabProps) {
           </span>
           <span>
             <span className="home-fab-name">Upload xlsx</span>
-            <span className="home-fab-desc">Import data from a spreadsheet</span>
+            <span className="home-fab-desc">Import data from file</span>
           </span>
         </button>
       </div>

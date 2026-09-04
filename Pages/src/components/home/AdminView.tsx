@@ -85,7 +85,7 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
         try {
           setUsers(await api.adminSearchUsers(query));
         } catch {
-          showToast("Search failed");
+          showToast("Could not search users. Try again.");
           loadList();
         }
       } else {
@@ -101,7 +101,7 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
     try {
       await api.adminDeleteUser(detailUser.id);
     } catch {
-      showToast("Delete failed");
+      showToast("Could not delete user. Try again.");
       return;
     }
     showToast("User deleted");
@@ -115,7 +115,7 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
     try {
       await api.adminBanUser(detailUser.id);
     } catch {
-      showToast("Ban failed");
+      showToast("Could not ban user. Try again.");
       return;
     }
     setDetailUser({ ...detailUser, banned: true });
@@ -130,7 +130,7 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
     try {
       await api.adminUnbanUser(detailUser.id);
     } catch {
-      showToast("Unban failed");
+      showToast("Could not unban user. Try again.");
       return;
     }
     setDetailUser({ ...detailUser, banned: false });
@@ -144,7 +144,7 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
     try {
       await api.adminDeleteFile(fileId);
     } catch {
-      showToast("Failed to archive file");
+      showToast("Could not archive file. Try again.");
       return;
     }
     showToast("File archived");
@@ -154,14 +154,14 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
   const downloadFile = async (file: SheetFile) => {
     const rows = await api.adminFileRows(file.id);
     if (!rows || !rows.length) {
-      showToast("No data");
+      showToast("No data to download. Check file contents.");
       return;
     }
     try {
       await downloadXlsx(rows, fileTypeDef(file.type).columns, file.name);
       showToast("Downloaded");
     } catch {
-      showToast("Download failed");
+      showToast("Could not download file. Check your connection.");
     }
   };
 
@@ -173,14 +173,14 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
   const commitRename = async () => {
     const name = renameName.trim();
     if (!name) {
-      showToast("Name cannot be empty");
+      showToast("Name is required. Enter a file name.");
       return;
     }
     if (!renameFileId) return;
     try {
       await api.adminUpdateFile(renameFileId, { name });
     } catch {
-      showToast("Rename failed");
+      showToast("Could not rename file. Try again.");
       return;
     }
     setRenameFileId(null);
@@ -193,7 +193,7 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
     try {
       await api.adminRestoreArchived(detailUser.id, fileId);
     } catch {
-      showToast("Restore failed");
+      showToast("Could not restore file. Try again.");
       return;
     }
     showToast("File restored");
@@ -207,7 +207,7 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
     try {
       await api.adminDeleteArchived(detailUser.id, fileId);
     } catch {
-      showToast("Delete failed");
+      showToast("Could not delete file. Try again.");
       return;
     }
     showToast("Permanently deleted");
@@ -275,8 +275,8 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <div className="pool-switch">
-            <button className={userFileTab === "files" ? "active" : ""} onClick={() => setUserFileTab("files")}>Files <span style={{ marginLeft: 6, fontFamily: "var(--mono)", fontSize: 11, opacity: .7 }}>{files.length}</span></button>
-            <button className={userFileTab === "archive" ? "active" : ""} onClick={() => setUserFileTab("archive")}>Archive <span style={{ marginLeft: 6, fontFamily: "var(--mono)", fontSize: 11, opacity: .7 }}>{detailArchived.length}</span></button>
+            <button className={userFileTab === "files" ? "active" : ""} aria-expanded={userFileTab === "files"} onClick={() => setUserFileTab("files")}>Files <span style={{ marginLeft: 6, fontFamily: "var(--mono)", fontSize: 11, opacity: .7 }}>{files.length}</span></button>
+            <button className={userFileTab === "archive" ? "active" : ""} aria-expanded={userFileTab === "archive"} onClick={() => setUserFileTab("archive")}>Archive <span style={{ marginLeft: 6, fontFamily: "var(--mono)", fontSize: 11, opacity: .7 }}>{detailArchived.length}</span></button>
           </div>
         </div>
 

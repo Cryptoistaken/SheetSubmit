@@ -127,7 +127,7 @@ export default function Topbar() {
 
   if (!user) return null;
 
-  const ringColor = conn.cls === "ok" ? "var(--green)" : conn.cls === "err" ? "var(--red)" : "var(--text3)";
+  const ringColor = conn.cls === "ok" ? "#d4440f" : conn.cls === "err" ? "var(--red)" : "var(--text3)";
   const displayName = ((user.firstName ?? "") + " " + (user.lastName ?? "")).trim();
   const fileName = file
     ? file.name.length > 10

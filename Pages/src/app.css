@@ -431,10 +431,14 @@ button, input, select, textarea {
     object-fit: cover;
     display: none;
     border-radius: 50%;
-    border: 2px solid var(--green);
+    border: 2px solid #d4440f;
     flex-shrink: 0;
     margin: 2px 2px 2px 0;
     order: 3;
+    animation: profileRingGlow 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .user-btn-avatar { animation: none; }
 }
 .profile-btn.loaded .user-btn-avatar {
     display: block;

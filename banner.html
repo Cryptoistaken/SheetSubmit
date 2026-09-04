@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Banner</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff; font-family: Geist, "Geist fallback: Arial", Arial, sans-serif; }
+  #zone { position: relative; }
+  #banner {
+    position: relative; overflow: hidden;
+    background: rgb(212, 68, 15); color: #fff;
+    height: 36px;
+  }
+  .dots {
+    position: absolute; inset: 0; pointer-events: none;
+    background-size: 3px 3px;
+    background-image: repeating-conic-gradient(rgba(255,255,255,0.55) 0% 25%, transparent 0% 50%);
+    -webkit-mask-image: linear-gradient(90deg, black, transparent 35%, transparent 65%, black);
+    mask-image: linear-gradient(90deg, black, transparent 35%, transparent 65%, black);
+  }
+  .shine {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 25%;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+    animation: sweep 5s ease-in-out infinite;
+  }
+  @keyframes sweep {
+    0% { transform: translate(-120%) skew(-12deg); opacity: 0; }
+    8% { opacity: 1; }
+    24% { transform: translate(420%) skew(-12deg); opacity: 0; }
+    100% { transform: translate(420%) skew(-12deg); opacity: 0; }
+  }
+  .inner {
+    position: relative; z-index: 10;
+    max-width: 1536px; height: 36px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 8px 40px; text-align: center;
+    font-size: 13px; font-weight: 500; line-height: 19.5px; color: #fff;
+  }
+  .beta {
+    flex-shrink: 0; border-radius: 9999px; padding: 1px 6px;
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.9px; line-height: 13.5px; color: #fff;
+    background: rgba(255,255,255,0.2);
+  }
+  .inner a {
+    color: #fff; text-decoration: none; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-underline-offset: 2px;
+  }
+  .inner a:hover { text-decoration: underline; }
+  .inner s { opacity: 0.7; }
+  .inner strong { font-weight: 700; }
+  #close {
+    position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border: 0; border-radius: 6px;
+    background: transparent; color: #fff; cursor: pointer;
+  }
+  #close:hover { background: rgba(255,255,255,0.2); }
+</style>
+</head>
+<body>
+<div id="zone">
+  <div id="banner">
+    <div class="dots" aria-hidden="true"></div>
+    <div class="shine" aria-hidden="true"></div>
+    <div class="inner">
+      <span class="beta">Beta</span>
+      <a href="https://allsvgicons.com/mcp/">Search 337k+ icons in your AI agent · lifetime access <s>$59</s> <strong>$29</strong> →</a>
+      <button id="close" type="button" aria-label="Collapse announcement">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+      </button>
+    </div>
+  </div>
+</div>
+<script>
+  document.getElementById('close').addEventListener('click', () => {
+    document.getElementById('banner').style.display = 'none';
+  });
+</script>
+</body>
+</html>

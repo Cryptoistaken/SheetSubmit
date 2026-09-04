@@ -1,5 +1,20 @@
+// load .env from same directory as this script
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+const __dirname = dirname(fileURLToPath(import.meta.url));
+try {
+  const env = readFileSync(resolve(__dirname, ".env"), "utf8");
+  for (const line of env.split("\n")) {
+    const [k, ...rest] = line.split("=");
+    const v = rest.join("=").trim();
+    if (k && !process.env[k.trim()]) process.env[k.trim()] = v;
+  }
+} catch {}
+
 const BASE = "https://sheetsubmit.traderspopy.workers.dev/api";
 const SECRET = process.env.TEST_SESSION_SECRET;
+const EXPECT_VERSION = process.env.EXPECT_VERSION; // fail fast if live worker is not the redeployed version yet
 const TEST_UID = process.env.TEST_UID || "8447133985";
 if (!SECRET) throw new Error("Set TEST_SESSION_SECRET before running this live test");
 
@@ -78,9 +93,12 @@ const run = async () => {
 
   await test("GET /api/health", async () => {
     const r = await api("/health");
-    return r.status === 200 && r.json?.ok === true
-      ? { ok: true }
-      : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+    if (r.status !== 200 || r.json?.ok !== true || typeof r.json?.version !== "string")
+      return { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+    if (EXPECT_VERSION && r.json.version !== EXPECT_VERSION)
+      return { ok: false, detail: `version=${r.json.version} expected=${EXPECT_VERSION} — redeploy hasn't landed yet` };
+    console.log(`   live API version: ${r.json.version}`);
+    return { ok: true };
   });
 
   await test("GET /api/bot/info", async () => {
@@ -906,6 +924,59 @@ const run = async () => {
     return r.status === 200 && r.json?.ok === true
       ? { ok: true }
       : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+  });
+
+  await test("DELETE /api/archive/:id (single)", async () => {
+    const cr = await api("/files", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ name: "SingleDelTest" }) });
+    if (cr.status !== 200 || !cr.json?.id) return { ok: false, detail: `create ${cr.status}` };
+    const id = cr.json.id;
+    await api(`/files/${id}`, { method: "DELETE", headers: { Cookie: cookie } });
+    const r = await api(`/archive/${id}`, { method: "DELETE", headers: { Cookie: cookie } });
+    const arch = await api("/archive", { headers: { Cookie: cookie } });
+    const gone = Array.isArray(arch.json) && !arch.json.find((f: any) => f.id === id);
+    return r.status === 200 && gone ? { ok: true } : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+  });
+
+  await test("GET /api/pools/:pwd/:pool/user-files (+ invalid pool → 400)", async () => {
+    const r = await api("/pools/dgddigital/cookies_only/user-files", { headers: { Cookie: cookie } });
+    const bad = await api("/pools/dgddigital/notapool/user-files", { headers: { Cookie: cookie } });
+    const ok = r.status === 200 && Array.isArray(r.json?.users) && typeof r.json?.noSrcAvail === "number" && bad.status === 400;
+    return ok ? { ok: true } : { ok: false, detail: `status=${r.status} bad=${bad.status} body=${JSON.stringify(r.json).slice(0, 200)}` };
+  });
+
+  await test("POST /api/pools/:pwd/:pool/revert (unknown id → 200)", async () => {
+    const r = await api("/pools/dgddigital/cookies_only/revert", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ id: "doesnotexist123" }) });
+    return r.status === 200 ? { ok: true } : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+  });
+
+  await test("POST /api/admin/user/:id/ban|unban (dummy + bad action → 400)", async () => {
+    const ban = await api("/admin/user/999999999/ban", { method: "POST", headers: { Cookie: cookie } });
+    const unban = await api("/admin/user/999999999/unban", { method: "POST", headers: { Cookie: cookie } });
+    const bad = await api("/admin/user/999999999/freeze", { method: "POST", headers: { Cookie: cookie } });
+    const ok = ban.status === 200 && ban.json?.ok === true && unban.status === 200 && unban.json?.ok === true && bad.status === 400;
+    return ok ? { ok: true } : { ok: false, detail: `ban=${ban.status} unban=${unban.status} bad=${bad.status}` };
+  });
+
+  await test("POST /api/fb/check (empty uids) → 400", async () => {
+    const r = await api("/fb/check", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ uids: [] }) });
+    return r.status === 400 ? { ok: true } : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+  });
+
+  await test("POST /api/auth/device/claim (bad token) → ok:false", async () => {
+    const r = await api("/auth/device/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: "bad-token-123" }) });
+    return r.status === 200 && r.json?.ok === false ? { ok: true } : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+  });
+
+  await test("GET /api/pools/downloads/:id?format=json (+ 404)", async () => {
+    const r = await api(`/pools/downloads/${downloadId}?format=json`, { headers: { Cookie: cookie } });
+    const nf = await api("/pools/downloads/doesnotexist123?format=json", { headers: { Cookie: cookie } });
+    const ok = r.status === 200 && Array.isArray(r.json?.rows) && nf.status === 404;
+    return ok ? { ok: true } : { ok: false, detail: `status=${r.status} nf=${nf.status} body=${JSON.stringify(r.json).slice(0, 200)}` };
+  });
+
+  await test("POST /webhook/tg (no secret) → 401", async () => {
+    const res = await fetch(BASE.replace(/\/api$/, "") + "/webhook/tg", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    return res.status === 401 ? { ok: true } : { ok: false, detail: `status=${res.status}` };
   });
 
   await test("GET /api/auth/logout (clears cookie)", async () => {

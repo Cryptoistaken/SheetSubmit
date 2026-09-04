@@ -13,9 +13,11 @@ import { FileDO } from "./do/FileDO";
 import { PoolDO } from "./do/PoolDO";
 
 const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
+// ponytail: manual bump on any worker route change — lets TestApi/health confirm a redeploy landed
+export const API_VERSION = "1.1.0";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => { if (c.req.raw.body) { try { const reader = c.req.raw.clone().body!.getReader(); let size = 0; while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > 4_000_000) { await reader.cancel(); return c.json({ error: "payload too large" }, 413); } } } catch { return c.json({ error: "invalid request body" }, 400); } } return next(); });
-app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now() }));
+app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now(), version: API_VERSION }));
 app.route("/api/files", files);
 app.route("/api/archive", archive);
 app.route("/api/cross-dups", crossDups);

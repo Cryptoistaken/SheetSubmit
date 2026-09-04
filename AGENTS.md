@@ -23,12 +23,13 @@
   worker/                 # Cloudflare Worker (Hono + DO)
   Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = sheetsubmit.pages.dev
-  scripts/TestApi.ts      # live API test suite (57 checks) — run: TEST_SESSION_SECRET=<secret> bun scripts/TestApi.ts
+  scripts/TestApi.ts      # live API test suite (mirrors every worker route, all must pass) — run: TEST_SESSION_SECRET=<secret> bun scripts/TestApi.ts
 ```
 
 ### Worker — `worker/src/` (Hono, entry `src/index.ts`)
 ```
-index.ts              # app setup, routes, /api/auth/me (verifySession, adds photoUrl+isAdmin), /api/auth/logout,
+index.ts              # app setup, routes, API_VERSION (bump on any route change, surfaced by /api/health),
+                      #   /api/auth/me (verifySession, adds photoUrl+isAdmin), /api/auth/logout,
                       #   /api/auth/device/claim, /api/auth/photo/:userId (Telegram getUserProfilePhotos→getFile, 24h meta cache),
                       #   /api/auth/turnstile-verify, /api/bot/info, ensureWebhook on first request
 lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, WORKER_URL, FRONTEND_URL, HITOOLS_CHECK_URL, TURNSTILE_SECRET, DO bindings INDEX/FILES/POOLS)
@@ -107,7 +108,8 @@ functions/webhook/[[path]].ts
 5. No versioning — save increments `seq` counter in meta. Undo/redo is client-side only (Zustand in-memory).
 6. Worker CPU limit: 10ms per request. Keep operations lightweight.
 7. No KV/D1/R2 bindings. Storage is Durable Objects + SQLite only.
-8. After changing worker APIs: `bun run typecheck` + `bun run test` in `worker/`, deploy, then re-run `scripts/TestApi.ts` (all 57 must pass) before pushing.
+8. Worker API change flow (TestApi.ts hits the LIVE worker, so order matters): bump `API_VERSION` in `worker/src/index.ts` → `bun run typecheck` + `bun run test` in `worker/` → push/merge so CI deploys the worker → confirm redeploy via `GET /api/health` `version` → then run `TEST_SESSION_SECRET=<secret> EXPECT_VERSION=<new> bun scripts/TestApi.ts` (all must pass).
+9. New API endpoint → new `test()` in `scripts/TestApi.ts` in the same change (happy path + 400/401/404). Never ship an untested route.
 
 ## Capacity
 | Resource | Limit |

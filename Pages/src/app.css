@@ -376,24 +376,37 @@ button, input, select, textarea {
 
 /* ── Profile button ── */
 .profile-btn {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    border: 1.5px solid var(--border);
+    border: none;
     background: transparent;
+    padding: 2px;
     color: var(--text3);
     cursor: pointer;
     transition: border-color 0.15s;
     flex-shrink: 0;
-    overflow: hidden;
+    overflow: visible;
 }
 .profile-btn:hover {
-    background: var(--bg3);
     color: var(--text);
-    border-color: var(--border);
+}
+.profile-ring {
+    position: absolute;
+    inset: -4px;
+    width: 40px;
+    height: 40px;
+    pointer-events: none;
+    animation: profileRingGlow 1.6s ease 3s 1;
+}
+@keyframes profileRingGlow {
+    0% { filter: drop-shadow(0 0 0 currentColor); opacity: .85; }
+    45% { filter: drop-shadow(0 0 7px currentColor); opacity: 1; }
+    100% { filter: drop-shadow(0 0 0 currentColor); opacity: .85; }
 }
 .profile-btn:active {
     transform: scale(0.97);
@@ -406,6 +419,8 @@ button, input, select, textarea {
     height: 100%;
     object-fit: cover;
     display: none;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
 }
 .profile-btn.loaded .user-btn-avatar {
     display: block;

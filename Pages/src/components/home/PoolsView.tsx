@@ -14,6 +14,41 @@ const POOL_TABS = [
 ] as const;
 type PoolId = (typeof POOL_TABS)[number]["id"];
 
+const CookieIcon = ({ size = 12, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" {...props}>
+    <mask id="pool-cookie-chips"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5" fill="#fff" /><g fill="#000"><circle cx="8.5" cy="8.5" r="1.5" /><circle cx="16" cy="15.5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="11" cy="17" r="1.5" /><circle cx="7" cy="14" r="1.5" /></g></mask>
+    <path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5" fill="currentColor" mask="url(#pool-cookie-chips)" />
+  </svg>
+);
+
+const TwoFaIcon = ({ size = 12, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 -11 960 876" width={size} height={size} aria-hidden="true" {...props}>
+    <path d="M960 427c0 44.7-36.2 80.9-80.9 80.9H600L480 265.2 609.5 40.9C631.9 2.2 681.3-11 720 11.3c38.7 22.4 51.9 71.8 29.6 110.5L620.1 346.1h259c44.7 0 80.9 36.2 80.9 80.9z" fill="currentColor" />
+    <path d="M720 842.7c-38.7 22.3-88.1 9.1-110.5-29.6L480 588.8 350.5 813.1c-22.4 38.7-71.8 51.9-110.5 29.6-38.7-22.4-51.9-71.8-29.6-110.5l129.5-224.3 140.1-5.3 140.1 5.3 129.5 224.3c22.3 38.7 9.1 88.1-29.6 110.5z" fill="currentColor" />
+    <path d="M480 265.2l-36.5 99.2-103.6-18.3-129.5-224.3c-22.3-38.7-9.1-88.1 29.6-110.5 38.7-22.3 88.1-9.1 110.5 29.6z" fill="currentColor" />
+    <path d="M459.1 346.1l-93.9 161.8H80.9C36.2 507.9 0 471.7 0 427s36.2-80.9 80.9-80.9z" fill="currentColor" />
+    <path d="M620.1 507.9H339.9L480 265.2z" fill="currentColor" />
+  </svg>
+);
+
+const PageIcon = ({ size = 12, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" {...props}>
+    <path fill="currentColor" d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z" />
+  </svg>
+);
+
+const UnknownUserIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+  </svg>
+);
+
+const POOL_META: Record<string, { label: string; Icon: typeof CookieIcon }> = {
+  cookies_only: { label: "Cookies", Icon: CookieIcon },
+  cookies_2fa: { label: "2FA", Icon: TwoFaIcon },
+  page: { label: "Page", Icon: PageIcon },
+};
+
 function displayName(u: PoolDetail["users"][number]) {
   const name = (u.displayName || u.displayName === undefined ? (u as unknown as { displayName?: string }).displayName : "")?.trim() ?? "";
   const uname = (u as unknown as { username?: string }).username;
@@ -496,7 +531,7 @@ export default function PoolsView() {
               const poolLabel = d.poolId || (d.filename?.includes("page_") ? "page" : d.filename?.includes("2fa") ? "cookies_2fa" : "cookies_only");
               const poolBadgeClass = poolLabel === "page" ? "badge page" : "badge";
               const claimer = d.claimedBy ? adminMap.get(String(d.claimedBy)) : null;
-              const initials = claimer?.name?.charAt(0)?.toUpperCase() || String(d.claimedBy ?? "?").charAt(0).toUpperCase();
+              const initials = claimer?.name?.charAt(0)?.toUpperCase() || (d.claimedBy ? String(d.claimedBy).charAt(0).toUpperCase() : "");
               return (
                 <div
                   key={d.id}
@@ -508,9 +543,11 @@ export default function PoolsView() {
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDetailId(d.id); } }}
                   style={{ cursor: "pointer" }}
                 >
-                  <span className={poolBadgeClass} style={{ flexShrink: 0 }}>{poolLabel}</span>
-                  <span style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg3)", border: "1.5px solid var(--border)", flexShrink: 0 }}>
-                    {claimer?.photoUrl ? <img src={claimer.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)" }}>{initials}</span>}
+                  {(() => { const meta = POOL_META[poolLabel] ?? POOL_META.cookies_only; const PoolIcon = meta.Icon; return (
+                  <span className={poolBadgeClass} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5 }}><PoolIcon size={12} />{meta.label}</span>
+                  ); })()}
+                  <span title={claimer?.name ?? (d.claimedBy ? String(d.claimedBy) : "Claimer unknown — before tracking")} style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg3)", border: "1.5px solid var(--border)", flexShrink: 0, color: "var(--text2)" }}>
+                    {claimer?.photoUrl ? <img src={claimer.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials ? <span style={{ fontWeight: 700, fontSize: 14 }}>{initials}</span> : <UnknownUserIcon size={16} />}
                   </span>
                   <div className="pool-card-info">
                     <div className="pool-card-name" title={d.filename}>{d.filename}</div>

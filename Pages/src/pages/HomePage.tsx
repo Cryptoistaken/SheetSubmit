@@ -1,11 +1,30 @@
 import { Archive, Files, Layers, ShieldCheck, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import type { ComponentType } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 
-const AdminView = lazy(() => import("@/components/home/AdminView"));
-const ArchiveView = lazy(() => import("@/components/home/ArchiveView"));
-const SplitterTool = lazy(() => import("@/components/tools/SplitterTool"));
-const PoolsView = lazy(() => import("@/components/home/PoolsView"));
+// Stale chunk after a fresh deploy (old tab imports a hashed asset the new
+// deploy deleted) — reload once to fetch the fresh index.html instead of
+// crashing to "Unexpected Application Error!".
+// ponytail: ComponentType<any> — retry wrapper is prop-agnostic by design
+function lazyRetry(fn: () => Promise<{ default: ComponentType<any> }>) {
+  return lazy(async () => {
+    try {
+      return await fn();
+    } catch {
+      if (!sessionStorage.getItem("ss_chunk_reload")) {
+        sessionStorage.setItem("ss_chunk_reload", "1");
+        window.location.reload();
+      }
+      throw new Error("Chunk failed — reloaded");
+    }
+  });
+}
+
+const AdminView = lazyRetry(() => import("@/components/home/AdminView"));
+const ArchiveView = lazyRetry(() => import("@/components/home/ArchiveView"));
+const SplitterTool = lazyRetry(() => import("@/components/tools/SplitterTool"));
+const PoolsView = lazyRetry(() => import("@/components/home/PoolsView"));
 import Fab from "@/components/home/Fab";
 import FileGrid from "@/components/home/FileGrid";
 import { useAuth } from "@/contexts/AuthContext";

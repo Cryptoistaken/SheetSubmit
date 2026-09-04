@@ -1,4 +1,3 @@
-import { Layers } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { ComponentType } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
@@ -52,15 +51,10 @@ function getAndroid(): AndroidBridge | null {
   }
 }
 
-const SolidityIcon = ({ size = 14, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 256 398" aria-hidden="true" {...props}>
-    <title>solidity</title>
-    <path fill="currentColor" d="m191.513 0l-63.867 113.512H0L63.823 0z" opacity=".45" />
-    <path fill="currentColor" d="M127.646 113.512h127.691L191.513 0H63.823z" opacity=".6" />
-    <path fill="currentColor" d="m63.823 226.981l63.823-113.469L63.823 0L0 113.512z" opacity=".8" />
-    <path fill="currentColor" d="m64.442 397.25l63.867-113.513H256L192.132 397.25z" opacity=".45" />
-    <path fill="currentColor" d="M128.309 283.737H.618L64.441 397.25h127.691z" opacity=".6" />
-    <path fill="currentColor" d="m192.132 170.269l-63.823 113.468l63.823 113.513L256 283.737z" opacity=".8" />
+const ReplitPoolsIcon = ({ size = 14, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 256 308" aria-hidden="true" {...props}>
+    <title>replit-icon</title>
+    <path fill="#f26207" d="M0 19.2C0 8.596 8.596 0 19.2 0h89.6C119.404 0 128 8.596 128 19.2v83.2H19.2C8.596 102.4 0 93.804 0 83.2zm128 83.2h108.8c10.604 0 19.2 8.596 19.2 19.2v64c0 10.604-8.596 19.2-19.2 19.2H128zM0 224c0-10.604 8.596-19.2 19.2-19.2H128V288c0 10.604-8.596 19.2-19.2 19.2H19.2C8.596 307.2 0 298.604 0 288z" />
   </svg>
 );
 
@@ -75,6 +69,32 @@ const RabbitmqIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProp
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 256 257" aria-hidden="true" {...props}>
     <title>rabbitmq-icon</title>
     <path fill="#f60" d="M245.734 102.437h-81.911a10.2 10.2 0 0 1-10.263-10.263v-81.91a10.2 10.2 0 0 0-10.263-10.2h-30.66a10.2 10.2 0 0 0-10.264 10.2v81.91a10.2 10.2 0 0 1-10.263 10.263H61.45a10.2 10.2 0 0 1-10.263-10.263v-81.91A10.2 10.2 0 0 0 40.924 0H10.199A10.2 10.2 0 0 0 0 10.263v235.535a10.2 10.2 0 0 0 10.263 10.263h235.47a10.2 10.2 0 0 0 10.264-10.263V112.893a10.2 10.2 0 0 0-10.263-10.456m-41.18 86.979a15.33 15.33 0 0 1-15.33 15.394h-20.526a15.33 15.33 0 0 1-15.33-15.394v-20.462a15.33 15.33 0 0 1 15.33-15.394h20.525a15.33 15.33 0 0 1 15.33 15.394z" />
+  </svg>
+);
+
+const ObsidianIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 256 332" aria-hidden="true" {...props}>
+    <title>obsidian-icon</title>
+    <defs>
+      <radialGradient id="SVGYDglUjvP" cx="72.819%" cy="96.934%" r="163.793%" fx="72.819%" fy="96.934%" gradientTransform="matrix(-.24192 0 .9703 0 13836.652 7282)"><stop offset="0%" stop-color="#fff" stop-opacity=".4"/><stop offset="100%" stop-opacity=".1"/></radialGradient>
+      <radialGradient id="SVG1mgR7H8p" cx="52.917%" cy="90.632%" r="190.361%" fx="52.917%" fy="90.632%" gradientTransform="matrix(.13917 0 .99027 0 9251.091 5292)"><stop offset="0%" stop-color="#fff" stop-opacity=".6"/><stop offset="100%" stop-color="#fff" stop-opacity=".1"/></radialGradient>
+      <radialGradient id="SVGzgHe6cFU" cx="31.174%" cy="97.138%" r="178.714%" fx="31.174%" fy="97.138%" gradientTransform="matrix(.22495 0 .97437 0 8312.095 3117)"><stop offset="0%" stop-color="#fff" stop-opacity=".8"/><stop offset="100%" stop-color="#fff" stop-opacity=".4"/></radialGradient>
+      <radialGradient id="SVGCTY0meFQ" cx="71.813%" cy="99.994%" r="92.086%" fx="71.813%" fy="99.994%" gradientTransform="matrix(0 -7537.88511 0 -4352 0 22251839.658)"><stop offset="0%" stop-color="#fff" stop-opacity=".3"/><stop offset="100%" stop-opacity=".3"/></radialGradient>
+      <radialGradient id="SVGp7NleeJb" cx="117.013%" cy="34.769%" r="328.729%" fx="117.013%" fy="34.769%" gradientTransform="matrix(-.20791 0 -.97815 0 -1213.278 1701)"><stop offset="0%" stop-color="#fff" stop-opacity="0"/><stop offset="100%" stop-color="#fff" stop-opacity=".2"/></radialGradient>
+      <radialGradient id="SVGzfuNdcEV" cx="-9.431%" cy="8.712%" r="153.492%" fx="-9.431%" fy="8.712%" gradientTransform="matrix(.7071 0 -.7071 0 490.42 943)"><stop offset="0%" stop-color="#fff" stop-opacity=".2"/><stop offset="100%" stop-color="#fff" stop-opacity=".4"/></radialGradient>
+      <radialGradient id="SVGHFK8RbnI" cx="103.902%" cy="-22.172%" r="394.771%" fx="103.902%" fy="-22.172%" gradientTransform="matrix(.17365 0 -.9848 0 3105.035 39)"><stop offset="0%" stop-color="#fff" stop-opacity=".1"/><stop offset="100%" stop-color="#fff" stop-opacity=".3"/></radialGradient>
+      <radialGradient id="SVGBKkxAcsd" cx="99.348%" cy="89.193%" r="203.824%" fx="99.348%" fy="89.193%" gradientTransform="matrix(0 -2496.1803 0 -4694.63235 0 -38783246.548)"><stop offset="0%" stop-color="#fff" stop-opacity=".2"/><stop offset="50%" stop-color="#fff" stop-opacity=".2"/><stop offset="100%" stop-color="#fff" stop-opacity=".3"/></radialGradient>
+    </defs>
+    <path fill-opacity=".3" d="M209.056 308.305c-2.043 14.93-16.738 26.638-31.432 22.552c-20.823-5.658-44.946-14.616-66.634-16.266l-33.317-2.515a22 22 0 0 1-14.144-6.522L6.167 246.778a21.77 21.77 0 0 1-4.244-24.124s35.36-77.478 36.775-81.485c1.257-4.008 6.13-39.211 8.958-58.07a22 22 0 0 1 7.072-12.965L122.462 9.47a22 22 0 0 1 31.903 2.672l57.048 71.978a23.18 23.18 0 0 1 4.872 14.38c0 13.594 1.179 41.646 8.8 59.72a236.8 236.8 0 0 0 27.974 45.732a11 11 0 0 1 .786 12.258c-4.95 8.408-14.851 24.595-28.76 45.26a111.7 111.7 0 0 0-16.108 46.834z" />
+    <path fill="#6c31e3" d="M209.606 305.79c-2.043 15.009-16.737 26.717-31.432 22.71c-20.744-5.737-44.79-14.695-66.555-16.345L78.38 309.64a21.92 21.92 0 0 1-14.144-6.6L6.874 244.106a21.92 21.92 0 0 1-4.243-24.36s35.438-77.792 36.774-81.878c1.336-4.007 6.13-39.289 8.958-58.305a22 22 0 0 1 7.072-13.044L123.17 5.621a22 22 0 0 1 31.902 2.75l56.97 72.292a23.34 23.34 0 0 1 4.871 14.38c0 13.673 1.18 41.804 8.723 59.955a238 238 0 0 0 27.974 45.969a11 11 0 0 1 .864 12.336c-5.03 8.487-14.851 24.674-28.838 45.497a112.6 112.6 0 0 0-16.03 46.99" />
+    <path fill="url(#SVGYDglUjvP)" d="M70.365 307.44c26.638-53.983 25.93-92.722 14.537-120.225c-10.372-25.459-29.781-41.489-45.025-51.468a19.2 19.2 0 0 1-1.415 4.243L2.631 219.747a21.92 21.92 0 0 0 4.321 24.36l57.284 58.933a23.8 23.8 0 0 0 6.129 4.4" />
+    <path fill="url(#SVG1mgR7H8p)" d="M142.814 197.902a86 86 0 0 1 21.06 4.793c21.844 8.172 41.724 26.56 58.147 61.999c1.179-2.043 2.357-4.008 3.615-5.894a960 960 0 0 0 28.838-45.497a11 11 0 0 0-.786-12.336a238 238 0 0 1-28.052-45.969c-7.544-18.073-8.644-46.282-8.723-59.955c0-5.186-1.65-10.294-4.871-14.38l-56.97-72.292l-.943-1.178c4.165 13.75 3.93 24.752 1.336 34.731c-2.357 9.272-6.757 17.68-11.394 26.56c-1.571 2.986-3.143 6.05-4.636 9.193a110 110 0 0 0-12.415 45.576c-.786 19.016 3.064 42.825 15.716 74.65z" />
+    <path fill="url(#SVGzgHe6cFU)" d="M142.736 197.902c-12.652-31.824-16.502-55.633-15.716-74.65c.786-18.858 6.286-33.002 12.415-45.575l4.715-9.193c4.558-8.88 8.88-17.288 11.315-26.56a61.7 61.7 0 0 0-1.336-34.731c-8.136-8.94-21.96-9.642-30.96-1.572L55.436 66.519a22 22 0 0 0-7.072 13.044l-8.25 54.69c0 .55-.158 1.022-.236 1.572c15.244 9.901 34.574 25.931 45.025 51.312c2.043 5.029 3.772 10.294 5.029 16.03a157.2 157.2 0 0 1 52.805-5.343z" />
+    <path fill="url(#SVGCTY0meFQ)" d="M178.253 328.5c14.616 4.007 29.31-7.701 31.353-22.789a120.2 120.2 0 0 1 12.494-41.017c-16.502-35.44-36.382-53.827-58.148-61.999c-23.18-8.643-48.404-5.736-74.021.472c5.736 26.01 2.357 60.034-19.487 104.273c2.436 1.257 5.186 1.965 7.936 2.2l34.496 2.593c18.701 1.336 46.597 11.001 65.377 16.266" />
+    <path fill="url(#SVGp7NleeJb)" d="M127.177 122.074c-.864 18.859 1.493 40.39 14.144 72.135l-3.929-.393c-11.394-33.081-13.908-50.054-13.044-69.149c.786-19.094 6.994-33.789 13.123-46.361c1.571-3.143 5.186-9.037 6.758-12.023c4.557-8.879 7.622-13.515 10.215-21.609c3.772-11.315 2.986-16.658 2.514-22.001c2.908 19.251-8.172 35.988-16.501 53.04a113.9 113.9 0 0 0-13.358 46.361z" />
+    <path fill="url(#SVGzfuNdcEV)" d="M88.674 188.551c1.571 3.458 2.907 6.287 3.85 10.608l-3.379.786c-1.336-5.029-2.357-8.643-4.322-12.965c-11.472-26.953-29.86-40.861-44.79-51.076c18.074 9.744 36.697 25.066 48.64 52.647" />
+    <path fill="url(#SVGHFK8RbnI)" d="M92.681 202.617c6.286 29.467-.786 66.948-21.609 103.409c17.445-36.146 25.931-70.8 18.859-102.938l2.75-.55z" />
+    <path fill="url(#SVGBKkxAcsd)" d="M164.659 199.867c34.181 12.808 47.383 40.86 57.205 64.355c-12.18-24.516-29.074-51.626-58.462-61.684c-22.317-7.7-41.175-6.758-73.471.55l-.707-3.143c34.26-7.858 52.176-8.8 75.435 0z" />
   </svg>
 );
 
@@ -116,7 +136,7 @@ function ToolsList({ onOpenSplitter }: { onOpenSplitter: () => void }) {
         >
           <div className="file-card-icon" style={{ background: "var(--blue-light)", color: "var(--blue)" }}>
             {/* icon: allsvgicons.com/lucide/scissors.svg */}
-            <RabbitmqIcon size={16} />
+            <ObsidianIcon size={16} />
           </div>
           <div className="file-card-name">Splitter</div>
           <div className="file-card-meta">Split xlsx into N parts</div>
@@ -421,7 +441,7 @@ export default function HomePage() {
             aria-selected={tab === "pools"}
             onClick={() => goTab("/pools/dgddigital/cookies_only")}
           >
-            <Layers size={14} aria-hidden="true" />
+            <ReplitPoolsIcon size={14} aria-hidden="true" />
             Pools
           </button>
         ) : null}
@@ -443,7 +463,7 @@ export default function HomePage() {
             aria-selected={tab === "tools"}
             onClick={() => goTab("/tools")}
           >
-            <SolidityIcon size={14} aria-hidden="true" />
+            <RabbitmqIcon size={14} aria-hidden="true" />
             Tools
           </button>
         ) : null}

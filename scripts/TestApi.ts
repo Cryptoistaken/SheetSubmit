@@ -154,7 +154,7 @@ const run = async () => {
       headers: { Cookie: cookie, "Content-Type": "application/json" },
       body: JSON.stringify({ name: "TestApi Run", type: "fb_cookie", password: "dgddigital", poolEnabled: false }),
     });
-    if (r.status === 200 && r.json?.id) { testFileId = r.json.id; return { ok: true }; }
+    if (r.status === 200 && r.json?.id && r.json?.lastAction === "created") { testFileId = r.json.id; return { ok: true }; }
     return { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
   });
 
@@ -178,7 +178,7 @@ const run = async () => {
       headers: { Cookie: cookie, "Content-Type": "application/json" },
       body: JSON.stringify({ name: "TestApi Renamed" }),
     });
-    return r.status === 200 && r.json?.name === "TestApi Renamed"
+    return r.status === 200 && r.json?.name === "TestApi Renamed" && r.json?.lastAction === "renamed"
       ? { ok: true }
       : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
   });
@@ -196,6 +196,8 @@ const run = async () => {
     });
     return r.status === 200 && r.json?.ok === true && typeof r.json?.seq === "number"
       && typeof r.json?.file?.liveCount === "number" && typeof r.json?.file?.deadCount === "number"
+      && typeof r.json?.file?.pageCount === "number" && typeof r.json?.file?.lastAction === "string"
+      && typeof r.json?.file?.dupCount === "number"
       ? { ok: true }
       : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
   });
@@ -385,7 +387,7 @@ const run = async () => {
     const del = await api(`/files/${archivedFileId}`, { method: "DELETE", headers: { Cookie: cookie } });
     if (del.status !== 200) return { ok: false, detail: `delete ${del.status}` };
     const arch = await api("/archive", { headers: { Cookie: cookie } });
-    const found = Array.isArray(arch.json) && arch.json.find((f: any) => f.id === archivedFileId && f.deletedAt);
+    const found = Array.isArray(arch.json) && arch.json.find((f: any) => f.id === archivedFileId && f.deletedAt && f.lastAction === "archived");
     return found ? { ok: true } : { ok: false, detail: `archive=${JSON.stringify(arch.json).slice(0, 200)}` };
   });
 
@@ -393,13 +395,15 @@ const run = async () => {
     const r = await api(`/archive/${archivedFileId}/restore`, { method: "POST", headers: { Cookie: cookie } });
     const files = await api("/files", { headers: { Cookie: cookie } });
     const back = Array.isArray(files.json) && files.json.find((f: any) => f.id === archivedFileId && !f.deletedAt);
-    return r.status === 200 && r.json?.ok && back ? { ok: true } : { ok: false, detail: `restore=${r.status} body=${JSON.stringify(r.json)}` };
+    return r.status === 200 && r.json?.ok && back?.lastAction === "restored" ? { ok: true } : { ok: false, detail: `restore=${r.status} back=${JSON.stringify(back)?.slice(0, 150)}` };
   });
 
   await test("POST /api/archive/batch-restore", async () => {
     await api(`/files/${archivedFileId}`, { method: "DELETE", headers: { Cookie: cookie } });
     const r = await api("/archive/batch-restore", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ ids: [archivedFileId] }) });
-    return r.status === 200 && r.json?.restored === 1 ? { ok: true } : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+    const files = await api("/files", { headers: { Cookie: cookie } });
+    const back = Array.isArray(files.json) && files.json.find((f: any) => f.id === archivedFileId && f.lastAction === "restored");
+    return r.status === 200 && r.json?.restored === 1 && back ? { ok: true } : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)} back=${JSON.stringify(back)?.slice(0, 100)}` };
   });
 
   await test("POST /api/archive/batch-delete (permanent)", async () => {

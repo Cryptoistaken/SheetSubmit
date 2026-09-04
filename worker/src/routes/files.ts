@@ -10,7 +10,20 @@ async function ownedArchived(c: any, id: string) { const found = await rpc(c.env
 const poolId = (r: Row) => String(r.uid || (String(r.cookies || "").match(/c_user=(\d+)/)?.[1] || ""));
 const normalizePreset = (v: unknown): FilePreset | undefined => { const s = String(v || "").toLowerCase(); if (s === "cookie") return "cookie"; if (s === "combo" || s === "2fa") return "combo"; if (s === "page") return "page"; return undefined; };
 const hasReal2FA = (r: Row) => { const v = String(r.twofakey ?? r["2fa key"] ?? "").trim(); return !!v && v !== "No_2Fa"; };
-export const ldCounts = (rows: Row[]) => { let live = 0, dead = 0, page = 0; for (const r of rows) { const s = String(r.status || "").toLowerCase(); if (s === "good") live++; else if (s === "bad") dead++; if (String(r.wa_status || "").toLowerCase() === "eligible") page++; } return { liveCount: live, deadCount: dead, pageCount: page }; };
+export const ldCounts = (rows: Row[]) => {
+  let live = 0, dead = 0, page = 0;
+  const keys = new Map<string, number>();
+  for (const r of rows) {
+    const s = String(r.status || "").toLowerCase();
+    if (s === "good") live++; else if (s === "bad") dead++;
+    if (String(r.wa_status || "").toLowerCase() === "eligible") page++;
+    const k = String(r.uid || "").trim() || (String(r.cookies || "").match(/c_user=(\d+)/)?.[1] ?? "");
+    if (k) keys.set(k, (keys.get(k) || 0) + 1);
+  }
+  let dup = 0;
+  keys.forEach((c) => { if (c > 1) dup += c; });
+  return { liveCount: live, deadCount: dead, pageCount: page, dupCount: dup };
+};
 function resolvePreset(file: SheetFile): FilePreset | null {
   const p = normalizePreset((file as any).preset ?? (file as any).poolKind);
   if (p) return p;

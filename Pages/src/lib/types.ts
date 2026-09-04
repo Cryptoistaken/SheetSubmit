@@ -27,6 +27,7 @@ export interface SheetFile {
   liveCount?: number;
   deadCount?: number;
   pageCount?: number;
+  dupCount?: number;
   lastAction?: string;
   createdAt?: number;
   updatedAt?: number;

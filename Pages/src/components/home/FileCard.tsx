@@ -165,6 +165,9 @@ export default function FileCard({
           {isPage && (file.pageCount ?? 0) > 0 ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--cyan)", "page eligible")}{file.pageCount}</span>
           ) : null}
+          {(file.dupCount ?? 0) > 0 ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow)", "duplicates")}{file.dupCount}</span>
+          ) : null}
           {crossDupCount ? (
             <>
               {" · "}

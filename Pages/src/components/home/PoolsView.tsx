@@ -396,10 +396,11 @@ export default function PoolsView() {
               const dateStr = dt ? dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
               const timeStr = dt ? dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
               const isReverted = !!(d as unknown as { reverted?: boolean }).reverted;
-              const poolBadgeClass = d.poolId === "page" ? "badge page" : "badge";
+              const poolLabel = d.poolId || (d.filename?.includes("page_") ? "page" : d.filename?.includes("2fa") ? "cookies_2fa" : "cookies_only");
+              const poolBadgeClass = poolLabel === "page" ? "badge page" : "badge";
               return (
                 <div key={d.id} className={`pool-card ${isReverted ? "reverted" : ""}`} style={{ cursor: "default" }}>
-                  <span className={poolBadgeClass} style={{ flexShrink: 0 }}>{d.poolId}</span>
+                  <span className={poolBadgeClass} style={{ flexShrink: 0 }}>{poolLabel}</span>
                   <div className="pool-card-info">
                     <div className="pool-card-name" title={d.filename}>{d.filename}</div>
                     <div className="pool-card-sub">

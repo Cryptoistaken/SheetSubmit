@@ -1,4 +1,4 @@
-const CACHE_NAME = "sheet-submit-v1";
+const CACHE_NAME = "sheet-submit-v2";
 const APP_SHELL_URLS = ["/config.js", "/favicon-light.svg"];
 
 self.addEventListener("install", (event) => {

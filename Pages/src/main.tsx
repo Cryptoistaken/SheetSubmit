@@ -25,4 +25,24 @@ createRoot(document.getElementById("root")!).render(
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
+  // stale chunk / M_ID crash after deploy → reload once (old chunk referencing deleted asset)
+  const chunkErr = (msg: string) =>
+    /M_ID|ChunkLoadError|Failed to fetch dynamically imported module|Loading chunk|200\.js/.test(msg);
+  window.addEventListener("error", (e) => {
+    if (chunkErr(e.message || "")) {
+      if (!sessionStorage.getItem("ss_chunk_reload_sw")) {
+        sessionStorage.setItem("ss_chunk_reload_sw", "1");
+        location.reload();
+      }
+    }
+  });
+  window.addEventListener("unhandledrejection", (e: PromiseRejectionEvent) => {
+    const m = String((e.reason as Error)?.message || e.reason || "");
+    if (chunkErr(m)) {
+      if (!sessionStorage.getItem("ss_chunk_reload_sw")) {
+        sessionStorage.setItem("ss_chunk_reload_sw", "1");
+        location.reload();
+      }
+    }
+  });
 }

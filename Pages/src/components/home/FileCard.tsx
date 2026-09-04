@@ -1,4 +1,4 @@
-import { Cookie, Download, Pencil, Trash2 } from "lucide-react";
+import { Download, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 const TwoFaIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
@@ -14,6 +14,13 @@ const TwoFaIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<S
 const PageIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" {...props}>
     <path fill="currentColor" d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z" />
+  </svg>
+);
+
+const CookieIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" {...props}>
+    <mask id="cookie-chips"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5" fill="#fff" /><g fill="#000"><circle cx="8.5" cy="8.5" r="1.5" /><circle cx="16" cy="15.5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="11" cy="17" r="1.5" /><circle cx="7" cy="14" r="1.5" /></g></mask>
+    <path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5" fill="currentColor" mask="url(#cookie-chips)" />
   </svg>
 );
 
@@ -118,14 +125,14 @@ export default function FileCard({
       ? PageIcon
       : _presetKind === "combo"
         ? TwoFaIcon
-        : Cookie
-    : file.name.toLowerCase().startsWith("cookie")
-      ? Cookie
+        : CookieIcon
+      : file.name.toLowerCase().startsWith("cookie")
+      ? CookieIcon
       : file.name.toLowerCase().startsWith("2fa")
         ? TwoFaIcon
         : file.name.toLowerCase().startsWith("page")
           ? PageIcon
-          : Cookie;
+          : CookieIcon;
   const pwStyle: React.CSSProperties = isCustom
     ? { background: "var(--fb-bg)", color: "var(--fb)" }
     : pw === "L0VE@12345"

@@ -7,6 +7,7 @@ import SheetToolbar from "@/components/sheet/SheetToolbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModalA11y } from "@/hooks/useModalA11y";
 import { api } from "@/lib/api";
+import { useAvatarUrl } from "@/lib/avatarCache";
 import { useTheme } from "@/lib/theme";
 import { useToast } from "@/lib/toast";
 import { useBubbleStore } from "@/stores/bubbleStore";
@@ -49,6 +50,7 @@ export default function Topbar() {
   const renameRef = useModalA11y(renameOpen && !!file, () => setRenameOpen(false));
   const [isAndroid, setIsAndroid] = useState(() => !!getAndroid());
   const bubbleOn = useBubbleStore((s) => s.on);
+  const avatarSrc = useAvatarUrl(user?.id, user?.photoUrl);
   const showToast = useToast();
 
   // The Android bridge can register after first paint (old bubble.js re-checked
@@ -113,7 +115,7 @@ export default function Topbar() {
   // hidden until the new image has actually loaded.
   useEffect(() => {
     setAvatarReady(false);
-  }, [user?.photoUrl]);
+  }, [user?.photoUrl, avatarSrc]);
 
   // Close gear panel on outside click.
   useEffect(() => {
@@ -222,8 +224,10 @@ export default function Topbar() {
             <WorkspaceIcon size={14} />
           </span>
           <span className="profile-pill-divider"></span>
-          <span className={`avatar-ring${avatarReady ? " show" : ""}`} style={{ background: ringColor, color: ringColor }}>
-            <img src={user.photoUrl ?? ""} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setAvatarReady(true)} />
+          <span className={`avatar-ring${avatarReady && avatarSrc ? " show" : ""}`} style={{ background: ringColor, color: ringColor }}>
+            {avatarSrc ? (
+              <img key={avatarSrc} src={avatarSrc} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setAvatarReady(true)} />
+            ) : null}
           </span>
         </button>
         <div ref={panelRef} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>

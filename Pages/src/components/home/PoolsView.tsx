@@ -7,6 +7,7 @@ import { useToast } from "@/lib/toast";
 import { useProfileCache } from "@/stores/profileCache";
 import { CookieIcon, PageIcon, PasswordIcon, SearchIcon, TwoFaIcon, UnknownUserIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import DownloadDetailModal from "./DownloadDetailModal";
+import ProfileAvatar from "@/components/profile/ProfileAvatar";
 
 const PASSWORDS = ["dgddigital", "L0VE@12345"] as const;
 const POOL_TABS = [
@@ -424,7 +425,7 @@ export default function PoolsView() {
           <div style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13, border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>No contributors yet</div>
         ) : filtered.map((u) => {
           const d = displayName(u);
-          const isAdmin = (u as unknown as Record<string, unknown>)["isAdmin"] as boolean | undefined;
+           const isAdmin = Boolean(u.isAdmin || cachedProfiles[u.userId]?.isAdmin);
           const expanded = expandedUser === u.userId;
           const uf = getUserFilesFor(u.userId);
           return (
@@ -434,7 +435,7 @@ export default function PoolsView() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6" /></svg>
                 </span>
                 <span className="admin-wrap">
-                  {u.photoUrl ? <img src={u.photoUrl} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "1.5px solid var(--border)" }} /> : <span style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--bg3)", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 14, border: "1.5px solid var(--border)", color: "var(--text2)" }}>{d.line1.charAt(0).toUpperCase()}</span>}
+                   <ProfileAvatar userId={u.userId} photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={d.line1.charAt(0).toUpperCase()} className="size-9 bg-[var(--bg3)] text-[var(--text2)]" />
                   {isAdmin ? <span className="admin-dot" aria-label="Verified admin" title="Verified"><VerifiedIcon size={18} /></span> : null}
                 </span>
                 <div className="pool-card-info">
@@ -518,7 +519,7 @@ export default function PoolsView() {
                   <span className={poolBadgeClass} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5 }}><PoolIcon size={12} />{meta.label}</span>
                   ); })()}
                   <span title={claimer?.name ?? (d.claimedBy ? String(d.claimedBy) : "Claimer unknown — before tracking")} style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg3)", border: "1.5px solid var(--border)", flexShrink: 0, color: "var(--text2)" }}>
-                    {claimer?.photoUrl ? <img src={claimer.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials ? <span style={{ fontWeight: 700, fontSize: 14 }}>{initials}</span> : <UnknownUserIcon size={16} />}
+                     {claimer ? <ProfileAvatar userId={String(d.claimedBy)} photoUrl={claimer.photoUrl} fallback={initials || "?"} className="size-9 border-0" /> : <UnknownUserIcon size={16} />}
                   </span>
                   <div className="pool-card-info">
                     <div className="pool-card-name" title={d.filename}>{d.filename}</div>

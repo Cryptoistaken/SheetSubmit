@@ -11,6 +11,7 @@ import { PaletteIcon, SearchIcon, VerifiedIcon } from "@/components/icons/FileTy
 import { fileTypeDef } from "@/lib/types";
 import type { AdminUser, ArchiveFile, SheetFile } from "@/lib/types";
 import { downloadXlsx } from "@/lib/xlsx";
+import ProfileAvatar from "@/components/profile/ProfileAvatar";
 
 function userName(u: { firstName?: string; lastName?: string }): string {
   return ((u.firstName ?? "") + " " + (u.lastName ?? "")).trim() || "Unknown";
@@ -229,13 +230,12 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
         <div className="admin-user-header">
           <div className="admin-detail-header">
             <div style={{ position: "relative", flexShrink: 0 }}>
-              {detailUser.photoUrl ? (
-                <img className="admin-detail-avatar" src={detailUser.photoUrl} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-              ) : (
-                <div className="admin-detail-avatar admin-user-avatar-placeholder">
-                  {userName(detailUser).charAt(0).toUpperCase()}
-                </div>
-              )}
+              <ProfileAvatar
+                userId={detailUser.id}
+                photoUrl={detailUser.photoUrl}
+                fallback={userName(detailUser).charAt(0).toUpperCase()}
+                className="admin-detail-avatar admin-user-avatar-placeholder"
+              />
               {detailUser.isAdmin ? (
                 <span title="Verified" style={{ position: "absolute", right: -4, bottom: -4, width: 18, height: 18, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))" }}><VerifiedIcon size={18} /></span>
               ) : null}
@@ -494,13 +494,12 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
                     }}
                   >
                     <div className="admin-user-avatar-wrap" style={{ position: "relative" }}>
-                      {u.photoUrl ? (
-                        <img className="admin-user-avatar" src={u.photoUrl} alt="" loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-                      ) : (
-                        <div className="admin-user-avatar admin-user-avatar-placeholder">
-                          {name.charAt(0).toUpperCase()}
-                        </div>
-                      )}
+                      <ProfileAvatar
+                        userId={u.id}
+                        photoUrl={u.photoUrl}
+                        fallback={name.charAt(0).toUpperCase()}
+                        className="admin-user-avatar admin-user-avatar-placeholder"
+                      />
                       {u.isAdmin ? (
                         <span title="Verified" style={{ position: "absolute", right: -4, bottom: -4, width: 18, height: 18, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))" }}><VerifiedIcon size={18} /></span>
                       ) : null}

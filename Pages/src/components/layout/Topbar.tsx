@@ -12,6 +12,8 @@ import { useTheme } from "@/lib/theme";
 import { useToast } from "@/lib/toast";
 import { useBubbleStore } from "@/stores/bubbleStore";
 import { useSheetStore } from "@/stores/sheetStore";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import ProfileAvatar from "@/components/profile/ProfileAvatar";
 
 interface AndroidBridge {
   isBubbleEnabled?: () => boolean;
@@ -227,16 +229,15 @@ export default function Topbar() {
           </span>
           <span className="profile-pill-divider"></span>
           <span className={`avatar-ring${!user.photoUrl || photoBusted || (avatarReady && avatarSrc) ? " show" : ""}`} style={{ background: ringColor, color: ringColor }}>
-            {!user.photoUrl || photoBusted ? (
-              <span className="avatar-fallback">{(displayName || "?").slice(0, 1).toUpperCase()}</span>
-            ) : avatarSrc ? (
-              <img key={avatarSrc} src={avatarSrc} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setAvatarReady(true)} onError={() => setPhotoBusted(true)} />
-            ) : null}
+             <Avatar className="size-full border-0 after:hidden">
+               {!photoBusted && avatarSrc ? <AvatarImage key={avatarSrc} src={avatarSrc} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setAvatarReady(true)} onError={() => setPhotoBusted(true)} /> : null}
+               <AvatarFallback className="bg-transparent text-inherit">{(displayName || "?").slice(0, 1).toUpperCase()}</AvatarFallback>
+             </Avatar>
           </span>
         </button>
         <div ref={panelRef} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
           <div className="gear-user-card">
-            <img className="gear-user-avatar" src={user.photoUrl ?? ""} alt="" />
+             <ProfileAvatar userId={user.id} photoUrl={user.photoUrl} fallback={(displayName || "?").slice(0, 1).toUpperCase()} className="gear-user-avatar" />
             <div className="gear-user-info">
               <div className="gear-user-name">{displayName}</div>
               <div className="gear-user-username">

@@ -30,7 +30,7 @@ export const useProfileCache = create<State>((set, get) => ({
       const id = (u.id ?? (u as unknown as { userId?: string }).userId) as string;
       if (!id) continue;
       const name = (u.name as string) || (u.displayName as string) || `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || (u.username ? `@${u.username}` : id);
-      map[id] = { id, name, username: u.username ?? null, photoUrl: u.photoUrl ?? null, firstName: u.firstName ?? null, lastName: u.lastName ?? null, isAdmin: (u as { isAdmin?: boolean }).isAdmin };
+      map[id] = { id, name, username: u.username ?? map[id]?.username ?? null, photoUrl: u.photoUrl ?? map[id]?.photoUrl ?? null, firstName: u.firstName ?? map[id]?.firstName ?? null, lastName: u.lastName ?? map[id]?.lastName ?? null, isAdmin: (u as { isAdmin?: boolean }).isAdmin ?? map[id]?.isAdmin };
     }
     set({ profiles: map });
   },

@@ -433,7 +433,7 @@ button, input, select, textarea {
     order: 3;
     background: #d4440f;
 }
-.profile-btn.loaded .avatar-ring {
+.avatar-ring.show {
     display: block;
 }
 .avatar-ring::before {

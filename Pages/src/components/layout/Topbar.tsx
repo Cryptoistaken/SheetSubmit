@@ -44,6 +44,7 @@ export default function Topbar() {
   const panelRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [avatarReady, setAvatarReady] = useState(false);
   const [renameName, setRenameName] = useState("");
   const renameRef = useModalA11y(renameOpen && !!file, () => setRenameOpen(false));
   const [isAndroid, setIsAndroid] = useState(() => !!getAndroid());
@@ -107,6 +108,12 @@ export default function Topbar() {
       if (timer) clearTimeout(timer);
     };
   }, []);
+
+  // Reset avatar readiness when the photo changes so the ring stays
+  // hidden until the new image has actually loaded.
+  useEffect(() => {
+    setAvatarReady(false);
+  }, [user?.photoUrl]);
 
   // Close gear panel on outside click.
   useEffect(() => {
@@ -215,8 +222,8 @@ export default function Topbar() {
             <WorkspaceIcon size={14} />
           </span>
           <span className="profile-pill-divider"></span>
-          <span className="avatar-ring" style={{ background: ringColor, color: ringColor }}>
-            <img src={user.photoUrl ?? ""} alt="" />
+          <span className={`avatar-ring${avatarReady ? " show" : ""}`} style={{ background: ringColor, color: ringColor }}>
+            <img src={user.photoUrl ?? ""} alt="" onLoad={() => setAvatarReady(true)} />
           </span>
         </button>
         <div ref={panelRef} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>

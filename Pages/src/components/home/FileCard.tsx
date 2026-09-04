@@ -20,6 +20,7 @@ interface FileCardProps {
   onHoldSelect: () => void;
   disableOpen?: boolean;
   daysLeft?: number;
+  recent?: boolean;
 }
 
 export default function FileCard({
@@ -36,6 +37,7 @@ export default function FileCard({
   onHoldSelect,
   disableOpen = false,
   daysLeft,
+  recent = false,
 }: FileCardProps) {
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heldRef = useRef(false);
@@ -129,6 +131,9 @@ export default function FileCard({
     : pw === "dgddigital"
       ? { background: "transparent", color: "#2563eb", border: "1px solid transparent" }
       : { background: "var(--bg3)", color: "var(--text2)" };
+  const sq = (bg: string, title: string) => (
+    <span title={title} style={{ width: 10, height: 10, borderRadius: 2, background: bg, border: "1px solid var(--border)", flexShrink: 0 }} />
+  );
 
   return (
     <div
@@ -153,12 +158,27 @@ export default function FileCard({
       <div className="file-card-icon">
         <FileIcon size={16} />
       </div>
+      {recent ? (
+        <span
+          title="Most recently modified"
+          style={{ position: "absolute", top: 24, left: 54, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color: "var(--green)", background: "var(--green-bg)", padding: "2px 7px", borderRadius: 999, letterSpacing: "-0.01em" }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)" }} />
+          Recent
+        </span>
+      ) : null}
       <div className="file-card-name">{file.name}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
         <span className="file-type-badge" title={badge} aria-label={badge} style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={12} /></span>
         <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center" }} title={pwTitle}>{isCustom ? pwLabel : <PasswordIcon password={pw} size={14} />}</span>
-        <span className="file-card-meta">
-          {count} row{count !== 1 ? "s" : ""}
+        <span className="file-card-meta" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--text)", "rows")}{count}</span>
+          {(file.liveCount ?? 0) + (file.deadCount ?? 0) > 0 ? (
+            <>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--green)", "live")}{file.liveCount}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--red)", "dead")}{file.deadCount}</span>
+            </>
+          ) : null}
           {crossDupCount ? (
             <>
               {" · "}

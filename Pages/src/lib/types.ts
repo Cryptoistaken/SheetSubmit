@@ -24,6 +24,8 @@ export interface SheetFile {
   poolKind?: FilePreset;
   rowCount?: number;
   dataCount?: number;
+  liveCount?: number;
+  deadCount?: number;
   createdAt?: number;
   updatedAt?: number;
   deletedAt?: number;

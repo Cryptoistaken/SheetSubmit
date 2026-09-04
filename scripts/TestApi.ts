@@ -195,6 +195,7 @@ const run = async () => {
       body: JSON.stringify({ rows, action: "edit" }),
     });
     return r.status === 200 && r.json?.ok === true && typeof r.json?.seq === "number"
+      && typeof r.json?.file?.liveCount === "number" && typeof r.json?.file?.deadCount === "number"
       ? { ok: true }
       : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
   });

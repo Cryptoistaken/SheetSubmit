@@ -31,12 +31,14 @@ export default function FileGrid({
   if (files.length === 0) {
     return <EmptyState title="No files yet" sub="Tap the + button to create your first file" />;
   }
+  const sorted = [...files].sort((a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0));
   return (
     <div className="files-grid">
-      {files.map((f) => (
+      {sorted.map((f, i) => (
         <FileCard
           key={f.id}
           file={f}
+          recent={i === 0}
           crossDupCount={crossDupCounts[f.id]}
           selected={selectedIds.has(f.id)}
           selectionMode={selectionMode}

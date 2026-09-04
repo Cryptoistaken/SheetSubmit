@@ -51,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(u);
         if (u) {
           localStorage.setItem(CACHE_KEY, JSON.stringify(u));
+          try { const { useProfileCache } = await import("@/stores/profileCache"); useProfileCache.getState().setProfiles([u as unknown]); } catch {}
         } else {
           localStorage.removeItem(CACHE_KEY);
         }

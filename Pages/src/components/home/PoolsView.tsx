@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import type { PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
+import { useProfileCache } from "@/stores/profileCache";
 import DownloadDetailModal from "./DownloadDetailModal";
 
 const PASSWORDS = ["dgddigital", "L0VE@12345"] as const;
@@ -166,7 +167,12 @@ export default function PoolsView() {
   const [userFiles, setUserFiles] = useState<PoolUserFile[] | null>(null);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [verified, setVerified] = useState<VerifiedCounts | null>(null);
-  const [adminMap, setAdminMap] = useState<Map<string, { name: string; username?: string; photoUrl?: string | null }>>(new Map());
+  const { profiles: cachedProfiles, fetchProfiles } = useProfileCache();
+  const adminMap = useMemo(() => {
+    const m = new Map<string, { name: string; username?: string; photoUrl?: string | null }>();
+    for (const [k, v] of Object.entries(cachedProfiles)) m.set(k, { name: v.name, username: v.username ?? undefined, photoUrl: v.photoUrl ?? null });
+    return m;
+  }, [cachedProfiles]);
   const [srcUid, setSrcUid] = useState<string>("");
   const [srcFileId, setSrcFileId] = useState<string>("");
   const [verifiedFilter, setVerifiedFilter] = useState<"all" | "verified" | "unverified">("all");
@@ -179,6 +185,7 @@ export default function PoolsView() {
       setPools(list);
       const d = await api.getPoolDetail(curPwd, cur);
       setDetail(d);
+      try { useProfileCache.getState().setProfiles(d.users as unknown[]); } catch {}
       try {
         const dls = await api.getDownloads() as unknown;
         const arr: unknown[] = Array.isArray(dls) ? dls : ((dls as { downloads?: unknown[] })?.downloads ?? []);
@@ -203,20 +210,8 @@ export default function PoolsView() {
     return () => { cancelled = true; };
   }, [cur, curPwd]);
 
-  // claimer avatars from existing adminUsers API (fallback initials)
-  useEffect(() => {
-    let cancelled = false;
-    api.adminUsers().then((us) => {
-      if (cancelled) return;
-      const m = new Map<string, { name: string; username?: string; photoUrl?: string | null }>();
-      for (const u of us as unknown as { id: string; firstName?: string; lastName?: string; username?: string; photoUrl?: string | null }[]) {
-        const name = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || (u.username ? `@${u.username}` : u.id);
-        m.set(u.id, { name, username: u.username, photoUrl: u.photoUrl });
-      }
-      setAdminMap(m);
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
+  // claimer avatars — cached globally so pool/admin switches don't refetch
+  useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
 
   // reset file selector when contributor changes or pool changes
   useEffect(() => { setSrcFileId(""); }, [srcUid]);
@@ -352,7 +347,7 @@ export default function PoolsView() {
         .badge.page{background:#fffbeb;color:#b45309;border-color:#fde68a;box-shadow:none;filter:none}
         .badge.taken{background:var(--bg3);color:var(--text3)}
         .admin-wrap{position:relative;display:inline-flex;flex-shrink:0}
-        .admin-dot{position:absolute;right:-4px;bottom:-4px;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--bg);display:grid;place-items:center;color:#1d9bf0;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+        .admin-dot{position:absolute;right:-4px;bottom:-4px;width:18px;height:18px;display:grid;place-items:center;color:#1d9bf0;filter:drop-shadow(0 1px 2px rgba(0,0,0,.15));background:transparent;border:none;}
         .taken-row td{position:relative}
         .taken-row td .cell-text{color:rgba(255,255,255,.72)!important}
         .user-row{cursor:pointer;transition:background .1s}
@@ -523,7 +518,7 @@ export default function PoolsView() {
                 </span>
                 <span className="admin-wrap">
                   {u.photoUrl ? <img src={u.photoUrl} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "1.5px solid var(--border)" }} /> : <span style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--bg3)", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 14, border: "1.5px solid var(--border)", color: "var(--text2)" }}>{d.line1.charAt(0).toUpperCase()}</span>}
-                  {isAdmin ? <span className="admin-dot" aria-label="Verified admin" title="Verified"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fillRule="evenodd" d="M15.418 5.643a1.25 1.25 0 0 0-1.34-.555l-1.798.413a1.25 1.25 0 0 1-.56 0l-1.798-.413a1.25 1.25 0 0 0-1.34.555l-.98 1.564c-.1.16-.235.295-.395.396l-1.564.98a1.25 1.25 0 0 0-.555 1.338l.413 1.8a1.25 1.25 0 0 1 0 .559l-.413 1.799a1.25 1.25 0 0 0 .555 1.339l1.564.98c.16.1.295.235.396.395l.98 1.564c.282.451.82.674 1.339.555l1.798-.413a1.25 1.25 0 0 1 .56 0l1.799.413a1.25 1.25 0 0 0 1.339-.555l.98-1.564c.1-.16.235-.295.395-.395l1.565-.98a1.25 1.25 0 0 0 .554-1.34L18.5 12.28a1.25 1.25 0 0 1 0-.56l.413-1.799a1.25 1.25 0 0 0-.554-1.339l-1.565-.98a1.25 1.25 0 0 1-.395-.395zm-.503 4.127a.5.5 0 0 0-.86-.509l-2.615 4.426l-1.579-1.512a.5.5 0 1 0-.691.722l2.034 1.949a.5.5 0 0 0 .776-.107z" clipRule="evenodd"/></svg></span> : null}
+                  {isAdmin ? <span className="admin-dot" aria-label="Verified admin" title="Verified"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15.418 5.643a1.25 1.25 0 0 0-1.34-.555l-1.798.413a1.25 1.25 0 0 1-.56 0l-1.798-.413a1.25 1.25 0 0 0-1.34.555l-.98 1.564c-.1.16-.235.295-.395.396l-1.564.98a1.25 1.25 0 0 0-.555 1.338l.413 1.8a1.25 1.25 0 0 1 0 .559l-.413 1.799a1.25 1.25 0 0 0 .555 1.339l1.564.98c.16.1.295.235.396.395l.98 1.564c.282.451.82.674 1.339.555l1.798-.413a1.25 1.25 0 0 1 .56 0l1.799.413a1.25 1.25 0 0 0 1.339-.555l.98-1.564c.1-.16.235-.295.395-.395l1.565-.98a1.25 1.25 0 0 0 .554-1.34L18.5 12.28a1.25 1.25 0 0 1 0-.56l.413-1.799a1.25 1.25 0 0 0-.554-1.339l-1.565-.98a1.25 1.25 0 0 1-.395-.395z"/><path fill="#fff" d="M14.915 9.77a.5.5 0 0 0-.86-.509l-2.615 4.426l-1.579-1.512a.5.5 0 1 0-.691.722l2.034 1.949a.5.5 0 0 0 .776-.107z"/></svg></span> : null}
                 </span>
                 <div className="pool-card-info">
                   <div className="pool-card-name">{d.line1}{uf ? <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 500 }}>{uf.files.length} file{uf.files.length !== 1 ? "s" : ""}</span> : null}</div>

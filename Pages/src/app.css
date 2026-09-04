@@ -385,7 +385,7 @@ button, input, select, textarea {
     border-radius: 50%;
     border: none;
     background: transparent;
-    padding: 2px;
+    padding: 0;
     color: var(--text3);
     cursor: pointer;
     transition: border-color 0.15s;
@@ -397,9 +397,9 @@ button, input, select, textarea {
 }
 .profile-ring {
     position: absolute;
-    inset: -6px;
-    width: 44px;
-    height: 44px;
+    inset: 0;
+    width: 32px;
+    height: 32px;
     pointer-events: none;
     animation: profileRingGlow 1.6s ease 3s 1;
 }

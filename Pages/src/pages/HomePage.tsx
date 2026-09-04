@@ -34,9 +34,9 @@ import { COLUMN_PRESETS, fileTypeDef, FILE_PRESET_NAMES } from "@/lib/types";
 import type { FilePreset, FileType, SheetFile } from "@/lib/types";
 import { downloadXlsx, genId, hydrateWaCache, importXlsx, todayStr } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
-import { CakephpIcon, ObsidianIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, WakuIcon } from "@/components/icons/FileTypeIcons";
+import { CakephpIcon, ObsidianIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
 
-type Tab = "files" | "archive" | "pools" | "admin" | "tools";
+type Tab = "files" | "archive" | "wallet" | "pools" | "admin" | "tools";
 
 interface AndroidBridge {
   getBubbleFile?: () => string;
@@ -98,7 +98,9 @@ export default function HomePage() {
         ? "admin"
         : path === "/archive"
           ? "archive"
-          : "files";
+          : path === "/wallet"
+            ? "wallet"
+            : "files";
 
   const [files, setFiles] = useState<SheetFile[] | null>(null);
   const [dupCounts, setDupCounts] = useState<Record<string, number>>({});
@@ -365,6 +367,15 @@ export default function HomePage() {
           <CakephpIcon size={14} aria-hidden="true" />
           Archive
         </button>
+        <button
+          className={`home-tab${tab === "wallet" ? " active" : ""}`}
+          role="tab"
+          aria-selected={tab === "wallet"}
+          onClick={() => goTab("/wallet")}
+        >
+          <WalletIcon size={14} aria-hidden="true" />
+          Wallet
+        </button>
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "pools" ? " active" : ""}`}
@@ -440,6 +451,11 @@ export default function HomePage() {
           <Suspense fallback={null}>
             <ArchiveView />
           </Suspense>
+        </div>
+      ) : null}
+
+      {tab === "wallet" ? (
+        <div className="home-pane" id="homePaneWallet" style={{ padding: "32px 24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
         </div>
       ) : null}
 

@@ -37,11 +37,60 @@ const TwoFaIcon = ({ size = 12, ...props }: { size?: number } & React.SVGProps<S
 );
 
 const PageIcon = ({ size = 12, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 256 308" aria-hidden="true" {...props}>
-    <title>replit-icon</title>
-    <path fill="#f26207" d="M0 19.2C0 8.596 8.596 0 19.2 0h89.6C119.404 0 128 8.596 128 19.2v83.2H19.2C8.596 102.4 0 93.804 0 83.2zm128 83.2h108.8c10.604 0 19.2 8.596 19.2 19.2v64c0 10.604-8.596 19.2-19.2 19.2H128zM0 224c0-10.604 8.596-19.2 19.2-19.2H128V288c0 10.604-8.596 19.2-19.2 19.2H19.2C8.596 307.2 0 298.604 0 288z" />
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 256 145" aria-hidden="true" {...props}>
+    <title>soundcloud</title>
+    <defs>
+      <linearGradient id="PVEm" x1="49.719%" x2="49.719%" y1="-27.701%" y2="100.084%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVIj" x1="50.208%" x2="50.208%" y1="-25%" y2="100.195%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVF3" x1="50.031%" x2="50.031%" y1="-26.166%" y2="100.311%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVJ1" x1="49.936%" x2="49.936%" y1="-23.196%" y2="100.193%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVu9" x1="49.525%" x2="49.525%" y1="-89.845%" y2="101.504%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVlH" x1="50.151%" x2="50.151%" y1="-13.846%" y2="100.179%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVcG" x1="49.659%" x2="49.659%" y1="-95.238%" y2="100.836%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PV9b" x1="49.596%" x2="49.596%" y1="-51.09%" y2="100.373%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVb7" x1="50.414%" x2="50.414%" y1="-33.211%" y2="100.08%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVwO" x1="50.034%" x2="50.034%" y1="-7.143%" y2="100.168%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVOb" x1="50.325%" x2="50.325%" y1="-220.199%" y2="147.927%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVKp" x1="49.159%" x2="49.159%" y1="-121.474%" y2="112.576%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVg3" x1="50.422%" x2="50.422%" y1="-94.484%" y2="103.334%"><stop offset="0%" stop-color="#f6871f"/><stop offset="23.93%" stop-color="#f57e20"/><stop offset="62.62%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+      <linearGradient id="PVfg" x1="49.931%" x2="49.931%" y1="0%" y2="100.017%"><stop offset="0%" stop-color="#f7941e"/><stop offset="0%" stop-color="#f68b1f"/><stop offset="0%" stop-color="#f6871f"/><stop offset="24.02%" stop-color="#f57e20"/><stop offset="63.06%" stop-color="#f36621"/><stop offset="100%" stop-color="#f04923"/></linearGradient>
+    </defs>
+    <path fill="url(#PVEm)" d="m109.97 81.482l-1.494-54.487c0-1.694-1.394-2.989-2.988-2.989c-1.693 0-2.988 1.295-2.988 2.989l-1.395 54.487l1.395 26.197c0 1.694 1.394 2.989 2.988 2.989c1.693 0 2.988-1.295 2.988-2.989z" />
+    <path fill="url(#PVIj)" d="m99.212 81.482l-1.693-56.58a2.784 2.784 0 0 0-2.789-2.788a2.784 2.784 0 0 0-2.79 2.789l-1.493 56.48l1.494 26.396a2.784 2.784 0 0 0 2.789 2.79a2.784 2.784 0 0 0 2.79-2.79z" />
+    <path fill="url(#PVF3)" d="M76.003 25.301c-.1-1.295-1.096-2.39-2.39-2.39s-2.292.996-2.391 2.39l-1.694 56.081l1.694 26.795c0 1.295 1.096 2.291 2.39 2.291s2.292-.996 2.391-2.39l1.992-26.796z" />
+    <path fill="url(#PVJ1)" d="M86.761 23.409c0-1.395-1.195-2.59-2.59-2.59a2.57 2.57 0 0 0-2.59 2.59l-1.593 57.973l1.593 26.596c0 1.395 1.196 2.59 2.59 2.59c1.395 0 2.49-1.096 2.59-2.59l1.793-26.596z" />
+    <path fill="url(#PVu9)" d="M32.473 109.87c.797 0 1.395-.597 1.494-1.493l2.59-26.995l-2.59-27.89c-.1-.798-.697-1.495-1.494-1.495s-1.394.598-1.494 1.494l-2.291 27.891l2.291 26.995c0 .896.697 1.494 1.494 1.494" />
+    <path fill="url(#PVlH)" d="m120.828 81.482l-1.395-64.747c0-1.096-.597-2.092-1.494-2.69c-.498-.299-1.095-.598-1.793-.598c-.597 0-1.195.2-1.793.499c-.896.597-1.494 1.593-1.494 2.689v.598l-1.195 64.15l1.195 25.998v.1c0 .696.299 1.394.797 1.892c.598.697 1.494 1.195 2.49 1.195c.897 0 1.694-.398 2.291-.896c.598-.598.996-1.395.996-2.291l.1-2.59z" />
+    <path fill="url(#PVcG)" d="M44.327 55.483c-.1-.996-.797-1.693-1.694-1.693s-1.693.697-1.693 1.693l-2.092 25.9l2.092 27.193c.1.996.797 1.693 1.693 1.693c.897 0 1.694-.697 1.694-1.693l2.39-27.194z" />
+    <path fill="url(#PV9b)" d="M52.893 37.354c-.996 0-1.892.797-1.892 1.893l-1.992 42.135L51 108.576c.1 1.096.896 1.892 1.892 1.892s1.893-.796 1.893-1.892l2.291-27.194l-2.291-42.135c0-.996-.897-1.893-1.893-1.893" />
+    <path fill="url(#PVb7)" d="m65.245 108.576l2.092-27.094l-2.092-51.798c-.1-1.195-.996-2.092-2.191-2.092c-1.196 0-2.092.897-2.192 2.092L58.97 81.482l1.892 27.094c0 1.195.996 2.092 2.192 2.092c1.195.1 2.092-.897 2.191-2.092" />
+    <path fill="url(#PVwO)" d="M128.697 7.87a3.44 3.44 0 0 0-1.793-.499a3.48 3.48 0 0 0-2.191.797c-.797.598-1.295 1.594-1.295 2.69v.398l-1.395 70.325l.698 12.95l.697 12.65c0 1.893 1.594 3.387 3.486 3.387s3.387-1.594 3.487-3.486l1.494-25.6l-1.494-70.624c-.1-1.295-.698-2.391-1.694-2.989" />
+    <path fill="url(#PVOb)" d="M2.889 96.324c.498 0 .896-.399.996-.996l2.191-13.946l-2.191-14.145c-.1-.597-.498-.996-.996-.996a1 1 0 0 0-.996.996L0 81.382l1.893 13.946c0 .597.498.996.996.996" />
+    <path fill="url(#PVKp)" d="M12.352 104.79c.498 0 .996-.398 1.095-.995l2.89-22.413l-2.89-22.91c-.1-.598-.498-.997-1.095-.997c-.498 0-.996.399-1.096.997l-2.49 22.91l2.49 22.413c.1.597.498.996 1.096.996" />
+    <path fill="url(#PVg3)" d="M22.313 108.875c.697 0 1.195-.498 1.295-1.295l2.69-26.198l-2.69-27.194c-.1-.697-.598-1.295-1.295-1.295s-1.195.498-1.295 1.295l-2.39 27.194l2.39 26.198c.1.697.598 1.295 1.295 1.295" />
+    <path fill="url(#PVfg)" d="M223.626 48.012c-4.283 0-8.367.897-12.152 2.391C208.984 22.213 185.276 0 156.389 0a55.1 55.1 0 0 0-20.022 3.785c-2.39.897-2.988 1.893-2.988 3.686v99.511c0 1.893 1.494 3.387 3.387 3.586h86.96c17.332 0 31.378-13.846 31.378-31.178c-.1-17.332-14.145-31.378-31.478-31.378" />
   </svg>
 );
+
+const PasswordIcon = ({ password, size = 14 }: { password: string; size?: number }) => password === "dgddigital" ? (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M22 12a1 1 0 0 1-10 0 1 1 0 0 0-10 0" />
+    <path d="M7 20.7a1 1 0 1 1 5-8.7 1 1 0 1 0 5-8.6" />
+    <path d="M7 3.3a1 1 0 1 1 5 8.6 1 1 0 1 0 5 8.6" />
+    <circle cx="12" cy="12" r="10" />
+  </svg>
+) : password === "L0VE@12345" ? (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 128 128" aria-hidden="true">
+    <title>lovable</title>
+    <ellipse cx="52.738" cy="65.101" fill="#4b73ff" rx="81.373" ry="81.192" transform="translate(.92)scale(1.04949)" />
+    <ellipse cx="61.673" cy="20.547" fill="#ff66f4" rx="104.216" ry="81.192" transform="translate(.92)scale(1.04949)" />
+    <ellipse cx="78.666" cy="5.268" fill="#ff0105" rx="81.373" ry="71.304" transform="translate(.92)scale(1.04949)" />
+    <ellipse cx="63.121" cy="20.527" fill="#fe7b02" rx="48.937" ry="48.829" transform="translate(.92)scale(1.04949)" />
+    <defs>
+      <mask id="pmask"><path fill="white" fillRule="evenodd" d="M38.774 0C59.68 0 76.628 16.955 76.628 37.87v14.392h12.598c20.905 0 37.854 16.955 37.854 37.87c0 20.913-16.949 37.868-37.854 37.868H.92V37.87C.92 16.954 17.868 0 38.774 0" /></mask>
+    </defs>
+  </svg>
+) : null;
 
 const UnknownUserIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
@@ -297,13 +346,13 @@ export default function PoolsView() {
     <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
       <style>{`
         .pool-switch{display:inline-flex;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px}
-        .pool-switch button{padding:7px 14px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;min-height:36px}
+        .pool-switch button{padding:7px 14px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;min-height:36px;display:inline-flex;align-items:center;gap:6px}
         .pool-switch button.active{background:var(--bg);border-color:var(--border2);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.04)}
-        .badge{font-size:11px;font-weight:600;letter-spacing:.02em;padding:2px 7px;border-radius:999px;border:1px solid var(--border);background:var(--bg3);color:var(--text2)}
-        .badge.page{background:#fffbeb;color:#b45309;border-color:#fde68a}
+        .badge{font-size:11px;font-weight:600;letter-spacing:.02em;padding:2px 7px;border-radius:999px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);box-shadow:none;filter:none}
+        .badge.page{background:#fffbeb;color:#b45309;border-color:#fde68a;box-shadow:none;filter:none}
         .badge.taken{background:var(--bg3);color:var(--text3)}
         .admin-wrap{position:relative;display:inline-flex;flex-shrink:0}
-        .admin-dot{position:absolute;right:-3px;bottom:-3px;width:14px;height:14px;border-radius:50%;background:var(--blue);border:2px solid var(--bg);display:grid;place-items:center;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+        .admin-dot{position:absolute;right:-4px;bottom:-4px;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--bg);display:grid;place-items:center;color:#1d9bf0;box-shadow:0 1px 4px rgba(0,0,0,.15)}
         .taken-row td{position:relative}
         .taken-row td .cell-text{color:rgba(255,255,255,.72)!important}
         .user-row{cursor:pointer;transition:background .1s}
@@ -344,15 +393,19 @@ export default function PoolsView() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <div className="pool-switch" style={{ background: "#eef2ff", borderColor: "#ddd6fe" }}>
             {PASSWORDS.map((p) => (
-              <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}>{p}</button>
+              <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>
             ))}
           </div>
           <div className="pool-switch">
-            {POOL_TABS.map((t) => (
-              <button key={t.id} className={cur === t.id ? "active" : ""} onClick={() => go(curPwd, t.id)}>
-                {t.label} <span className="badge" style={{ marginLeft: 6 }}>{poolCounts[t.id] ?? 0}</span>
-              </button>
-            ))}
+            {POOL_TABS.map((t) => {
+              const meta = POOL_META[t.id];
+              const Icon = meta.Icon;
+              return (
+                <button key={t.id} className={cur === t.id ? "active" : ""} onClick={() => go(curPwd, t.id)}>
+                  <Icon size={14} />{t.label} <span className="badge" style={{ marginLeft: 2 }}>{poolCounts[t.id] ?? 0}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -470,7 +523,7 @@ export default function PoolsView() {
                 </span>
                 <span className="admin-wrap">
                   {u.photoUrl ? <img src={u.photoUrl} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "1.5px solid var(--border)" }} /> : <span style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--bg3)", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 14, border: "1.5px solid var(--border)", color: "var(--text2)" }}>{d.line1.charAt(0).toUpperCase()}</span>}
-                  {isAdmin ? <span className="admin-dot"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M5 13l4 4L19 7" /></svg></span> : null}
+                  {isAdmin ? <span className="admin-dot" aria-label="Verified admin" title="Verified"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fillRule="evenodd" d="M15.418 5.643a1.25 1.25 0 0 0-1.34-.555l-1.798.413a1.25 1.25 0 0 1-.56 0l-1.798-.413a1.25 1.25 0 0 0-1.34.555l-.98 1.564c-.1.16-.235.295-.395.396l-1.564.98a1.25 1.25 0 0 0-.555 1.338l.413 1.8a1.25 1.25 0 0 1 0 .559l-.413 1.799a1.25 1.25 0 0 0 .555 1.339l1.564.98c.16.1.295.235.396.395l.98 1.564c.282.451.82.674 1.339.555l1.798-.413a1.25 1.25 0 0 1 .56 0l1.799.413a1.25 1.25 0 0 0 1.339-.555l.98-1.564c.1-.16.235-.295.395-.395l1.565-.98a1.25 1.25 0 0 0 .554-1.34L18.5 12.28a1.25 1.25 0 0 1 0-.56l.413-1.799a1.25 1.25 0 0 0-.554-1.339l-1.565-.98a1.25 1.25 0 0 1-.395-.395zm-.503 4.127a.5.5 0 0 0-.86-.509l-2.615 4.426l-1.579-1.512a.5.5 0 1 0-.691.722l2.034 1.949a.5.5 0 0 0 .776-.107z" clipRule="evenodd"/></svg></span> : null}
                 </span>
                 <div className="pool-card-info">
                   <div className="pool-card-name">{d.line1}{uf ? <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 500 }}>{uf.files.length} file{uf.files.length !== 1 ? "s" : ""}</span> : null}</div>

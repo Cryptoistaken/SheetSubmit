@@ -7,11 +7,16 @@ export function genId(): string {
 }
 
 export function todayStr(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return y + "-" + m + "-" + day;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Dhaka",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return get("day") + " " + get("month") + " " + get("hour") + ":" + get("minute");
 }
 
 export interface ImportXlsxResult {

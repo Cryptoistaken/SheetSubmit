@@ -287,13 +287,21 @@ export default function HomePage() {
     const columns = COLUMN_PRESETS[pwModal.preset];
     const poolEnabled = password === "dgddigital";
     setPwModal(null);
-    const name = FILE_PRESET_NAMES[pwModal.preset] + " " + todayStr();
+    const base = FILE_PRESET_NAMES[pwModal.preset];
+    const date = todayStr();
     const current = files ?? (await api.getFiles());
-    let finalName = name;
-    if (current.some((f) => f.name === name)) {
-      let suffix = 2;
-      while (current.some((f) => f.name === name + " (" + suffix + ")")) suffix++;
-      finalName = name + " (" + suffix + ")";
+    const sameCount = current.filter((f) => {
+      const p = (f.preset ?? f.poolKind) as string | undefined;
+      if (p) return p === pwModal.preset;
+      return f.name.toLowerCase().startsWith(base.toLowerCase());
+    }).length;
+    let finalName = sameCount === 0 ? base + " " + date : base + " " + (sameCount + 1) + " " + date;
+    if (current.some((f) => f.name === finalName)) {
+      let n = sameCount + 1;
+      while (current.some((f) => f.name === finalName)) {
+        n++;
+        finalName = base + " " + n + " " + date;
+      }
     }
     const id = genId();
     try {

@@ -18,6 +18,16 @@ const EXPECT_VERSION = process.env.EXPECT_VERSION; // fail fast if live worker i
 const TEST_UID = process.env.TEST_UID || "8447133985";
 if (!SECRET) throw new Error("Set TEST_SESSION_SECRET before running this live test");
 
+// ── Filter: `bun scripts/TestApi.ts <f...>` or TEST_FILTER="<f...>" (space/comma-separated).
+// Each filter is a test number (90), range (55-70), or case-insensitive name substring (claim).
+// Numbers are stable file order (shown in output). Stateful tests need their setup tests — include those ranges too.
+const FILTER_ARG = (process.env.TEST_FILTER || process.argv.slice(2).map((a) => a.replace(/^-+/, "").replace(/^(filter|only|grep)=/, "")).join(" ")).trim();
+const FILTERS = FILTER_ARG.split(/[,\s]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+if (FILTERS.includes("h") || FILTERS.includes("help")) {
+  console.log(`Usage: bun scripts/TestApi.ts [number|range|substring ...]\n  bun scripts/TestApi.ts 90-97       # only tests 90–97\n  bun scripts/TestApi.ts claim pools # any test with "claim" or "pools" in the name\n  TEST_FILTER=archive bun scripts/TestApi.ts`);
+  process.exit(0);
+}
+
 // ── HMAC session signer (mirrors worker/src/lib/session.ts) ──
 const enc = new TextEncoder();
 const b64 = (v: ArrayBuffer | string) =>
@@ -33,21 +43,30 @@ async function signSession(uid: string): Promise<string> {
 }
 
 // ── Test runner ──
-let passed = 0, failed = 0, total = 0;
+let passed = 0, failed = 0, total = 0, seq = 0, skipped = 0;
 const results: string[] = [];
+const matchFilter = (name: string, id: number) =>
+  !FILTERS.length || FILTERS.some((f) => {
+    const m = f.match(/^(\d+)-(\d+)$/);
+    if (m) return id >= +m[1] && id <= +m[2];
+    if (/^\d+$/.test(f)) return id === +f;
+    return name.toLowerCase().includes(f);
+  });
 
 async function test(name: string, fn: () => Promise<{ ok: boolean; detail?: string }>) {
+  const id = ++seq;
+  if (!matchFilter(name, id)) { skipped++; return; }
   total++;
   const t0 = Date.now();
   try {
     const r = await fn();
     const ms = Date.now() - t0;
-    if (r.ok) { passed++; results.push(`\x1b[32m✅ PASS\x1b[0m  ${String(total).padStart(2)}. ${name} \x1b[90m(${ms}ms)\x1b[0m`); }
-    else { failed++; results.push(`\x1b[31m❌ FAIL\x1b[0m  ${String(total).padStart(2)}. ${name} \x1b[90m(${ms}ms)\x1b[0m\n         ${r.detail ?? ""}`); }
+    if (r.ok) { passed++; results.push(`\x1b[32m✅ PASS\x1b[0m  ${String(id).padStart(2)}. ${name} \x1b[90m(${ms}ms)\x1b[0m`); }
+    else { failed++; results.push(`\x1b[31m❌ FAIL\x1b[0m  ${String(id).padStart(2)}. ${name} \x1b[90m(${ms}ms)\x1b[0m\n         ${r.detail ?? ""}`); }
   } catch (e) {
     const ms = Date.now() - t0;
     failed++;
-    results.push(`\x1b[31m❌ ERROR\x1b[0m ${String(total).padStart(2)}. ${name} \x1b[90m(${ms}ms)\x1b[0m\n         ${e instanceof Error ? e.message : String(e)}`);
+    results.push(`\x1b[31m❌ ERROR\x1b[0m ${String(id).padStart(2)}. ${name} \x1b[90m(${ms}ms)\x1b[0m\n         ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
@@ -995,7 +1014,8 @@ const run = async () => {
 
   // ── Summary ──
   console.log("\n" + results.join("\n") + "\n");
-  console.log(`\x1b[1mResults: \x1b[32m${passed} passed\x1b[0m, \x1b[31m${failed} failed\x1b[0m, ${total} total\n`);
+  console.log(`\x1b[1mResults: \x1b[32m${passed} passed\x1b[0m, \x1b[31m${failed} failed\x1b[0m, ${total} total` + (FILTERS.length ? ` (filter: "${FILTER_ARG}", ${skipped} skipped)` : ``) + `\n`);
+  if (!total && FILTERS.length) console.log(`No tests matched — run with --help for usage.\n`);
   process.exit(failed > 0 ? 1 : 0);
 };
 

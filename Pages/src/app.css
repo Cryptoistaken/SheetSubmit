@@ -431,7 +431,7 @@ button, input, select, textarea {
     flex-shrink: 0;
     margin: 2px 2px 2px 0;
     order: 3;
-    background: #d4440f;
+    background: var(--green);
 }
 .avatar-ring.show {
     display: block;

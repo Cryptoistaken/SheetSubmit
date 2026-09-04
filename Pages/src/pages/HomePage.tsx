@@ -34,7 +34,7 @@ import { COLUMN_PRESETS, fileTypeDef, FILE_PRESET_NAMES } from "@/lib/types";
 import type { FilePreset, FileType, SheetFile } from "@/lib/types";
 import { downloadXlsx, genId, hydrateWaCache, importXlsx, todayStr } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
-import { CakephpIcon, ObsidianIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
+import { CakephpIcon, CookieIcon, ObsidianIcon, PageIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, TwoFaIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
 
 type Tab = "files" | "archive" | "wallet" | "pools" | "admin" | "tools";
 
@@ -317,6 +317,14 @@ export default function HomePage() {
   const createFile = async (preset: FilePreset) => openCreatePw("fb_cookie", preset);
 
   const [uploadPending, setUploadPending] = useState<null | { id: string; name: string; type: FileType; rows: import("@/lib/types").Row[]; dataCount: number; cacheReady: Promise<void> }>(null);
+  const [typePick, setTypePick] = useState<null | { has2fa: boolean; pageHint: boolean }>(null);
+
+  const pickUploadType = (preset: FilePreset) => {
+    if (!uploadPending) return;
+    setTypePick(null);
+    const isLoveName = uploadPending.name.toLowerCase().includes("love");
+    setPwModal({ type: uploadPending.type, preset, choice: isLoveName ? "L0VE@12345" : "dgddigital", custom: "" });
+  };
 
   const doUploadWithPassword = async (password: string) => {
     if (!uploadPending) return;
@@ -326,7 +334,7 @@ export default function HomePage() {
     setPwModal(null);
     await uploadPending.cacheReady;
     try {
-      await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: password === "dgddigital", rows, dataCount });
+      await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: password === "dgddigital", rows, dataCount, columns: COLUMN_PRESETS[preset] });
     } catch {
       showToast("Could not import file. Check your file and try again.");
       return;
@@ -340,11 +348,13 @@ export default function HomePage() {
       const buf = await file.arrayBuffer();
       const current = files ?? (await api.getFiles());
       const result = await importXlsx(buf, file.name, current);
-      const isLoveName = result.name.toLowerCase().includes("love");
-      // ask password before creating uploaded file — 2 cards, auto-pick L0VE if name contains Love
-       const cacheReady = hydrateWaCache(result.rows);
-       setUploadPending({ id: result.id, name: result.name, type: result.type, rows: result.rows, dataCount: result.dataCount, cacheReady });
-      setPwModal({ type: result.type, preset: "page", choice: isLoveName ? "L0VE@12345" : "dgddigital", custom: "" });
+      // ask file type first, then password — L0VE preselect if name contains Love
+      const cacheReady = hydrateWaCache(result.rows);
+      setUploadPending({ id: result.id, name: result.name, type: result.type, rows: result.rows, dataCount: result.dataCount, cacheReady });
+      setTypePick({
+        has2fa: result.rows.some((r) => String(r.twofakey ?? "").trim() !== ""),
+        pageHint: result.name.toLowerCase().includes("page"),
+      });
     } catch {
       showToast("Could not import file. Check your file and try again.");
     }
@@ -540,6 +550,33 @@ export default function HomePage() {
             <button className="btn btn-primary" onClick={commitRename}>
               Rename
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div className={`modal-overlay${typePick ? " open" : ""}`} onClick={(e) => { if (e.target === e.currentTarget) { setTypePick(null); setUploadPending(null); } }}>
+        <div className="modal-box" role="dialog" aria-modal="true" aria-label="Choose file type" style={{ width: 300 }}>
+          <div className="modal-title">Choose file type</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 10 }}>
+            {([
+              { preset: "cookie" as FilePreset, name: "Cookie", desc: "cookies and uid", Icon: CookieIcon },
+              { preset: "combo" as FilePreset, name: "2fa", desc: "cookies and 2fa and uid", Icon: TwoFaIcon },
+              { preset: "page" as FilePreset, name: "Page", desc: "full columns", Icon: PageIcon },
+            ] as const).filter((o) => !typePick?.has2fa || o.preset !== "cookie").map((o) => {
+              const detected = typePick && ((o.preset === "cookie" && !typePick.has2fa) || (o.preset === "combo" && typePick.has2fa) || (o.preset === "page" && typePick.pageHint));
+              return (
+                <button className="home-fab-item" key={o.preset} onClick={() => pickUploadType(o.preset)}>
+                  <span className="home-fab-ic" style={{ background: "var(--bg3)", color: "var(--text)" }}><o.Icon size={15} /></span>
+                  <span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span className="home-fab-name">{o.name}</span>
+                      {detected ? <span style={{ fontSize: 10, fontWeight: 600, color: "var(--green)", background: "var(--green-bg)", padding: "1px 6px", borderRadius: 999 }}>Detected</span> : null}
+                    </span>
+                    <span className="home-fab-desc">{o.desc}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

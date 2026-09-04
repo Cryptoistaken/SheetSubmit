@@ -132,7 +132,7 @@ export default function FileCard({
       ? { background: "transparent", color: "#2563eb", border: "1px solid transparent" }
       : { background: "var(--bg3)", color: "var(--text2)" };
   const sq = (bg: string, title: string) => (
-    <span title={title} style={{ width: 10, height: 10, borderRadius: 2, background: bg, border: "1px solid var(--border)", flexShrink: 0 }} />
+    <span title={title} style={{ width: 10, height: 10, borderRadius: 3, background: bg, border: "1px solid var(--border)", flexShrink: 0 }} />
   );
 
   return (
@@ -159,12 +159,8 @@ export default function FileCard({
         <FileIcon size={16} />
       </div>
       {recent ? (
-        <span
-          title="Most recently modified"
-          style={{ position: "absolute", top: 24, left: 54, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color: "var(--green)", background: "var(--green-bg)", padding: "2px 7px", borderRadius: 999, letterSpacing: "-0.01em" }}
-        >
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)" }} />
-          Recent
+        <span title="Most recently modified file" style={{ position: "absolute", top: 0, left: 0, fontSize: 9, fontWeight: 600, color: "var(--text2)", background: "var(--bg3)", padding: "2px 6px", borderBottomRightRadius: 6, letterSpacing: "-0.01em" }}>
+          Last Modified
         </span>
       ) : null}
       <div className="file-card-name">{file.name}</div>

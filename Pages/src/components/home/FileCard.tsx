@@ -191,7 +191,7 @@ export default function FileCard({
   const pwStyle: React.CSSProperties = isCustom
     ? { background: "var(--fb-bg)", color: "var(--fb)" }
     : pw === "dgddigital"
-      ? { background: "#dbeafe", color: "#1d4ed8" }
+      ? { background: "transparent", color: "#2563eb", border: "1px solid transparent" }
       : { background: "var(--bg3)", color: "var(--text2)" };
 
   return (

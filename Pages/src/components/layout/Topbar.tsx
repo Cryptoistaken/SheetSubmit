@@ -215,7 +215,9 @@ export default function Topbar() {
             <WorkspaceIcon size={14} />
           </span>
           <span className="profile-pill-divider"></span>
-          <img className="user-btn-avatar" src={user.photoUrl ?? ""} alt="" style={{ borderColor: ringColor, color: ringColor }} />
+          <span className="avatar-ring" style={{ background: ringColor, color: ringColor }}>
+            <img src={user.photoUrl ?? ""} alt="" />
+          </span>
         </button>
         <div ref={panelRef} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
           <div className="gear-user-card">

@@ -425,23 +425,47 @@ button, input, select, textarea {
 .profile-btn .gear-icon {
     display: none;
 }
-.user-btn-avatar {
+.avatar-ring {
+    position: relative;
+    display: none;
     width: 26px;
     height: 26px;
-    object-fit: cover;
-    display: none;
     border-radius: 50%;
-    border: 2px solid #d4440f;
+    padding: 2px;
+    overflow: hidden;
     flex-shrink: 0;
     margin: 2px 2px 2px 0;
     order: 3;
-    animation: profileRingGlow 2.4s ease-in-out infinite;
+    background: #d4440f;
+    animation: profileRingGlow 3s ease-in-out infinite;
+}
+.profile-btn.loaded .avatar-ring {
+    display: block;
+}
+.avatar-ring::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: conic-gradient(from 0deg, transparent 0 68%, rgba(255,255,255,.95) 80%, transparent 92%);
+    animation: ringOrbit 3s linear infinite;
+}
+@keyframes ringOrbit {
+    0% { transform: rotate(0); opacity: 0; }
+    5% { opacity: 1; }
+    40% { transform: rotate(-360deg); opacity: 1; }
+    45%, 100% { transform: rotate(-360deg); opacity: 0; }
+}
+.avatar-ring img {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
 }
 @media (prefers-reduced-motion: reduce) {
-    .user-btn-avatar { animation: none; }
-}
-.profile-btn.loaded .user-btn-avatar {
-    display: block;
+    .avatar-ring, .avatar-ring::before { animation: none; }
 }
 
 /* ── Settings panel ── */

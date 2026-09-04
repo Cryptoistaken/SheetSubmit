@@ -296,16 +296,14 @@ export default function HomePage() {
       finalName = name + " (" + suffix + ")";
     }
     const id = genId();
-    let created: import("@/lib/types").SheetFile;
     try {
-      created = await api.createFile({ id, name: finalName, type, preset: pwModal.preset, poolKind: pwModal.preset, password, poolEnabled, columns });
+      await api.createFile({ id, name: finalName, type, preset: pwModal.preset, poolKind: pwModal.preset, password, poolEnabled, columns });
     } catch {
       showToast("Could not create file. Check your connection.");
       return;
     }
     showToast(fileTypeDef(type).label + " file created");
-    if (useBubbleStore.getState().pickMode) { loadFiles(); return; }
-    navigate("/file/" + created.id);
+    loadFiles();
   };
 
   const createFile = async (preset: FilePreset) => openCreatePw("fb_cookie", preset);
@@ -319,16 +317,14 @@ export default function HomePage() {
     setUploadPending(null);
     setPwModal(null);
     await uploadPending.cacheReady;
-    let created: import("@/lib/types").SheetFile;
     try {
-      created = await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: password === "dgddigital", rows, dataCount });
+      await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: password === "dgddigital", rows, dataCount });
     } catch {
       showToast("Could not import file. Check your file and try again.");
       return;
     }
     showToast("Imported " + dataCount + " rows");
-    if (useBubbleStore.getState().pickMode) { loadFiles(); return; }
-    navigate("/file/" + created.id);
+    loadFiles();
   };
 
   const uploadFile = async (file: File) => {
@@ -551,10 +547,10 @@ export default function HomePage() {
               <button
                 key={c.id}
                 className="file-card"
-                style={{ display: "flex", gap: 10, textAlign: "center", padding: 14, minHeight: 56, justifyContent: "center", alignItems: "center", borderColor: "var(--border2)" }}
+                style={{ display: "flex", flexDirection: "row", gap: 12, textAlign: "left", padding: "14px 16px", minHeight: 56, justifyContent: "flex-start", alignItems: "center", borderColor: "var(--border2)" }}
                 onClick={() => { if (uploadPending) doUploadWithPassword(c.id); else createWithPassword(c.id); }}
               >
-                <PasswordIcon password={c.id} size={18} />
+                <span style={{ display: "inline-flex", flexShrink: 0 }}><PasswordIcon password={c.id} size={18} /></span>
                 <span className="file-card-name" style={{ fontSize: 13, fontWeight: 600 }}>{c.id}</span>
               </button>
             ))}

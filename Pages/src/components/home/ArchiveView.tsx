@@ -1,14 +1,12 @@
-import { RotateCcw, Trash2 } from "lucide-react";
-import { CookieIcon, PageIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
-import { fileTypeDef } from "@/lib/types";
 import type { ArchiveFile } from "@/lib/types";
 
 import EmptyState from "./EmptyState";
+import FileCard from "./FileCard";
 
 export default function ArchiveView() {
   const [archived, setArchived] = useState<ArchiveFile[] | null>(null);
@@ -128,71 +126,19 @@ export default function ArchiveView() {
               0,
               30 - Math.floor((Date.now() - (f.deletedAt || 0)) / 86400000),
             );
-            const presetKind = (f as unknown as { preset?: string; poolKind?: string }).preset ?? (f as unknown as { poolKind?: string }).poolKind;
-            const FileIcon = presetKind
-              ? presetKind === "page"
-                ? PageIcon
-                : presetKind === "combo"
-                  ? TwoFaIcon
-                  : CookieIcon
-              : f.name.toLowerCase().startsWith("cookie")
-                ? CookieIcon
-                : f.name.toLowerCase().startsWith("2fa")
-                  ? TwoFaIcon
-                  : f.name.toLowerCase().startsWith("page")
-                    ? PageIcon
-                    : CookieIcon;
             return (
-              <div
+              <FileCard
                 key={f.id}
-                className={`file-card${selected.has(f.id) ? " selected" : ""}`}
-                role="button"
-                tabIndex={0}
-                style={{ userSelect: "none", WebkitUserSelect: "none", touchAction: "manipulation" } as React.CSSProperties}
-                onClick={() => handleCardSelect(f.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    handleCardSelect(f.id);
-                  }
-                }}
-              >
-                <div className="file-card-icon">
-                  <FileIcon size={16} />
-                </div>
-                <div className="file-card-name" style={{ opacity: 0.7 }}>
-                  {f.name}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
-                  <span className="file-type-badge t-fb">{fileTypeDef(f.type).badge}</span>
-                  {(() => { const pw = (f as ArchiveFile).password ?? "dgddigital"; const isCust = pw !== "dgddigital" && pw !== "L0VE@12345"; const lbl = pw === "dgddigital" ? "dgd" : pw === "L0VE@12345" ? "L0VE" : pw.slice(0, 8); const st: React.CSSProperties = isCust ? { background: "var(--fb-bg)", color: "var(--fb)" } : pw === "L0VE@12345" ? { background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" } : { background: "var(--bg3)", color: "var(--text2)" }; return <span className="file-type-badge" style={{ ...st, fontSize: 10, padding: "2px 6px" } as React.CSSProperties} title={pw}>{lbl}</span>; })()}
-                  <span className="file-card-meta">{daysLeft} days left</span>
-                </div>
-                <div className="file-card-actions">
-                  <button
-                    className="file-card-btn archive-restore"
-                    title="Restore"
-                    aria-label="Restore"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      restoreOne(f.id);
-                    }}
-                  >
-                    <RotateCcw size={14} />
-                  </button>
-                  <button
-                    className="file-card-btn archive-del"
-                    title="Delete permanently"
-                    aria-label="Delete permanently"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteOne(f.id);
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
+                file={f}
+                selected={selected.has(f.id)}
+                selectionMode={selectionMode}
+                disableOpen
+                daysLeft={daysLeft}
+                onRestore={() => restoreOne(f.id)}
+                onDelete={() => deleteOne(f.id)}
+                onToggleSelect={() => handleCardSelect(f.id)}
+                onHoldSelect={() => handleCardSelect(f.id)}
+              />
             );
           })}
         </div>

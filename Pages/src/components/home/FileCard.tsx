@@ -1,4 +1,4 @@
-import { Download, Pencil, Trash2 } from "lucide-react";
+import { Download, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { CookieIcon, PageIcon, PasswordIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
 import { useEffect, useRef } from "react";
 
@@ -11,12 +11,15 @@ interface FileCardProps {
   crossDupCount?: number;
   selected?: boolean;
   selectionMode?: boolean;
-  onOpen: () => void;
-  onDownload: () => void;
-  onRename: () => void;
+  onOpen?: () => void;
+  onDownload?: () => void;
+  onRename?: () => void;
   onDelete: () => void;
+  onRestore?: () => void;
   onToggleSelect: () => void;
   onHoldSelect: () => void;
+  disableOpen?: boolean;
+  daysLeft?: number;
 }
 
 export default function FileCard({
@@ -28,8 +31,11 @@ export default function FileCard({
   onDownload,
   onRename,
   onDelete,
+  onRestore,
   onToggleSelect,
   onHoldSelect,
+  disableOpen = false,
+  daysLeft,
 }: FileCardProps) {
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heldRef = useRef(false);
@@ -73,12 +79,18 @@ export default function FileCard({
     }
   };
 
+  const doOpen = () => {
+    if (disableOpen) onToggleSelect();
+    else if (onOpen) onOpen();
+    else onToggleSelect();
+  };
+
   const onPointerUp = () => {
     const held = heldRef.current;
     clearHold();
     if (held || movedRef.current) return;
     if (selectionMode) onToggleSelect();
-    else onOpen();
+    else doOpen();
     suppressClickRef.current = true;
     setTimeout(() => {
       suppressClickRef.current = false;
@@ -89,7 +101,7 @@ export default function FileCard({
     if (suppressClickRef.current) return;
     if (heldRef.current || movedRef.current) return;
     if (selectionMode) onToggleSelect();
-    else onOpen();
+    else doOpen();
   };
 
   const count = file.dataCount ?? file.rowCount ?? 0;
@@ -134,7 +146,7 @@ export default function FileCard({
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           if (selectionMode) onToggleSelect();
-          else onOpen();
+          else doOpen();
         }
       }}
     >
@@ -153,39 +165,64 @@ export default function FileCard({
               <span className="cd-badge">{crossDupCount} dup</span>
             </>
           ) : null}
+          {daysLeft !== undefined ? (
+            <>
+              {" · "}
+              {daysLeft} days left
+            </>
+          ) : null}
         </span>
       </div>
       <div className="file-card-actions">
-        <button
-          className="file-card-btn file-card-dl"
-          title="Download"
-          aria-label="Download"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDownload();
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onPointerUp={(e) => e.stopPropagation()}
-        >
-          <Download size={14} />
-        </button>
-        <button
-          className="file-card-btn file-card-rename"
-          title="Rename"
-          aria-label="Rename"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRename();
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onPointerUp={(e) => e.stopPropagation()}
-        >
-          <Pencil size={14} />
-        </button>
+        {onRestore ? (
+          <button
+            className="file-card-btn archive-restore"
+            title="Restore"
+            aria-label="Restore"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRestore();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
+            <RotateCcw size={14} />
+          </button>
+        ) : null}
+        {onDownload ? (
+          <button
+            className="file-card-btn file-card-dl"
+            title="Download"
+            aria-label="Download"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDownload();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
+            <Download size={14} />
+          </button>
+        ) : null}
+        {onRename ? (
+          <button
+            className="file-card-btn file-card-rename"
+            title="Rename"
+            aria-label="Rename"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRename();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
+            <Pencil size={14} />
+          </button>
+        ) : null}
         <button
           className="file-card-btn file-card-del"
-          title="Delete"
-          aria-label="Delete"
+          title={onRestore ? "Delete permanently" : "Delete"}
+          aria-label={onRestore ? "Delete permanently" : "Delete"}
           onClick={(e) => {
             e.stopPropagation();
             onDelete();

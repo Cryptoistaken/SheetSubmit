@@ -44,11 +44,11 @@ export function buildDownloadOpts(rows: Row[], columns: ColumnDef[]): DownloadOp
     },
     {
       key: "combo",
-      label: "Cookie + 2FA",
+      label: "Cookie & 2FA",
       className: "btn-violet",
       count: combo,
       filter: (r) => !!(r.status === "good" && r.cookies && r.twofakey),
-      suffix: " (Cookie + 2FA)",
+      suffix: " (Cookie & 2FA)",
     },
     {
       key: "onlycookie",

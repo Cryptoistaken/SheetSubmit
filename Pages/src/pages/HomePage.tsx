@@ -34,7 +34,7 @@ import { COLUMN_PRESETS, fileTypeDef, FILE_PRESET_NAMES } from "@/lib/types";
 import type { FilePreset, FileType, SheetFile } from "@/lib/types";
 import { downloadXlsx, genId, hydrateWaCache, importXlsx, todayStr } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
-import { CakephpIcon, ObsidianIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, WakuIcon } from "@/components/icons/FileTypeIcons";
+import { CakephpIcon, ObsidianIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, WakuIcon } from "@/components/icons/FileTypeIcons";
 
 type Tab = "files" | "archive" | "pools" | "admin" | "tools";
 
@@ -535,9 +535,10 @@ export default function HomePage() {
               <button
                 key={c.id}
                 className="file-card"
-                style={{ textAlign: "center", padding: 14, minHeight: 56, justifyContent: "center", alignItems: "center", borderColor: "var(--border2)" }}
+                style={{ display: "flex", gap: 10, textAlign: "center", padding: 14, minHeight: 56, justifyContent: "center", alignItems: "center", borderColor: "var(--border2)" }}
                 onClick={() => { if (uploadPending) doUploadWithPassword(c.id); else createWithPassword(c.id); }}
               >
+                <PasswordIcon password={c.id} size={18} />
                 <span className="file-card-name" style={{ fontSize: 13, fontWeight: 600 }}>{c.id}</span>
               </button>
             ))}

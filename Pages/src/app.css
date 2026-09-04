@@ -395,14 +395,6 @@ button, input, select, textarea {
 .profile-btn:hover {
     color: var(--text);
 }
-.profile-ring {
-    position: absolute;
-    inset: 0;
-    width: 32px;
-    height: 32px;
-    pointer-events: none;
-    animation: profileRingGlow 1.6s ease 3s 1;
-}
 .profile-currency {
     position: absolute;
     bottom: -6px;
@@ -440,7 +432,9 @@ button, input, select, textarea {
     object-fit: cover;
     display: none;
     border-radius: 50%;
-    border: 1.5px solid var(--border);
+    border: 2px solid currentColor;
+    color: var(--border);
+    animation: profileRingGlow 1.6s ease 3s 1;
 }
 .profile-btn.loaded .user-btn-avatar {
     display: block;
@@ -821,7 +815,7 @@ button, input, select, textarea {
     right: 24px;
     width: 48px;
     height: 48px;
-    border-radius: 50%;
+    border-radius: 12px;
     background: var(--text);
     color: var(--bg);
     border: none;
@@ -839,7 +833,7 @@ button, input, select, textarea {
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: 50%;
+    border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     transition: opacity 0.15s;
     pointer-events: none;
@@ -851,7 +845,7 @@ button, input, select, textarea {
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: 50%;
+    border-radius: 12px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
     opacity: 0;
     transition: opacity 0.15s;

@@ -1,4 +1,5 @@
-import { Archive, RotateCcw, Trash2 } from "lucide-react";
+import { RotateCcw, Trash2 } from "lucide-react";
+import { CookieIcon, PageIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
@@ -127,6 +128,20 @@ export default function ArchiveView() {
               0,
               30 - Math.floor((Date.now() - (f.deletedAt || 0)) / 86400000),
             );
+            const presetKind = (f as unknown as { preset?: string; poolKind?: string }).preset ?? (f as unknown as { poolKind?: string }).poolKind;
+            const FileIcon = presetKind
+              ? presetKind === "page"
+                ? PageIcon
+                : presetKind === "combo"
+                  ? TwoFaIcon
+                  : CookieIcon
+              : f.name.toLowerCase().startsWith("cookie")
+                ? CookieIcon
+                : f.name.toLowerCase().startsWith("2fa")
+                  ? TwoFaIcon
+                  : f.name.toLowerCase().startsWith("page")
+                    ? PageIcon
+                    : CookieIcon;
             return (
               <div
                 key={f.id}
@@ -142,8 +157,8 @@ export default function ArchiveView() {
                   }
                 }}
               >
-                <div className="file-card-icon" style={{ opacity: 0.5 }}>
-                  <Archive size={16} />
+                <div className="file-card-icon">
+                  <FileIcon size={16} />
                 </div>
                 <div className="file-card-name" style={{ opacity: 0.7 }}>
                   {f.name}

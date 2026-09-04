@@ -561,7 +561,7 @@ const run = async () => {
   });
 
   // ── Preset-aware file creation & pool routing ──
-  const uniq = () => String(Date.now()).slice(-7) + String(Math.floor(Math.random()*90+10));
+  const uniq = () => String(Date.now()).slice(-6) + String(Math.floor(Math.random()*90+10));
   const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
   let cookiePresetFileId = "";
   let comboPresetFileId = "";

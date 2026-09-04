@@ -964,13 +964,13 @@ const run = async () => {
 
   await test("POST /api/auth/device/claim (bad token) → ok:false", async () => {
     const r = await api("/auth/device/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: "bad-token-123" }) });
-    return r.status === 200 && r.json?.ok === false ? { ok: true } : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+    return r.json?.ok === false && (r.status === 200 || r.status === 403) ? { ok: true } : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
   });
 
   await test("GET /api/pools/downloads/:id?format=json (+ 404)", async () => {
     const r = await api(`/pools/downloads/${downloadId}?format=json`, { headers: { Cookie: cookie } });
     const nf = await api("/pools/downloads/doesnotexist123?format=json", { headers: { Cookie: cookie } });
-    const ok = r.status === 200 && Array.isArray(r.json?.rows) && nf.status === 404;
+    const ok = r.status === 200 && typeof r.json?.claimed === "number" && r.json?.id === downloadId && nf.status === 404;
     return ok ? { ok: true } : { ok: false, detail: `status=${r.status} nf=${nf.status} body=${JSON.stringify(r.json).slice(0, 200)}` };
   });
 

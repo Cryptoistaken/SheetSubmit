@@ -10,11 +10,52 @@ import {
   type SheetFile,
   type WaCacheEntry,
 } from "@/lib/types";
-import { getFileBehavior } from "@/features/filetypes";
+import { getFileBehavior, isPageFile } from "@/features/filetypes";
 import { toast } from "@/lib/toast";
 import { vibrate } from "@/lib/utils";
 import { IS_DESKTOP } from "@/lib/device";
 import { getCachedTOTP } from "@/features/filetypes/totp";
+
+// ── Page-check ledger (device only, per file, keyed by c_user) ──
+type LedgerEntry = { p: number; w: boolean };
+type Ledger = Record<string, LedgerEntry>;
+function ledgerKey(fileId: string): string {
+  return `ss_pageLedger:${fileId}`;
+}
+function loadLedger(fileId: string | null): Ledger {
+  if (!fileId) return {};
+  try {
+    const raw = localStorage.getItem(ledgerKey(fileId));
+    if (!raw) return {};
+    const j = JSON.parse(raw);
+    return j && typeof j === "object" ? (j as Ledger) : {};
+  } catch {
+    return {};
+  }
+}
+function saveLedger(fileId: string | null, ledger: Ledger): void {
+  if (!fileId) return;
+  try {
+    localStorage.setItem(ledgerKey(fileId), JSON.stringify(ledger));
+  } catch {
+    // ignore
+  }
+}
+function resetLedgerEntry(fileId: string | null, cuser: string | null | undefined): void {
+  if (!fileId || !cuser) return;
+  const ledger = loadLedger(fileId);
+  if (ledger[cuser]) {
+    delete ledger[cuser];
+    saveLedger(fileId, ledger);
+  }
+}
+function extractCUser(cookies: string | null | undefined): string | null {
+  if (!cookies) return null;
+  const m = cookies.match(/c_user=(\d+)/);
+  return m ? m[1] : null;
+}
+// pending trigger for auto sweep exclusion
+let pendingAutoTriggerRow: number | null = null;
 
 
 export interface CellDelta {
@@ -338,11 +379,12 @@ export interface SheetState {
     wa: { status: string; banReason?: string | null } | null;
   } | null;
   toggleVisibleCol: (colKey: string) => void;
-  runCheck: () => Promise<void>;
+  runCheck: (triggerRowIdx?: number) => Promise<void>;
   runWaChecks: () => Promise<void>;
   runWaChecksFiltered: (filter: (row: Row, idx: number) => boolean) => Promise<void>;
   runWaChecksWaFiltered: (filter: (row: Row, idx: number) => boolean) => Promise<void>;
-  maybeAutoCheck: (rowIdx: number, colKey: string) => void;
+  maybeAutoCheck: (rowIdx: number | null | undefined, colKey: string) => void;
+  _pageSweepCore?: (mode: "auto-page" | "manual-page" | "manual-wa", filter?: (row: Row, idx: number) => boolean, excludeIdx?: number | null) => Promise<void>;
   restoreVersion: (v: number) => Promise<boolean>;
   mergeRows: (incoming: Row[]) => void;
   applyUpload: (mode: "replace" | "append", incoming: Row[]) => void;
@@ -408,7 +450,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   openFile: async (id) => {
     const seq = ++openSeq;
-    set({ status: "loading", adminMode: false, adminOwnerId: null });
+    pendingAutoTriggerRow = null;
+    set({ status: "loading", adminMode: false, adminOwnerId: null, pendingAutoCheck: false });
     try {
       const [full, crossDups] = await Promise.all([
         api.getFileFull(id),
@@ -469,6 +512,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   closeFile: async () => {
     openSeq++;
+    pendingAutoTriggerRow = null;
+    set({ pendingAutoCheck: false });
     const st = get();
     if (st.selectedCell && (st.qebOpen || st.inlineEdit)) {
       const rows = st.rows.slice();
@@ -517,7 +562,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   openFileAdmin: async (id, ownerId) => {
     const seq = ++openSeq;
-    set({ status: "loading", adminMode: true, adminOwnerId: ownerId });
+    pendingAutoTriggerRow = null;
+    set({ status: "loading", adminMode: true, adminOwnerId: ownerId, pendingAutoCheck: false });
     try {
       const [f, rowsRes, logsRes, undoData] = await Promise.all([
         api.adminFile(id),
@@ -606,6 +652,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (row._taken) return;
     const prevVal = row[colKey] ?? "";
     if (value === prevVal) return;
+    if (colKey === "cookies" && isPageFile(s.file)) {
+      const newCUser = extractCUser(value);
+      if (newCUser) resetLedgerEntry(s.fileId, newCUser);
+    }
     const prevRow = { ...row };
     const newRows = s.rows.slice();
     newRows[rowIdx] = { ...row, [colKey]: value };
@@ -1453,7 +1503,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     }
   },
 
-  runCheck: async () => {
+
+  runCheck: async (triggerRowIdx?: number) => {
     const s = get();
     if (s.checkRunning) return;
     if (s.hasDuplicates) {
@@ -1466,6 +1517,30 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     }
     const behavior = getFileBehavior(s.file?.type ?? "fb_cookie");
     if (!behavior?.checkAccounts) return;
+    const uidOn = localStorage.getItem("ss_autoCheck") !== "false";
+    const isPage = isPageFile(s.file);
+    const pageOn = localStorage.getItem("ss_waCheck") === "true";
+    const waOn = localStorage.getItem("ss_checkWa") === "true";
+    const shouldDoUid = uidOn;
+    const shouldDispatchPageWa = isPage && (pageOn || waOn);
+    if (!shouldDoUid && !shouldDispatchPageWa) return;
+    const dispatchPageWa = () => {
+      const curIsPage = isPageFile(get().file);
+      if (!curIsPage) return;
+      const curPageOn = localStorage.getItem("ss_waCheck") === "true";
+      const curWaOn = localStorage.getItem("ss_checkWa") === "true";
+      const isAuto = triggerRowIdx != null;
+      if (isAuto) {
+        if (curPageOn) void (get() as unknown as { _pageSweepCore: (m: string, f?: unknown, e?: unknown) => Promise<void> })._pageSweepCore("auto-page", undefined, triggerRowIdx);
+      } else {
+        if (curPageOn) void (get() as unknown as { _pageSweepCore: (m: string, f?: unknown, e?: unknown) => Promise<void> })._pageSweepCore("manual-page");
+        else if (curWaOn) void (get() as unknown as { _pageSweepCore: (m: string, f?: unknown, e?: unknown) => Promise<void> })._pageSweepCore("manual-wa");
+      }
+    };
+    if (!shouldDoUid) {
+      dispatchPageWa();
+      return;
+    }
     const rows = s.rows.map((r) => ({ ...r }));
     rows.forEach((row) => {
       const isEmpty = s.columns.every((c) => !row[c.key]);
@@ -1475,36 +1550,38 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     try {
       const result = await behavior.checkAccounts(rows);
       const showSummary = () => {
+        const doToast = () => {
+          if (
+            typeof document !== "undefined" &&
+            document.body.classList.contains("bubble-mode")
+          ) {
+            const parts: string[] = [];
+            if (result.valid > 0) parts.push(result.valid + " alive");
+            if (result.dead > 0) parts.push(result.dead + " dead");
+            if (result.uncertain > 0) parts.push(result.uncertain + " uncertain");
+            toast("Check: " + (parts.join(" \u00b7 ") || "0 checked"));
+          } else {
+            const parts: string[] = [];
+            if (result.valid > 0) parts.push(result.valid + " valid");
+            if (result.dead > 0) parts.push(result.dead + " dead");
+            if (result.uncertain > 0) parts.push(result.uncertain + " uncertain");
+            toast("Check done " + (parts.join(", ") || "0 checked"));
+          }
+        };
         if (get().pendingAutoCheck) {
+          dispatchPageWa();
+          doToast();
           set({ pendingAutoCheck: false });
-          void get().runCheck();
+          const pending = pendingAutoTriggerRow;
+          pendingAutoTriggerRow = null;
+          // pending null == bulk (no single row), use -1 sentinel to keep auto with no exclusion
+          const nextTrigger = pending == null ? (-1 as unknown as number) : pending;
+          void get().runCheck(nextTrigger);
           return;
         }
-        if (
-          typeof document !== "undefined" &&
-          document.body.classList.contains("bubble-mode")
-        ) {
-          const parts: string[] = [];
-          if (result.valid > 0) parts.push(result.valid + " alive");
-          if (result.dead > 0) parts.push(result.dead + " dead");
-          if (result.uncertain > 0) parts.push(result.uncertain + " uncertain");
-          toast("Check: " + (parts.join(" · ") || "0 checked"));
-        } else {
-          const parts: string[] = [];
-          if (result.valid > 0) parts.push(result.valid + " valid");
-          if (result.dead > 0) parts.push(result.dead + " dead");
-          if (result.uncertain > 0) parts.push(result.uncertain + " uncertain");
-          toast("Check done " + (parts.join(", ") || "0 checked"));
-        }
-        if (
-          s.file?.type === "fb_cookie" &&
-          localStorage.getItem("ss_waCheck") === "true"
-        ) {
-          void get().runWaChecks();
-        }
+        doToast();
+        dispatchPageWa();
       };
-      // Figure out which rows actually changed vs the pre-check snapshot.
-      // Identity always differs (rows were copied), so compare values per key.
       const changed: { rowIdx: number; cols: Record<string, string> }[] = [];
       rows.forEach((row, i) => {
         const prev = s.rows[i] ?? {};
@@ -1522,8 +1599,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       });
       const changedByRow = new Map(changed.map((c) => [c.rowIdx, c]));
       if (changed.length === 0) {
-        // Same results as before — nothing new to save, don't persist and don't
-        // grow the check history with redundant entries.
         set({ checkRunning: false });
         showSummary();
         return;
@@ -1572,45 +1647,62 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       showSummary();
     } catch (e) {
       set({ checkRunning: false, pendingAutoCheck: false });
+      pendingAutoTriggerRow = null;
       toast("Check failed: " + (e instanceof Error ? e.message : String(e)));
     }
   },
 
-  maybeAutoCheck: (_rowIdx, colKey) => {
+  maybeAutoCheck: (rowIdx: number | null | undefined, colKey: string) => {
     const s = get();
-    if (localStorage.getItem("ss_autoCheck") === "false") return;
     const behavior = getFileBehavior(s.file?.type ?? "fb_cookie");
     if (!behavior?.checkAccounts) return;
     if (colKey !== "cookies") return;
+    const uidOn = localStorage.getItem("ss_autoCheck") !== "false";
+    const pageOn = isPageFile(s.file) && localStorage.getItem("ss_waCheck") === "true";
+    if (!uidOn && !pageOn) return;
+    const isBulk = rowIdx == null;
+    const trigger = isBulk ? -1 : rowIdx;
     if (s.checkRunning) {
       if (!s.pendingAutoCheck) set({ pendingAutoCheck: true });
+      pendingAutoTriggerRow = isBulk ? null : (rowIdx as number);
       return;
     }
-    void get().runCheck();
+    void get().runCheck(trigger as unknown as number);
   },
 
-  runWaChecks: async () => {
+  _pageSweepCore: async (mode, filter, excludeIdx) => {
     const s = get();
     if (s.file?.type !== "fb_cookie") return;
+    if (!isPageFile(s.file)) return;
+    const sweepFileId = s.fileId;
     const rows = s.rows.map((r) => ({ ...r }));
     const rowsRef = s.rows;
-    const waRows: { row: Row; uid: string | null; idx: number }[] = [];
+    let ledger: Ledger | null = null;
+    let ledgerDirty = false;
+    if (mode === "auto-page") {
+      ledger = { ...loadLedger(sweepFileId) };
+    }
+    const waInFlight = new Set<string>();
+    const waRows: { row: Row; uid: string | null; idx: number; cuser: string | null }[] = [];
     rows.forEach((row, idx) => {
+      if (filter && !filter(row, idx)) return;
+      if (excludeIdx != null && idx === excludeIdx) return;
       const tf = (row.twofakey ?? "").trim();
       if (!tf || isNo2FAMark("twofakey", tf)) return;
-      const match =
-        row.status === "good" &&
-        row.wa_status !== "eligible" &&
-        !!row.cookies &&
-        /c_user=\d+/.test(row.cookies);
-      if (match) {
-        let uid = row.uid ?? null;
-        if (!uid && row.cookies) {
-          const m = row.cookies.match(/c_user=(\d+)/);
-          if (m) uid = m[1];
-        }
-        waRows.push({ row, uid, idx });
+      if (row.status !== "good") return;
+      if (!row.cookies || !/c_user=\d+/.test(row.cookies)) return;
+      if (row.wa_status === "eligible") return;
+      const cuser = extractCUser(row.cookies);
+      if (mode === "auto-page" && cuser && ledger) {
+        const ent = ledger[cuser];
+        if (ent && (ent.p >= 3 || ent.w)) return;
       }
+      let uid = row.uid ?? null;
+      if (!uid && row.cookies) {
+        const m = row.cookies.match(/c_user=(\d+)/);
+        if (m) uid = m[1];
+      }
+      waRows.push({ row, uid, idx, cuser });
     });
     if (!waRows.length) return;
     const writeBack = () => {
@@ -1624,59 +1716,104 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         return {
           ...r,
           wa_status: snap.wa_status ?? r.wa_status,
-          wa_ban_reason:
-            snap.wa_ban_reason !== undefined ? snap.wa_ban_reason : r.wa_ban_reason,
-          wa_page_name:
-            snap.wa_page_name !== undefined ? snap.wa_page_name : r.wa_page_name,
-          wa_linked_number:
-            snap.wa_linked_number !== undefined
-              ? snap.wa_linked_number
-              : r.wa_linked_number,
+          wa_ban_reason: snap.wa_ban_reason !== undefined ? snap.wa_ban_reason : r.wa_ban_reason,
+          wa_page_name: snap.wa_page_name !== undefined ? snap.wa_page_name : r.wa_page_name,
+          wa_linked_number: snap.wa_linked_number !== undefined ? snap.wa_linked_number : r.wa_linked_number,
         };
       });
     };
-    let cache: Record<string, WaCacheEntry> = {};
-    try {
-      const uids = waRows
-        .map((w) => w.uid)
-        .filter((u): u is string => !!u);
-      if (uids.length) {
-        const res = await api.getWaCache(uids);
-        cache = (res?.cache as Record<string, WaCacheEntry>) ?? {};
-      }
-    } catch {
-      cache = {};
-    }
-    if (get().fileId !== s.fileId) return;
-    const live = waRows.filter((w) => {
-      const hit = w.uid ? cache[w.uid] : null;
-      if (!hit || !hit.status) return true;
-      if (hit.status === "eligible" || hit.status === "ineligible") {
-        w.row.wa_status = hit.status;
-        w.row.wa_ban_reason = hit.banReason ?? null;
-        w.row.wa_page_name = hit.pageName ?? null;
-        w.row.wa_linked_number = hit.linkedNumber ?? null;
-        return false;
-      }
-      return true;
-    });
     const pushInstant = (idx: number, newRow: Row) => {
       const cur = get();
-      if (cur.fileId !== s.fileId) return;
+      if (cur.fileId !== sweepFileId) return;
       const curRow = cur.rows[idx];
       if (!curRow) return;
       const out = cur.rows.slice();
       out[idx] = { ...curRow, wa_status: newRow.wa_status, wa_ban_reason: newRow.wa_ban_reason, wa_page_name: newRow.wa_page_name, wa_linked_number: newRow.wa_linked_number };
       set({ rows: out });
     };
+    const isCleanMiss = (wa: unknown): boolean => {
+      if (!wa || typeof wa !== "object") return false;
+      const o = wa as Record<string, unknown>;
+      return o.eligible === false && (o.error == null);
+    };
+    // cache-first for every mode, including manual-wa
+    {
+      let cache: Record<string, WaCacheEntry> = {};
+      try {
+        const uids = waRows.map((w) => w.uid).filter((u): u is string => !!u);
+        if (uids.length) {
+          const res = await api.getWaCache(uids);
+          cache = (res?.cache as Record<string, WaCacheEntry>) ?? {};
+        }
+      } catch {
+        cache = {};
+      }
+      if (get().fileId !== sweepFileId) return;
+      const remaining: typeof waRows = [];
+      for (const w of waRows) {
+        const hit = w.uid ? cache[w.uid] : null;
+        if (hit && hit.status === "eligible") {
+          w.row.wa_status = "eligible";
+          w.row.wa_ban_reason = hit.banReason ?? null;
+          w.row.wa_page_name = hit.pageName ?? null;
+          w.row.wa_linked_number = hit.linkedNumber ?? null;
+          if (ledger && w.cuser && ledger[w.cuser]) {
+            delete ledger[w.cuser];
+            ledgerDirty = true;
+          }
+          pushInstant(w.idx, w.row);
+          rows[w.idx] = { ...w.row };
+          continue;
+        }
+        remaining.push(w);
+      }
+      if (remaining.length === 0) {
+        if (ledgerDirty && sweepFileId && get().fileId === sweepFileId && ledger) {
+          saveLedger(sweepFileId, ledger);
+        }
+        if (get().fileId !== sweepFileId) return;
+        const finalRows = writeBack();
+        const cur = get();
+        const WA_FIELDS = ["wa_status", "wa_ban_reason", "wa_page_name", "wa_linked_number"] as const;
+        const changed: { rowIdx: number; cols: Record<string, string> }[] = [];
+        const changedSet = new Set<number>();
+        finalRows.forEach((row, i) => {
+          const prev = s.rows[i] ?? {};
+          const cols: Record<string, string> = {};
+          let diff = false;
+          for (const k of WA_FIELDS) {
+            const pv = (prev as Record<string, unknown>)[k];
+            const nv = (row as Record<string, unknown>)[k];
+            if (pv !== nv) {
+              diff = true;
+              cols[k] = nv == null ? "" : String(nv);
+            }
+          }
+          if (diff) {
+            changed.push({ rowIdx: i, cols });
+            changedSet.add(i);
+          }
+        });
+        if (changed.length === 0) return;
+        const changeJournal = [
+          ...s.changeJournal.filter((op) => !changedSet.has(op.rowIdx)),
+          ...changed,
+        ];
+        if (changeJournal.length > MAX_JOURNAL) changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
+        set({ rows: finalRows, changeJournal, isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
+        get().persist();
+        return;
+      }
+      waRows.length = 0;
+      waRows.push(...remaining);
+    }
+    const live = waRows;
     const concurrency = 3;
     let pos = 0;
     const nextBatch = async (): Promise<void> => {
       if (pos >= live.length) return;
       const batch: number[] = [];
-      for (let limit = concurrency; limit > 0 && pos < live.length; limit--) {
-        batch.push(pos++);
-      }
+      for (let limit = concurrency; limit > 0 && pos < live.length; limit--) batch.push(pos++);
       await Promise.all(
         batch.map(async (i) => {
           const w = live[i];
@@ -1689,18 +1826,86 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
             live[i] = { ...w, row: newRow };
             pushInstant(w.idx, newRow);
           };
+          if (mode === "manual-wa") {
+            try {
+              const wa = (await api.waCheck(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
+              if (wa && wa.eligible === true) apply("eligible", wa.banReason ?? null, undefined, wa.linkedNumber ?? null);
+              else if (wa && wa.error) apply("error", wa.banReason ?? null, undefined, wa.linkedNumber ?? null);
+              else if (isCleanMiss(wa)) apply("ineligible", wa ? (wa as unknown as { banReason?: string | null }).banReason ?? null : null, undefined, wa ? (wa as unknown as { linkedNumber?: string | null }).linkedNumber ?? null : null);
+              else apply("error", wa ? (wa as unknown as { banReason?: string | null }).banReason ?? null : null, undefined, wa ? (wa as unknown as { linkedNumber?: string | null }).linkedNumber ?? null : null);
+            } catch {
+              if (s.rows[w.idx]?.wa_status === "eligible") return;
+              apply("error");
+            }
+            return;
+          }
+          // page modes (auto-page | manual-page)
           try {
-            const wa = (await api.pageCheck(w.row.cookies ?? "")) as {
-              eligible?: boolean;
-              error?: string | null;
-              banReason?: string | null;
-              pageName?: string | null;
-              linkedNumber?: string | null;
-            } | null;
+            const wa = (await api.pageCheck(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null } | null;
             if (wa && wa.eligible === true) {
               apply("eligible", null, wa.pageName ?? null, wa.linkedNumber ?? null);
+              if (ledger && w.cuser && ledger[w.cuser]) {
+                delete ledger[w.cuser];
+                ledgerDirty = true;
+              }
+            } else if (isCleanMiss(wa)) {
+              apply("ineligible", (wa as unknown as { banReason?: string | null }).banReason ?? null, (wa as unknown as { pageName?: string | null }).pageName ?? null, (wa as unknown as { linkedNumber?: string | null }).linkedNumber ?? null);
+              if (ledger && w.cuser) {
+                const ent = ledger[w.cuser] ?? { p: 0, w: false };
+                // avoid double-count for same cuser in same sweep
+                if (waInFlight.has(w.cuser)) {
+                  ent.p = Math.max(ent.p, 1);
+                } else {
+                  ent.p += 1;
+                }
+                if (ent.p >= 3 && !ent.w && !waInFlight.has(w.cuser)) {
+                  waInFlight.add(w.cuser);
+                  try {
+                    const wa2 = (await api.waCheck(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
+                    if (wa2 && wa2.eligible === true) {
+                      const newRow: Row = { ...rows[w.idx], wa_status: "eligible", wa_ban_reason: wa2.banReason ?? null, wa_linked_number: wa2.linkedNumber ?? null };
+                      rows[w.idx] = newRow;
+                      live[i] = { ...w, row: newRow };
+                      pushInstant(w.idx, newRow);
+                      delete ledger[w.cuser];
+                      ledgerDirty = true;
+                    } else if (wa2 && wa2.error) {
+                      ent.w = true;
+                      ledger[w.cuser] = ent;
+                      ledgerDirty = true;
+                      apply("ineligible", wa2.banReason ?? null, undefined, wa2.linkedNumber ?? null);
+                      // keep ineligible status from page miss, mark exhausted
+                      rows[w.idx] = { ...rows[w.idx], wa_status: "ineligible", wa_ban_reason: wa2.banReason ?? null, wa_linked_number: wa2.linkedNumber ?? null };
+                      pushInstant(w.idx, rows[w.idx]);
+                    } else if (isCleanMiss(wa2)) {
+                      ent.w = true;
+                      ledger[w.cuser] = ent;
+                      ledgerDirty = true;
+                    } else {
+                      ent.w = true;
+                      ledger[w.cuser] = ent;
+                      ledgerDirty = true;
+                      if (wa2 && wa2.error) {
+                        rows[w.idx] = { ...rows[w.idx], wa_status: "error" };
+                        pushInstant(w.idx, rows[w.idx]);
+                      }
+                    }
+                  } catch {
+                    ent.w = true;
+                    ledger[w.cuser] = ent;
+                    ledgerDirty = true;
+                  }
+                } else {
+                  ledger[w.cuser] = ent;
+                  ledgerDirty = true;
+                }
+              }
             } else {
-              apply(wa?.error ? "error" : "ineligible", wa ? wa.banReason ?? null : null, wa ? wa.pageName ?? null : null, wa ? wa.linkedNumber ?? null : null);
+              // null/undefined or error response -> error, no ledger increment
+              const ban = (wa as unknown as { banReason?: string | null } | null)?.banReason ?? null;
+              const pn = (wa as unknown as { pageName?: string | null } | null)?.pageName ?? null;
+              const ln = (wa as unknown as { linkedNumber?: string | null } | null)?.linkedNumber ?? null;
+              apply("error", ban, pn, ln);
             }
           } catch {
             apply("error");
@@ -1714,7 +1919,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     } catch {
       // swallow
     }
-    if (get().fileId !== s.fileId) return;
+    if (ledgerDirty && sweepFileId && get().fileId === sweepFileId && ledger) {
+      saveLedger(sweepFileId, ledger);
+    }
+    if (get().fileId !== sweepFileId) return;
     const finalRows = writeBack();
     const cur = get();
     const WA_FIELDS = ["wa_status", "wa_ban_reason", "wa_page_name", "wa_linked_number"] as const;
@@ -1737,244 +1945,28 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         changedSet.add(i);
       }
     });
-    // Same WA results as before — nothing new to save, skip persist entirely.
     if (changed.length === 0) return;
     const changeJournal = [
       ...s.changeJournal.filter((op) => !changedSet.has(op.rowIdx)),
       ...changed,
     ];
-    if (changeJournal.length > MAX_JOURNAL) {
-      changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
-    }
-    set({
-      rows: finalRows,
-      changeJournal,
-      isDirty: true,
-      ...recomputeMarks(finalRows, cur.crossDups, cur.columns),
-    });
+    if (changeJournal.length > MAX_JOURNAL) changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
+    set({ rows: finalRows, changeJournal, isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
     get().persist();
+  },
+
+  runWaChecks: async () => {
+    const s = get();
+    if (s.file?.type !== "fb_cookie") return;
+    await (get() as unknown as { _pageSweepCore: (m: string) => Promise<void> })._pageSweepCore("auto-page");
   },
 
   runWaChecksFiltered: async (filter) => {
-    const s = get();
-    if (s.file?.type !== "fb_cookie") return;
-    const rows = s.rows.map((r) => ({ ...r }));
-    const rowsRef = s.rows;
-    const waRows: { row: Row; uid: string | null; idx: number }[] = [];
-    rows.forEach((row, idx) => {
-      if (!filter(row, idx)) return;
-      const tf = (row.twofakey ?? "").trim();
-      if (!tf || isNo2FAMark("twofakey", tf)) return;
-      if (!row.cookies || !/c_user=\d+/.test(row.cookies)) return;
-      let uid = row.uid ?? null;
-      if (!uid && row.cookies) {
-        const m = row.cookies.match(/c_user=(\d+)/);
-        if (m) uid = m[1];
-      }
-      waRows.push({ row, uid, idx });
-    });
-    if (!waRows.length) return;
-    const writeBack = () => {
-      const cur = get();
-      if (cur.rows === rowsRef) return rows.slice();
-      const processed = new Set(waRows.map((w) => w.idx));
-      return cur.rows.map((r, i) => {
-        if (!processed.has(i)) return r;
-        const snap = rows[i];
-        if (!snap) return r;
-        return {
-          ...r,
-          wa_status: snap.wa_status ?? r.wa_status,
-          wa_ban_reason: snap.wa_ban_reason !== undefined ? snap.wa_ban_reason : r.wa_ban_reason,
-          wa_page_name: snap.wa_page_name !== undefined ? snap.wa_page_name : r.wa_page_name,
-          wa_linked_number: snap.wa_linked_number !== undefined ? snap.wa_linked_number : r.wa_linked_number,
-        };
-      });
-    };
-    let cache: Record<string, WaCacheEntry> = {};
-    try {
-      const uids = waRows.map((w) => w.uid).filter((u): u is string => !!u);
-      if (uids.length) {
-        const res = await api.getWaCache(uids);
-        cache = (res?.cache as Record<string, WaCacheEntry>) ?? {};
-      }
-    } catch {
-      cache = {};
-    }
-    if (get().fileId !== s.fileId) return;
-    const live = waRows.filter((w) => {
-      const hit = w.uid ? cache[w.uid] : null;
-      if (!hit || !hit.status) return true;
-      if (hit.status === "eligible" || hit.status === "ineligible") {
-        w.row.wa_status = hit.status;
-        w.row.wa_ban_reason = hit.banReason ?? null;
-        w.row.wa_page_name = hit.pageName ?? null;
-        w.row.wa_linked_number = hit.linkedNumber ?? null;
-        return false;
-      }
-      return true;
-    });
-    const pushInstant = (idx: number, newRow: Row) => {
-      const cur = get();
-      if (cur.fileId !== s.fileId) return;
-      const curRow = cur.rows[idx];
-      if (!curRow) return;
-      const out = cur.rows.slice();
-      out[idx] = { ...curRow, wa_status: newRow.wa_status, wa_ban_reason: newRow.wa_ban_reason, wa_page_name: newRow.wa_page_name, wa_linked_number: newRow.wa_linked_number };
-      set({ rows: out });
-    };
-    const concurrency = 3;
-    let pos = 0;
-    const nextBatch = async (): Promise<void> => {
-      if (pos >= live.length) return;
-      const batch: number[] = [];
-      for (let limit = concurrency; limit > 0 && pos < live.length; limit--) batch.push(pos++);
-      await Promise.all(batch.map(async (i) => {
-        const w = live[i];
-        const apply = (wa_status: string, wa_ban_reason?: string | null, wa_page_name?: string | null, wa_linked_number?: string | null) => {
-          const newRow: Row = { ...w.row, wa_status };
-          if (wa_ban_reason !== undefined) newRow.wa_ban_reason = wa_ban_reason;
-          if (wa_page_name !== undefined) newRow.wa_page_name = wa_page_name;
-          if (wa_linked_number !== undefined) newRow.wa_linked_number = wa_linked_number;
-          rows[w.idx] = newRow;
-          live[i] = { ...w, row: newRow };
-          pushInstant(w.idx, newRow);
-        };
-        try {
-          const wa = (await api.pageCheck(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null } | null;
-          if (wa && wa.eligible === true) apply("eligible", null, wa.pageName ?? null, wa.linkedNumber ?? null);
-          else apply(wa?.error ? "error" : "ineligible", wa ? wa.banReason ?? null : null, wa ? wa.pageName ?? null : null, wa ? wa.linkedNumber ?? null : null);
-        } catch {
-          apply("error");
-        }
-      }));
-      return nextBatch();
-    };
-    try { await nextBatch(); } catch { /* swallow */ }
-    if (get().fileId !== s.fileId) return;
-    const finalRows = writeBack();
-    const cur = get();
-    const WA_FIELDS = ["wa_status", "wa_ban_reason", "wa_page_name", "wa_linked_number"] as const;
-    const changed: { rowIdx: number; cols: Record<string, string> }[] = [];
-    const changedSet = new Set<number>();
-    finalRows.forEach((row, i) => {
-      const prev = s.rows[i] ?? {};
-      const cols: Record<string, string> = {};
-      let diff = false;
-      for (const k of WA_FIELDS) {
-        const pv = (prev as Record<string, unknown>)[k];
-        const nv = (row as Record<string, unknown>)[k];
-        if (pv !== nv) { diff = true; cols[k] = nv == null ? "" : String(nv); }
-      }
-      if (diff) { changed.push({ rowIdx: i, cols }); changedSet.add(i); }
-    });
-    if (changed.length === 0) return;
-    const changeJournal = [...s.changeJournal.filter((op) => !changedSet.has(op.rowIdx)), ...changed];
-    if (changeJournal.length > MAX_JOURNAL) changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
-    set({ rows: finalRows, changeJournal, isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
-    get().persist();
+    await (get() as unknown as { _pageSweepCore: (m: string, f: unknown) => Promise<void> })._pageSweepCore("manual-page", filter as unknown as (row: Row, idx: number) => boolean);
   },
 
   runWaChecksWaFiltered: async (filter) => {
-    const s = get();
-    if (s.file?.type !== "fb_cookie") return;
-    const rows = s.rows.map((r) => ({ ...r }));
-    const rowsRef = s.rows;
-    const waRows: { row: Row; uid: string | null; idx: number }[] = [];
-    rows.forEach((row, idx) => {
-      if (!filter(row, idx)) return;
-      const tf = (row.twofakey ?? "").trim();
-      if (!tf || isNo2FAMark("twofakey", tf)) return;
-      if (!row.cookies || !/c_user=\d+/.test(row.cookies)) return;
-      let uid = row.uid ?? null;
-      if (!uid && row.cookies) {
-        const m = row.cookies.match(/c_user=(\d+)/);
-        if (m) uid = m[1];
-      }
-      waRows.push({ row, uid, idx });
-    });
-    if (!waRows.length) return;
-    const writeBack = () => {
-      const cur = get();
-      if (cur.rows === rowsRef) return rows.slice();
-      const processed = new Set(waRows.map((w) => w.idx));
-      return cur.rows.map((r, i) => {
-        if (!processed.has(i)) return r;
-        const snap = rows[i];
-        if (!snap) return r;
-        return {
-          ...r,
-          wa_status: snap.wa_status ?? r.wa_status,
-          wa_ban_reason: snap.wa_ban_reason !== undefined ? snap.wa_ban_reason : r.wa_ban_reason,
-          wa_page_name: snap.wa_page_name !== undefined ? snap.wa_page_name : r.wa_page_name,
-          wa_linked_number: snap.wa_linked_number !== undefined ? snap.wa_linked_number : r.wa_linked_number,
-        };
-      });
-    };
-    const pushInstant = (idx: number, newRow: Row) => {
-      const cur = get();
-      if (cur.fileId !== s.fileId) return;
-      const curRow = cur.rows[idx];
-      if (!curRow) return;
-      const out = cur.rows.slice();
-      out[idx] = { ...curRow, wa_status: newRow.wa_status, wa_ban_reason: newRow.wa_ban_reason, wa_page_name: newRow.wa_page_name, wa_linked_number: newRow.wa_linked_number };
-      set({ rows: out });
-    };
-    const concurrency = 3;
-    let pos = 0;
-    const nextBatch = async (): Promise<void> => {
-      if (pos >= waRows.length) return;
-      const batch: number[] = [];
-      for (let limit = concurrency; limit > 0 && pos < waRows.length; limit--) batch.push(pos++);
-      await Promise.all(batch.map(async (i) => {
-        const w = waRows[i];
-        const apply = (wa_status: string, wa_ban_reason?: string | null, wa_page_name?: string | null, wa_linked_number?: string | null) => {
-          const newRow: Row = { ...w.row, wa_status };
-          if (wa_ban_reason !== undefined) newRow.wa_ban_reason = wa_ban_reason;
-          if (wa_page_name !== undefined) newRow.wa_page_name = wa_page_name;
-          if (wa_linked_number !== undefined) newRow.wa_linked_number = wa_linked_number;
-          rows[w.idx] = newRow;
-          waRows[i] = { ...w, row: newRow };
-          pushInstant(w.idx, newRow);
-        };
-        try {
-          const wa = (await api.waCheck(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
-          if (wa && wa.eligible === true) apply("eligible", wa.banReason ?? null, undefined, wa.linkedNumber ?? null);
-          else {
-            // WA check must only turn green, never downgrade an already-green dot
-            if (s.rows[w.idx]?.wa_status === "eligible") return;
-            apply(wa?.error ? "error" : "ineligible", wa ? wa.banReason ?? null : null, undefined, wa ? wa.linkedNumber ?? null : null);
-          }
-        } catch {
-          if (s.rows[w.idx]?.wa_status === "eligible") return;
-          apply("error");
-        }
-      }));
-      return nextBatch();
-    };
-    try { await nextBatch(); } catch { /* swallow */ }
-    if (get().fileId !== s.fileId) return;
-    const finalRows = writeBack();
-    const cur = get();
-    const WA_FIELDS = ["wa_status", "wa_ban_reason", "wa_page_name", "wa_linked_number"] as const;
-    const changed: { rowIdx: number; cols: Record<string, string> }[] = [];
-    const changedSet = new Set<number>();
-    finalRows.forEach((row, i) => {
-      const prev = s.rows[i] ?? {};
-      const cols: Record<string, string> = {};
-      let diff = false;
-      for (const k of WA_FIELDS) {
-        const pv = (prev as Record<string, unknown>)[k];
-        const nv = (row as Record<string, unknown>)[k];
-        if (pv !== nv) { diff = true; cols[k] = nv == null ? "" : String(nv); }
-      }
-      if (diff) { changed.push({ rowIdx: i, cols }); changedSet.add(i); }
-    });
-    if (changed.length === 0) return;
-    const changeJournal = [...s.changeJournal.filter((op) => !changedSet.has(op.rowIdx)), ...changed];
-    if (changeJournal.length > MAX_JOURNAL) changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
-    set({ rows: finalRows, changeJournal, isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
-    get().persist();
+    await (get() as unknown as { _pageSweepCore: (m: string, f: unknown) => Promise<void> })._pageSweepCore("manual-wa", filter as unknown as (row: Row, idx: number) => boolean);
   },
 
   restoreVersion: async () => {
@@ -2022,7 +2014,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     get().persist("merge");
     void refreshCrossDups(s.fileId);
     if (added.some((r) => r.cookies || r.uid)) {
-      get().maybeAutoCheck(0, "cookies");
+      get().maybeAutoCheck(null, "cookies");
     }
     toast(`Merged ${added.length} (skipped ${skipped})`);
   },
@@ -2072,7 +2064,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     }
     void refreshCrossDups(s.fileId);
     if (incoming.some((r) => r.cookies || r.uid)) {
-      get().maybeAutoCheck(0, "cookies");
+      get().maybeAutoCheck(null, "cookies");
     }
   },
 
@@ -2493,7 +2485,7 @@ function applyCells(
   });
   useSheetStore.getState().persist();
   if (pastedCookie) {
-    useSheetStore.getState().maybeAutoCheck(0, "cookies");
+    useSheetStore.getState().maybeAutoCheck(null, "cookies");
   }
   toast(toastMsg);
   if (lastKey && !s.isDesktop) {

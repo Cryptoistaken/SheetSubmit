@@ -1,5 +1,15 @@
-import type { Row } from "@/lib/types";
+import type { Row, SheetFile } from "@/lib/types";
 import { createFbCookieBehavior } from "./fbcookie";
+
+export function isPageFile(file: SheetFile | null | undefined): boolean {
+  if (!file) return false;
+  const hasTwoFaCol = file.columns?.some((c) => c.key === "twofakey") ?? false;
+  const hasPreset = file.preset != null || file.poolKind != null;
+  const isPagePreset = hasPreset
+    ? file.preset === "page" || file.poolKind === "page"
+    : (file.name?.toLowerCase().startsWith("page") ?? false);
+  return hasTwoFaCol && isPagePreset;
+}
 
 export interface BehaviorCtx {
   rows: Row[];

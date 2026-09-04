@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, mock } from "bun:test";
 // Bun has no `localStorage`. sheetStore reads it in openFile (inside try/catch)
 // and in maybeAutoCheck (unprotected). Provide a minimal shim so the real store
 // module can run unmodified under bun.
+const _lsStore = new Map<string, string>();
 (globalThis as Record<string, unknown>).localStorage = {
-  getItem: () => null,
-  setItem: () => {},
-  removeItem: () => {},
+  getItem: (k: string) => _lsStore.get(k) ?? null,
+  setItem: (k: string, v: string) => { _lsStore.set(k, String(v)); },
+  removeItem: (k: string) => { _lsStore.delete(k); },
+  clear: () => { _lsStore.clear(); },
 };
 
 interface Deferred<T> {
@@ -65,6 +67,12 @@ interface Harness {
   nextAppend: Deferred<{ ok: boolean; seq: number }> | null;
   fullRows: Array<Record<string, string>>;
   fullSeq: number;
+  pageCheckCalls: string[];
+  waCheckCalls: string[];
+  getWaCacheCalls: string[][];
+  nextPageCheck: ((cookie: string) => unknown) | null;
+  nextWaCheck: ((cookie: string) => unknown) | null;
+  waCache: Record<string, unknown>;
 }
 
 const harness: Harness = {
@@ -76,6 +84,12 @@ const harness: Harness = {
   nextAppend: null,
   fullRows: [{ cookies: "", uid: "", twofakey: "" }],
   fullSeq: 0,
+  pageCheckCalls: [],
+  waCheckCalls: [],
+  getWaCacheCalls: [],
+  nextPageCheck: null,
+  nextWaCheck: null,
+  waCache: {},
 };
 
 // Fake the entire `@/lib/api` module BEFORE importing the store. sheetStore only
@@ -86,7 +100,7 @@ mock.module("@/lib/api", () => ({
     getFileFull: async (id: string) => {
       harness.getFileFullCalls++;
       return {
-        file: { id, name: "Test", type: "fb_cookie" },
+        file: { id, name: "pageTest", type: "fb_cookie", preset: "page", columns: [{ key: "cookies", label: "cookies", width: 340 }, { key: "twofakey", label: "2fa key", width: 200 }, { key: "uid", label: "uid", width: 120 }] } as unknown as Record<string, unknown>,
         rows: harness.fullRows,
         logs: [],
         undo: [],
@@ -119,8 +133,20 @@ mock.module("@/lib/api", () => ({
       return { ok: true };
     },
     fbCheck: async () => ({ valid: [], dead: [], uncertain: [] }),
-    getWaCache: async () => ({ cache: {} }),
-    pageCheck: async () => null,
+    getWaCache: async (uids: string[]) => {
+      harness.getWaCacheCalls.push(uids);
+      return { cache: harness.waCache as Record<string, unknown> };
+    },
+    pageCheck: async (cookie: string) => {
+      harness.pageCheckCalls.push(cookie);
+      if (harness.nextPageCheck) return harness.nextPageCheck(cookie) as null;
+      return null;
+    },
+    waCheck: async (cookie: string) => {
+      harness.waCheckCalls.push(cookie);
+      if (harness.nextWaCheck) return harness.nextWaCheck(cookie) as null;
+      return null;
+    },
     restoreVersion: async () => ({ ok: false }),
     adminRestoreVersion: async () => ({ ok: false }),
     adminFile: async (id: string) => ({ id, name: "Test", type: "fb_cookie" }),
@@ -181,6 +207,13 @@ function resetStore(): void {
   harness.nextAppend = null;
   harness.fullRows = [{ cookies: "", uid: "", twofakey: "" }];
   harness.fullSeq = 0;
+  harness.pageCheckCalls = [];
+  harness.waCheckCalls = [];
+  harness.getWaCacheCalls = [];
+  harness.nextPageCheck = null;
+  harness.nextWaCheck = null;
+  harness.waCache = {};
+  _lsStore.clear();
 }
 
 beforeEach(resetStore);
@@ -458,11 +491,12 @@ describe("sheetStore data-integrity", () => {
       rows: [
         { cookies: "c_user=202;", uid: "202", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" },
       ],
+      columns: [{ key: "cookies", label: "cookies", width: 340 }, { key: "twofakey", label: "2fa key", width: 200 }, { key: "uid", label: "uid", width: 120 }] as never,
     });
     expect(useSheetStore.getState().rows[0].wa_status).toBe("");
 
-    // pageCheck mock returns null -> wa_status becomes "ineligible" + null fields:
-    // delta append, not full persist.
+    // clean miss -> ineligible (strict: only {eligible:false,error:null} is clean)
+    harness.nextPageCheck = () => ({ eligible: false, error: null });
     await useSheetStore.getState().runWaChecks();
     await useSheetStore.getState().flushPersist();
 
@@ -746,7 +780,7 @@ describe("bubble user flow (as a user uses it)", () => {
     useSheetStore.setState({
       rows: [
         { cookies: "c_user=2; a=b", uid: "2", twofakey: NO_2FA_MARK },
-        { cookies: "", uid: "0", twofakey: "" },
+        { cookies: "c_user=3; a=b", uid: "3", twofakey: "" },
       ],
       bubbleActiveRow: 1,
     });
@@ -811,5 +845,154 @@ describe("bubble user flow (as a user uses it)", () => {
     expect(rows[0].twofakey).toBe("");
     expect(rows[1].twofakey).toBe("JBSWY3DPEHPK3PXP");
     expect(rows[0].cookies).toBe("c_user=1; a=b");
+  });
+});
+
+describe("page ledger — auto vs manual + review regressions", () => {
+  function ledger(fileId: string): Record<string, unknown> {
+    const raw = (globalThis as unknown as { localStorage: { getItem: (k: string) => string | null } }).localStorage.getItem(`ss_pageLedger:${fileId}`);
+    return raw ? JSON.parse(raw) : {};
+  }
+  const pageCols = [{ key: "cookies", label: "cookies", width: 340 }, { key: "twofakey", label: "2fa key", width: 200 }, { key: "uid", label: "uid", width: 120 }];
+
+  it("clean no-page increments; error/null do not", async () => {
+    await openTestFile();
+    useSheetStore.setState({ rows: [{ cookies: "c_user=100;", uid: "100", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" }], columns: pageCols as never });
+    _lsStore.set("ss_waCheck", "true");
+    harness.nextPageCheck = () => ({ eligible: false, error: null });
+    await useSheetStore.getState().runWaChecks();
+    await useSheetStore.getState().flushPersist();
+    expect(harness.pageCheckCalls.length).toBe(1);
+    expect((ledger("f1")["100"] as { p: number }).p).toBe(1);
+    // error must not increment
+    harness.pageCheckCalls = [];
+    harness.nextPageCheck = () => ({ eligible: false, error: "timeout" });
+    useSheetStore.setState({ rows: [{ cookies: "c_user=100;", uid: "100", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "error" }] });
+    await useSheetStore.getState().runWaChecks();
+    expect(harness.pageCheckCalls.length).toBe(1);
+    expect((ledger("f1")["100"] as { p: number }).p).toBe(1);
+    // null response must not increment (strict clean miss)
+    harness.pageCheckCalls = [];
+    harness.nextPageCheck = () => null;
+    useSheetStore.setState({ rows: [{ cookies: "c_user=101;", uid: "101", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" }] });
+    await useSheetStore.getState().runWaChecks();
+    expect(harness.pageCheckCalls.length).toBe(1);
+    expect(ledger("f1")["101"]).toBeUndefined();
+    expect(useSheetStore.getState().rows[0].wa_status).toBe("error");
+  });
+
+  it("3 clean strikes trigger exactly one waCheck; WA fail exhausts; auto skips but manual includes", async () => {
+    await openTestFile();
+    _lsStore.set("ss_waCheck", "true");
+    useSheetStore.setState({ rows: [{ cookies: "c_user=200;", uid: "200", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" }], columns: pageCols as never });
+    harness.nextPageCheck = () => ({ eligible: false, error: null });
+    harness.nextWaCheck = () => ({ eligible: false, error: null });
+    await useSheetStore.getState().runWaChecks();
+    expect(harness.pageCheckCalls.length).toBe(1);
+    expect(harness.waCheckCalls.length).toBe(0);
+    expect((ledger("f1")["200"] as { p: number }).p).toBe(1);
+    useSheetStore.setState({ rows: [{ cookies: "c_user=200;", uid: "200", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "ineligible" }] });
+    harness.pageCheckCalls = [];
+    await useSheetStore.getState().runWaChecks();
+    expect((ledger("f1")["200"] as { p: number }).p).toBe(2);
+    useSheetStore.setState({ rows: [{ cookies: "c_user=200;", uid: "200", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "ineligible" }] });
+    harness.pageCheckCalls = []; harness.waCheckCalls = [];
+    await useSheetStore.getState().runWaChecks();
+    expect(harness.pageCheckCalls.length).toBe(1);
+    expect(harness.waCheckCalls.length).toBe(1);
+    expect((ledger("f1")["200"] as { w: boolean }).w).toBe(true);
+    // auto now skips exhausted
+    useSheetStore.setState({ rows: [{ cookies: "c_user=200;", uid: "200", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "ineligible" }] });
+    harness.pageCheckCalls = []; harness.waCheckCalls = [];
+    await useSheetStore.getState().runWaChecks();
+    expect(harness.pageCheckCalls.length).toBe(0);
+    // manual page includes exhausted
+    harness.nextPageCheck = () => ({ eligible: true, pageName: "P", linkedNumber: null });
+    await useSheetStore.getState().runWaChecksFiltered(() => true);
+    expect(harness.pageCheckCalls.length).toBe(1);
+    expect(useSheetStore.getState().rows[0].wa_status).toBe("eligible");
+    // manual-wa includes exhausted
+    useSheetStore.setState({ rows: [{ cookies: "c_user=201;", uid: "201", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "ineligible" }], columns: pageCols as never });
+    _lsStore.set(`ss_pageLedger:f1`, JSON.stringify({ "201": { p: 3, w: true } }));
+    harness.pageCheckCalls = []; harness.waCheckCalls = [];
+    await useSheetStore.getState().runWaChecks();
+    expect(harness.pageCheckCalls.length).toBe(0);
+    harness.nextWaCheck = () => ({ eligible: true, linkedNumber: "123" });
+    await useSheetStore.getState().runWaChecksWaFiltered(() => true);
+    expect(harness.waCheckCalls.length).toBe(1);
+    expect(useSheetStore.getState().rows[0].wa_status).toBe("eligible");
+  });
+
+  it("cache hit eligible skips live calls for auto and manual-wa", async () => {
+    await openTestFile();
+    _lsStore.set("ss_waCheck", "true");
+    _lsStore.set("ss_checkWa", "true");
+    useSheetStore.setState({ rows: [{ cookies: "c_user=300;", uid: "300", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" }], columns: pageCols as never });
+    harness.waCache = { "300": { status: "eligible", banReason: null, error: null, pageName: "Cached", linkedNumber: null, ts: Date.now() } } as unknown as Record<string, unknown>;
+    await useSheetStore.getState().runWaChecks();
+    expect(harness.pageCheckCalls.length).toBe(0);
+    expect(useSheetStore.getState().rows[0].wa_status).toBe("eligible");
+    expect(useSheetStore.getState().rows[0].wa_page_name).toBe("Cached");
+    // manual-wa also cache-first
+    useSheetStore.setState({ rows: [{ cookies: "c_user=301;", uid: "301", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" }], columns: pageCols as never });
+    harness.waCache = { "301": { status: "eligible", banReason: null, error: null, pageName: "CachedWA", linkedNumber: null, ts: Date.now() } } as unknown as Record<string, unknown>;
+    harness.pageCheckCalls = []; harness.waCheckCalls = []; harness.getWaCacheCalls = [];
+    await useSheetStore.getState().runWaChecksWaFiltered(() => true);
+    expect(harness.waCheckCalls.length).toBe(0);
+    expect(harness.getWaCacheCalls.length).toBe(1);
+    expect(useSheetStore.getState().rows[0].wa_status).toBe("eligible");
+  });
+
+  it("same cuser rows in same sweep do not double WA", async () => {
+    await openTestFile();
+    _lsStore.set("ss_waCheck", "true");
+    _lsStore.set(`ss_pageLedger:f1`, JSON.stringify({ "400": { p: 2, w: false } }));
+    useSheetStore.setState({
+      rows: [
+        { cookies: "c_user=400;", uid: "400", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" },
+        { cookies: "c_user=400;", uid: "400", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" },
+      ], columns: pageCols as never
+    });
+    harness.nextPageCheck = () => ({ eligible: false, error: null });
+    harness.nextWaCheck = () => ({ eligible: false, error: null });
+    harness.pageCheckCalls = []; harness.waCheckCalls = [];
+    await useSheetStore.getState().runWaChecks();
+    // two pageChecks (one per row) but only one waCheck for the shared cuser
+    expect(harness.pageCheckCalls.length).toBe(2);
+    expect(harness.waCheckCalls.length).toBe(1);
+    expect((ledger("f1")["400"] as { w: boolean }).w).toBe(true);
+  });
+
+  it("cookie edit resets ledger for new cuser", async () => {
+    await openTestFile();
+    _lsStore.set(`ss_pageLedger:f1`, JSON.stringify({ "500": { p: 2, w: false }, "501": { p: 3, w: true } }));
+    useSheetStore.setState({ rows: [{ cookies: "c_user=500;", uid: "500", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" }], columns: pageCols as never });
+    useSheetStore.getState().commitCell(0, "cookies", "c_user=501; new=1");
+    expect(ledger("f1")["501"]).toBeUndefined();
+    expect((ledger("f1")["500"] as { p: number }).p).toBe(2);
+  });
+
+  it("bulk merge does not exclude row 0", async () => {
+    await openTestFile();
+    _lsStore.set("ss_waCheck", "true");
+    useSheetStore.setState({
+      rows: [
+        { cookies: "c_user=600;", uid: "600", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" },
+        { cookies: "c_user=601;", uid: "601", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" },
+      ], columns: pageCols as never
+    });
+    // stub pageCheck to mark eligible, if bulk incorrectly excluded row 0, only one call would happen
+    harness.nextPageCheck = () => ({ eligible: true, pageName: "P" });
+    // use internal core with bulk sentinel -1 (no exclusion) — merge uses null sentinel
+    await (useSheetStore.getState() as unknown as { _pageSweepCore: (m: string, f?: unknown, e?: number) => Promise<void> })._pageSweepCore("auto-page", undefined, null as unknown as number);
+    expect(harness.pageCheckCalls.length).toBe(2);
+  });
+
+  it("isPageFile false when no columns", async () => {
+    const { isPageFile } = await import("@/features/filetypes");
+    // no columns -> false even with preset page (production behavior)
+    expect(isPageFile({ id: "x", name: "pageTest", type: "fb_cookie", preset: "page" } as unknown as never)).toBe(false);
+    // with columns -> true
+    expect(isPageFile({ id: "x", name: "pageTest", type: "fb_cookie", preset: "page", columns: pageCols } as unknown as never)).toBe(true);
   });
 });

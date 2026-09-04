@@ -8,6 +8,7 @@ import { parseSheetRows } from "@/lib/xlsx";
 import { useSheetStore } from "@/stores/sheetStore";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Row } from "@/lib/types";
+import { isPageFile as isPageFileHelper } from "@/features/filetypes";
 
 const DownloadOverlay = lazy(() => import("./DownloadOverlay"));
 const CustomDownloadOverlay = lazy(() => import("./CustomDownloadOverlay"));
@@ -65,15 +66,15 @@ export default function SheetToolbar() {
   const [waCheckOn, setWaCheckOn] = useState(
     () => localStorage.getItem("ss_waCheck") === "true",
   );
+  const [checkWaOn, setCheckWaOn] = useState(
+    () => localStorage.getItem("ss_checkWa") === "true",
+  );
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [customDlOpen, setCustomDlOpen] = useState(false);
   const [waOpen, setWaOpen] = useState(false);
   const [uploadRows, setUploadRows] = useState<Row[] | null>(null);
   const file = useSheetStore((s) => s.file);
-  const hasTwoFaCol = file?.columns?.some((c) => c.key === "twofakey") ?? false;
-  const _hasPreset = file?.preset != null || file?.poolKind != null;
-  const _isPagePreset = _hasPreset ? file?.preset === "page" || file?.poolKind === "page" : (file?.name?.toLowerCase().startsWith("page") ?? false);
-  const isPageFile = hasTwoFaCol && _isPagePreset;
+  const isPageFile = isPageFileHelper(file);
   const pendingMerge = useRef(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -251,7 +252,7 @@ export default function SheetToolbar() {
         className={"check-dropdown" + (checkOpen ? " open" : "")}
         style={{ top: checkPos.top, right: checkPos.right }}
       >
-        <div className="check-dropdown-label">Auto-check</div>
+        <div className="check-dropdown-label">UID check</div>
         <button
           className={"autocheck-toggle" + (autoCheckOn ? " on" : "")}
           onClick={() => {
@@ -261,7 +262,7 @@ export default function SheetToolbar() {
           }}
         >
           <span className="autocheck-track"></span>
-          Auto-check
+          UID check
         </button>
         {isPageFile ? (
           <>
@@ -274,10 +275,32 @@ export default function SheetToolbar() {
                 const next = !waCheckOn;
                 setWaCheckOn(next);
                 localStorage.setItem("ss_waCheck", String(next));
+                if (next) {
+                  setCheckWaOn(false);
+                  localStorage.setItem("ss_checkWa", "false");
+                }
               }}
             >
               <span className="autocheck-track"></span>
               Page Check
+            </button>
+            <div className="check-dropdown-label" style={{ marginTop: 8 }}>
+              WA Check
+            </div>
+            <button
+              className={"autocheck-toggle" + (checkWaOn ? " on" : "")}
+              onClick={() => {
+                const next = !checkWaOn;
+                setCheckWaOn(next);
+                localStorage.setItem("ss_checkWa", String(next));
+                if (next) {
+                  setWaCheckOn(false);
+                  localStorage.setItem("ss_waCheck", "false");
+                }
+              }}
+            >
+              <span className="autocheck-track"></span>
+              WA Check
             </button>
           </>
         ) : null}

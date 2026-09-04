@@ -397,11 +397,31 @@ button, input, select, textarea {
 }
 .profile-ring {
     position: absolute;
-    inset: -4px;
-    width: 40px;
-    height: 40px;
+    inset: -6px;
+    width: 44px;
+    height: 44px;
     pointer-events: none;
     animation: profileRingGlow 1.6s ease 3s 1;
+}
+.profile-currency {
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
+    pointer-events: none;
+    white-space: nowrap;
 }
 @keyframes profileRingGlow {
     0% { filter: drop-shadow(0 0 0 currentColor); opacity: .85; }

@@ -210,10 +210,14 @@ export default function Topbar() {
           }}
         >
           <img className="user-btn-avatar" src={user.photoUrl ?? ""} alt="" />
-          <svg className="profile-ring" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true" style={{ color: ringColor }}>
+          <svg className="profile-ring" xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" aria-hidden="true" style={{ color: ringColor }}>
             <title>circle-outline</title>
             <path fill="currentColor" d="M12.003 21q-1.866 0-3.51-.708q-1.643-.709-2.859-1.924t-1.925-2.856T3 12.003t.709-3.51Q4.417 6.85 5.63 5.634t2.857-1.925T11.997 3t3.51.709q1.643.708 2.859 1.922t1.925 2.857t.709 3.509t-.708 3.51t-1.924 2.859t-2.856 1.925t-3.509.709M12 20q3.35 0 5.675-2.325T20 12t-2.325-5.675T12 4T6.325 6.325T4 12t2.325 5.675T12 20m0-8"/>
           </svg>
+          <span className="profile-currency" aria-label="Balance 0">
+            <span>0</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 256 256" aria-hidden="true"><title>hashnode-icon</title><path fill="#2962ff" fillRule="evenodd" d="M17.591 85.533c-23.455 23.455-23.455 61.479 0 84.932l67.943 67.944c23.455 23.453 61.479 23.453 84.932 0l67.944-67.944c23.453-23.455 23.453-61.48 0-84.932L170.466 17.59c-23.455-23.452-61.48-23.452-84.932 0zm140.134 72.193c16.418-16.419 16.418-43.036 0-59.452c-16.417-16.419-43.034-16.419-59.45 0c-16.419 16.418-16.419 43.033 0 59.452c16.418 16.416 43.033 16.416 59.452 0z"/></svg>
+          </span>
         </button>
         <div ref={panelRef} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
           <div className="gear-user-card">

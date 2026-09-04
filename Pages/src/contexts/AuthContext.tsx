@@ -84,6 +84,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Preload the avatar the instant its URL is known so the browser fires
+  // that request before first paint instead of after the topbar mounts.
+  useEffect(() => {
+    if (!user?.photoUrl) return;
+    if (document.querySelector(`link[rel="preload"][href="${user.photoUrl}"]`)) return;
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = user.photoUrl;
+    link.setAttribute("fetchpriority", "high");
+    document.head.appendChild(link);
+  }, [user?.photoUrl]);
+
   return (
     <AuthContext.Provider value={{ user, loading, sessionExpired }}>{children}</AuthContext.Provider>
   );

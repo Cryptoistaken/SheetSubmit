@@ -223,7 +223,7 @@ export default function Topbar() {
           </span>
           <span className="profile-pill-divider"></span>
           <span className={`avatar-ring${avatarReady ? " show" : ""}`} style={{ background: ringColor, color: ringColor }}>
-            <img src={user.photoUrl ?? ""} alt="" onLoad={() => setAvatarReady(true)} />
+            <img src={user.photoUrl ?? ""} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setAvatarReady(true)} />
           </span>
         </button>
         <div ref={panelRef} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>

@@ -61,13 +61,19 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
     };
   }, [fileId]);
 
-  // Bubble default: only cookies + 2FA key columns visible (uid hidden) unless
-  // the user has explicitly saved a column preference for this file.
+  // Bubble default: cookie+2fa for combo/page, cookie+uid for cookie-only
   useEffect(() => {
     if (status !== "ready") return;
     try {
       if (!localStorage.getItem(`ss_cols_${fileId}`)) {
-        useSheetStore.setState({ visibleCols: new Set(["cookies", "twofakey"]) });
+        const f = useSheetStore.getState().file;
+        const isCookieOnly =
+          f?.preset === "cookie" ||
+          f?.poolKind === "cookie" ||
+          (f?.columns ? !f.columns.some((c) => c.key === "twofakey") : false);
+        useSheetStore.setState({
+          visibleCols: new Set(isCookieOnly ? ["cookies", "uid"] : ["cookies", "twofakey"]),
+        });
       }
     } catch {
       // ignore malformed storage
@@ -124,6 +130,10 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
       if (s.status !== "ready" || !s.fileId || s.file?.type !== "fb_cookie") {
         return;
       }
+      const isCookieOnly =
+        s.file?.preset === "cookie" ||
+        s.file?.poolKind === "cookie" ||
+        (s.file?.columns ? !s.file.columns.some((c) => c.key === "twofakey") : false);
       void readClipboardText().then((raw) => {
         if (st.stopped) return;
         const t = (raw || "").trim();
@@ -153,6 +163,11 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
           useSheetStore.getState().bubbleSaveCookie(t);
           finish();
         } else if (looksLikeKey(t)) {
+          if (isCookieOnly) {
+            toast("No cookie or key");
+            finish();
+            return;
+          }
           const st2 = useSheetStore.getState();
           const row = st2.rows[st2.bubbleActiveRow];
           if (!row?.cookies) {

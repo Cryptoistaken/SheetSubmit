@@ -2151,7 +2151,12 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   bubbleGetActiveRow: () => {
     const s = get();
-    const complete = (r: Row) => !!(r.cookies && r.twofakey);
+    const isCookieOnly =
+      s.file?.preset === "cookie" ||
+      s.file?.poolKind === "cookie" ||
+      (s.file?.columns ? !s.file.columns.some((c) => c.key === "twofakey") : false);
+    const complete = (r: Row) =>
+      isCookieOnly ? !!r.cookies : !!(r.cookies && r.twofakey);
     // Keep the current in-progress row (missing cookie or missing key).
     if (
       s.bubbleActiveRow >= 0 &&
@@ -2195,8 +2200,12 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       toast("Duplicate @ " + (dupe + 1));
       return;
     }
+    const isCookieOnly =
+      s.file?.preset === "cookie" ||
+      s.file?.poolKind === "cookie" ||
+      (s.file?.columns ? !s.file.columns.some((c) => c.key === "twofakey") : false);
     const idx = get().bubbleGetActiveRow();
-    if (s.rows[idx].cookies) {
+    if (!isCookieOnly && s.rows[idx].cookies) {
       // Row already has a cookie — this paste was NOT saved (it's a cookie,
       // not a 2FA key). Keep it short: the bubble popup has no room for a
       // long toast.
@@ -2218,6 +2227,21 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       });
     }
     vibrate(15);
+    if (isCookieOnly) {
+      toast("Row " + (idx + 1) + " done");
+      set({
+        rows,
+        isDirty: true,
+        dirtyStructural: true,
+        structuralVersion: ++structuralCounter,
+        invalidCells: newInvalid,
+        ...recomputeMarksForRow(rows, s.crossDups, s.columns, idx),
+      });
+      get().persist("bubble");
+      get().maybeAutoCheck(idx, "cookies");
+      get().bubbleAdvanceActiveRow();
+      return;
+    }
     const complete = !!rows[idx].twofakey;
     toast(complete ? "Row " + (idx + 1) + " done" : "Paste 2FA key");
     set({
@@ -2234,8 +2258,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   },
 
   bubbleSaveKey: async (text) => {
-    const key = normalizeBubbleKey(text);
     const s = get();
+    const isCookieOnly =
+      s.file?.preset === "cookie" ||
+      s.file?.poolKind === "cookie" ||
+      (s.file?.columns ? !s.file.columns.some((c) => c.key === "twofakey") : false);
+    if (isCookieOnly) return;
+    const key = normalizeBubbleKey(text);
     if (bubbleKeyIndex(s.rows).has(key)) {
       toast("Duplicate 2FA");
       return;
@@ -2290,6 +2319,11 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   bubbleSkipNo2FA: () => {
     const s = get();
+    const isCookieOnly =
+      s.file?.preset === "cookie" ||
+      s.file?.poolKind === "cookie" ||
+      (s.file?.columns ? !s.file.columns.some((c) => c.key === "twofakey") : false);
+    if (isCookieOnly) return;
     const idx = s.bubbleActiveRow >= 0 ? s.bubbleActiveRow : s.bubbleGetActiveRow();
     const row = s.rows[idx];
     const canSkip = !!(row?.cookies && row.cookies.trim()) && !row.twofakey;

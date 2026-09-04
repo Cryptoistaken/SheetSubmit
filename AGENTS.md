@@ -2,7 +2,7 @@
 
 ## Project quick facts
 - Cloudflare Worker (`sheetsubmit.traderspopy.workers.dev`) + Pages (`sheetsubmit.pages.dev`).
-- Git-connected Pages auto-deploys on push. Worker deploys via `.github/workflows/deploy-worker.yml` (no native git deploy via API).
+- Git-connected Pages + Worker auto-deploy on push. No CI deploy workflow.
 - Package manager **bun**. Run `bun install` in `worker/` and `Pages/` if `node_modules` missing.
 - Frontend: React 19 + TypeScript + Vite 8 + Tailwind v4 + shadcn/ui (Nova, neutral, lucide, Geist) + Zustand.
 - Worker: Hono + Durable Objects (SQLite) + `xlsx`. No Redis, no KV, no D1.
@@ -18,7 +18,6 @@
   AGENTS.md               # this file
   deploy.env              # gitignored — CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN
   .github/workflows/
-    deploy-worker.yml     # CI: worker typecheck + deploy via wrangler
     build-android.yml     # APK CI only (JDK17, assembleRelease)
   worker/                 # Cloudflare Worker (Hono + DO)
   Pages/                  # React SPA (Vite)
@@ -104,11 +103,11 @@ functions/webhook/[[path]].ts
 1. **Production isolation** — test bot token only, own Cloudflare project. Never touch prod.
 2. Use tokens/CSS variables for colors — no hardcoded hex.
 3. **Android — NEVER build locally, CI only.**
-4. Pages auto-deploys on git push (git-connected). Worker needs CI (`deploy-worker.yml`).
+4. Pages + Worker auto-deploy on git push (git-connected). No CI deploy step.
 5. No versioning — save increments `seq` counter in meta. Undo/redo is client-side only (Zustand in-memory).
 6. Worker CPU limit: 10ms per request. Keep operations lightweight.
 7. No KV/D1/R2 bindings. Storage is Durable Objects + SQLite only.
-8. Worker API change flow (TestApi.ts hits the LIVE worker, so order matters): bump `API_VERSION` in `worker/src/index.ts` → `bun run typecheck` + `bun run test` in `worker/` → push/merge so CI deploys the worker → confirm redeploy via `GET /api/health` `version` → then run `TEST_SESSION_SECRET=<secret> EXPECT_VERSION=<new> bun scripts/TestApi.ts` (all must pass).
+8. Worker API change flow (TestApi.ts hits the LIVE worker, so order matters): bump `API_VERSION` in `worker/src/index.ts` → `bun run typecheck` + `bun run test` in `worker/` → push so Cloudflare auto-deploys → confirm via `GET /api/health` `version` → then run `TEST_SESSION_SECRET=<secret> EXPECT_VERSION=<new> bun scripts/TestApi.ts` (all must pass).
 9. New API endpoint → new `test()` in `scripts/TestApi.ts` in the same change (happy path + 400/401/404). Never ship an untested route.
 
 ## Capacity

@@ -1,4 +1,4 @@
-import { Archive, Layers } from "lucide-react";
+import { Layers } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { ComponentType } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
@@ -52,10 +52,29 @@ function getAndroid(): AndroidBridge | null {
   }
 }
 
-const ReplitIcon = ({ size = 14, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 128 128" aria-hidden="true" {...props}>
-    <title>replit</title>
-    <path fill="#f26207" d="M11 8c0-2.122.845-4.157 2.35-5.657A8.04 8.04 0 0 1 19.026 0h37.45a8.04 8.04 0 0 1 5.675 2.343A8 8 0 0 1 64.5 8v34.667H19.025a8.04 8.04 0 0 1-5.674-2.343A8 8 0 0 1 11 34.666zm53.5 34.667h45.475a8.04 8.04 0 0 1 5.675 2.343a8 8 0 0 1 2.35 5.657v26.666a8 8 0 0 1-2.35 5.657a8.04 8.04 0 0 1-5.675 2.343H64.5zM11 93.333c0-2.121.845-4.156 2.35-5.656a8.04 8.04 0 0 1 5.675-2.344H64.5V120a8 8 0 0 1-2.35 5.657A8.04 8.04 0 0 1 56.475 128h-37.45a8.04 8.04 0 0 1-5.674-2.343A8 8 0 0 1 11 120z" />
+const SolidityIcon = ({ size = 14, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 256 398" aria-hidden="true" {...props}>
+    <title>solidity</title>
+    <path fill="currentColor" d="m191.513 0l-63.867 113.512H0L63.823 0z" opacity=".45" />
+    <path fill="currentColor" d="M127.646 113.512h127.691L191.513 0H63.823z" opacity=".6" />
+    <path fill="currentColor" d="m63.823 226.981l63.823-113.469L63.823 0L0 113.512z" opacity=".8" />
+    <path fill="currentColor" d="m64.442 397.25l63.867-113.513H256L192.132 397.25z" opacity=".45" />
+    <path fill="currentColor" d="M128.309 283.737H.618L64.441 397.25h127.691z" opacity=".6" />
+    <path fill="currentColor" d="m192.132 170.269l-63.823 113.468l63.823 113.513L256 283.737z" opacity=".8" />
+  </svg>
+);
+
+const CakephpIcon = ({ size = 14, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 256 200" aria-hidden="true" {...props}>
+    <title>cakephp-icon</title>
+    <path fill="#d33c44" fill-rule="evenodd" d="M0 119.883c0 22.056 57.294 39.958 127.98 39.958v39.942C57.294 199.783 0 181.897 0 159.841Zm256 0v39.95c0 9.417-10.47 18.056-27.902 24.89l-100.126-24.89v-39.95l100.126 24.882c17.433-6.826 27.91-15.465 27.902-24.882M127.98 0C198.674 0 256 17.918 256 39.958v39.983c0 9.384-10.47 18.056-27.894 24.857L127.98 79.941v39.942C57.294 119.883 0 101.989 0 79.94V39.958C0 17.918 57.294 0 127.98 0" />
+  </svg>
+);
+
+const RabbitmqIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 256 257" aria-hidden="true" {...props}>
+    <title>rabbitmq-icon</title>
+    <path fill="#f60" d="M245.734 102.437h-81.911a10.2 10.2 0 0 1-10.263-10.263v-81.91a10.2 10.2 0 0 0-10.263-10.2h-30.66a10.2 10.2 0 0 0-10.264 10.2v81.91a10.2 10.2 0 0 1-10.263 10.263H61.45a10.2 10.2 0 0 1-10.263-10.263v-81.91A10.2 10.2 0 0 0 40.924 0H10.199A10.2 10.2 0 0 0 0 10.263v235.535a10.2 10.2 0 0 0 10.263 10.263h235.47a10.2 10.2 0 0 0 10.264-10.263V112.893a10.2 10.2 0 0 0-10.263-10.456m-41.18 86.979a15.33 15.33 0 0 1-15.33 15.394h-20.526a15.33 15.33 0 0 1-15.33-15.394v-20.462a15.33 15.33 0 0 1 15.33-15.394h20.525a15.33 15.33 0 0 1 15.33 15.394z" />
   </svg>
 );
 
@@ -97,12 +116,7 @@ function ToolsList({ onOpenSplitter }: { onOpenSplitter: () => void }) {
         >
           <div className="file-card-icon" style={{ background: "var(--blue-light)", color: "var(--blue)" }}>
             {/* icon: allsvgicons.com/lucide/scissors.svg */}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="6" cy="6" r="3" />
-              <path d="M8.12 8.12L12 12m8-8L8.12 15.88" />
-              <circle cx="6" cy="18" r="3" />
-              <path d="M14.8 14.8L20 20" />
-            </svg>
+            <RabbitmqIcon size={16} />
           </div>
           <div className="file-card-name">Splitter</div>
           <div className="file-card-meta">Split xlsx into N parts</div>
@@ -397,7 +411,7 @@ export default function HomePage() {
           aria-selected={tab === "archive"}
           onClick={() => goTab("/archive")}
         >
-          <Archive size={14} aria-hidden="true" />
+          <CakephpIcon size={14} aria-hidden="true" />
           Archive
         </button>
         {user?.isAdmin ? (
@@ -429,7 +443,7 @@ export default function HomePage() {
             aria-selected={tab === "tools"}
             onClick={() => goTab("/tools")}
           >
-            <ReplitIcon size={14} aria-hidden="true" />
+            <SolidityIcon size={14} aria-hidden="true" />
             Tools
           </button>
         ) : null}

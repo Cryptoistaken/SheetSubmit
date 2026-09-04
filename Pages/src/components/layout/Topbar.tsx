@@ -210,11 +210,12 @@ export default function Topbar() {
             setPanelOpen((o) => !o);
           }}
         >
-          <img className="user-btn-avatar" src={user.photoUrl ?? ""} alt="" style={{ borderColor: ringColor, color: ringColor }} />
           <span className="profile-currency" aria-label="Balance 0">
+            <WorkspaceIcon size={14} />
             <span>0</span>
-            <WorkspaceIcon size={12} />
           </span>
+          <span className="profile-pill-divider"></span>
+          <img className="user-btn-avatar" src={user.photoUrl ?? ""} alt="" style={{ borderColor: ringColor, color: ringColor }} />
         </button>
         <div ref={panelRef} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
           <div className="gear-user-card">

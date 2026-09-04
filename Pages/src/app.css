@@ -379,41 +379,40 @@ button, input, select, textarea {
     position: relative;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: none;
-    background: transparent;
+    height: 34px;
+    border-radius: 999px;
+    border: 1.5px solid var(--border);
+    background: var(--bg3);
     padding: 0;
     color: var(--text3);
     cursor: pointer;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, box-shadow 0.15s;
     flex-shrink: 0;
-    overflow: visible;
+    overflow: hidden;
 }
 .profile-btn:hover {
-    color: var(--text);
+    border-color: var(--text3);
+    box-shadow: 0 0 0 2px rgba(99,102,241,.15);
 }
 .profile-currency {
-    position: absolute;
-    bottom: -6px;
-    left: 50%;
-    transform: translateX(-50%);
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    padding: 1px 6px;
-    border-radius: 999px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    font-size: 11px;
-    font-weight: 600;
+    gap: 5px;
+    padding: 0 10px 0 10px;
+    height: 100%;
+    font-size: 13px;
+    font-weight: 700;
     line-height: 1;
     color: var(--text);
-    box-shadow: var(--shadow-sm);
-    pointer-events: none;
     white-space: nowrap;
+    order: 1;
+}
+.profile-pill-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+    flex-shrink: 0;
+    order: 2;
 }
 @keyframes profileRingGlow {
     0% { filter: drop-shadow(0 0 0 currentColor); opacity: .85; }
@@ -427,14 +426,15 @@ button, input, select, textarea {
     display: none;
 }
 .user-btn-avatar {
-    width: 100%;
-    height: 100%;
+    width: 30px;
+    height: 30px;
     object-fit: cover;
     display: none;
     border-radius: 50%;
-    border: 2px solid currentColor;
-    color: var(--border);
-    animation: profileRingGlow 1.6s ease 3s 1;
+    border: 1.5px solid var(--green);
+    flex-shrink: 0;
+    margin: 2px 2px 2px 0;
+    order: 3;
 }
 .profile-btn.loaded .user-btn-avatar {
     display: block;

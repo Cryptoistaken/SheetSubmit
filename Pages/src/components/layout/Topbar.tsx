@@ -46,6 +46,7 @@ export default function Topbar() {
   const btnRef = useRef<HTMLButtonElement>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [avatarReady, setAvatarReady] = useState(false);
+  const [photoBusted, setPhotoBusted] = useState(false);
   const [renameName, setRenameName] = useState("");
   const renameRef = useModalA11y(renameOpen && !!file, () => setRenameOpen(false));
   const [isAndroid, setIsAndroid] = useState(() => !!getAndroid());
@@ -115,6 +116,7 @@ export default function Topbar() {
   // hidden until the new image has actually loaded.
   useEffect(() => {
     setAvatarReady(false);
+    setPhotoBusted(false);
   }, [user?.photoUrl, avatarSrc]);
 
   // Close gear panel on outside click.
@@ -224,9 +226,11 @@ export default function Topbar() {
             <WorkspaceIcon size={14} />
           </span>
           <span className="profile-pill-divider"></span>
-          <span className={`avatar-ring${avatarReady && avatarSrc ? " show" : ""}`} style={{ background: ringColor, color: ringColor }}>
-            {avatarSrc ? (
-              <img key={avatarSrc} src={avatarSrc} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setAvatarReady(true)} />
+          <span className={`avatar-ring${!user.photoUrl || photoBusted || (avatarReady && avatarSrc) ? " show" : ""}`} style={{ background: ringColor, color: ringColor }}>
+            {!user.photoUrl || photoBusted ? (
+              <span className="avatar-fallback">{(displayName || "?").slice(0, 1).toUpperCase()}</span>
+            ) : avatarSrc ? (
+              <img key={avatarSrc} src={avatarSrc} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setAvatarReady(true)} onError={() => setPhotoBusted(true)} />
             ) : null}
           </span>
         </button>

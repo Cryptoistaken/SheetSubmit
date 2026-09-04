@@ -223,9 +223,27 @@ export default function PoolsView() {
         .user-row:hover{background:var(--bg2)}
         .expand-icon{transition:transform .15s;display:inline-flex}
         .expand-icon.open{transform:rotate(90deg)}
-        .file-row{background:var(--bg2);animation:fadeIn .15s}
+        .file-row{animation:fadeIn .15s}
         @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-        @media(max-width:640px){.pools-stack{flex-direction:column;align-items:stretch}.pools-switch{width:100%}.pools-switch button{flex:1;justify-content:center}.pools-toolbar{flex-direction:column;align-items:stretch}.pools-qty{width:100%}.pools-qty button{flex:1}.pools-download{width:100%;height:44px;justify-content:center}.pools-stats{grid-template-columns:1fr!important}}
+        .card-list{display:flex;flex-direction:column;gap:8px}
+        .pool-card{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--rl);background:var(--bg);cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s}
+        @media(hover:hover){.pool-card:hover{border-color:var(--text3);box-shadow:var(--shadow-md);transform:translateY(-1px)}}
+        .pool-card:active{transform:scale(.99)}
+        .pool-card.expanded{border-color:var(--blue);background:var(--blue-light)}
+        .pool-card-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+        .pool-card-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);display:flex;align-items:center;gap:8px}
+        .pool-card-sub{font-size:12px;color:var(--text3);display:flex;align-items:center;gap:8px}
+        .pool-card-stats{display:flex;align-items:center;gap:10px;flex-shrink:0}
+        .pool-card-stat{font-size:12px;font-family:var(--mono);font-weight:600;white-space:nowrap}
+        .pool-card-actions{display:flex;gap:6px;flex-shrink:0}
+        .file-card{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s}
+        @media(hover:hover){.file-card:hover{border-color:var(--text3);box-shadow:var(--shadow-sm)}}
+        .file-card:active{transform:scale(.99)}
+        .file-card-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+        .file-card-id{font-size:12px;font-family:var(--mono);color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .file-card-stats{display:flex;align-items:center;gap:6px;flex-shrink:0}
+        .file-card-stat{font-size:12px;font-family:var(--mono);font-weight:600}
+        @media(max-width:640px){.pools-stack{flex-direction:column;align-items:stretch}.pools-switch{width:100%}.pools-switch button{flex:1;justify-content:center}.pools-toolbar{flex-direction:column;align-items:stretch}.pools-qty{width:100%}.pools-qty button{flex:1}.pools-download{width:100%;height:44px;justify-content:center}.pools-stats{grid-template-columns:1fr!important}.pool-card{flex-wrap:wrap}.pool-card-actions{width:100%;justify-content:flex-end}}
       `}</style>
 
       {/* header + switches */}
@@ -297,110 +315,108 @@ export default function PoolsView() {
         </label>
       </div>
 
-      {/* user table with expandable file rows */}
-      <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", overflow: "auto", background: "var(--bg)", marginTop: 12 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 520 }}>
-          <thead><tr style={{ borderBottom: "1px solid var(--border)", textAlign: "left", color: "var(--text3)" }}><th style={{ padding: "10px 12px" }}>User</th><th style={{ padding: "10px 12px" }}>Available</th><th style={{ padding: "10px 12px" }}>Claimed</th><th style={{ width: 44 }}></th></tr></thead>
-          <tbody>
-            {filtered.length === 0 ? <tr><td colSpan={4} style={{ padding: 24, textAlign: "center", color: "var(--text3)" }}>No users yet</td></tr> : filtered.map((u) => {
-              const d = displayName(u);
-              const isAdmin = (u as unknown as Record<string, unknown>)["isAdmin"] as boolean | undefined;
-              const expanded = expandedUser === u.userId;
-              const uf = getUserFilesFor(u.userId);
-              return (
-                <>
-                  <tr key={u.userId} className="user-row" style={{ borderBottom: "1px solid var(--border)" }} onClick={() => toggleExpand(u.userId)}>
-                    <td style={{ padding: "10px 12px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span className={`expand-icon ${expanded ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0 }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6" /></svg>
-                        </span>
-                        <span className="admin-wrap">
-                          {u.photoUrl ? <img src={u.photoUrl} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", border: "1px solid var(--border)" }} /> : <span style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--bg3)", display: "grid", placeItems: "center", fontWeight: 700, border: "1px solid var(--border)" }}>{d.line1.charAt(0).toUpperCase()}</span>}
-                          {isAdmin ? <span className="admin-dot"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M5 13l4 4L19 7" /></svg></span> : null}
-                        </span>
-                        <span style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.line1}</div>
-                          {d.line2 ? <div style={{ fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.line2}</div> : null}
-                        </span>
-                        {uf ? <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: 4, whiteSpace: "nowrap" }}>{uf.files.length} file{uf.files.length !== 1 ? "s" : ""}</span> : null}
-                      </div>
-                    </td>
-                    <td style={{ fontFamily: "var(--mono)", padding: "10px 12px" }}>{u.available}</td>
-                    <td style={{ padding: "10px 12px" }}><span className="badge taken">{u.claimed} Taken</span></td>
-                    <td style={{ padding: "8px", position: "relative" }} onClick={(e) => e.stopPropagation()}>
-                      <button className="btn" style={{ width: 32, height: 32, padding: 0, justifyContent: "center" }} onClick={() => setMenuUser(menuUser === u.userId ? null : u.userId)}>⋯</button>
-                      {menuUser === u.userId ? (
-                        <div style={{ position: "absolute", right: 8, top: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--rl)", boxShadow: "var(--shadow-lg)", zIndex: 10, minWidth: 160, padding: 4 }}>
-                          <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", borderRadius: 6, fontWeight: 500 }} onClick={() => openFile(u)}>View file</button>
-                          <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "var(--blue)", color: "#fff", cursor: "pointer", borderRadius: 6, fontWeight: 700, marginTop: 4 }} onClick={() => { setMenuUser(null); setDlUser(u); setPerQty(10); setPerCustom(""); }}>Download</button>
-                          {isAdmin ? <div style={{ fontSize: 11, color: "var(--text3)", padding: "6px 10px" }}>Admin account</div> : null}
-                        </div>
-                      ) : null}
-                    </td>
-                  </tr>
-                  {expanded && (
-                    <tr key={`${u.userId}-files`} className="file-row">
-                      <td colSpan={4} style={{ padding: "0 12px 12px 44px" }}>
-                        {loadingFiles && !uf ? (
-                          <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>Loading files...</div>
-                        ) : !uf || uf.files.length === 0 ? (
-                          <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>No files tracked for this user</div>
-                        ) : (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 2 }}>
-                              Files in pool — {uf.files.length} total
-                            </div>
-                            {uf.files.map((f) => (
-                              <div key={f.fileId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer" }} onClick={() => navigate(`/admin/user/${u.userId}/file/${f.fileId}`)}>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--text3)", flexShrink: 0 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>
-                                <span style={{ fontSize: 12, fontFamily: "var(--mono)", color: "var(--text2)", flexShrink: 0 }}>#{f.fileId.slice(-8)}</span>
-                                <span style={{ flex: 1 }} />
-                                <span style={{ fontSize: 12, color: "var(--green)", fontWeight: 600 }}>{f.available} avail</span>
-                                <span style={{ fontSize: 12, color: "var(--text3)" }}>/</span>
-                                <span style={{ fontSize: 12, color: "var(--red)", fontWeight: 600 }}>{f.claimed} taken</span>
-                              </div>
-                            ))}
+      {/* user list */}
+      <div className="card-list" style={{ marginTop: 12 }}>
+        {filtered.length === 0 ? (
+          <div style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13, border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>No users yet</div>
+        ) : filtered.map((u) => {
+          const d = displayName(u);
+          const isAdmin = (u as unknown as Record<string, unknown>)["isAdmin"] as boolean | undefined;
+          const expanded = expandedUser === u.userId;
+          const uf = getUserFilesFor(u.userId);
+          return (
+            <div key={u.userId} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              <div className={`pool-card ${expanded ? "expanded" : ""}`} onClick={() => toggleExpand(u.userId)}>
+                <span className={`expand-icon ${expanded ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6" /></svg>
+                </span>
+                <span className="admin-wrap">
+                  {u.photoUrl ? <img src={u.photoUrl} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "1.5px solid var(--border)" }} /> : <span style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--bg3)", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 14, border: "1.5px solid var(--border)", color: "var(--text2)" }}>{d.line1.charAt(0).toUpperCase()}</span>}
+                  {isAdmin ? <span className="admin-dot"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M5 13l4 4L19 7" /></svg></span> : null}
+                </span>
+                <div className="pool-card-info">
+                  <div className="pool-card-name">{d.line1}{uf ? <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 500 }}>{uf.files.length} file{uf.files.length !== 1 ? "s" : ""}</span> : null}</div>
+                  {d.line2 ? <div className="pool-card-sub">{d.line2}</div> : null}
+                </div>
+                <div className="pool-card-stats">
+                  <span className="pool-card-stat" style={{ color: "var(--green)" }}>{u.available}</span>
+                  <span className="pool-card-stat" style={{ color: "var(--text3)" }}>/</span>
+                  <span className="pool-card-stat" style={{ color: "var(--text3)" }}>{u.claimed} taken</span>
+                </div>
+                <div className="pool-card-actions" onClick={(e) => e.stopPropagation()}>
+                  <button className="btn" style={{ width: 32, height: 32, padding: 0, justifyContent: "center" }} onClick={() => setMenuUser(menuUser === u.userId ? null : u.userId)}>⋯</button>
+                  {menuUser === u.userId ? (
+                    <div style={{ position: "absolute", right: 8, top: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--rl)", boxShadow: "var(--shadow-lg)", zIndex: 10, minWidth: 160, padding: 4 }}>
+                      <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", borderRadius: 6, fontWeight: 500 }} onClick={() => openFile(u)}>View file</button>
+                      <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "var(--blue)", color: "#fff", cursor: "pointer", borderRadius: 6, fontWeight: 700, marginTop: 4 }} onClick={() => { setMenuUser(null); setDlUser(u); setPerQty(10); setPerCustom(""); }}>Download</button>
+                      {isAdmin ? <div style={{ fontSize: 11, color: "var(--text3)", padding: "6px 10px" }}>Admin account</div> : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+              {expanded && (
+                <div className="file-row" style={{ padding: "4px 0 8px 42px" }}>
+                  {loadingFiles && !uf ? (
+                    <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>Loading files...</div>
+                  ) : !uf || uf.files.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>No files tracked for this user</div>
+                  ) : (
+                    <div className="card-list">
+                      {uf.files.map((f) => (
+                        <div key={f.fileId} className="file-card" onClick={() => navigate(`/admin/user/${u.userId}/file/${f.fileId}`)}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--text3)", flexShrink: 0 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>
+                          <div className="file-card-info">
+                            <div className="file-card-id">#{f.fileId.slice(-8)}</div>
                           </div>
-                        )}
-                      </td>
-                    </tr>
+                          <div className="file-card-stats">
+                            <span className="file-card-stat" style={{ color: "var(--green)" }}>{f.available} avail</span>
+                            <span className="file-card-stat" style={{ color: "var(--text3)" }}>/</span>
+                            <span className="file-card-stat" style={{ color: "var(--red)" }}>{f.claimed} taken</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </>
-              );
-            })}
-          </tbody>
-        </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* download history */}
-      <div style={{ marginTop: 16, border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)", padding: 14, overflow: "auto" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Recent downloads</div>
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Recent downloads</div>
         {!downloads || downloads.length === 0 ? (
-          <div style={{ fontSize: 13, color: "var(--text3)", padding: "12px 0", textAlign: "center" }}>{downloads === null ? "Loading..." : "No downloads yet"}</div>
+          <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>{downloads === null ? "Loading..." : "No downloads yet"}</div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640 }}>
-            <thead><tr style={{ borderBottom: "1px solid var(--border)", textAlign: "left", color: "var(--text3)", fontSize: 12 }}><th style={{ padding: "8px 8px" }}>Date</th><th style={{ padding: "8px 8px" }}>Pool</th><th style={{ padding: "8px 8px" }}>Password</th><th style={{ padding: "8px 8px" }}>Claimed</th><th style={{ padding: "8px 8px" }}>Filename</th><th style={{ width: 200 }}></th></tr></thead>
-            <tbody>
-              {(downloads as unknown as { id: string; at: number; poolId: string; password: string; claimed: number; filename: string; reverted?: boolean }[]).map((d) => {
-                const dt = d.at ? new Date(d.at).toLocaleString() : "—";
-                const isReverted = !!(d as unknown as { reverted?: boolean }).reverted;
-                return (
-                  <tr key={d.id} style={{ borderBottom: "1px solid var(--border)", opacity: isReverted ? 0.6 : 1 }}>
-                    <td style={{ padding: "8px", whiteSpace: "nowrap" }}>{dt}</td>
-                    <td style={{ padding: "8px" }}><span className="badge">{d.poolId}</span></td>
-                    <td style={{ padding: "8px", fontFamily: "var(--mono)", fontSize: 12 }}>{d.password}</td>
-                    <td style={{ padding: "8px", fontFamily: "var(--mono)" }}>{d.claimed} {isReverted ? <span style={{ fontSize: 10, color: "var(--green)", marginLeft: 6, fontWeight: 600 }}>REVERTED</span> : null}</td>
-                    <td style={{ padding: "8px", fontSize: 12, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.filename}>{d.filename}</td>
-                    <td style={{ padding: "8px", display: "flex", gap: 6 }}>
-                      <button className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} disabled={reDownloading === d.id || isReverted} onClick={() => doRedownload(d.id, d.filename)}>{reDownloading === d.id ? "…" : "Download"}</button>
-                      <button className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, color: isReverted ? "var(--text3)" : "var(--red)" }} disabled={reverting === d.id || isReverted} onClick={() => doRevert(d.id)}>{reverting === d.id ? "…" : isReverted ? "Given back" : "Give back"}</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="card-list">
+            {(downloads as unknown as { id: string; at: number; poolId: string; password: string; claimed: number; filename: string; reverted?: boolean }[]).map((d) => {
+              const dt = d.at ? new Date(d.at) : null;
+              const dateStr = dt ? dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
+              const timeStr = dt ? dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
+              const isReverted = !!(d as unknown as { reverted?: boolean }).reverted;
+              const poolBadgeClass = d.poolId === "page" ? "badge page" : "badge";
+              return (
+                <div key={d.id} className={`pool-card ${isReverted ? "reverted" : ""}`} style={{ cursor: "default" }}>
+                  <span className={poolBadgeClass} style={{ flexShrink: 0 }}>{d.poolId}</span>
+                  <div className="pool-card-info">
+                    <div className="pool-card-name" title={d.filename}>{d.filename}</div>
+                    <div className="pool-card-sub">
+                      <span>{dateStr} {timeStr}</span>
+                      <span>·</span>
+                      <span>{d.claimed} claimed</span>
+                      {isReverted ? <><span>·</span><span style={{ color: "var(--green)", fontWeight: 600 }}>REVERTED</span></> : null}
+                    </div>
+                  </div>
+                  <div className="pool-card-actions">
+                    <button className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} disabled={reDownloading === d.id || isReverted} onClick={() => doRedownload(d.id, d.filename)}>{reDownloading === d.id ? "…" : "Download"}</button>
+                    <button className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, color: isReverted ? "var(--text3)" : "var(--red)" }} disabled={reverting === d.id || isReverted} onClick={() => doRevert(d.id)}>{reverting === d.id ? "…" : isReverted ? "Given back" : "Give back"}</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 

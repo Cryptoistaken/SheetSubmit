@@ -2,6 +2,7 @@ import { Plus, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
+import { FacebookIcon } from "@/components/icons/FacebookIcon";
 import type { FilePreset } from "@/lib/types";
 
 const TwoFaIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
@@ -77,7 +78,7 @@ export default function Fab({ onCreate, onUpload }: FabProps) {
         <Plus size={24} strokeWidth={3} />
       </button>
       <div ref={menuRef} className={`home-fab-menu${open ? " open" : ""}`}>
-        <div className="home-fab-platform">Facebook</div>
+        <div className="home-fab-platform" style={{ display: "flex", alignItems: "center", gap: 6 }}><FacebookIcon size={13} />Facebook</div>
         {([
           ["cookie", "Cookie", "cookies and uid", CookieIcon],
           ["combo", "2fa", "cookies and 2fa and uid", TwoFaIcon],

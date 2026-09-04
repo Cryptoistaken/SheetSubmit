@@ -24,6 +24,7 @@ const CookieIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<
   </svg>
 );
 
+import { FacebookIcon } from "@/components/icons/FacebookIcon";
 import { fileTypeDef } from "@/lib/types";
 import type { SheetFile } from "@/lib/types";
 
@@ -164,7 +165,7 @@ export default function FileCard({
       </div>
       <div className="file-card-name">{file.name}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
-        <span className="file-type-badge">{badge}</span>
+        <span className="file-type-badge" title={badge} aria-label={badge} style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={12} /></span>
         <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={pwTitle}>{pwLabel}</span>
         <span className="file-card-meta">
           {count} row{count !== 1 ? "s" : ""}

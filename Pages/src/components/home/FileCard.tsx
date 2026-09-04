@@ -24,6 +24,19 @@ const CookieIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<
   </svg>
 );
 
+const PasswordIcon = ({ password, size = 16 }: { password: string; size?: number }) => password === "dgddigital" ? (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M22 12a1 1 0 0 1-10 0 1 1 0 0 0-10 0" />
+    <path d="M7 20.7a1 1 0 1 1 5-8.7 1 1 0 1 0 5-8.6" />
+    <path d="M7 3.3a1 1 0 1 1 5 8.6 1 1 0 1 0 5 8.6" />
+    <circle cx="12" cy="12" r="10" />
+  </svg>
+) : password === "L0VE@12345" ? (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
+  </svg>
+) : null;
+
 import { FacebookIcon } from "@/components/icons/FacebookIcon";
 import { fileTypeDef } from "@/lib/types";
 import type { SheetFile } from "@/lib/types";
@@ -136,9 +149,7 @@ export default function FileCard({
           : CookieIcon;
   const pwStyle: React.CSSProperties = isCustom
     ? { background: "var(--fb-bg)", color: "var(--fb)" }
-    : pw === "L0VE@12345"
-      ? { background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" }
-      : { background: "var(--bg3)", color: "var(--text2)" };
+    : { background: "var(--bg3)", color: "var(--text2)" };
 
   return (
     <div
@@ -166,7 +177,7 @@ export default function FileCard({
       <div className="file-card-name">{file.name}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
         <span className="file-type-badge" title={badge} aria-label={badge} style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={12} /></span>
-        <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={pwTitle}>{pwLabel}</span>
+        <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center" }} title={pwTitle}>{isCustom ? pwLabel : <PasswordIcon password={pw} size={14} />}</span>
         <span className="file-card-meta">
           {count} row{count !== 1 ? "s" : ""}
           {crossDupCount ? (

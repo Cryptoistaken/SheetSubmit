@@ -414,11 +414,6 @@ button, input, select, textarea {
     flex-shrink: 0;
     order: 2;
 }
-@keyframes profileRingGlow {
-    0% { filter: drop-shadow(0 0 0 currentColor); opacity: .85; }
-    45% { filter: drop-shadow(0 0 7px currentColor); opacity: 1; }
-    100% { filter: drop-shadow(0 0 0 currentColor); opacity: .85; }
-}
 .profile-btn:active {
     transform: scale(0.97);
 }
@@ -437,7 +432,6 @@ button, input, select, textarea {
     margin: 2px 2px 2px 0;
     order: 3;
     background: #d4440f;
-    animation: profileRingGlow 3s ease-in-out infinite;
 }
 .profile-btn.loaded .avatar-ring {
     display: block;
@@ -465,7 +459,7 @@ button, input, select, textarea {
     display: block;
 }
 @media (prefers-reduced-motion: reduce) {
-    .avatar-ring, .avatar-ring::before { animation: none; }
+    .avatar-ring::before { animation: none; }
 }
 
 /* ── Settings panel ── */

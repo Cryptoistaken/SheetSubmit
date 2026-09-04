@@ -211,8 +211,8 @@ export default function Topbar() {
           }}
         >
           <span className="profile-currency" aria-label="Balance 0">
-            <WorkspaceIcon size={14} />
             <span>0</span>
+            <WorkspaceIcon size={14} />
           </span>
           <span className="profile-pill-divider"></span>
           <img className="user-btn-avatar" src={user.photoUrl ?? ""} alt="" style={{ borderColor: ringColor, color: ringColor }} />

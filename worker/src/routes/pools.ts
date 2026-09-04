@@ -28,7 +28,7 @@ pools.use("/*", requireAuth);
 const DL_PASSWORDS = ["dgddigital", "L0VE@12345"];
 const dlMeta = (m: any) => ({ id: m.id, at: m.ts, claimedBy: m.claimedBy, password: m.password, poolId: m.poolId || m.pool_id, claimed: m.claimed, filename: m.filename, reverted: !!m.reverted });
 const findDownload = async (c: any, id: string) => { for (const pwd of DL_PASSWORDS) { const d: any = await rpc(c.env.POOLS, pwd, "download", { id }).catch(() => null); if (d) return { ...d, password: pwd }; } return null; };
-pools.get("/downloads", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const all: any[] = []; for (const pwd of DL_PASSWORDS) { const r = await rpc(c.env.POOLS, pwd, "downloads").catch(() => ({ downloads: [] })); for (const d of r.downloads || []) all.push(dlMeta({ ...d, password: pwd })); } all.sort((a, b) => b.at - a.at); return c.json(all.slice(0, 50)); });
+pools.get("/downloads", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const results = await Promise.all(DL_PASSWORDS.map((pwd) => rpc(c.env.POOLS, pwd, "downloads").catch(() => ({ downloads: [] })))); const all = results.flatMap((r, i) => (r.downloads || []).map((d: any) => dlMeta({ ...d, password: DL_PASSWORDS[i] }))); all.sort((a, b) => b.at - a.at); return c.json(all.slice(0, 50)); });
 pools.get("/downloads/:id/detail", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const id = c.req.param("id");
@@ -43,11 +43,10 @@ pools.get("/downloads/:id", async (c) => { if (!admin(c)) return c.json({ error:
 pools.post("/downloads/:id/revert", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findDownload(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); return c.json(await rpc(c.env.POOLS, d.password, "revertDownload", { id: d.id, uid: c.get("uid") })); });
 pools.get("/", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
-  const out: any[] = [];
-  for (const pwd of PASSWORDS) for (const pid of POOL_IDS) {
+  const out = await Promise.all(PASSWORDS.flatMap((pwd) => POOL_IDS.map(async (pid) => {
     const s = summarize(await detailRows(c, pwd, pid));
-    out.push({ id: pid, ...META[pid], password: pwd, available: s.available, claimed: s.claimed, users: s.users.length });
-  }
+    return { id: pid, ...META[pid], password: pwd, available: s.available, claimed: s.claimed, users: s.users.length };
+  })));
   return c.json({ pools: out });
 });
 pools.get("/:password/:pool/rows", async (c) => {

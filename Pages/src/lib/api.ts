@@ -25,6 +25,18 @@ declare global {
 const BASE = RUNTIME_BASE + "/api";
 export const API_BASE = BASE;
 
+/** The worker sends snake_case DB rows — normalize once so every consumer
+ *  sees the camelCase User shape (id, firstName, lastName). */
+export function normalizeUser(raw: any): User {
+  const parts = String(raw?.name || "").split(" ").filter(Boolean);
+  return {
+    ...raw,
+    id: String(raw?.id ?? raw?.user_id ?? ""),
+    firstName: raw?.firstName ?? parts[0] ?? "",
+    lastName: raw?.lastName ?? parts.slice(1).join(" ") ?? "",
+  } as User;
+}
+
 async function requestBlob(path: string): Promise<Blob> {
   const res = await fetch(BASE + path, { credentials: "include" });
   if (!res.ok) {
@@ -325,7 +337,9 @@ export const api = {
       return { user: null, expired: body?.error === "session_expired" };
     }
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    return { user: (await res.json()) as User | null, expired: false };
+    const raw = (await res.json()) as any;
+    if (!raw) return { user: null, expired: false };
+    return { user: normalizeUser(raw), expired: false };
   },
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   botInfo: () => request<{ username: string }>("/bot/info"),

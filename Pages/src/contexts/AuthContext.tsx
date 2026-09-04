@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import { api } from "@/lib/api";
+import { api, normalizeUser } from "@/lib/api";
 import type { User } from "@/lib/types";
 
 interface AuthContextValue {
@@ -63,7 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cached) {
           try {
             const parsed = JSON.parse(cached) as User;
-            if (active && parsed?.id) setUser(parsed);
+            const cid = (parsed as any)?.id ?? (parsed as any)?.user_id;
+            if (active && cid) setUser(normalizeUser(parsed));
           } catch {
             localStorage.removeItem(CACHE_KEY);
           }

@@ -70,6 +70,10 @@ export default function SheetToolbar() {
   const [waOpen, setWaOpen] = useState(false);
   const [uploadRows, setUploadRows] = useState<Row[] | null>(null);
   const file = useSheetStore((s) => s.file);
+  const hasTwoFaCol = file?.columns?.some((c) => c.key === "twofakey") ?? false;
+  const _hasPreset = file?.preset != null || file?.poolKind != null;
+  const _isPagePreset = _hasPreset ? file?.preset === "page" || file?.poolKind === "page" : (file?.name?.toLowerCase().startsWith("page") ?? false);
+  const isPageFile = hasTwoFaCol && _isPagePreset;
   const pendingMerge = useRef(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -259,20 +263,24 @@ export default function SheetToolbar() {
           <span className="autocheck-track"></span>
           Auto-check
         </button>
-        <div className="check-dropdown-label" style={{ marginTop: 8 }}>
-          Page Check
-        </div>
-        <button
-          className={"autocheck-toggle" + (waCheckOn ? " on" : "")}
-          onClick={() => {
-            const next = !waCheckOn;
-            setWaCheckOn(next);
-            localStorage.setItem("ss_waCheck", String(next));
-          }}
-        >
-          <span className="autocheck-track"></span>
-          Page Check
-        </button>
+        {isPageFile ? (
+          <>
+            <div className="check-dropdown-label" style={{ marginTop: 8 }}>
+              Page Check
+            </div>
+            <button
+              className={"autocheck-toggle" + (waCheckOn ? " on" : "")}
+              onClick={() => {
+                const next = !waCheckOn;
+                setWaCheckOn(next);
+                localStorage.setItem("ss_waCheck", String(next));
+              }}
+            >
+              <span className="autocheck-track"></span>
+              Page Check
+            </button>
+          </>
+        ) : null}
       </div>
       <button
         ref={btnRef}
@@ -346,7 +354,7 @@ export default function SheetToolbar() {
             Download custom
           </button>
         ) : null}
-        {user?.isAdmin && file?.type === "fb_cookie" ? (
+        {user?.isAdmin && isPageFile ? (
           <button
             className="sheet-more-item"
             onClick={() => {

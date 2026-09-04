@@ -456,7 +456,7 @@ describe("sheetStore data-integrity", () => {
     await openTestFile();
     useSheetStore.setState({
       rows: [
-        { cookies: "c_user=202;", uid: "202", twofakey: "", status: "good", wa_status: "" },
+        { cookies: "c_user=202;", uid: "202", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "" },
       ],
     });
     expect(useSheetStore.getState().rows[0].wa_status).toBe("");

@@ -1,3 +1,4 @@
+import { Archive, Files, Layers, ShieldCheck, Wrench } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 
@@ -281,7 +282,7 @@ export default function HomePage() {
     const id = genId();
     let created: import("@/lib/types").SheetFile;
     try {
-      created = await api.createFile({ id, name: finalName, type, password, poolEnabled, columns });
+      created = await api.createFile({ id, name: finalName, type, preset: pwModal.preset, poolKind: pwModal.preset, password, poolEnabled, columns });
     } catch {
       showToast("Could not create file. Check your connection.");
       return;
@@ -298,12 +299,13 @@ export default function HomePage() {
   const doUploadWithPassword = async (password: string) => {
     if (!uploadPending) return;
     const { id, name, type, rows, dataCount } = uploadPending;
+    const preset = pwModal?.preset ?? "page";
     setUploadPending(null);
     setPwModal(null);
     await uploadPending.cacheReady;
     let created: import("@/lib/types").SheetFile;
     try {
-      created = await api.createFile({ id, name, type, password, poolEnabled: password === "dgddigital", rows, dataCount });
+      created = await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: password === "dgddigital", rows, dataCount });
     } catch {
       showToast("Could not import file. Check your file and try again.");
       return;
@@ -330,40 +332,55 @@ export default function HomePage() {
 
   return (
     <>
-      <div className="home-tabs">
+      <div className="home-tabs" role="tablist" aria-label="Home sections">
         <button
           className={`home-tab${tab === "files" ? " active" : ""}`}
+          role="tab"
+          aria-selected={tab === "files"}
           onClick={() => goTab("/")}
         >
+          <Files size={14} aria-hidden="true" />
           My Files
         </button>
         <button
           className={`home-tab${tab === "archive" ? " active" : ""}`}
+          role="tab"
+          aria-selected={tab === "archive"}
           onClick={() => goTab("/archive")}
         >
+          <Archive size={14} aria-hidden="true" />
           Archive
         </button>
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "pools" ? " active" : ""}`}
+            role="tab"
+            aria-selected={tab === "pools"}
             onClick={() => goTab("/pools/dgddigital/cookies_only")}
           >
+            <Layers size={14} aria-hidden="true" />
             Pools
           </button>
         ) : null}
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "admin" ? " active" : ""}`}
+            role="tab"
+            aria-selected={tab === "admin"}
             onClick={() => goTab("/admin")}
           >
+            <ShieldCheck size={14} aria-hidden="true" />
             Admin
           </button>
         ) : null}
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "tools" ? " active" : ""}`}
+            role="tab"
+            aria-selected={tab === "tools"}
             onClick={() => goTab("/tools")}
           >
+            <Wrench size={14} aria-hidden="true" />
             Tools
           </button>
         ) : null}

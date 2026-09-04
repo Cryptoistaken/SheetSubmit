@@ -44,6 +44,22 @@ async function api(path: string, init?: RequestInit) {
   return { status: res.status, headers: res.headers, json, text };
 }
 
+// polling helper: wait until rows endpoint reports expected total (handles waitUntil feedPools/archive)
+async function pollRowsTotal(password: string, pool: string, qs: string, expected: number, timeoutMs = 5000): Promise<any> {
+  const deadline = Date.now() + timeoutMs;
+  let last: any = null;
+  const base = "/pools/" + password + "/" + pool + "/rows";
+  const q = qs ? (qs.startsWith("?") ? qs : "?" + qs) : "?limit=1000";
+  while (Date.now() < deadline) {
+    const r = await api(base + q, { headers: { Cookie: cookie } });
+    last = r.json;
+    const total = typeof last?.total === "number" ? last.total : (Array.isArray(last?.rows) ? last.rows.length : -1);
+    if (r.status === 200 && total === expected) return last;
+    await new Promise((res) => setTimeout(res, 150));
+  }
+  return last;
+}
+
 // ── Tests ──
 let cookie = "";
 let testFileId = "";
@@ -524,6 +540,362 @@ const run = async () => {
     await api(`/files/${feedFileId}`, { method: "DELETE", headers: { Cookie: cookie } });
     const r = await api("/archive/batch-delete", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ ids: [feedFileId] }) });
     return r.status === 200 && r.json?.deleted === 1 ? { ok: true } : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+  });
+
+  // ── Preset-aware file creation & pool routing ──
+  const uniq = () => String(Date.now()).slice(-7) + String(Math.floor(Math.random()*90+10));
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  let cookiePresetFileId = "";
+  let comboPresetFileId = "";
+  let pagePresetFileId = "";
+  let poolKindAliasFileId = "";
+  let poolKindAliasSecondId = "";
+  const su = uniq();
+  const cookieUid = `880${su}1`.slice(0,12);
+  const comboUid = `880${su}2`.slice(0,12);
+  const pageVerifiedUid = `880${su}3`.slice(0,12);
+  const pageUnverifiedUid = `880${su}4`.slice(0,12);
+  const extraPageUid = `880${su}5`.slice(0,12);
+  const newDownloads: string[] = [];
+
+  await test("POST /api/files (preset=cookie, preset+poolKind persisted)", async () => {
+    const r = await api("/files", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ name: "TestApiPresetCookie"+su, preset: "cookie", password: "dgddigital", poolEnabled: true }) });
+    if (r.status===200 && r.json?.id && r.json?.preset==="cookie" && r.json?.poolKind==="cookie") { cookiePresetFileId=r.json.id; return {ok:true}; }
+    return { ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json).slice(0,300)} preset=${r.json?.preset} poolKind=${r.json?.poolKind}` };
+  });
+
+  await test("POST /api/files (poolKind=combo alias, normalized to preset)", async () => {
+    const r = await api("/files", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ name: "TestApiPresetCombo"+su, poolKind: "combo", password: "dgddigital", poolEnabled: true }) });
+    if (r.status===200 && r.json?.id && r.json?.preset==="combo" && r.json?.poolKind==="combo") { comboPresetFileId=r.json.id; return {ok:true}; }
+    return { ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json).slice(0,300)} preset=${r.json?.preset} poolKind=${r.json?.poolKind}` };
+  });
+
+  await test("POST /api/files (preset=page)", async () => {
+    const r = await api("/files", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ name: "TestApiPresetPage"+su, preset: "page", password: "dgddigital", poolEnabled: true }) });
+    if (r.status===200 && r.json?.id && r.json?.preset==="page" && r.json?.poolKind==="page") { pagePresetFileId=r.json.id; return {ok:true}; }
+    return { ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json).slice(0,300)}` };
+  });
+
+  await test("POST /api/files (poolKind=page alias + preset=2fa normalized to combo)", async () => {
+    const r1 = await api("/files", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ name: "TestApiPoolKindPage"+su, poolKind: "page", password: "dgddigital", poolEnabled: true }) });
+    const r2 = await api("/files", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ name: "TestApiPreset2Fa"+su, preset: "2fa", password: "dgddigital", poolEnabled: true }) });
+    poolKindAliasFileId = r1.json?.id || "";
+    poolKindAliasSecondId = r2.json?.id || "";
+    if (r1.status!==200 || !r1.json?.id || r1.json?.preset!=="page") return {ok:false, detail:`poolKind page: ${r1.status} ${JSON.stringify(r1.json).slice(0,200)}`};
+    if (r2.status!==200 || !r2.json?.id || r2.json?.preset!=="combo") return {ok:false, detail:`preset 2fa->combo: ${r2.status} ${JSON.stringify(r2.json).slice(0,200)}`};
+    await api(`/files/${r2.json.id}`, {method:"DELETE", headers:{Cookie:cookie}});
+    const del2 = await api("/archive/batch-delete", {method:"POST", headers:{Cookie:cookie, "Content-Type":"application/json"}, body:JSON.stringify({ids:[r2.json.id]})});
+    if (del2.status===200) poolKindAliasSecondId = "";
+    return {ok:true};
+  });
+
+  await test("PUT /api/files/:id (update preset/poolKind)", async () => {
+    const r = await api(`/files/${cookiePresetFileId}`, { method:"PUT", headers:{Cookie:cookie, "Content-Type":"application/json"}, body:JSON.stringify({ preset:"page" })});
+    const ok1 = r.status===200 && r.json?.preset==="page" && r.json?.poolKind==="page";
+    if (!ok1) return {ok:false, detail:`to page: status=${r.status} body=${JSON.stringify(r.json).slice(0,200)}`};
+    const r2 = await api(`/files/${cookiePresetFileId}`, { method:"PUT", headers:{Cookie:cookie, "Content-Type":"application/json"}, body:JSON.stringify({ poolKind:"cookie" })});
+    const ok2 = r2.status===200 && r2.json?.preset==="cookie" && r2.json?.poolKind==="cookie";
+    return ok2 ? {ok:true} : {ok:false, detail:`back to cookie: status=${r2.status} body=${JSON.stringify(r2.json).slice(0,200)}`};
+  });
+
+  await test("preset routing: cookie→cookies_only, combo→cookies_2fa, page(unverified)→page", async () => {
+    const ck = await api(`/files/${cookiePresetFileId}/persist`, { method:"PUT", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({rows:[{cookies:`c_user=${cookieUid}; xs=abc`, uid:cookieUid}]})});
+    const co = await api(`/files/${comboPresetFileId}/persist`, { method:"PUT", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({rows:[{cookies:`c_user=${comboUid}; xs=abc`, uid:comboUid, twofakey:"ABCDEF123456"}]})});
+    const pg = await api(`/files/${pagePresetFileId}/persist`, { method:"PUT", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({rows:[
+      {cookies:`c_user=${pageVerifiedUid}; xs=abc`, uid:pageVerifiedUid, twofakey:"VERIFYKEY1", wa_status:"eligible"},
+      {cookies:`c_user=${pageUnverifiedUid}; xs=abc`, uid:pageUnverifiedUid, twofakey:"VERIFYKEY2", wa_status:"not_eligible"},
+      {cookies:`c_user=${extraPageUid}; xs=abc`, uid:extraPageUid, twofakey:"VERIFYKEY3", wa_status:""},
+    ]})});
+    if (ck.status!==200 || co.status!==200 || pg.status!==200) return {ok:false, detail:`persist ck=${ck.status} co=${co.status} pg=${pg.status} bodies ${JSON.stringify(ck.json).slice(0,80)}/${JSON.stringify(co.json).slice(0,80)}/${JSON.stringify(pg.json).slice(0,80)}`};
+    // waitUntil feedPools is async — poll until expected totals appear
+    await pollRowsTotal("dgddigital", "page", `limit=1000&srcFileId=${pagePresetFileId}`, 3, 5000);
+    await pollRowsTotal("dgddigital", "cookies_2fa", `limit=1000&srcFileId=${comboPresetFileId}`, 1, 5000);
+    await pollRowsTotal("dgddigital", "cookies_only", `limit=1000&srcFileId=${cookiePresetFileId}`, 1, 5000);
+    const pageRows = await api(`/pools/dgddigital/page/rows?limit=1000&srcFileId=${pagePresetFileId}`, {headers:{Cookie:cookie}});
+    const comboRows = await api(`/pools/dgddigital/cookies_2fa/rows?limit=1000&srcFileId=${comboPresetFileId}`, {headers:{Cookie:cookie}});
+    const cookieRows = await api(`/pools/dgddigital/cookies_only/rows?limit=1000&srcFileId=${cookiePresetFileId}`, {headers:{Cookie:cookie}});
+    const pageRowUids = Array.isArray(pageRows.json?.rows) ? pageRows.json.rows.map((r:any)=>String(r.uid)) : [];
+    const comboRowUids = Array.isArray(comboRows.json?.rows) ? comboRows.json.rows.map((r:any)=>String(r.uid)) : [];
+    const cookieRowUids = Array.isArray(cookieRows.json?.rows) ? cookieRows.json.rows.map((r:any)=>String(r.uid)) : [];
+    const pageHasVerified = pageRowUids.includes(pageVerifiedUid);
+    const pageHasUnverified = pageRowUids.includes(pageUnverifiedUid);
+    const pageHasExtra = pageRowUids.includes(extraPageUid);
+    const comboHas = comboRowUids.includes(comboUid);
+    const cookieHas = cookieRowUids.includes(cookieUid);
+    const crossCheck = await api(`/pools/dgddigital/cookies_2fa/rows?limit=1000&srcFileId=${pagePresetFileId}`, {headers:{Cookie:cookie}});
+    const leakedTo2fa = Array.isArray(crossCheck.json?.rows) && crossCheck.json.rows.some((r:any)=>String(r.uid)===pageUnverifiedUid);
+    const comboInPage = pageRowUids.includes(comboUid);
+    if (!pageHasVerified || !pageHasUnverified || !pageHasExtra) return {ok:false, detail:`page rows missing verified=${pageHasVerified} unverified=${pageHasUnverified} extra=${pageHasExtra} got ${JSON.stringify(pageRowUids).slice(0,200)} page status ${pageRows.status}`};
+    if (leakedTo2fa) return {ok:false, detail:`page unverified leaked to cookies_2fa: ${JSON.stringify(crossCheck.json?.rows?.slice(0,2))}`};
+    if (comboInPage) return {ok:false, detail:`combo row leaked to page`};
+    if (!comboHas) return {ok:false, detail:`combo row missing in cookies_2fa: got ${JSON.stringify(comboRowUids).slice(0,200)} status ${comboRows.status}`};
+    if (!cookieHas) return {ok:false, detail:`cookie row missing in cookies_only: got ${JSON.stringify(cookieRowUids).slice(0,200)} status ${cookieRows.status}`};
+    if (!(Array.isArray(comboRows.json?.rows) && comboRows.json.rows.every((r:any)=> String(r.twofakey||"").trim() && String(r.twofakey)!=="No_2Fa"))) return {ok:false, detail:`combo rows missing twofakey`};
+    return {ok:true};
+  });
+
+  await test("GET /pools/:pwd/:pool/verified-counts (page pool, shape + verified/unverified)", async () => {
+    const r = await api("/pools/dgddigital/page/verified-counts", {headers:{Cookie:cookie}});
+    if (r.status!==200) return {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json).slice(0,300)}`};
+    const j=r.json as any;
+    const shapeOk = typeof j.verified==="number" && typeof j.unverified==="number" && typeof j.totalAvailable==="number" && typeof j.pool==="string" && j.pool==="page";
+    if (!shapeOk) return {ok:false, detail:`shape ${JSON.stringify(j).slice(0,300)}`};
+    const pageRowsAll = await api(`/pools/dgddigital/page/rows?limit=1000&srcFileId=${pagePresetFileId}`, {headers:{Cookie:cookie}});
+    const verifiedForFile = Array.isArray(pageRowsAll.json?.rows) ? pageRowsAll.json.rows.filter((r:any)=> String(r.wa_status||r.waStatus||"").toLowerCase()==="eligible").length : 0;
+    const unverifiedForFile = Array.isArray(pageRowsAll.json?.rows) ? pageRowsAll.json.rows.filter((r:any)=> String(r.wa_status||r.waStatus||"").toLowerCase()!=="eligible").length : 0;
+    if (verifiedForFile!==1 || unverifiedForFile!==2) return {ok:false, detail:`file-scoped verified=${verifiedForFile} unverified=${unverifiedForFile} expected 1/2`};
+    if (j.verified <1 || j.unverified <1) return {ok:false, detail:`global counts verified=${j.verified} unverified=${j.unverified} expected >=1 each body=${JSON.stringify(j).slice(0,200)}`};
+    return {ok:true};
+  });
+
+  await test("GET /pools/:pwd/:pool/page-counts alias (page)", async () => {
+    const a = await api("/pools/dgddigital/page/verified-counts", {headers:{Cookie:cookie}});
+    const b = await api("/pools/dgddigital/page/page-counts", {headers:{Cookie:cookie}});
+    if (b.status!==200) return {ok:false, detail:`page-counts status=${b.status} body=${JSON.stringify(b.json).slice(0,200)}`};
+    const eq = a.json?.verified===b.json?.verified && a.json?.unverified===b.json?.unverified && a.json?.pool===b.json?.pool;
+    return eq ? {ok:true} : {ok:false, detail:`verified-counts ${JSON.stringify(a.json).slice(0,200)} vs page-counts ${JSON.stringify(b.json).slice(0,200)}`};
+  });
+
+  await test("GET /pools/:pwd/:pool/verified-counts (cookies_only, non-page)", async () => {
+    const r = await api("/pools/dgddigital/cookies_only/verified-counts", {headers:{Cookie:cookie}});
+    if (r.status!==200) return {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json).slice(0,200)}`};
+    if (typeof r.json?.verified!=="number" || typeof r.json?.unverified!=="number" || typeof r.json?.totalAvailable!=="number") return {ok:false, detail:`shape ${JSON.stringify(r.json).slice(0,200)}`};
+    return {ok:true};
+  });
+
+  await test("GET /pools/:pwd/:pool/verified-counts (cookies_2fa)", async () => {
+    const r = await api("/pools/dgddigital/cookies_2fa/verified-counts", {headers:{Cookie:cookie}});
+    if (r.status!==200) return {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json).slice(0,200)}`};
+    if (r.json?.pool!=="cookies_2fa") return {ok:false, detail:`pool=${r.json?.pool}`};
+    return {ok:true};
+  });
+
+  await test("GET /pools/:pwd/:pool/verified-counts (invalid pool) → 400", async () => {
+    const r = await api("/pools/dgddigital/notapool/verified-counts", {headers:{Cookie:cookie}});
+    return r.status===400 ? {ok:true} : {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json)}`};
+  });
+
+  await test("GET /pools/:pwd/:pool/rows?srcUid filter", async () => {
+    const r = await api(`/pools/dgddigital/page/rows?limit=1000&srcUid=${TEST_UID}`, {headers:{Cookie:cookie}});
+    const hasPageVerified = Array.isArray(r.json?.rows) && r.json.rows.some((x:any)=>String(x.uid)===pageVerifiedUid);
+    const hasCombo = Array.isArray(r.json?.rows) && r.json.rows.some((x:any)=>String(x.uid)===comboUid);
+    if (r.status!==200 || !Array.isArray(r.json?.rows)) return {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json).slice(0,200)}`};
+    if (!hasPageVerified) return {ok:false, detail:`srcUid filter missing pageVerifiedUid, got ${r.json.rows.length} rows`};
+    if (hasCombo) return {ok:false, detail:`srcUid page rows incorrectly contains comboUid`};
+    if (!r.json.rows.every((x:any)=> String(x._srcUid)===TEST_UID)) return {ok:false, detail:`every row must have _srcUid=${TEST_UID}, got ${JSON.stringify(r.json.rows.slice(0,2))}`};
+    return {ok:true};
+  });
+
+  await test("GET /pools/:pwd/:pool/rows?srcFileId filter", async () => {
+    const r = await api(`/pools/dgddigital/page/rows?limit=1000&srcFileId=${pagePresetFileId}`, {headers:{Cookie:cookie}});
+    if (r.status!==200 || !Array.isArray(r.json?.rows) || r.json.rows.length!==3) return {ok:false, detail:`status=${r.status} total=${r.json?.total} rows=${JSON.stringify(r.json?.rows)?.slice(0,200)} expected 3`};
+    const allSameFile = r.json.rows.every((x:any)=> String(x._srcFileId||"")===pagePresetFileId);
+    if (!allSameFile) return {ok:false, detail:`_srcFileId mismatch ${JSON.stringify(r.json.rows.slice(0,2))}`};
+    if (!r.json.rows.every((x:any)=> String(x._srcUid)===TEST_UID)) return {ok:false, detail:`every row must have _srcUid=${TEST_UID}, got ${JSON.stringify(r.json.rows.slice(0,2))}`};
+    return {ok:true};
+  });
+
+  await test("GET /pools/:pwd/:pool/rows?srcFileId+srcUid combined", async () => {
+    const r = await api(`/pools/dgddigital/page/rows?limit=1000&srcUid=${TEST_UID}&srcFileId=${pagePresetFileId}`, {headers:{Cookie:cookie}});
+    if (r.status!==200 || r.json?.total!==3) return {ok:false, detail:`status=${r.status} total=${r.json?.total} body=${JSON.stringify(r.json).slice(0,200)}`};
+    if (!Array.isArray(r.json?.rows) || !r.json.rows.every((x:any)=> String(x._srcUid)===TEST_UID && String(x._srcFileId)===pagePresetFileId)) return {ok:false, detail:`every row must have _srcUid=${TEST_UID} and _srcFileId=${pagePresetFileId}, got ${JSON.stringify(r.json.rows.slice(0,2))}`};
+    const r2 = await api(`/pools/dgddigital/page/rows?limit=1000&srcUid=0000000000&srcFileId=${pagePresetFileId}`, {headers:{Cookie:cookie}});
+    if (r2.status!==200 || r2.json?.total!==0) return {ok:false, detail:`wrong srcUid should yield 0 got ${r2.json?.total}`};
+    return {ok:true};
+  });
+
+  await test("GET /pools/:pwd/:pool/rows?verifiedOnly / unverifiedOnly (page)", async () => {
+    const v = await api(`/pools/dgddigital/page/rows?limit=1000&srcFileId=${pagePresetFileId}&verifiedOnly=true`, {headers:{Cookie:cookie}});
+    const uv = await api(`/pools/dgddigital/page/rows?limit=1000&srcFileId=${pagePresetFileId}&unverifiedOnly=true`, {headers:{Cookie:cookie}});
+    const vOk = v.status===200 && v.json?.total===1 && Array.isArray(v.json?.rows) && String(v.json.rows[0]?.uid)===pageVerifiedUid;
+    const uvOk = uv.status===200 && uv.json?.total===2 && Array.isArray(uv.json?.rows) && uv.json.rows.every((r:any)=> String(r.wa_status||r.waStatus||"").toLowerCase()!=="eligible");
+    if (!vOk) return {ok:false, detail:`verifiedOnly total=${v.json?.total} rows=${JSON.stringify(v.json?.rows)?.slice(0,200)} status ${v.status}`};
+    if (!uvOk) return {ok:false, detail:`unverifiedOnly total=${uv.json?.total} rows=${JSON.stringify(uv.json?.rows)?.slice(0,200)} status ${uv.status}`};
+    const v1 = await api(`/pools/dgddigital/page/rows?limit=1000&srcFileId=${pagePresetFileId}&verifiedOnly=1`, {headers:{Cookie:cookie}});
+    if (v1.json?.total!==1) return {ok:false, detail:`verifiedOnly=1 should be same as true got ${v1.json?.total}`};
+    return {ok:true};
+  });
+
+  await test("GET /pools/:pwd/:pool/rows verifiedOnly+unverifiedOnly → 400", async () => {
+    const r = await api(`/pools/dgddigital/page/rows?limit=1000&verifiedOnly=true&unverifiedOnly=true`, {headers:{Cookie:cookie}});
+    return r.status===400 ? {ok:true} : {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json)}`};
+  });
+
+  await test("GET /pools/:pwd/:pool/rows verifiedOnly on non-page → 400", async () => {
+    const r = await api(`/pools/dgddigital/cookies_only/rows?limit=1000&verifiedOnly=true`, {headers:{Cookie:cookie}});
+    return r.status===400 ? {ok:true} : {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json)}`};
+  });
+
+  await test("GET /pools/:pwd/:pool/rows srcUid filter on cookies_2fa", async () => {
+    const r = await api(`/pools/dgddigital/cookies_2fa/rows?limit=1000&srcUid=${TEST_UID}&srcFileId=${comboPresetFileId}`, {headers:{Cookie:cookie}});
+    if (r.status!==200 || r.json?.total!==1) return {ok:false, detail:`status=${r.status} total=${r.json?.total} body=${JSON.stringify(r.json).slice(0,200)}`};
+    if (String(r.json.rows[0]?.uid)!==comboUid) return {ok:false, detail:`uid mismatch ${JSON.stringify(r.json.rows[0])}`};
+    if (!r.json.rows.every((x:any)=> String(x._srcUid)===TEST_UID)) return {ok:false, detail:`every row must have _srcUid=${TEST_UID}, got ${JSON.stringify(r.json.rows.slice(0,2))}`};
+    return {ok:true};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim srcUid filter", async () => {
+    const r = await api(`/pools/dgddigital/page/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:1, srcUid: TEST_UID})});
+    if (r.status!==200 || typeof r.json?.claimed!=="number" || r.json.claimed <1) return {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json).slice(0,200)}`};
+    if (r.json?.downloadId) { newDownloads.push(r.json.downloadId); await api(`/pools/downloads/${r.json.downloadId}/revert`, {method:"POST", headers:{Cookie:cookie}}); }
+    return {ok:true};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim srcFileId filter", async () => {
+    const r = await api(`/pools/dgddigital/page/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:1, srcFileId: pagePresetFileId})});
+    if (r.status!==200 || r.json?.claimed!==1) return {ok:false, detail:`status=${r.status} claimed=${r.json?.claimed} body=${JSON.stringify(r.json).slice(0,200)}`};
+    if (!r.json?.downloadId) return {ok:false, detail:`missing downloadId`};
+    newDownloads.push(r.json.downloadId);
+    const rev = await api(`/pools/downloads/${r.json.downloadId}/revert`, {method:"POST", headers:{Cookie:cookie}});
+    if (rev.status!==200) return {ok:false, detail:`revert ${rev.status}`};
+    return {ok:true};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim claimForUser alias (srcUid)", async () => {
+    const r = await api(`/pools/dgddigital/cookies_2fa/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:1, claimForUser: TEST_UID})});
+    if (r.status!==200 || r.json?.claimed!==1) return {ok:false, detail:`status=${r.status} claimed=${r.json?.claimed} body=${JSON.stringify(r.json).slice(0,200)}`};
+    newDownloads.push(r.json.downloadId);
+    await api(`/pools/downloads/${r.json.downloadId}/revert`, {method:"POST", headers:{Cookie:cookie}});
+    return {ok:true};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim userId alias (srcUid)", async () => {
+    const r = await api(`/pools/dgddigital/cookies_2fa/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:1, userId: TEST_UID})});
+    if (r.status!==200 || r.json?.claimed!==1) return {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json).slice(0,200)}`};
+    newDownloads.push(r.json.downloadId);
+    await api(`/pools/downloads/${r.json.downloadId}/revert`, {method:"POST", headers:{Cookie:cookie}});
+    return {ok:true};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim verifiedOnly (page, only eligible)", async () => {
+    const r = await api(`/pools/dgddigital/page/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:5, srcFileId: pagePresetFileId, verifiedOnly: true})});
+    if (r.status!==200 || r.json?.claimed!==1) return {ok:false, detail:`status=${r.status} claimed=${r.json?.claimed} expected 1 body=${JSON.stringify(r.json).slice(0,300)}`};
+    const hasVerified = Array.isArray(r.json?.rows) && r.json.rows.some((x:any)=> String(x.uid)===pageVerifiedUid);
+    const hasUnverified = Array.isArray(r.json?.rows) && r.json.rows.some((x:any)=> String(x.uid)===pageUnverifiedUid);
+    if (!hasVerified || hasUnverified) return {ok:false, detail:`verifiedOnly claimed wrong rows verified=${hasVerified} unverified=${hasUnverified} rows=${JSON.stringify(r.json.rows).slice(0,200)}`};
+    newDownloads.push(r.json.downloadId);
+    await api(`/pools/downloads/${r.json.downloadId}/revert`, {method:"POST", headers:{Cookie:cookie}});
+    return {ok:true};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim unverifiedOnly (page, not eligible)", async () => {
+    const r = await api(`/pools/dgddigital/page/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:5, srcFileId: pagePresetFileId, unverifiedOnly: true})});
+    if (r.status!==200 || r.json?.claimed!==2) return {ok:false, detail:`status=${r.status} claimed=${r.json?.claimed} expected 2 body=${JSON.stringify(r.json).slice(0,300)}`};
+    const hasVerified = Array.isArray(r.json?.rows) && r.json.rows.some((x:any)=> String(x.uid)===pageVerifiedUid);
+    if (hasVerified) return {ok:false, detail:`unverifiedOnly claimed verified row`};
+    newDownloads.push(r.json.downloadId);
+    await api(`/pools/downloads/${r.json.downloadId}/revert`, {method:"POST", headers:{Cookie:cookie}});
+    return {ok:true};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim count:'all' (page, srcFileId-scoped)", async () => {
+    const before = await api(`/pools/dgddigital/page/rows?limit=1000&srcFileId=${pagePresetFileId}`, {headers:{Cookie:cookie}});
+    const totalBefore = before.json?.total ?? 0;
+    if (totalBefore!==3) return {ok:false, detail:`before total=${totalBefore} expected 3`};
+    const r = await api(`/pools/dgddigital/page/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:"all", srcFileId: pagePresetFileId})});
+    if (r.status!==200 || r.json?.claimed!==3) return {ok:false, detail:`status=${r.status} claimed=${r.json?.claimed} expected 3 body=${JSON.stringify(r.json).slice(0,300)}`};
+    if (!r.json?.downloadId) return {ok:false, detail:`missing downloadId`};
+    newDownloads.push(r.json.downloadId);
+    const after = await api(`/pools/dgddigital/page/rows?limit=1000&srcFileId=${pagePresetFileId}`, {headers:{Cookie:cookie}});
+    if (after.json?.total!==0) return {ok:false, detail:`after total=${after.json?.total} expected 0`};
+    const detail = await api(`/pools/downloads/${r.json.downloadId}/detail`, {headers:{Cookie:cookie}});
+    if (detail.status!==200 || !Array.isArray(detail.json?.groups) || !Array.isArray(detail.json?.rows) || detail.json.rows.length!==3) return {ok:false, detail:`detail status=${detail.status} body=${JSON.stringify(detail.json).slice(0,300)}`};
+    await api(`/pools/downloads/${r.json.downloadId}/revert`, {method:"POST", headers:{Cookie:cookie}});
+    const restored = await api(`/pools/dgddigital/page/rows?limit=1000&srcFileId=${pagePresetFileId}`, {headers:{Cookie:cookie}});
+    if (restored.json?.total!==3) return {ok:false, detail:`restored total=${restored.json?.total} expected 3`};
+    return {ok:true};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim verifiedOnly+unverifiedOnly → 400", async () => {
+    const r = await api(`/pools/dgddigital/page/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:1, verifiedOnly:true, unverifiedOnly:true})});
+    return r.status===400 ? {ok:true} : {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json)}`};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim verified filter on non-page → 400", async () => {
+    const r = await api(`/pools/dgddigital/cookies_only/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:1, verifiedOnly:true})});
+    return r.status===400 ? {ok:true} : {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json)}`};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim invalid srcUid → 400", async () => {
+    const r = await api(`/pools/dgddigital/page/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:1, srcUid:""})});
+    return r.status===400 ? {ok:true} : {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json)}`};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim invalid srcFileId → 400", async () => {
+    const r = await api(`/pools/dgddigital/page/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:1, srcFileId:""})});
+    return r.status===400 ? {ok:true} : {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json)}`};
+  });
+
+  await test("POST /pools/:pwd/:pool/claim invalid count → 400", async () => {
+    const r = await api(`/pools/dgddigital/page/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:0})});
+    return r.status===400 ? {ok:true} : {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json)}`};
+  });
+
+  await test("GET /pools/downloads/:id/detail (shape + groups)", async () => {
+    const claim = await api(`/pools/dgddigital/cookies_only/claim`, {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({count:1, srcFileId: cookiePresetFileId})});
+    if (claim.status!==200 || !claim.json?.downloadId) return {ok:false, detail:`claim failed ${claim.status} ${JSON.stringify(claim.json).slice(0,200)}`};
+    newDownloads.push(claim.json.downloadId);
+    const r = await api(`/pools/downloads/${claim.json.downloadId}/detail`, {headers:{Cookie:cookie}});
+    if (r.status!==200) return {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json).slice(0,300)}`};
+    const j=r.json as any;
+    const shapeOk = typeof j.id==="string" && typeof j.poolId==="string" && typeof j.password==="string" && typeof j.claimed==="number" && Array.isArray(j.rows) && Array.isArray(j.keys) && Array.isArray(j.groups);
+    if (!shapeOk) return {ok:false, detail:`shape ${JSON.stringify(j).slice(0,300)}`};
+    if (j.groups.length===0) return {ok:false, detail:`groups empty`};
+    const hasSrc = j.groups.some((g:any)=> g.srcUid===TEST_UID && g.srcFileId===cookiePresetFileId);
+    if (!hasSrc) return {ok:false, detail:`groups missing srcUid/srcFileId ${JSON.stringify(j.groups).slice(0,200)} expected ${TEST_UID}/${cookiePresetFileId}`};
+    await api(`/pools/downloads/${claim.json.downloadId}/revert`, {method:"POST", headers:{Cookie:cookie}});
+    return {ok:true};
+  });
+
+  await test("GET /pools/downloads/:id/detail (not found) → 404", async () => {
+    const r = await api(`/pools/downloads/doesnotexist123/detail`, {headers:{Cookie:cookie}});
+    return r.status===404 ? {ok:true} : {ok:false, detail:`status=${r.status} body=${JSON.stringify(r.json)}`};
+  });
+
+  await test("archive cleanup removes page rows (preset-aware)", async () => {
+    const before = await api(`/pools/dgddigital/page/rows?limit=1000&srcFileId=${pagePresetFileId}`, {headers:{Cookie:cookie}});
+    if (before.json?.total!==3) return {ok:false, detail:`before total=${before.json?.total} expected 3`};
+    await api(`/files/${pagePresetFileId}`, {method:"DELETE", headers:{Cookie:cookie}});
+    const arch = await api("/archive", {headers:{Cookie:cookie}});
+    const found = Array.isArray(arch.json) && arch.json.find((f:any)=> f.id===pagePresetFileId);
+    if (!found) return {ok:false, detail:`not in archive`};
+    const del = await api("/archive/batch-delete", {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({ids:[pagePresetFileId]})});
+    if (del.status!==200 || del.json?.deleted!==1) return {ok:false, detail:`batch-delete ${del.status} ${JSON.stringify(del.json)}`};
+    await pollRowsTotal("dgddigital", "page", `limit=1000&srcFileId=${pagePresetFileId}`, 0, 5000);
+    const after = await api(`/pools/dgddigital/page/rows?limit=1000&srcFileId=${pagePresetFileId}`, {headers:{Cookie:cookie}});
+    if (after.json?.total!==0) return {ok:false, detail:`after total=${after.json?.total} expected 0 leaked page rows not cleaned`};
+    const comboStill = await api(`/pools/dgddigital/cookies_2fa/rows?limit=1000&srcFileId=${comboPresetFileId}`, {headers:{Cookie:cookie}});
+    if (comboStill.json?.total!==1) return {ok:false, detail:`combo file should still have 1 row, got ${comboStill.json?.total}`};
+    pagePresetFileId="";
+    return {ok:true};
+  });
+
+  await test("cleanup preset files + revert leftover downloads", async () => {
+    // fetch downloads once and revert all tracked non-reverted before archiving
+    const dlRes = await api(`/pools/downloads`, {headers:{Cookie:cookie}});
+    const toRevert = (Array.isArray(dlRes.json) ? dlRes.json : []).filter((d:any)=> newDownloads.includes(d.id) && !d.reverted);
+    for (const d of toRevert) {
+      await api(`/pools/downloads/${d.id}/revert`, {method:"POST", headers:{Cookie:cookie}});
+    }
+    const ids = [cookiePresetFileId, comboPresetFileId, poolKindAliasFileId, poolKindAliasSecondId].filter(Boolean) as string[];
+    for (const id of ids) await api(`/files/${id}`, {method:"DELETE", headers:{Cookie:cookie}});
+    if (ids.length) {
+      const r = await api("/archive/batch-delete", {method:"POST", headers:{Cookie:cookie,"Content-Type":"application/json"}, body:JSON.stringify({ids})});
+      if (r.status!==200) return {ok:false, detail:`batch-delete ${r.status} ${JSON.stringify(r.json)}`};
+    }
+    // verify cleanup across page/cookies_only/cookies_2fa and both passwords
+    const pools = ["page", "cookies_only", "cookies_2fa"] as const;
+    const passwords = ["dgddigital", "L0VE@12345"] as const;
+    for (const id of ids) {
+      for (const pwd of passwords) {
+        for (const pool of pools) {
+          const last = await pollRowsTotal(pwd, pool, `limit=1000&srcFileId=${id}`, 0, 5000);
+          const total = typeof last?.total === "number" ? last.total : -1;
+          if (total !== 0) return {ok:false, detail:`file ${id} rows not cleaned in ${pwd}/${pool} total=${total} body=${JSON.stringify(last).slice(0,200)}`};
+        }
+      }
+    }
+    return {ok:true};
   });
 
   await test("DELETE /api/files/:id (cleanup)", async () => {

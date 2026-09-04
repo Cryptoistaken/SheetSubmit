@@ -554,8 +554,15 @@ button, input, select, textarea {
     border-radius: 8px;
     padding: 3px;
     margin: 8px 24px 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
 }
+.home-tabs::-webkit-scrollbar { display: none; }
 .home-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 7px 14px;
     font-size: 13px;
     font-weight: 600;
@@ -666,6 +673,7 @@ button, input, select, textarea {
     width: 32px;
     height: 32px;
     background: var(--bg3);
+    color: var(--text);
     border-radius: var(--r);
     display: flex;
     align-items: center;
@@ -741,8 +749,8 @@ button, input, select, textarea {
     margin-top: 2px;
 }
 .file-type-badge.t-fb {
-    color: var(--fb);
-    background: var(--fb-bg);
+    color: var(--text2);
+    background: var(--bg3);
 }
 
 /* ── Empty state ── */
@@ -884,8 +892,8 @@ button, input, select, textarea {
     flex-shrink: 0;
 }
 .home-fab-ic.t-fb {
-    background: var(--fb-bg);
-    color: var(--fb);
+    background: var(--bg3);
+    color: var(--text);
 }
 .home-fab-name {
     display: block;

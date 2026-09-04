@@ -1,5 +1,21 @@
-import { Cookie, Download, FileText, KeyRound, Pencil, Trash2 } from "lucide-react";
+import { Cookie, Download, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
+
+const TwoFaIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 -11 960 876" width={size} height={size} aria-hidden="true" {...props}>
+    <path d="M960 427c0 44.7-36.2 80.9-80.9 80.9H600L480 265.2 609.5 40.9C631.9 2.2 681.3-11 720 11.3c38.7 22.4 51.9 71.8 29.6 110.5L620.1 346.1h259c44.7 0 80.9 36.2 80.9 80.9z" fill="currentColor" />
+    <path d="M720 842.7c-38.7 22.3-88.1 9.1-110.5-29.6L480 588.8 350.5 813.1c-22.4 38.7-71.8 51.9-110.5 29.6-38.7-22.4-51.9-71.8-29.6-110.5l129.5-224.3 140.1-5.3 140.1 5.3 129.5 224.3c22.3 38.7 9.1 88.1-29.6 110.5z" fill="currentColor" />
+    <path d="M480 265.2l-36.5 99.2-103.6-18.3-129.5-224.3c-22.3-38.7-9.1-88.1 29.6-110.5 38.7-22.3 88.1-9.1 110.5 29.6z" fill="currentColor" />
+    <path d="M459.1 346.1l-93.9 161.8H80.9C36.2 507.9 0 471.7 0 427s36.2-80.9 80.9-80.9z" fill="currentColor" />
+    <path d="M620.1 507.9H339.9L480 265.2z" fill="currentColor" />
+  </svg>
+);
+
+const PageIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" {...props}>
+    <path fill="currentColor" d="M14.4 6H20v10h-7l-.4-2H7v7H5V4h9zm-.4 8h2v-2h2v-2h-2V8h-2v2l-1-2V6h-2v2H9V6H7v2h2v2H7v2h2v-2h2v2h2v-2l1 2zm-3-4V8h2v2zm3 0h2v2h-2z" />
+  </svg>
+);
 
 import { fileTypeDef } from "@/lib/types";
 import type { SheetFile } from "@/lib/types";
@@ -96,13 +112,20 @@ export default function FileCard({
   const isCustom = pw !== "dgddigital" && pw !== "L0VE@12345";
   const pwLabel = pw === "dgddigital" ? "dgd" : pw === "L0VE@12345" ? "L0VE" : pw.slice(0, 8);
   const pwTitle = pw;
-  const FileIcon = file.name.toLowerCase().startsWith("cookie")
-    ? Cookie
-    : file.name.toLowerCase().startsWith("2fa")
-      ? KeyRound
-      : file.name.toLowerCase().startsWith("page")
-        ? FileText
-        : Cookie;
+  const _presetKind = (file.preset ?? file.poolKind) as string | undefined;
+  const FileIcon = _presetKind
+    ? _presetKind === "page"
+      ? PageIcon
+      : _presetKind === "combo"
+        ? TwoFaIcon
+        : Cookie
+    : file.name.toLowerCase().startsWith("cookie")
+      ? Cookie
+      : file.name.toLowerCase().startsWith("2fa")
+        ? TwoFaIcon
+        : file.name.toLowerCase().startsWith("page")
+          ? PageIcon
+          : Cookie;
   const pwStyle: React.CSSProperties = isCustom
     ? { background: "var(--fb-bg)", color: "var(--fb)" }
     : pw === "L0VE@12345"
@@ -134,7 +157,7 @@ export default function FileCard({
       </div>
       <div className="file-card-name">{file.name}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
-        <span className="file-type-badge t-fb">{badge}</span>
+        <span className="file-type-badge">{badge}</span>
         <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={pwTitle}>{pwLabel}</span>
         <span className="file-card-meta">
           {count} row{count !== 1 ? "s" : ""}

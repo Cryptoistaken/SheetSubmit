@@ -1596,6 +1596,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const rowsRef = s.rows;
     const waRows: { row: Row; uid: string | null; idx: number }[] = [];
     rows.forEach((row, idx) => {
+      const tf = (row.twofakey ?? "").trim();
+      if (!tf || isNo2FAMark("twofakey", tf)) return;
       const match =
         row.status === "good" &&
         row.wa_status !== "eligible" &&
@@ -1761,6 +1763,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const waRows: { row: Row; uid: string | null; idx: number }[] = [];
     rows.forEach((row, idx) => {
       if (!filter(row, idx)) return;
+      const tf = (row.twofakey ?? "").trim();
+      if (!tf || isNo2FAMark("twofakey", tf)) return;
       if (!row.cookies || !/c_user=\d+/.test(row.cookies)) return;
       let uid = row.uid ?? null;
       if (!uid && row.cookies) {
@@ -1879,6 +1883,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const waRows: { row: Row; uid: string | null; idx: number }[] = [];
     rows.forEach((row, idx) => {
       if (!filter(row, idx)) return;
+      const tf = (row.twofakey ?? "").trim();
+      if (!tf || isNo2FAMark("twofakey", tf)) return;
       if (!row.cookies || !/c_user=\d+/.test(row.cookies)) return;
       let uid = row.uid ?? null;
       if (!uid && row.cookies) {

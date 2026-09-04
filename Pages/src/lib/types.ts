@@ -20,6 +20,8 @@ export interface SheetFile {
   id: string;
   name: string;
   type: FileType;
+  preset?: FilePreset;
+  poolKind?: FilePreset;
   rowCount?: number;
   dataCount?: number;
   createdAt?: number;

@@ -2,7 +2,10 @@ import type { Row } from "../lib/shared";
 const pools = ["cookies_only", "cookies_2fa", "page"] as const;
 type Pool = typeof pools[number];
 const key = (r: Row) => String(r.uid || (String(r.cookies || "").match(/c_user=(\d+)/)?.[1] || ""));
-export function classifyRow(r: Row): Pool | null { const c = String(r.cookies || ""); if (!/c_user=\d+/.test(c) || !r.uid || ["bad", "dead"].includes(String(r.status || "").toLowerCase())) return null; const two = !!String(r.twofakey || r["2fa key"] || "").trim(); if (String(r.wa_status || r.waStatus || "") === "eligible" && two) return "page"; return two ? "cookies_2fa" : "cookies_only"; }
+const hasReal2FA = (r: Row) => { const v = String(r.twofakey ?? r["2fa key"] ?? "").trim(); return !!v && v !== "No_2Fa"; };
+export function classifyRow(r: Row, preset?: string | null): Pool | null { const c = String(r.cookies || ""); if (!/c_user=\d+/.test(c) || !r.uid || ["bad", "dead"].includes(String(r.status || "").toLowerCase())) return null; const has2 = hasReal2FA(r); if (preset === "page") return has2 ? "page" : "cookies_only"; if (preset === "combo" || preset === "2fa") return has2 ? "cookies_2fa" : "cookies_only"; if (preset === "cookie") return "cookies_only"; const two = has2; if (String(r.wa_status || r.waStatus || "") === "eligible" && two) return "page"; return two ? "cookies_2fa" : "cookies_only"; }
+const isEligible = (d: any) => String(d?.wa_status ?? d?.waStatus ?? "").toLowerCase() === "eligible";
+const normalizePreset = (v: unknown): string | null => { const s = String(v || "").toLowerCase(); if (s === "cookie") return "cookie"; if (s === "combo" || s === "2fa") return "combo"; if (s === "page") return "page"; return null; };
 export class PoolDO {
   constructor(private readonly state: DurableObjectState) {
     state.blockConcurrencyWhile(async () => {
@@ -21,9 +24,21 @@ export class PoolDO {
     switch (op) {
       case "add": {
         let added = 0;
+        const preset = normalizePreset(args.preset ?? args.poolKind ?? args.filePreset ?? args.file?.preset ?? args.file?.poolKind);
+        const srcFileId = args.srcFileId ? String(args.srcFileId) : null;
         for (const row of args.rows as Row[]) {
-          const p = classifyRow(row), k = key(row);
+          const p = classifyRow(row, preset), k = key(row);
           if (!p || !k) continue;
+          // migration: prevent stale duplicate across pools for same src_file_id/key
+          // page preset with real 2FA+unverified previously lived in cookies_2fa; combo/cookie clear opposite pool(s)
+          if (srcFileId && preset) {
+            if (p === "page") s.exec("DELETE FROM pool_rows WHERE pool_id='cookies_2fa' AND row_key=? AND src_file_id=? AND state='available'", k, srcFileId);
+            else if (p === "cookies_2fa") s.exec("DELETE FROM pool_rows WHERE pool_id='page' AND row_key=? AND src_file_id=? AND state='available'", k, srcFileId);
+            else if (p === "cookies_only") {
+              s.exec("DELETE FROM pool_rows WHERE pool_id='cookies_2fa' AND row_key=? AND src_file_id=? AND state='available'", k, srcFileId);
+              s.exec("DELETE FROM pool_rows WHERE pool_id='page' AND row_key=? AND src_file_id=? AND state='available'", k, srcFileId);
+            }
+          }
           const before = s.exec("SELECT 1 FROM pool_rows WHERE pool_id=? AND row_key=?", p, k).toArray();
           if (!before.length) {
             s.exec("INSERT INTO pool_rows(pool_id,row_key,data,src_uid,src_file_id) VALUES(?,?,?,?,?)", p, k, JSON.stringify(row), args.srcUid || null, args.srcFileId || null);
@@ -36,17 +51,80 @@ export class PoolDO {
       case "counts": return Response.json(Object.fromEntries(pools.map((p) => [p, Number(s.exec("SELECT COUNT(*) n FROM pool_rows WHERE pool_id=? AND state='available'", p).toArray()[0].n)])));
       case "detail": return Response.json(s.exec("SELECT row_key,data,state,claimed_by,claimed_at,src_uid,src_file_id FROM pool_rows WHERE pool_id=?", args.pool).toArray().map((r: any) => ({ ...JSON.parse(r.data), _key: r.row_key, _state: r.state, _claimedBy: r.claimed_by, _claimedAt: r.claimed_at, _srcUid: r.src_uid, _srcFileId: r.src_file_id })));
       case "claim": {
-        const rows = s.exec("SELECT row_key,data FROM pool_rows WHERE pool_id=? AND state='available' LIMIT ?", args.pool, Math.min(10000, Number(args.count || 1))).toArray();
+        const pool = String(args.pool || "");
+        if (!pools.includes(pool as Pool)) return Response.json({ error: "invalid pool" }, { status: 400 });
+        const want = args.count === "all" ? 10000 : Math.min(10000, Math.max(1, Number(args.count) || 1));
+        const srcUid = args.srcUid != null ? String(args.srcUid) : args.claimForUser != null ? String(args.claimForUser) : args.userId != null ? String(args.userId) : null;
+        const srcFileId = args.srcFileId != null ? String(args.srcFileId) : args.fileId != null ? String(args.fileId) : null;
+        const verifiedOnly = !!args.verifiedOnly;
+        const unverifiedOnly = !!args.unverifiedOnly;
+        if (verifiedOnly && unverifiedOnly) return Response.json({ error: "verifiedOnly and unverifiedOnly are mutually exclusive" }, { status: 400 });
+        if ((verifiedOnly || unverifiedOnly) && pool !== "page") return Response.json({ error: "verified filters only for page pool" }, { status: 400 });
+        let rows: any[] = [];
+        if (verifiedOnly || unverifiedOnly) {
+          // page rows contain both verified (eligible) and unverified (not eligible) — filter within page itself
+          // ponytail: bounded scan 5000, upgrade to paginated scan if page pool exceeds cap; no SQL JSON parsing
+          const SCAN_CAP = 5000;
+          let q = "SELECT row_key,data FROM pool_rows WHERE pool_id=? AND state='available'";
+          const qArgs: any[] = [pool];
+          if (srcUid) { q += " AND src_uid=?"; qArgs.push(srcUid); }
+          if (srcFileId) { q += " AND src_file_id=?"; qArgs.push(srcFileId); }
+          q += " LIMIT ?";
+          qArgs.push(SCAN_CAP);
+          const candidates = s.exec(q, ...qArgs).toArray() as any[];
+          const filtered = candidates.filter((r: any) => {
+            try { const d = JSON.parse(r.data); const v = isEligible(d); return verifiedOnly ? v : !v; } catch { return !verifiedOnly; }
+          }).slice(0, want);
+          rows = filtered;
+        } else {
+          let q = "SELECT row_key,data FROM pool_rows WHERE pool_id=? AND state='available'";
+          const qArgs: any[] = [pool];
+          if (srcUid) { q += " AND src_uid=?"; qArgs.push(srcUid); }
+          if (srcFileId) { q += " AND src_file_id=?"; qArgs.push(srcFileId); }
+          q += " LIMIT ?";
+          qArgs.push(want);
+          rows = s.exec(q, ...qArgs).toArray() as any[];
+        }
         rows.forEach((r: any) => {
-          s.exec("UPDATE pool_rows SET state='claimed',claimed_by=?,claimed_at=? WHERE pool_id=? AND row_key=?", args.uid, Date.now(), args.pool, r.row_key);
-          s.exec("INSERT INTO ledger(pool_id,row_key,user_id,action,ts) VALUES(?,?,?,?,?)", args.pool, r.row_key, args.uid, "claim", Date.now());
+          s.exec("UPDATE pool_rows SET state='claimed',claimed_by=?,claimed_at=? WHERE pool_id=? AND row_key=?", args.uid, Date.now(), pool, r.row_key);
+          s.exec("INSERT INTO ledger(pool_id,row_key,user_id,action,ts) VALUES(?,?,?,?,?)", pool, r.row_key, args.uid, "claim", Date.now());
         });
         let downloadId: string | null = null;
         if (rows.length && args.downloadId) {
-          s.exec("INSERT INTO downloads(id,pool_id,claimed_by,claimed,filename,keys,rows,ts) VALUES(?,?,?,?,?,?,?,?)", args.downloadId, args.pool, args.uid, rows.length, String(args.filename || "pool.xlsx"), JSON.stringify(rows.map((r: any) => r.row_key)), JSON.stringify(rows.map((r: any) => JSON.parse(r.data))), Date.now());
+          s.exec("INSERT INTO downloads(id,pool_id,claimed_by,claimed,filename,keys,rows,ts) VALUES(?,?,?,?,?,?,?,?)", args.downloadId, pool, args.uid, rows.length, String(args.filename || "pool.xlsx"), JSON.stringify(rows.map((r: any) => r.row_key)), JSON.stringify(rows.map((r: any) => JSON.parse(r.data))), Date.now());
           downloadId = String(args.downloadId);
         }
         return Response.json({ claimed: rows.length, rows: rows.map((r: any) => JSON.parse(r.data)), downloadId, filename: args.filename || null });
+      }
+      case "verifiedCounts":
+      case "pageCounts":
+      case "pageVerifiedCounts": {
+        const pool = String(args.pool || "");
+        if (!pools.includes(pool as Pool)) return Response.json({ error: "invalid pool" }, { status: 400 });
+        if (pool === "page") {
+          // verified/unverified both live in page pool — count by wa_status within page itself
+          // ponytail: O(n) bounded scan 5000, paginated scan if page pool exceeds cap to keep CPU bounded
+          const SCAN_CAP = 5000;
+          const totalAvailable = Number(s.exec("SELECT COUNT(*) n FROM pool_rows WHERE pool_id='page' AND state='available'").toArray()[0].n);
+          const rows = s.exec("SELECT data FROM pool_rows WHERE pool_id='page' AND state='available' LIMIT ?", SCAN_CAP).toArray() as any[];
+          let verified = 0;
+          for (const r of rows) { try { const d = JSON.parse(r.data); if (isEligible(d)) verified++; } catch {} }
+          const unverified = rows.length - verified;
+          const truncated = totalAvailable > SCAN_CAP;
+          // keep legacy alias totalCookies2faAvailable for compat
+          return Response.json({ pool, verified, unverified, totalAvailable, totalCookies2faAvailable: totalAvailable, unverifiedScanned: rows.length, truncated, scanCap: SCAN_CAP });
+        }
+        // non-page pools: cheap verified/unverified split within same pool (no cross-pool)
+        // ponytail: bounded scan 5000 — cheap counts without SQL JSON parsing, paginated scan if pool exceeds cap
+        const SCAN_CAP = 5000;
+        const rows = s.exec("SELECT data FROM pool_rows WHERE pool_id=? AND state='available' LIMIT ?", pool, SCAN_CAP).toArray() as any[];
+        let verified = 0;
+        for (const r of rows) { try { const d = JSON.parse(r.data); if (isEligible(d)) verified++; } catch {} }
+        const total = rows.length;
+        const unverified = total - verified;
+        const totalAvailable = Number(s.exec("SELECT COUNT(*) n FROM pool_rows WHERE pool_id=? AND state='available'", pool).toArray()[0].n);
+        const truncated = totalAvailable > SCAN_CAP;
+        return Response.json({ pool, verified, unverified, totalAvailable, truncated, scanCap: SCAN_CAP });
       }
       case "userFiles": {
         const pool = args.pool as string;
@@ -84,7 +162,31 @@ export class PoolDO {
       case "downloads": return Response.json({ downloads: s.exec("SELECT id,pool_id,claimed_by,claimed,filename,reverted,ts FROM downloads ORDER BY ts DESC LIMIT 50").toArray() });
       case "download": {
         const r: any = s.exec("SELECT * FROM downloads WHERE id=?", args.id).toArray()[0];
-        return Response.json(r ? { id: r.id, poolId: r.pool_id, claimedBy: r.claimed_by, claimed: r.claimed, filename: r.filename, rows: JSON.parse(r.rows), reverted: !!r.reverted, ts: r.ts } : null);
+        return Response.json(r ? { id: r.id, poolId: r.pool_id, claimedBy: r.claimed_by, claimed: r.claimed, filename: r.filename, rows: JSON.parse(r.rows), keys: JSON.parse(r.keys), reverted: !!r.reverted, ts: r.ts } : null);
+      }
+      case "downloadDetail": {
+        const id = String(args.id || "");
+        if (!id) return Response.json({ error: "id required" }, { status: 400 });
+        const r: any = s.exec("SELECT * FROM downloads WHERE id=?", id).toArray()[0];
+        if (!r) return Response.json(null);
+        const rows = JSON.parse(r.rows) as any[];
+        const keys = JSON.parse(r.keys) as string[];
+        const groups = new Map<string, { srcUid: string | null; srcFileId: string | null; count: number }>();
+        for (const k of keys) {
+          const prow: any = s.exec("SELECT src_uid, src_file_id FROM pool_rows WHERE pool_id=? AND row_key=?", r.pool_id, k).toArray()[0];
+          const uid = prow?.src_uid ?? null;
+          const fid = prow?.src_file_id ?? null;
+          const gk = `${uid ?? "_null"}::${fid ?? "_null"}`;
+          const g = groups.get(gk) || { srcUid: uid, srcFileId: fid, count: 0 };
+          g.count++;
+          groups.set(gk, g);
+        }
+        if (!groups.size && rows.length) {
+          const byUid = new Map<string, number>();
+          for (const row of rows) { const u = String(row.uid || ""); byUid.set(u, (byUid.get(u) || 0) + 1); }
+          for (const [u, c] of byUid) groups.set(`uid:${u}`, { srcUid: u || null, srcFileId: null, count: c });
+        }
+        return Response.json({ id: r.id, poolId: r.pool_id, claimedBy: r.claimed_by, claimed: r.claimed, filename: r.filename, rows, keys, reverted: !!r.reverted, ts: r.ts, groups: [...groups.values()] });
       }
       case "revertDownload": {
         const d: any = s.exec("SELECT * FROM downloads WHERE id=?", args.id).toArray()[0];

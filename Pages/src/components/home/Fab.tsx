@@ -1,8 +1,24 @@
-import { Cookie, FileText, KeyRound, Plus, Upload } from "lucide-react";
+import { Cookie, Plus, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
 import type { FilePreset } from "@/lib/types";
+
+const TwoFaIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 -11 960 876" width={size} height={size} aria-hidden="true" {...props}>
+    <path d="M960 427c0 44.7-36.2 80.9-80.9 80.9H600L480 265.2 609.5 40.9C631.9 2.2 681.3-11 720 11.3c38.7 22.4 51.9 71.8 29.6 110.5L620.1 346.1h259c44.7 0 80.9 36.2 80.9 80.9z" fill="currentColor" />
+    <path d="M720 842.7c-38.7 22.3-88.1 9.1-110.5-29.6L480 588.8 350.5 813.1c-22.4 38.7-71.8 51.9-110.5 29.6-38.7-22.4-51.9-71.8-29.6-110.5l129.5-224.3 140.1-5.3 140.1 5.3 129.5 224.3c22.3 38.7 9.1 88.1-29.6 110.5z" fill="currentColor" />
+    <path d="M480 265.2l-36.5 99.2-103.6-18.3-129.5-224.3c-22.3-38.7-9.1-88.1 29.6-110.5 38.7-22.3 88.1-9.1 110.5 29.6z" fill="currentColor" />
+    <path d="M459.1 346.1l-93.9 161.8H80.9C36.2 507.9 0 471.7 0 427s36.2-80.9 80.9-80.9z" fill="currentColor" />
+    <path d="M620.1 507.9H339.9L480 265.2z" fill="currentColor" />
+  </svg>
+);
+
+const PageIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" {...props}>
+    <path fill="currentColor" d="M14.4 6H20v10h-7l-.4-2H7v7H5V4h9zm-.4 8h2v-2h2v-2h-2V8h-2v2l-1-2V6h-2v2H9V6H7v2h2v2H7v2h2v-2h2v2h2v-2l1 2zm-3-4V8h2v2zm3 0h2v2h-2z" />
+  </svg>
+);
 
 interface FabProps {
   onCreate: (preset: FilePreset) => void;
@@ -57,11 +73,11 @@ export default function Fab({ onCreate, onUpload }: FabProps) {
         <div className="home-fab-platform">Facebook</div>
         {([
           ["cookie", "Cookie", "cookies and uid", Cookie],
-          ["combo", "2fa", "cookies and 2fa and uid", KeyRound],
-          ["page", "Page", "full columns", FileText],
+          ["combo", "2fa", "cookies and 2fa and uid", TwoFaIcon],
+          ["page", "Page", "full columns", PageIcon],
         ] as const).map(([preset, name, desc, Icon]) => (
           <button className="home-fab-item home-fab-subitem" key={preset} onClick={() => { setOpen(false); onCreate(preset); }}>
-            <span className="home-fab-ic t-fb"><Icon size={15} /></span>
+            <span className="home-fab-ic" style={{ background: "var(--bg3)", color: "var(--text)" }}><Icon size={15} /></span>
             <span>
               <span className="home-fab-name">{name}</span>
               <span className="home-fab-desc">{desc}</span>

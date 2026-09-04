@@ -135,6 +135,33 @@ export interface PoolUserFilesResult {
   users: PoolUserFile[];
   noSrcAvail: number;
 }
+export interface VerifiedCounts {
+  pool: string;
+  verified: number;
+  unverified: number;
+  totalAvailable: number;
+  truncated: boolean;
+  scanCap: number;
+}
+export interface DownloadDetailGroup {
+  srcUid: string | null;
+  srcFileId: string | null;
+  count: number;
+}
+export interface DownloadDetail {
+  id: string;
+  at: number;
+  ts: number;
+  poolId: string;
+  password: string;
+  claimed: number;
+  claimedBy?: string | null;
+  filename: string;
+  reverted: boolean;
+  rows: Record<string, unknown>[];
+  keys: string[];
+  groups: DownloadDetailGroup[];
+}
 
 export const api = {
   // ── Files ──
@@ -143,7 +170,7 @@ export const api = {
     request<{ file: SheetFile; rows: Row[]; logs: unknown[]; undo: unknown[]; redo: unknown[]; seq?: number }>(
       `/files/${id}/full`,
     ),
-  createFile: (data: { id: string; name: string; type: FileType; password?: string; poolEnabled?: boolean; rows?: Row[]; dataCount?: number; columns?: ColumnDef[] }) =>
+  createFile: (data: { id: string; name: string; type: FileType; preset?: string; poolKind?: string; password?: string; poolEnabled?: boolean; rows?: Row[]; dataCount?: number; columns?: ColumnDef[] }) =>
     request<SheetFile>("/files", { method: "POST", body: JSON.stringify(data) }),
   updateFile: (id: string, data: Record<string, unknown>) =>
     request<SheetFile>(`/files/${id}`, { method: "PUT", body: JSON.stringify(data) }),
@@ -240,13 +267,16 @@ export const api = {
       throw e;
     }
   },
-  claimPool: async (password: string, poolId: string, body: { count: number | "all"; userId?: string }): Promise<PoolClaimResult> => {
+  claimPool: async (password: string, poolId: string, body: { count: number | "all"; userId?: string; srcUid?: string | null; srcFileId?: string | null; verifiedOnly?: boolean; unverifiedOnly?: boolean }): Promise<PoolClaimResult> => {
     const enc = (s: string) => encodeURIComponent(s);
+    const payload: Record<string, unknown> = { ...body };
+    if (body.srcUid) { payload.srcUid = body.srcUid; payload.claimForUser = body.srcUid; }
+    if (body.srcFileId) payload.srcFileId = body.srcFileId;
     try {
-      return await request<PoolClaimResult>(`/pools/${enc(password)}/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(body) });
+      return await request<PoolClaimResult>(`/pools/${enc(password)}/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(payload) });
     } catch (e) {
       if (password === "dgddigital" && String(e).includes("404")) {
-        return request<PoolClaimResult>(`/pools/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(body) });
+        return request<PoolClaimResult>(`/pools/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(payload) });
       }
       throw e;
     }
@@ -274,6 +304,11 @@ export const api = {
       throw e;
     }
   },
+  getVerifiedCounts: (password: string, poolId: string) => {
+    const enc = (s: string) => encodeURIComponent(s);
+    return request<VerifiedCounts>(`/pools/${enc(password)}/${enc(poolId)}/verified-counts`);
+  },
+  getDownloadDetail: (id: string) => request<DownloadDetail>(`/pools/downloads/${encodeURIComponent(id)}/detail`),
   getDownloadBlob: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
   revertDownload: (id: string) => request<{ ok: boolean; reverted: number }>(`/pools/downloads/${encodeURIComponent(id)}/revert`, { method: "POST" }),
   // aliases for spec compatibility

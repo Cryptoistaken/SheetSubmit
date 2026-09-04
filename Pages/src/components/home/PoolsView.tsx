@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { api } from "@/lib/api";
-import type { PoolDetail, PoolSummary, PoolUserFile } from "@/lib/api";
+import type { PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
+import DownloadDetailModal from "./DownloadDetailModal";
 
 const PASSWORDS = ["dgddigital", "L0VE@12345"] as const;
 const POOL_TABS = [
@@ -74,6 +75,12 @@ export default function PoolsView() {
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [userFiles, setUserFiles] = useState<PoolUserFile[] | null>(null);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [verified, setVerified] = useState<VerifiedCounts | null>(null);
+  const [adminMap, setAdminMap] = useState<Map<string, { name: string; username?: string; photoUrl?: string | null }>>(new Map());
+  const [srcUid, setSrcUid] = useState<string>("");
+  const [srcFileId, setSrcFileId] = useState<string>("");
+  const [verifiedFilter, setVerifiedFilter] = useState<"all" | "verified" | "unverified">("all");
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -97,6 +104,33 @@ export default function PoolsView() {
   }, [cur, curPwd, showToast]);
 
   useEffect(() => { load(); }, [load]);
+
+  // verified counts only on page tab — bounded scan, safe
+  useEffect(() => {
+    if (cur !== "page") { setVerified(null); return; }
+    let cancelled = false;
+    api.getVerifiedCounts(curPwd, cur).then((r) => { if (!cancelled) setVerified(r); }).catch(() => { if (!cancelled) setVerified(null); });
+    return () => { cancelled = true; };
+  }, [cur, curPwd]);
+
+  // claimer avatars from existing adminUsers API (fallback initials)
+  useEffect(() => {
+    let cancelled = false;
+    api.adminUsers().then((us) => {
+      if (cancelled) return;
+      const m = new Map<string, { name: string; username?: string; photoUrl?: string | null }>();
+      for (const u of us as unknown as { id: string; firstName?: string; lastName?: string; username?: string; photoUrl?: string | null }[]) {
+        const name = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || (u.username ? `@${u.username}` : u.id);
+        m.set(u.id, { name, username: u.username, photoUrl: u.photoUrl });
+      }
+      setAdminMap(m);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // reset file selector when contributor changes or pool changes
+  useEffect(() => { setSrcFileId(""); }, [srcUid]);
+  useEffect(() => { setSrcUid(""); setSrcFileId(""); setVerifiedFilter("all"); }, [cur, curPwd]);
 
   const poolCounts: Record<string, number> = {};
   if (pools) pools.filter((p) => (p as unknown as Record<string, unknown>)["password"] === curPwd || !(p as unknown as Record<string, unknown>)["password"]).forEach((p) => { poolCounts[p.id] = p.available; });
@@ -128,12 +162,24 @@ export default function PoolsView() {
 
   const getUserFilesFor = (userId: string) => userFiles?.find((u) => u.userId === userId);
 
+  const srcFileOptions = useMemo(() => {
+    if (!srcUid) return [];
+    const u = userFiles?.find((x) => x.userId === srcUid);
+    return u?.files ?? [];
+  }, [srcUid, userFiles]);
+
   const doPoolClaim = async () => {
     const n = customQty ? Number(customQty) : poolQty;
     if (!totals.available) return showToast("No rows available to claim");
     setDownloading(true);
     try {
-      const res = await api.claimPool(curPwd, cur, { count: n });
+      const res = await api.claimPool(curPwd, cur, {
+        count: n,
+        srcUid: srcUid || undefined,
+        srcFileId: srcFileId || undefined,
+        verifiedOnly: cur === "page" && verifiedFilter === "verified" ? true : undefined,
+        unverifiedOnly: cur === "page" && verifiedFilter === "unverified" ? true : undefined,
+      });
       if (!res.claimed) return showToast("No rows available to claim");
       const filename = (res as unknown as { filename?: string }).filename || (cur === "cookies_only" ? "cookies_pool.xlsx" : cur === "cookies_2fa" ? "2fa_pool.xlsx" : "page_pool.xlsx");
       const downloadId = (res as unknown as { downloadId?: string }).downloadId;
@@ -243,6 +289,9 @@ export default function PoolsView() {
         .file-card-id{font-size:12px;font-family:var(--mono);color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .file-card-stats{display:flex;align-items:center;gap:6px;flex-shrink:0}
         .file-card-stat{font-size:12px;font-family:var(--mono);font-weight:600}
+        .dl-card{display:grid;grid-template-columns:auto 36px 1fr auto;gap:12px;align-items:center}
+        .dl-card .pool-card-actions{justify-self:end}
+        @media(max-width:640px){.dl-card{grid-template-columns:36px 1fr;gap:10px}.dl-card .badge{grid-column:1/-1;justify-self:start}.dl-card .pool-card-actions{grid-column:1/-1;width:100%;justify-content:flex-end}}
         @media(max-width:640px){.pools-stack{flex-direction:column;align-items:stretch}.pools-switch{width:100%}.pools-switch button{flex:1;justify-content:center}.pools-toolbar{flex-direction:column;align-items:stretch}.pools-qty{width:100%}.pools-qty button{flex:1}.pools-download{width:100%;height:44px;justify-content:center}.pools-stats{grid-template-columns:1fr!important}.pool-card{flex-wrap:wrap}.pool-card-actions{width:100%;justify-content:flex-end}}
       `}</style>
 
@@ -273,6 +322,13 @@ export default function PoolsView() {
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Available in {poolMeta.label}</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{totals.available}</div>
           <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>{cur === "cookies_only" ? "Cookies only" : cur === "cookies_2fa" ? "Cookies + 2FA" : "Full"}</div>
+          {cur === "page" && verified ? (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, color: "var(--text2)" }}><span style={{ fontWeight: 700, color: "var(--green)", fontFamily: "var(--mono)" }}>{verified.verified}</span> verified</span>
+              <span style={{ fontSize: 12, color: "var(--text2)" }}><span style={{ fontWeight: 700, color: "var(--text3)", fontFamily: "var(--mono)" }}>{verified.unverified}</span> unverified</span>
+              {verified.truncated ? <span style={{ fontSize: 11, color: "var(--text3)" }} title={`scan cap ${verified.scanCap}`}>· approx</span> : null}
+            </div>
+          ) : null}
         </div>
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Claimed</div>
@@ -285,9 +341,50 @@ export default function PoolsView() {
         </div>
       </div>
 
-      {/* toolbar */}
-      <div className="pools-toolbar pools-stack" style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end", marginTop: 16 }}>
+      {/* toolbar — source selector before main Download */}
+      <div className="pools-toolbar pools-stack" style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end", marginTop: 16, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text3)", fontWeight: 600 }}>
+            Source
+            <select
+              aria-label="Source contributor"
+              value={srcUid}
+              onChange={(e) => setSrcUid(e.target.value)}
+              style={{ padding: "7px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", minHeight: 36, maxWidth: 160 }}
+            >
+              <option value="">All contributors</option>
+              {(((userFiles as unknown as { userId: string }[] | null) ?? (detail?.users as unknown as { userId: string }[] | null) ?? []) as { userId: string }[]).map((u) => {
+                const du = detail?.users.find((x) => x.userId === u.userId);
+                const label = du ? displayName(du).line1 : u.userId.slice(-6);
+                return <option key={u.userId} value={u.userId}>{label} · {u.userId.slice(-6)}</option>;
+              })}
+            </select>
+          </label>
+          {srcUid ? (
+            <select
+              aria-label="Source file"
+              value={srcFileId}
+              onChange={(e) => setSrcFileId(e.target.value)}
+              style={{ padding: "7px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", minHeight: 36, maxWidth: 160 }}
+            >
+              <option value="">All files</option>
+              {srcFileOptions.map((f) => (
+                <option key={f.fileId} value={f.fileId}>#{f.fileId.slice(-8)} · {f.available} avail</option>
+              ))}
+            </select>
+          ) : null}
+          {cur === "page" ? (
+            <select
+              aria-label="Page verified filter"
+              value={verifiedFilter}
+              onChange={(e) => setVerifiedFilter(e.target.value as never)}
+              style={{ padding: "7px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", minHeight: 36 }}
+            >
+              <option value="all">All pages</option>
+              <option value="verified">Verified only</option>
+              <option value="unverified">Unverified only</option>
+            </select>
+          ) : null}
           <div className="pools-qty" style={{ display: "inline-flex", border: "1px solid var(--border2)", borderRadius: 8, overflow: "hidden" }}>
             {[10, 50, 100].map((n) => (
               <button key={n} onClick={() => { setPoolQty(n); setCustomQty(""); }} style={{ padding: "7px 10px", fontSize: 13, fontWeight: 600, background: poolQty === n && !customQty ? "var(--text)" : "var(--bg)", color: poolQty === n && !customQty ? "var(--bg)" : "var(--text2)", border: "none", borderRight: "1px solid var(--border)", cursor: "pointer", minHeight: 36 }}>{n}</button>
@@ -391,26 +488,41 @@ export default function PoolsView() {
           <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>{downloads === null ? "Loading..." : "No downloads yet"}</div>
         ) : (
           <div className="card-list">
-            {(downloads as unknown as { id: string; at: number; poolId: string; password: string; claimed: number; filename: string; reverted?: boolean }[]).map((d) => {
-              const dt = d.at ? new Date(d.at) : null;
+            {(downloads as unknown as { id: string; at: number; ts?: number; poolId: string; password: string; claimed: number; filename: string; reverted?: boolean; claimedBy?: string | null }[]).map((d) => {
+              const dt = d.at || (d as unknown as { ts?: number }).ts ? new Date((d.at ?? (d as unknown as { ts: number }).ts)) : null;
               const dateStr = dt ? dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
               const timeStr = dt ? dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
               const isReverted = !!(d as unknown as { reverted?: boolean }).reverted;
               const poolLabel = d.poolId || (d.filename?.includes("page_") ? "page" : d.filename?.includes("2fa") ? "cookies_2fa" : "cookies_only");
               const poolBadgeClass = poolLabel === "page" ? "badge page" : "badge";
+              const claimer = d.claimedBy ? adminMap.get(String(d.claimedBy)) : null;
+              const initials = claimer?.name?.charAt(0)?.toUpperCase() || String(d.claimedBy ?? "?").charAt(0).toUpperCase();
               return (
-                <div key={d.id} className={`pool-card ${isReverted ? "reverted" : ""}`} style={{ cursor: "default" }}>
+                <div
+                  key={d.id}
+                  className={`pool-card dl-card ${isReverted ? "reverted" : ""}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View download ${d.filename}`}
+                  onClick={() => setDetailId(d.id)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDetailId(d.id); } }}
+                  style={{ cursor: "pointer" }}
+                >
                   <span className={poolBadgeClass} style={{ flexShrink: 0 }}>{poolLabel}</span>
+                  <span style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg3)", border: "1.5px solid var(--border)", flexShrink: 0 }}>
+                    {claimer?.photoUrl ? <img src={claimer.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text2)" }}>{initials}</span>}
+                  </span>
                   <div className="pool-card-info">
                     <div className="pool-card-name" title={d.filename}>{d.filename}</div>
                     <div className="pool-card-sub">
                       <span title={d.at ? new Date(d.at).toISOString() : ""}>{dateStr} {timeStr}</span>
                       <span>·</span>
                       <span>{d.claimed} claimed</span>
+                      {claimer?.name ? <><span>·</span><span title={String(d.claimedBy)} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>{claimer.name}</span></> : d.claimedBy ? <><span>·</span><span title={String(d.claimedBy)}>#{String(d.claimedBy).slice(-6)}</span></> : null}
                       {isReverted ? <><span>·</span><span style={{ color: "var(--green)", fontWeight: 600 }}>REVERTED</span></> : null}
                     </div>
                   </div>
-                  <div className="pool-card-actions">
+                  <div className="pool-card-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                     <button className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} disabled={reDownloading === d.id || isReverted} onClick={() => doRedownload(d.id, d.filename)}>{reDownloading === d.id ? "…" : "Download"}</button>
                     <button className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, color: isReverted ? "var(--text3)" : "var(--red)" }} disabled={reverting === d.id || isReverted} onClick={() => doRevert(d.id)}>{reverting === d.id ? "…" : isReverted ? "Returned" : "Return"}</button>
                   </div>
@@ -447,6 +559,7 @@ export default function PoolsView() {
           </div>
         </div>
       ) : null}
+      <DownloadDetailModal downloadId={detailId} onClose={() => setDetailId(null)} />
     </div>
   );
 }

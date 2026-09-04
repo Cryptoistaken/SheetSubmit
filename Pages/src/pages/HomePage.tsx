@@ -242,16 +242,6 @@ export default function HomePage() {
     });
   };
 
-  const holdSelect = (id: string) => {
-    setSelected((prev) => {
-      if (prev.size === 0) return new Set([id]);
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
   const selectAll = () => {
     if (files) setSelected(new Set(files.map((f) => f.id)));
   };
@@ -454,7 +444,6 @@ export default function HomePage() {
               onRename={openRename}
               onDelete={deleteFile}
               onToggleSelect={toggleSelect}
-              onHoldSelect={holdSelect}
             />
           ) : null}
         </div>

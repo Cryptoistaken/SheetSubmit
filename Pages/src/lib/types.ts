@@ -26,6 +26,8 @@ export interface SheetFile {
   dataCount?: number;
   liveCount?: number;
   deadCount?: number;
+  pageCount?: number;
+  lastAction?: string;
   createdAt?: number;
   updatedAt?: number;
   deletedAt?: number;

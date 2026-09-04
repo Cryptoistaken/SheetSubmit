@@ -13,7 +13,6 @@ interface FileGridProps {
   onRename: (file: SheetFile) => void;
   onDelete: (file: SheetFile) => void;
   onToggleSelect: (id: string) => void;
-  onHoldSelect: (id: string) => void;
 }
 
 export default function FileGrid({
@@ -26,7 +25,6 @@ export default function FileGrid({
   onRename,
   onDelete,
   onToggleSelect,
-  onHoldSelect,
 }: FileGridProps) {
   if (files.length === 0) {
     return <EmptyState title="No files yet" sub="Tap the + button to create your first file" />;
@@ -47,7 +45,6 @@ export default function FileGrid({
           onRename={() => onRename(f)}
           onDelete={() => onDelete(f)}
           onToggleSelect={() => onToggleSelect(f.id)}
-          onHoldSelect={() => onHoldSelect(f.id)}
         />
       ))}
     </div>

@@ -23,6 +23,7 @@
   Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = sheetsubmit.pages.dev
   scripts/TestApi.ts      # live API test suite (mirrors every worker route, all must pass) — run: TEST_SESSION_SECRET=<secret> bun scripts/TestApi.ts
+                        #   subset: append filter — number (59), range (55-70), or name substring (claim) — e.g. `bun scripts/TestApi.ts 90-97`, `--help` for usage
 ```
 
 ### Worker — `worker/src/` (Hono, entry `src/index.ts`)

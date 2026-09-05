@@ -147,6 +147,34 @@ export function wsDisconnect() {
   useWsStore.getState().setStatus("off");
 }
 
+// Resolve true if the socket is (or becomes) open within timeoutMs; false if
+// idle/disconnected or the handshake didn't land in time. Lets callers ride an
+// in-flight connect instead of instantly falling back to HTTP on page load.
+export function wsWaitOpen(timeoutMs = 1500): Promise<boolean> {
+  const st = useWsStore.getState().status;
+  if (st === "open") return Promise.resolve(true);
+  if (st !== "connecting") return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const cleanup = () => { unsub(); clearTimeout(t); };
+    const unsub = useWsStore.subscribe((s) => {
+      if (s.status === "open") { cleanup(); resolve(true); }
+      else if (s.status === "closed" || s.status === "off") { cleanup(); resolve(false); }
+    });
+    const t = setTimeout(() => { cleanup(); resolve(false); }, timeoutMs);
+  });
+}
+
+// Android WebView kills sockets in background; reconnect the moment the app is
+// foregrounded or network returns instead of waiting out the backoff timer.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && localStorage.getItem("ss_had_session") === "1") void wsConnect();
+  });
+  window.addEventListener("online", () => {
+    if (useWsStore.getState().status !== "open") void wsConnect();
+  });
+}
+
 export function wsCall<T>(op: string, args?: object, timeoutMs = 15000): Promise<T> {
   if (!socket || socket.readyState !== WebSocket.OPEN) return Promise.reject(new Error("ws closed"));
   const id = nextId++;

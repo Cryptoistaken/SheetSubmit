@@ -9,7 +9,7 @@ import type {
   SheetFile,
   User,
 } from "./types";
-import { useWsStore, wsCall } from "./ws";
+import { wsCall, wsWaitOpen } from "./ws";
 
 const RUNTIME_BASE = (window.APP_CONFIG?.apiBase ?? import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
 declare global {
@@ -70,7 +70,7 @@ async function request<T>(path: string, init?: RequestInit, opts?: { keepalive?:
 
 async function call<T>(op: string, args: object | undefined, httpFn: () => Promise<T>, opts?: { keepalive?: boolean }): Promise<T> {
   if (opts?.keepalive) return httpFn();
-  if (useWsStore.getState().status !== "open") return httpFn();
+  if (!(await wsWaitOpen())) return httpFn();
   try {
     return await wsCall<T>(op, args);
   } catch {

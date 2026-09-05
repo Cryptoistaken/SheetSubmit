@@ -7,7 +7,7 @@ import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfileCache } from "@/stores/profileCache";
-import { SearchIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
+import { VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import { fileTypeDef } from "@/lib/types";
 import type { AdminUser, ArchiveFile, SheetFile } from "@/lib/types";
 import { downloadXlsx } from "@/lib/xlsx";
@@ -15,6 +15,7 @@ import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import EmptyState from "./EmptyState";
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 import FileCard from "./FileCard";
+import SearchInput from "@/components/ui/search-input";
 
 function userName(u: { name?: string; firstName?: string; lastName?: string; username?: string }): string {
   return u.name?.trim() || ((u.firstName ?? "") + " " + (u.lastName ?? "")).trim() || (u.username ? "@" + u.username : "") || "Unknown";
@@ -401,19 +402,14 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ fontSize: 12, color: "var(--text3)", fontWeight: 500 }}>{users === null ? <Skeleton className="h-4 w-20" /> : `${users.length} users`}</div>
-        <label style={{ position: "relative", display: "inline-flex", alignItems: "center", marginLeft: "auto" }}>
-          <SearchIcon size={14} style={{ position: "absolute", left: 10, color: "var(--text3)", pointerEvents: "none" } as React.CSSProperties} />
-          <input
-            type="text"
-            className="admin-search-input"
+        <SearchInput
             placeholder="Search users..."
             aria-label="Search users"
             autoComplete="off"
             value={search}
             onChange={(e) => onSearch(e.target.value)}
-            style={{ width: 240, maxWidth: "48vw", paddingLeft: 32 }}
-          />
-        </label>
+            containerStyle={{ width: 240, maxWidth: "48vw", marginLeft: "auto" }}
+        />
       </div>
       <div className="admin-user-list">
         {users === null

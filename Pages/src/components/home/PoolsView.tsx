@@ -5,11 +5,12 @@ import type { PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/li
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { useProfileCache } from "@/stores/profileCache";
-import { CookieIcon, PageIcon, PasswordIcon, SearchIcon, TwoFaIcon, UnknownUserIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
+import { CookieIcon, PageIcon, PasswordIcon, TwoFaIcon, UnknownUserIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import EmptyState from "./EmptyState";
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 import DownloadDetailModal from "./DownloadDetailModal";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
+import SearchInput from "@/components/ui/search-input";
 
 const PASSWORDS = ["dgddigital", "L0VE@12345"] as const;
 const POOL_TABS = [
@@ -417,10 +418,7 @@ export default function PoolsView() {
 
       {/* search */}
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, marginBottom: 8 }}>
-        <label style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-          <SearchIcon size={14} style={{ position: "absolute", left: 10, color: "var(--text3)", pointerEvents: "none" } as React.CSSProperties} />
-          <input className="admin-search-input" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search users" style={{ width: 240, maxWidth: "48vw", paddingLeft: 32 }} />
-        </label>
+        <SearchInput placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search users" containerStyle={{ width: 240, maxWidth: "48vw" }} />
       </div>
 
       {/* user list */}

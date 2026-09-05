@@ -631,6 +631,14 @@ button, input, select, textarea {
     -webkit-overflow-scrolling: touch;
 }
 .home-tabs::-webkit-scrollbar { display: none; }
+.home-tabs.sel-tabs {
+    width: 100%;
+    justify-content: space-between;
+    animation: selIn .18s var(--ease-out) both;
+}
+@keyframes selIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.sel-tabs .sel-btn { background: var(--bg); }
+.sel-tabs .sel-bar-count { padding: 0 6px 0 10px; }
 .home-tab {
     display: inline-flex;
     align-items: center;
@@ -1327,35 +1335,21 @@ button, input, select, textarea {
 }
 
 /* ── Selection bars ── */
+/* Cell multi-select bar — flush bottom like the cell edit menu */
 .sel-bar {
     position: fixed;
     z-index: 600;
     background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 12px;
     display: none;
     align-items: center;
     padding: 6px 6px 6px 14px;
     gap: 6px;
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
     min-width: 0;
-    max-width: calc(100vw - 16px);
-    left: 8px;
-    right: 8px;
-    top: 54px;
-    bottom: auto;
-    animation: selIn .18s var(--ease-out) both;
-}
-@keyframes selIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
-.sel-bar.below {
-    top: auto;
-    bottom: 0;
     left: 0;
     right: 0;
-    max-width: none;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
+    bottom: 0;
+    border-top: 1px solid var(--border);
     animation: qebIn .22s var(--ease-out) both;
 }
 .sel-bar.open {

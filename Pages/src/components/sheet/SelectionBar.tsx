@@ -10,7 +10,7 @@ export default function SelectionBar() {
   if (!selectionMode || size === 0) return null;
 
   return (
-    <div className="sel-bar below open">
+    <div className="sel-bar open">
       <span className="sel-bar-count">{size} selected</span>
       <div className="sel-bar-actions">
         <button

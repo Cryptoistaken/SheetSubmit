@@ -105,6 +105,7 @@ export default function HomePage() {
   const [files, setFiles] = useState<SheetFile[] | null>(null);
   const [dupCounts, setDupCounts] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [archSel, setArchSel] = useState<Set<string>>(new Set());
   const [renameFileId, setRenameFileId] = useState<string | null>(null);
   const [renameName, setRenameName] = useState("");
 
@@ -145,6 +146,7 @@ export default function HomePage() {
   // selection bar behind (its Delete would act on files from the previous tab).
   const goTab = (to: string) => {
     setSelected(new Set());
+    setArchSel(new Set());
     navigate(to);
   };
 
@@ -363,7 +365,27 @@ export default function HomePage() {
 
   return (
     <>
-      <div className="home-tabs" role="tablist" aria-label="Home sections">
+      <div id="homeTabBar">
+        {tab === "files" && selectionMode ? (
+          <div className="home-tabs sel-tabs">
+            <span className="sel-bar-count">{selected.size} selected</span>
+            <div className="sel-bar-actions">
+              <button className="sel-btn sel-btn-primary" disabled={dlBusy} onClick={() => void downloadSelected()}>
+                Download
+              </button>
+              <button className="sel-btn danger" onClick={() => void deleteSelected()}>
+                Delete
+              </button>
+              <button className="sel-btn" onClick={selectAll}>
+                Select all
+              </button>
+              <button className="sel-btn" onClick={unselectAll}>
+                Unselect all
+              </button>
+            </div>
+          </div>
+        ) : tab === "archive" && archSel.size > 0 ? null : (
+          <div className="home-tabs" role="tablist" aria-label="Home sections">
         <button
           className={`home-tab${tab === "files" ? " active" : ""}`}
           role="tab"
@@ -424,6 +446,8 @@ export default function HomePage() {
             Tools
           </button>
         ) : null}
+          </div>
+        )}
       </div>
 
       {tab === "files" ? (
@@ -463,7 +487,7 @@ export default function HomePage() {
       {tab === "archive" ? (
         <div className="home-pane" id="homePaneArchive">
           <Suspense fallback={null}>
-            <ArchiveView />
+            <ArchiveView selected={archSel} setSelected={setArchSel} />
           </Suspense>
         </div>
       ) : null}
@@ -502,24 +526,6 @@ export default function HomePage() {
       ) : null}
 
       {tab === "files" ? <Fab onCreate={createFile} onUpload={uploadFile} /> : null}
-
-      <div className={`sel-bar${selectionMode ? " open" : ""}`}>
-        <span className="sel-bar-count">{selected.size} selected</span>
-        <div className="sel-bar-actions">
-          <button className="sel-btn sel-btn-primary" disabled={dlBusy} onClick={() => void downloadSelected()}>
-            Download
-          </button>
-          <button className="sel-btn danger" onClick={() => void deleteSelected()}>
-            Delete
-          </button>
-          <button className="sel-btn" onClick={selectAll}>
-            Select all
-          </button>
-          <button className="sel-btn" onClick={unselectAll}>
-            Unselect all
-          </button>
-        </div>
-      </div>
 
       <div
         className={`modal-overlay${renameFileId ? " open" : ""}`}

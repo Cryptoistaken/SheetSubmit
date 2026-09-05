@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { api } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
@@ -8,9 +9,14 @@ import type { ArchiveFile } from "@/lib/types";
 import EmptyState from "./EmptyState";
 import FileCard from "./FileCard";
 
-export default function ArchiveView() {
+export default function ArchiveView({
+  selected,
+  setSelected,
+}: {
+  selected: Set<string>;
+  setSelected: React.Dispatch<React.SetStateAction<Set<string>>>;
+}) {
   const [archived, setArchived] = useState<ArchiveFile[] | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const showToast = useToast();
   const confirm = useConfirm();
 
@@ -143,23 +149,27 @@ export default function ArchiveView() {
           })}
         </div>
       )}
-      <div className={`sel-bar${selectionMode ? " open" : ""}`}>
-        <span className="sel-bar-count">{selected.size} selected</span>
-        <div className="sel-bar-actions">
-          <button className="sel-btn sel-btn-primary" onClick={restoreSelected}>
-            Restore
-          </button>
-          <button className="sel-btn danger" onClick={deleteSelected}>
-            Delete
-          </button>
-          <button className="sel-btn" onClick={selectAll}>
-            Select all
-          </button>
-          <button className="sel-btn" onClick={unselectAll}>
-            Unselect all
-          </button>
-        </div>
-      </div>
+      {selectionMode &&
+        createPortal(
+          <div className="home-tabs sel-tabs">
+            <span className="sel-bar-count">{selected.size} selected</span>
+            <div className="sel-bar-actions">
+              <button className="sel-btn sel-btn-primary" onClick={() => void restoreSelected()}>
+                Restore
+              </button>
+              <button className="sel-btn danger" onClick={() => void deleteSelected()}>
+                Delete
+              </button>
+              <button className="sel-btn" onClick={selectAll}>
+                Select all
+              </button>
+              <button className="sel-btn" onClick={unselectAll}>
+                Unselect all
+              </button>
+            </div>
+          </div>,
+          document.getElementById("homeTabBar")!,
+        )}
     </>
   );
 }

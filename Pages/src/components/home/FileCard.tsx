@@ -135,7 +135,7 @@ export default function FileCard({
       ? { background: "transparent", color: "#2563eb", border: "1px solid transparent" }
       : { background: "var(--bg3)", color: "var(--text2)" };
   const sq = (bg: string, title: string) => (
-    <span title={title} style={{ width: 10, height: 10, borderRadius: 3, background: bg, border: "1px solid var(--border)", flexShrink: 0 }} />
+    <span title={title} style={{ width: 12, height: 12, borderRadius: 2.5, background: bg, border: "1px solid var(--border)", flexShrink: 0 }} />
   );
 
   const actionLabel = ({ created: "Newly Created", renamed: "Renamed", modified: "Last Modified", restored: "Last Restored", archived: "Last Archived" } as Record<string, string>)[file.lastAction ?? (file.deletedAt ? "archived" : "modified")] ?? "Last Modified";
@@ -178,13 +178,13 @@ export default function FileCard({
             </>
           ) : null}
           {isPage && (file.pageCount ?? 0) > 0 ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--cyan)", "page eligible")}{file.pageCount}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("linear-gradient(oklch(0.640619 0.197547 260) 0%, oklch(0.5772 0.2324 260) 100%)", "page eligible")}{file.pageCount}</span>
           ) : null}
           {(file.dupCount ?? 0) > 0 ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow-dark)", "duplicates in file")}{file.dupCount}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow-light)", "duplicates in file")}{file.dupCount}</span>
           ) : null}
           {crossDupCount ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow-light)", "cross-file duplicates")}{crossDupCount}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--orange)", "cross-file duplicates")}{crossDupCount}</span>
           ) : null}
         </span>
       </div>

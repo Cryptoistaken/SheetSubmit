@@ -1001,6 +1001,66 @@ const run = async () => {
     return ok ? { ok: true } : { ok: false, detail: `status=${r.status} nf=${nf.status} body=${JSON.stringify(r.json).slice(0, 200)}` };
   });
 
+  let wsTicket = "";
+  await test("ws ticket authed", async () => {
+    const r = await api("/ws/ticket", { headers: { Cookie: cookie } });
+    if (r.status !== 200 || typeof r.json?.ticket !== "string" || !r.json.ticket) return { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+    wsTicket = r.json.ticket;
+    return { ok: true };
+  });
+  await test("ws connect + ping", async () => {
+    if (!wsTicket) return { ok: false, detail: "no ticket" };
+    const WS_URL = BASE.replace(/^https/, "wss").replace(/^http/, "ws").replace(/\/api$/, "") + `/ws?t=${wsTicket}`;
+    return await new Promise<{ ok: boolean; detail?: string }>((resolve) => {
+      let done = false;
+      const timer = setTimeout(() => { if (!done) { done = true; try { (ws as any).close(); } catch {} resolve({ ok: false, detail: "timeout 10s" }); } }, 10000);
+      const ws: any = new WebSocket(WS_URL);
+      ws.addEventListener("open", () => { ws.send(JSON.stringify({ id: 1, op: "ping" })); });
+      ws.addEventListener("message", (e: any) => {
+        try {
+          const d = JSON.parse(typeof e.data === "string" ? e.data : String(e.data));
+          if (d.ev === "health") return;
+          if (d.id === 1 && d.ok === true) { clearTimeout(timer); done = true; ws.close(1000); resolve({ ok: true }); }
+          else if (d.id === 1) { clearTimeout(timer); done = true; ws.close(); resolve({ ok: false, detail: `ping response ${JSON.stringify(d)}` }); }
+        } catch {}
+      });
+      ws.addEventListener("error", () => { if (!done) { done = true; clearTimeout(timer); resolve({ ok: false, detail: "ws error" }); } });
+      ws.addEventListener("close", () => { if (!done) { /* wait for message */ } });
+    });
+  });
+  await test("ws bad ticket rejected", async () => {
+    const WS_URL = BASE.replace(/^https/, "wss").replace(/^http/, "ws").replace(/\/api$/, "") + `/ws?t=bogus123`;
+    return await new Promise<{ ok: boolean; detail?: string }>((resolve) => {
+      let done = false;
+      const timer = setTimeout(() => { if (!done) { done = true; try { (ws as any).close(); } catch {} resolve({ ok: false, detail: "timeout 5s expected reject" }); } }, 5000);
+      const ws: any = new WebSocket(WS_URL);
+      ws.addEventListener("open", () => {});
+      ws.addEventListener("close", () => { if (!done) { done = true; clearTimeout(timer); resolve({ ok: true }); } });
+      ws.addEventListener("error", () => { if (!done) { done = true; clearTimeout(timer); resolve({ ok: true }); } });
+    });
+  });
+  await test("ws anon ops rejected", async () => {
+    const anonRes = await api("/ws/ticket");
+    const anonTicket = (anonRes.json as any)?.ticket;
+    if (!anonTicket) return { ok: false, detail: `anon ticket failed ${anonRes.status} ${JSON.stringify(anonRes.json)}` };
+    const WS_URL = BASE.replace(/^https/, "wss").replace(/^http/, "ws").replace(/\/api$/, "") + `/ws?t=${anonTicket}`;
+    return await new Promise<{ ok: boolean; detail?: string }>((resolve) => {
+      let done = false;
+      const timer = setTimeout(() => { if (!done) { done = true; try { (ws as any).close(); } catch {} resolve({ ok: false, detail: "timeout 10s" }); } }, 10000);
+      const ws: any = new WebSocket(WS_URL);
+      ws.addEventListener("open", () => { ws.send(JSON.stringify({ id: 2, op: "files.list" })); });
+      ws.addEventListener("message", (e: any) => {
+        try {
+          const d = JSON.parse(typeof e.data === "string" ? e.data : String(e.data));
+          if (d.ev) return;
+          if (d.id === 2) { clearTimeout(timer); done = true; const ok = d.ok === false && String(d.error || "").includes("unauthorized"); ws.close(); resolve(ok ? { ok: true } : { ok: false, detail: `expected unauthorized got ${JSON.stringify(d)}` }); }
+        } catch {}
+      });
+      ws.addEventListener("error", () => { if (!done) { done = true; clearTimeout(timer); resolve({ ok: false, detail: "ws error" }); } });
+      ws.addEventListener("close", () => { if (!done) { done = true; clearTimeout(timer); resolve({ ok: false, detail: "closed before response" }); } });
+    });
+  });
+
   await test("POST /webhook/tg (no secret) → 401", async () => {
     const res = await fetch(BASE.replace(/\/api$/, "") + "/webhook/tg", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
     return res.status === 401 ? { ok: true } : { ok: false, detail: `status=${res.status}` };

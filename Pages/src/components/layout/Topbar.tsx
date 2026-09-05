@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { useAvatarUrl } from "@/lib/avatarCache";
 import { useTheme } from "@/lib/theme";
 import { useToast } from "@/lib/toast";
+import { useWsStore } from "@/lib/ws";
 import { useBubbleStore } from "@/stores/bubbleStore";
 import { useSheetStore } from "@/stores/sheetStore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -81,41 +82,18 @@ export default function Topbar() {
     if (isFilePage) setPanelOpen(false);
   }, [isFilePage]);
 
-  // Health polling — 30s interval, 1.5x backoff to 2min, paused while tab hidden.
+  const wsStatus = useWsStore((s) => s.status);
   useEffect(() => {
-    let cancelled = false;
-    let interval = 30000;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const check = () => {
-      setRingPulse(true);
-      setTimeout(() => setRingPulse(false), 1200);
-      api
-        .health()
-        .then((h) => {
-          interval = 30000;
-          if (cancelled) return;
-          setConn(h.ok ? { cls: "ok", text: "Connected" } : { cls: "", text: "Reconnecting..." });
-        })
-        .catch(() => {
-          if (cancelled) return;
-          setConn({ cls: "err", text: "Disconnected" });
-          interval = Math.min(interval * 1.5, 120000);
-        });
-    };
-    const schedule = () => {
-      timer = setTimeout(() => {
-        if (document.visibilityState !== "hidden") check();
-        schedule();
-      }, interval);
-    };
-    check();
-    schedule();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, []);
+    if (wsStatus === "open") setConn({ cls: "ok", text: "Connected" });
+    else if (wsStatus === "closed") setConn({ cls: "err", text: "Disconnected" });
+    else setConn({ cls: "", text: "Connecting..." });
+  }, [wsStatus]);
+  useEffect(() => {
+    if (wsStatus !== "open") return;
+    setRingPulse(true);
+    const t = setTimeout(() => setRingPulse(false), 1200);
+    return () => clearTimeout(t);
+  }, [wsStatus]);
 
   // Reset avatar readiness when the photo changes so the ring stays
   // hidden until the new image has actually loaded.

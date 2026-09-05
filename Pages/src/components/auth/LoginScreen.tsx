@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
 import { getInitialTheme } from "@/lib/theme";
+import { wsCall, wsConnect, wsOn } from "@/lib/ws";
 
 const TURNSTILE_SITE_KEY = "0x4AAAAAAEmGwKWEZqnHmgYU";
 
@@ -40,6 +41,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
   const turnstileTokenRef = useRef<string | null>(null);
   const turnstileRef = useRef<string | null>(null);
   const turnstileBoxRef = useRef<HTMLDivElement>(null);
+  const claimedDoneRef = useRef(false);
 
   // Load Turnstile script and render widget
   useEffect(() => {
@@ -79,6 +81,32 @@ export default function LoginScreen({ notice }: { notice?: string }) {
     return () => { stop = true; };
   }, []);
 
+  // WS fast-path — anonymous ticket, watch for claimed push
+  useEffect(() => {
+    if (!href) return;
+    void wsConnect();
+    const offClaimed = wsOn("claimed", () => {
+      if (claimedDoneRef.current) return;
+      api.claimDeviceSession(didRef.current ?? "", turnstileTokenRef.current).then((res) => {
+        if (!res.ok) return;
+        if (claimedDoneRef.current) return;
+        claimedDoneRef.current = true;
+        localStorage.setItem(HAD_SESSION, "1");
+        setWaiting(true);
+        window.location.href = "/";
+      }).catch(() => {});
+    });
+    const offHealth = wsOn("health", () => {
+      const did = didRef.current;
+      if (did) wsCall("claim.watch", { did }).catch(() => {});
+    });
+    const t = setTimeout(() => {
+      const did = didRef.current;
+      if (did) wsCall("claim.watch", { did }).catch(() => {});
+    }, 1000);
+    return () => { offClaimed(); offHealth(); clearTimeout(t); };
+  }, [href]);
+
   // Claim polling
   useEffect(() => {
     if (!href || !turnstileToken) return;
@@ -86,13 +114,13 @@ export default function LoginScreen({ notice }: { notice?: string }) {
     let iv: ReturnType<typeof setInterval> | null = null;
     let attempts = 0;
     const tick = () => {
-      if (stop) return;
+      if (stop || claimedDoneRef.current) return;
       if (!document.hasFocus()) return;
       setChecking(true);
       attempts++;
       api.claimDeviceSession(didRef.current ?? "", turnstileTokenRef.current).then((res) => {
-        if (stop) return;
-        if (res.ok) { stop = true; localStorage.setItem(HAD_SESSION, "1"); setWaiting(true); window.location.href = "/"; return; }
+        if (stop || claimedDoneRef.current) return;
+        if (res.ok) { claimedDoneRef.current = true; stop = true; localStorage.setItem(HAD_SESSION, "1"); setWaiting(true); window.location.href = "/"; return; }
         if (attempts >= MAX_ATTEMPTS) { stop = true; if (iv) clearInterval(iv); setChecking(false); setShowRecheck(true); }
       }).catch(() => { if (stop) return; if (attempts >= MAX_ATTEMPTS) { stop = true; if (iv) clearInterval(iv); setChecking(false); setShowRecheck(true); } });
     };

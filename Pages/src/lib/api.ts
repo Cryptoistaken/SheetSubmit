@@ -9,24 +9,18 @@ import type {
   SheetFile,
   User,
 } from "./types";
+import { useWsStore, wsCall } from "./ws";
 
-// Base URL of the backend API. The static server injects it at container start via
-// /config.js (window.APP_CONFIG.apiBase ← VITE_API_BASE env var on the web service),
-// so no URL is baked into the build. Falls back to a build-time VITE_API_BASE (for
-// anyone building manually), then to relative /api (local dev → vite proxy).
 const RUNTIME_BASE = (window.APP_CONFIG?.apiBase ?? import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
-// Runtime config injected by the static server via /config.js (see server.js).
 declare global {
   interface Window {
-    APP_CONFIG?: { apiBase?: string };
+    APP_CONFIG?: { apiBase?: string; wsBase?: string };
   }
 }
 
 const BASE = RUNTIME_BASE + "/api";
 export const API_BASE = BASE;
 
-/** The worker sends snake_case DB rows — normalize once so every consumer
- *  sees the camelCase User shape (id, firstName, lastName). */
 export function normalizeUser(raw: any): User {
   const parts = String(raw?.name || "").split(" ").filter(Boolean);
   return {
@@ -72,6 +66,16 @@ async function request<T>(path: string, init?: RequestInit, opts?: { keepalive?:
     throw new Error(`${res.status} ${res.statusText}${detail ? ` — ${detail}` : ""}`);
   }
   return res.json() as Promise<T>;
+}
+
+async function call<T>(op: string, args: object | undefined, httpFn: () => Promise<T>, opts?: { keepalive?: boolean }): Promise<T> {
+  if (opts?.keepalive) return httpFn();
+  if (useWsStore.getState().status !== "open") return httpFn();
+  try {
+    return await wsCall<T>(op, args);
+  } catch {
+    return httpFn();
+  }
 }
 
 interface PersistPayload {
@@ -176,38 +180,30 @@ export interface DownloadDetail {
 }
 
 export const api = {
-  // ── Files ──
-  getFiles: () => request<SheetFile[]>("/files"),
+  wsTicket: () => request<{ ticket: string }>("/ws/ticket"),
+  getFiles: () => call<SheetFile[]>("files.list", {}, () => request<SheetFile[]>("/files")),
   getFileFull: (id: string) =>
-    request<{ file: SheetFile; rows: Row[]; logs: unknown[]; undo: unknown[]; redo: unknown[]; seq?: number }>(
-      `/files/${id}/full`,
-    ),
+    call<{ file: SheetFile; rows: Row[]; logs: unknown[]; undo: unknown[]; redo: unknown[]; seq?: number }>("file.full", { id }, () => request<{ file: SheetFile; rows: Row[]; logs: unknown[]; undo: unknown[]; redo: unknown[]; seq?: number }>(`/files/${id}/full`)),
   createFile: (data: { id: string; name: string; type: FileType; preset?: string; poolKind?: string; password?: string; poolEnabled?: boolean; rows?: Row[]; dataCount?: number; columns?: ColumnDef[] }) =>
-    request<SheetFile>("/files", { method: "POST", body: JSON.stringify(data) }),
+    call<SheetFile>("file.create", { body: data }, () => request<SheetFile>("/files", { method: "POST", body: JSON.stringify(data) })),
   updateFile: (id: string, data: Record<string, unknown>) =>
-    request<SheetFile>(`/files/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-  deleteFile: (id: string) => request<{ ok: boolean }>(`/files/${id}`, { method: "DELETE" }),
-  getRows: (id: string) => request<Row[]>(`/files/${id}/rows`),
+    call<SheetFile>("file.update", { id, data }, () => request<SheetFile>(`/files/${id}`, { method: "PUT", body: JSON.stringify(data) })),
+  deleteFile: (id: string) => call<{ ok: boolean }>("file.delete", { id }, () => request<{ ok: boolean }>(`/files/${id}`, { method: "DELETE" })),
+  getRows: (id: string) => call<Row[]>("file.rows", { id }, () => request<Row[]>(`/files/${id}/rows`)),
   persist: (id: string, data: PersistPayload, opts?: { keepalive?: boolean }) =>
-    request<{ ok: boolean; seq?: number; file?: SheetFile }>(`/files/${id}/persist`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }, opts),
+    call<{ ok: boolean; seq?: number; file?: SheetFile }>("file.persist", { id, payload: data }, () => request<{ ok: boolean; seq?: number; file?: SheetFile }>(`/files/${id}/persist`, { method: "PUT", body: JSON.stringify(data) }, opts), opts),
   append: (id: string, data: AppendPayload, opts?: { keepalive?: boolean }) =>
-    request<{ ok: boolean; seq: number; file?: SheetFile }>(`/files/${id}/append`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }, opts),
+    call<{ ok: boolean; seq: number; file?: SheetFile }>("file.append", { id, payload: data }, () => request<{ ok: boolean; seq: number; file?: SheetFile }>(`/files/${id}/append`, { method: "PUT", body: JSON.stringify(data) }, opts), opts),
   health: () => request<{ ok: boolean }>("/health"),
-  getArchive: () => request<ArchiveFile[]>("/archive"),
-  restoreFile: (id: string) => request<{ ok: boolean }>(`/archive/${id}/restore`, { method: "POST" }),
-  permanentDelete: (id: string) => request<{ ok: boolean }>(`/archive/${id}`, { method: "DELETE" }),
+  getArchive: () => call<ArchiveFile[]>("archive.list", {}, () => request<ArchiveFile[]>("/archive")),
+  restoreFile: (id: string) => call<{ ok: boolean }>("archive.restore", { id }, () => request<{ ok: boolean }>(`/archive/${id}/restore`, { method: "POST" })),
+  permanentDelete: (id: string) => call<{ ok: boolean }>("archive.delete", { id }, () => request<{ ok: boolean }>(`/archive/${id}`, { method: "DELETE" })),
   batchRestore: (ids: string[]) =>
-    request<{ restored: number }>("/archive/batch-restore", { method: "POST", body: JSON.stringify({ ids }) }),
+    call<{ restored: number }>("archive.batchRestore", { ids }, () => request<{ restored: number }>("/archive/batch-restore", { method: "POST", body: JSON.stringify({ ids }) })),
   batchDelete: (ids: string[]) =>
-    request<{ deleted: number }>("/archive/batch-delete", { method: "POST", body: JSON.stringify({ ids }) }),
+    call<{ deleted: number }>("archive.batchDelete", { ids }, () => request<{ deleted: number }>("/archive/batch-delete", { method: "POST", body: JSON.stringify({ ids }) })),
   getCrossDups: (fileId?: string) =>
-    request<CrossDupResult>(`/cross-dups${fileId ? `?fileId=${fileId}` : ""}`),
+    call<CrossDupResult>("crossdups", { fileId }, () => request<CrossDupResult>(`/cross-dups${fileId ? `?fileId=${fileId}` : ""}`)),
   pageCheck: (cookie: string) =>
     request<{ eligible?: boolean; error?: string | null; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null }>("/fb/page-check", {
       method: "POST",
@@ -224,112 +220,123 @@ export const api = {
       body: JSON.stringify({ uids }),
     }),
   getWaCache: (uids: string[]) =>
-    request<{ cache: Record<string, unknown> }>(`/wa/cache?uids=${encodeURIComponent(uids.join(","))}`),
+    call<{ cache: Record<string, unknown> }>("wa.cache", { uids }, () => request<{ cache: Record<string, unknown> }>(`/wa/cache?uids=${encodeURIComponent(uids.join(","))}`)),
 
-  // ── Admin ──
-  adminStats: () => request<{ totalUsers: number; totalFiles: number }>("/admin/stats"),
-  adminUsers: () => request<AdminUser[]>("/admin/users"),
-  adminSearchUsers: (q: string) => request<AdminUser[]>(`/admin/users/search?q=${encodeURIComponent(q)}`),
-  adminUser: (userId: string) => request<AdminUser>(`/admin/user/${userId}`),
-  adminUserArchive: (userId: string) => request<ArchiveFile[]>(`/admin/user/${userId}/archive`),
+  adminStats: () => call<{ totalUsers: number; totalFiles: number }>("admin.stats", {}, () => request<{ totalUsers: number; totalFiles: number }>("/admin/stats")),
+  adminUsers: () => call<AdminUser[]>("admin.users", {}, () => request<AdminUser[]>("/admin/users")),
+  adminSearchUsers: (q: string) => call<AdminUser[]>("admin.users.search", { q }, () => request<AdminUser[]>(`/admin/users/search?q=${encodeURIComponent(q)}`)),
+  adminUser: (userId: string) => call<AdminUser>("admin.user", { userId }, () => request<AdminUser>(`/admin/user/${userId}`)),
+  adminUserArchive: (userId: string) => call<ArchiveFile[]>("admin.user.archive", { userId }, () => request<ArchiveFile[]>(`/admin/user/${userId}/archive`)),
   adminRestoreArchived: (userId: string, fileId: string) =>
-    request<{ ok: boolean }>(`/admin/user/${userId}/archive/${fileId}/restore`, { method: "POST" }),
+    call<{ ok: boolean }>("admin.user.archive.restore", { userId, fileId }, () => request<{ ok: boolean }>(`/admin/user/${userId}/archive/${fileId}/restore`, { method: "POST" })),
   adminDeleteArchived: (userId: string, fileId: string) =>
-    request<{ ok: boolean }>(`/admin/user/${userId}/archive/${fileId}`, { method: "DELETE" }),
-  adminFile: (fileId: string) => request<SheetFile>(`/admin/file/${fileId}`),
+    call<{ ok: boolean }>("admin.user.archive.delete", { userId, fileId }, () => request<{ ok: boolean }>(`/admin/user/${userId}/archive/${fileId}`, { method: "DELETE" })),
+  adminFile: (fileId: string) => call<SheetFile>("admin.file", { fileId }, () => request<SheetFile>(`/admin/file/${fileId}`)),
   adminUpdateFile: (fileId: string, data: Record<string, unknown>) =>
-    request<SheetFile>(`/admin/file/${fileId}`, { method: "PUT", body: JSON.stringify(data) }),
-  adminDeleteFile: (fileId: string) => request<{ ok: boolean }>(`/admin/file/${fileId}`, { method: "DELETE" }),
-  adminFileRows: (fileId: string) => request<Row[]>(`/admin/file/${fileId}/rows`),
+    call<SheetFile>("admin.file.update", { fileId, data }, () => request<SheetFile>(`/admin/file/${fileId}`, { method: "PUT", body: JSON.stringify(data) })),
+  adminDeleteFile: (fileId: string) => call<{ ok: boolean }>("admin.file.delete", { fileId }, () => request<{ ok: boolean }>(`/admin/file/${fileId}`, { method: "DELETE" })),
+  adminFileRows: (fileId: string) => call<Row[]>("admin.file.rows", { fileId }, () => request<Row[]>(`/admin/file/${fileId}/rows`)),
   adminPersist: (fileId: string, data: PersistPayload) =>
-    request<{ ok: boolean }>(`/admin/file/${fileId}/persist`, { method: "PUT", body: JSON.stringify(data) }),
-  adminFileLogs: (fileId: string) => request<unknown[]>(`/admin/file/${fileId}/logs`),
-  adminUndo: (fileId: string) => request<HistoryResult>(`/admin/file/${fileId}/undo`),
+    call<{ ok: boolean }>("admin.file.persist", { fileId, payload: data }, () => request<{ ok: boolean }>(`/admin/file/${fileId}/persist`, { method: "PUT", body: JSON.stringify(data) })),
+  adminFileLogs: (fileId: string) => call<unknown[]>("admin.file.logs", { fileId }, () => request<unknown[]>(`/admin/file/${fileId}/logs`)),
+  adminUndo: (fileId: string) => call<HistoryResult>("admin.file.undo", { fileId }, () => request<HistoryResult>(`/admin/file/${fileId}/undo`)),
 
-  adminDeleteUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}`, { method: "DELETE" }),
-  adminBanUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}/ban`, { method: "POST" }),
-  adminUnbanUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}/unban`, { method: "POST" }),
+  adminDeleteUser: (userId: string) => call<{ ok: boolean }>("admin.user.delete", { userId }, () => request<{ ok: boolean }>(`/admin/user/${userId}`, { method: "DELETE" })),
+  adminBanUser: (userId: string) => call<{ ok: boolean }>("admin.ban", { userId }, () => request<{ ok: boolean }>(`/admin/user/${userId}/ban`, { method: "POST" })),
+  adminUnbanUser: (userId: string) => call<{ ok: boolean }>("admin.unban", { userId }, () => request<{ ok: boolean }>(`/admin/user/${userId}/unban`, { method: "POST" })),
 
-  // ── Pools (admin-only, password-scoped with legacy alias for dgddigital) ──
-  getPools: () => request<{ pools: PoolSummary[] }>("/pools"),
-  getPoolDetail: async (password: string, poolId: string): Promise<PoolDetail> => {
+  getPools: () => call<{ pools: PoolSummary[] }>("pools.list", {}, () => request<{ pools: PoolSummary[] }>("/pools")),
+  getPoolDetail: (password: string, poolId: string): Promise<PoolDetail> => {
     const enc = (s: string) => encodeURIComponent(s);
-    try {
-      return await request<PoolDetail>(`/pools/${enc(password)}/${enc(poolId)}`);
-    } catch (e) {
-      if (password === "dgddigital" && String(e).includes("404")) {
-        return request<PoolDetail>(`/pools/${enc(poolId)}`);
+    const httpFn = async () => {
+      try {
+        return await request<PoolDetail>(`/pools/${enc(password)}/${enc(poolId)}`);
+      } catch (e) {
+        if (password === "dgddigital" && String(e).includes("404")) {
+          return request<PoolDetail>(`/pools/${enc(poolId)}`);
+        }
+        throw e;
       }
-      throw e;
-    }
+    };
+    return call<PoolDetail>("pool.detail", { password, poolId }, httpFn);
   },
-  getPoolRows: async (password: string, poolId: string, opts?: { userId?: string; limit?: number; offset?: number }): Promise<PoolRowsResult> => {
+  getPoolRows: (password: string, poolId: string, opts?: { userId?: string; limit?: number; offset?: number }): Promise<PoolRowsResult> => {
     const enc = (s: string) => encodeURIComponent(s);
     const q = new URLSearchParams();
     if (opts?.userId) q.set("userId", opts.userId);
     if (opts?.limit) q.set("limit", String(opts.limit));
     if (opts?.offset) q.set("offset", String(opts.offset));
     const qs = q.toString() ? `?${q}` : "";
-    try {
-      return await request<PoolRowsResult>(`/pools/${enc(password)}/${enc(poolId)}/rows${qs}`);
-    } catch (e) {
-      if (password === "dgddigital" && String(e).includes("404")) {
-        return request<PoolRowsResult>(`/pools/${enc(poolId)}/rows${qs}`);
+    const httpFn = async () => {
+      try {
+        return await request<PoolRowsResult>(`/pools/${enc(password)}/${enc(poolId)}/rows${qs}`);
+      } catch (e) {
+        if (password === "dgddigital" && String(e).includes("404")) {
+          return request<PoolRowsResult>(`/pools/${enc(poolId)}/rows${qs}`);
+        }
+        throw e;
       }
-      throw e;
-    }
+    };
+    return call<PoolRowsResult>("pool.rows", { password, poolId, ...opts }, httpFn);
   },
-  claimPool: async (password: string, poolId: string, body: { count: number | "all"; userId?: string; srcUid?: string | null; srcFileId?: string | null; verifiedOnly?: boolean; unverifiedOnly?: boolean }): Promise<PoolClaimResult> => {
+  claimPool: (password: string, poolId: string, body: { count: number | "all"; userId?: string; srcUid?: string | null; srcFileId?: string | null; verifiedOnly?: boolean; unverifiedOnly?: boolean }): Promise<PoolClaimResult> => {
     const enc = (s: string) => encodeURIComponent(s);
     const payload: Record<string, unknown> = { ...body };
     if (body.srcUid) { payload.srcUid = body.srcUid; payload.claimForUser = body.srcUid; }
     if (body.srcFileId) payload.srcFileId = body.srcFileId;
-    try {
-      return await request<PoolClaimResult>(`/pools/${enc(password)}/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(payload) });
-    } catch (e) {
-      if (password === "dgddigital" && String(e).includes("404")) {
-        return request<PoolClaimResult>(`/pools/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(payload) });
+    const httpFn = async () => {
+      try {
+        return await request<PoolClaimResult>(`/pools/${enc(password)}/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(payload) });
+      } catch (e) {
+        if (password === "dgddigital" && String(e).includes("404")) {
+          return request<PoolClaimResult>(`/pools/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(payload) });
+        }
+        throw e;
       }
-      throw e;
-    }
+    };
+    return call<PoolClaimResult>("pool.claim", { password, poolId, ...body }, httpFn);
   },
-  getPoolLedger: async (password: string, poolId: string): Promise<{ ledger: unknown[] }> => {
+  getPoolLedger: (password: string, poolId: string): Promise<{ ledger: unknown[] }> => {
     const enc = (s: string) => encodeURIComponent(s);
-    try {
-      return await request<{ ledger: unknown[] }>(`/pools/${enc(password)}/${enc(poolId)}/ledger`);
-    } catch (e) {
-      if (password === "dgddigital" && String(e).includes("404")) {
-        return request<{ ledger: unknown[] }>(`/pools/${enc(poolId)}/ledger`);
+    const httpFn = async () => {
+      try {
+        return await request<{ ledger: unknown[] }>(`/pools/${enc(password)}/${enc(poolId)}/ledger`);
+      } catch (e) {
+        if (password === "dgddigital" && String(e).includes("404")) {
+          return request<{ ledger: unknown[] }>(`/pools/${enc(poolId)}/ledger`);
+        }
+        throw e;
       }
-      throw e;
-    }
+    };
+    return call<{ ledger: unknown[] }>("pool.ledger", { password, poolId }, httpFn);
   },
-  getDownloads: () => request<unknown[]>("/pools/downloads"),
-  getUserFiles: async (password: string, poolId: string): Promise<PoolUserFilesResult> => {
+  getDownloads: () => call<unknown[]>("pool.downloads", {}, () => request<unknown[]>("/pools/downloads")),
+  getUserFiles: (password: string, poolId: string): Promise<PoolUserFilesResult> => {
     const enc = (s: string) => encodeURIComponent(s);
-    try {
-      return await request<PoolUserFilesResult>(`/pools/${enc(password)}/${enc(poolId)}/user-files`);
-    } catch (e) {
-      if (password === "dgddigital" && String(e).includes("404")) {
-        return request<PoolUserFilesResult>(`/pools/${enc(poolId)}/user-files`);
+    const httpFn = async () => {
+      try {
+        return await request<PoolUserFilesResult>(`/pools/${enc(password)}/${enc(poolId)}/user-files`);
+      } catch (e) {
+        if (password === "dgddigital" && String(e).includes("404")) {
+          return request<PoolUserFilesResult>(`/pools/${enc(poolId)}/user-files`);
+        }
+        throw e;
       }
-      throw e;
-    }
+    };
+    return call<PoolUserFilesResult>("pool.userFiles", { password, poolId }, httpFn);
   },
   getVerifiedCounts: (password: string, poolId: string) => {
     const enc = (s: string) => encodeURIComponent(s);
-    return request<VerifiedCounts>(`/pools/${enc(password)}/${enc(poolId)}/verified-counts`);
+    return call<VerifiedCounts>("pool.verifiedCounts", { password, poolId }, () => request<VerifiedCounts>(`/pools/${enc(password)}/${enc(poolId)}/verified-counts`));
   },
-  getDownloadDetail: (id: string) => request<DownloadDetail>(`/pools/downloads/${encodeURIComponent(id)}/detail`),
+  getDownloadDetail: (id: string) => call<DownloadDetail>("pool.downloadDetail", { id }, () => request<DownloadDetail>(`/pools/downloads/${encodeURIComponent(id)}/detail`)),
   getDownloadBlob: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
-  revertDownload: (id: string) => request<{ ok: boolean; reverted: number }>(`/pools/downloads/${encodeURIComponent(id)}/revert`, { method: "POST" }),
-  // aliases for spec compatibility
-  downloadHistory: () => request<{ downloads: unknown[] } | unknown[]>("/pools/downloads" as string) as Promise<{ downloads: unknown[] } | unknown[]>,
+  revertDownload: (id: string) => call<{ ok: boolean; reverted: number }>("pool.revertDownload", { id }, () => request<{ ok: boolean; reverted: number }>(`/pools/downloads/${encodeURIComponent(id)}/revert`, { method: "POST" })),
+  downloadHistory: () => call<{ downloads: unknown[] } | unknown[]>("pool.downloads", {}, () => request<{ downloads: unknown[] } | unknown[]>("/pools/downloads" as string) as Promise<{ downloads: unknown[] } | unknown[]>),
   redownload: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
   downloadById: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
   downloadByIdBlob: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
 
-  // ── Auth & bot (not in old api.js; used directly by the UI) ──
   me: async (): Promise<{ user: User | null; expired: boolean }> => {
     const res = await fetch(BASE + "/auth/me", { credentials: "include" });
     if (res.status === 401) {

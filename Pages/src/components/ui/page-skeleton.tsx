@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 type PageSkeletonProps = {
-  variant?: "grid" | "list" | "sheet" | "files" | "archive" | "pools" | "admin" | "admin-detail" | "splitter";
+  variant?: "files" | "archive" | "pools" | "admin" | "admin-detail" | "splitter" | "sheet";
   className?: string;
 };
 
@@ -74,7 +74,7 @@ function Wrap({ children, className }: { children: React.ReactNode; className?: 
   );
 }
 
-export default function PageSkeleton({ variant = "grid", className }: PageSkeletonProps) {
+export default function PageSkeleton({ variant = "files", className }: PageSkeletonProps) {
   if (variant === "files" || variant === "archive") {
     return (
       <Wrap className={cn("w-full", className)}>
@@ -279,26 +279,14 @@ export default function PageSkeleton({ variant = "grid", className }: PageSkelet
     );
   }
 
-  // grid / list fallback
+  // Detailed-only fallback (no generic): default to files shape.
   return (
-    <Wrap className={cn("flex flex-col gap-4 p-6", className)}>
-      <div className="flex items-center justify-between gap-4">
-        <Skeleton className="h-7 w-36" />
-        <Skeleton className="h-9 w-24" />
+    <Wrap className={cn("w-full", className)}>
+      <div className="files-grid">
+        {Array.from({ length: 5 }, (_, i) => (
+          <FileCardSkeleton key={i} />
+        ))}
       </div>
-      {variant === "grid" ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} className="h-28" />
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} className="h-16 w-full" />
-          ))}
-        </div>
-      )}
     </Wrap>
   );
 }

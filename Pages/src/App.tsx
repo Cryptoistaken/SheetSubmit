@@ -4,6 +4,7 @@ import {
   Outlet,
   RouterProvider,
   createBrowserRouter,
+  useLocation,
   useParams,
 } from "react-router";
 
@@ -32,7 +33,22 @@ function getBubbleFileId(): string | null {
   return null;
 }
 
+type DetailedSkeletonVariant = "files" | "archive" | "pools" | "admin" | "admin-detail" | "splitter" | "sheet";
+
+function skeletonForPath(pathname: string): DetailedSkeletonVariant {
+  if (pathname.includes("/file/")) return "sheet";
+  if (pathname.startsWith("/archive")) return "archive";
+  if (pathname.startsWith("/pools")) return "pools";
+  if (pathname.startsWith("/admin/user/")) return "admin-detail";
+  if (pathname.startsWith("/admin")) return "admin";
+  if (pathname.startsWith("/tools")) return "splitter";
+  if (pathname.startsWith("/bubble-design")) return "splitter";
+  return "files";
+}
+
 function Layout() {
+  const { pathname } = useLocation();
+  const variant = skeletonForPath(pathname);
   return (
     <div className="flex h-dvh flex-col">
       <a
@@ -45,7 +61,7 @@ function Layout() {
         <Topbar />
       </header>
       <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 focus:outline-none">
-        <Suspense fallback={<PageSkeleton variant="list" className="min-h-full" />}>
+        <Suspense fallback={<PageSkeleton variant={variant} className="min-h-full" />}>
           <Outlet />
         </Suspense>
       </main>
@@ -90,7 +106,7 @@ export default function App() {
   const { user, loading, sessionExpired } = useAuth();
   const bubbleFileId = useMemo(() => getBubbleFileId(), []);
 
-  if (loading) return <PageSkeleton className="min-h-dvh" />;
+  if (loading) return <PageSkeleton variant={skeletonForPath(window.location.pathname)} className="min-h-dvh" />;
 
   // Android floating-bubble mini window (?bubble=1&file=<id>) — code-split so the
   // main bundle stays lean; only loads inside the Android WebView.

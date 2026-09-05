@@ -22,6 +22,7 @@ interface FileCardProps {
   daysLeft?: number;
   recent?: boolean;
   list?: boolean;
+  selectable?: boolean;
 }
 
 export default function FileCard({
@@ -39,6 +40,7 @@ export default function FileCard({
   daysLeft,
   recent = false,
   list = false,
+  selectable = true,
 }: FileCardProps) {
   const movedRef = useRef(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
@@ -203,10 +205,12 @@ export default function FileCard({
           onPointerUp={(e) => e.stopPropagation()}
           onPointerMove={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}>
-          <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onToggleSelect(); }}>
-            <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Square size={13} /></span>
-            Select
-          </button>
+          {selectable ? (
+            <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onToggleSelect(); }}>
+              <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Square size={13} /></span>
+              Select
+            </button>
+          ) : null}
           {onRestore ? (
             <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onRestore(); }}>
               <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><RotateCcw size={13} /></span>

@@ -1,4 +1,4 @@
-import { Archive, ArrowLeft, Download, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
@@ -7,11 +7,13 @@ import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfileCache } from "@/stores/profileCache";
-import { PaletteIcon, SearchIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
+import { SearchIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import { fileTypeDef } from "@/lib/types";
 import type { AdminUser, ArchiveFile, SheetFile } from "@/lib/types";
 import { downloadXlsx } from "@/lib/xlsx";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
+import EmptyState from "./EmptyState";
+import FileCard from "./FileCard";
 
 function userName(u: { firstName?: string; lastName?: string }): string {
   return ((u.firstName ?? "") + " " + (u.lastName ?? "")).trim() || "Unknown";
@@ -284,119 +286,51 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
           </div>
         </div>
 
-        <div className={"admin-file-list" + (view === "list" ? " list" : "")}>
-          {(userFileTab === "files" ? files : detailArchived).length === 0 && userFileTab === "files" ? <div style={{ gridColumn: "1/-1", padding: 16, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>No files</div> : null}
-          {(userFileTab === "archive" && detailArchived.length === 0) ? <div style={{ gridColumn: "1/-1", padding: 16, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>No archived files</div> : null}
-          {(userFileTab === "files" ? files : []).map((f) => {
-            const count = f.dataCount ?? f.rowCount ?? 0;
-            return (
-              <div
-                key={f.id}
-                className={"file-card" + (view === "list" ? " list-row" : "")}
-                role="button"
-                tabIndex={0}
-                title={"Open " + f.name}
-                onClick={() => navigate(`/admin/user/${detailUser.id}/file/${f.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    navigate(`/admin/user/${detailUser.id}/file/${f.id}`);
-                  }
-                }}
-              >
-                <div className="file-card-icon">
-                  <PaletteIcon size={16} />
-                </div>
-                <div className="file-card-name">{f.name}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
-                  <span className="file-type-badge t-fb">{fileTypeDef(f.type).label}</span>
-                  {(() => { const pw = (f as SheetFile).password ?? "dgddigital"; const isCust = pw !== "dgddigital" && pw !== "L0VE@12345"; const lbl = pw === "dgddigital" ? "dgd" : pw === "L0VE@12345" ? "L0VE" : pw.slice(0, 8); const st: React.CSSProperties = isCust ? { background: "var(--fb-bg)", color: "var(--fb)" } : pw === "L0VE@12345" ? { background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" } : { background: "var(--bg3)", color: "var(--text2)" }; return <span className="file-type-badge" style={{ ...st, fontSize: 10, padding: "2px 6px" } as React.CSSProperties} title={pw}>{lbl}</span>; })()}
-                  <span className="file-card-meta">
-                    {count} row{count !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="file-card-actions">
-                  <button
-                    className="file-card-btn admin-file-dl"
-                    title="Download"
-                    aria-label="Download"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      downloadFile(f);
-                    }}
-                  >
-                    <Download size={14} />
-                  </button>
-                  <button
-                    className="file-card-btn admin-file-rename"
-                    title="Rename"
-                    aria-label="Rename"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openRename(f.id, f.name);
-                    }}
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    className="file-card-btn admin-file-del file-card-del"
-                    title="Delete"
-                    aria-label="Delete"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeFile(f.id);
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-          {userFileTab === "archive" ? detailArchived.map((f) => {
-                const daysLeft = Math.max(
-                  0,
-                  30 - Math.floor((Date.now() - (f.deletedAt || 0)) / 86400000),
-                );
-                return (
-                  <div key={f.id} className={"file-card" + (view === "list" ? " list-row" : "")} style={{ opacity: 0.85 }}>
-                    <div className="file-card-icon" style={{ opacity: 0.5 }}>
-                      <Archive size={16} />
-                    </div>
-                    <div className="file-card-name">{f.name}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
-                      <span className="file-type-badge t-fb">{fileTypeDef(f.type).label}</span>
-                      {(() => { const pw = (f as SheetFile).password ?? "dgddigital"; const isCust = pw !== "dgddigital" && pw !== "L0VE@12345"; const lbl = pw === "dgddigital" ? "dgd" : pw === "L0VE@12345" ? "L0VE" : pw.slice(0, 8); const st: React.CSSProperties = isCust ? { background: "var(--fb-bg)", color: "var(--fb)" } : pw === "L0VE@12345" ? { background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" } : { background: "var(--bg3)", color: "var(--text2)" }; return <span className="file-type-badge" style={{ ...st, fontSize: 10, padding: "2px 6px" } as React.CSSProperties} title={pw}>{lbl}</span>; })()}
-                      <span className="file-card-meta">{daysLeft} days left</span>
-                    </div>
-                    <div className="file-card-actions">
-                      <button
-                        className="file-card-btn admin-archive-restore"
-                        title="Restore"
-                        aria-label="Restore"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          restoreArchived(f.id);
-                        }}
-                      >
-                        <RotateCcw size={14} />
-                      </button>
-                      <button
-                        className="file-card-btn admin-archive-del file-card-del"
-                        title="Delete permanently"
-                        aria-label="Delete permanently"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteArchived(f.id);
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              }) : null}
-        </div>
+        {userFileTab === "files" ? (
+          files.length === 0 ? (
+            <EmptyState title="No files" sub="This user has no files yet" />
+          ) : (
+            <div className={view === "list" ? "files-list" : "files-grid"}>
+              {files.map((f) => (
+                <FileCard
+                  key={f.id}
+                  file={f}
+                  list={view === "list"}
+                  selectable={false}
+                  onOpen={() => navigate(`/admin/user/${detailUser.id}/file/${f.id}`)}
+                  onDownload={() => void downloadFile(f)}
+                  onRename={() => openRename(f.id, f.name)}
+                  onDelete={() => void removeFile(f.id)}
+                  onToggleSelect={() => {}}
+                />
+              ))}
+            </div>
+          )
+        ) : detailArchived.length === 0 ? (
+          <EmptyState title="No archived files" sub="Deleted files appear here for 30 days" />
+        ) : (
+          <div className={view === "list" ? "files-list" : "files-grid"}>
+            {detailArchived.map((f) => {
+              const daysLeft = Math.max(
+                0,
+                30 - Math.floor((Date.now() - (f.deletedAt || 0)) / 86400000),
+              );
+              return (
+                <FileCard
+                  key={f.id}
+                  file={f}
+                  list={view === "list"}
+                  selectable={false}
+                  disableOpen
+                  daysLeft={daysLeft}
+                  onRestore={() => void restoreArchived(f.id)}
+                  onDelete={() => void deleteArchived(f.id)}
+                  onToggleSelect={() => {}}
+                />
+              );
+            })}
+          </div>
+        )}
 
         <div
           className={`modal-overlay${renameFileId ? " open" : ""}`}

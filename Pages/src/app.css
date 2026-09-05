@@ -1274,16 +1274,6 @@ button, input, select, textarea {
 .pool-switch{display:inline-flex;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px}
 .pool-switch button{padding:7px 14px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;min-height:36px;transition:.12s}
 .pool-switch button.active{background:var(--bg);border-color:var(--border2);color:var(--text);box-shadow:var(--shadow-sm)}
-.admin-file-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 12px;
-}
-.admin-file-list.list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
 
 /* ── Buttons ── */
 .btn {
@@ -1538,7 +1528,6 @@ button, input, select, textarea {
     .home-tabs { margin: 8px auto 0; }
     #homePaneFiles, #homePaneArchive, #homePaneAdmin { padding: 20px 14px; }
     .admin-stats { grid-template-columns: 1fr; }
-    .admin-file-list { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
     .admin-detail-header { flex-direction: column; align-items: flex-start; }
 }
 

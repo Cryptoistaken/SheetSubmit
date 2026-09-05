@@ -1,7 +1,9 @@
 import { cn } from "@/lib/utils";
 
+const FILE_SKELETON_COUNT = 10;
+
 type PageSkeletonProps = {
-  variant?: "files" | "archive" | "pools" | "admin" | "admin-detail" | "splitter" | "sheet";
+  variant?: "files" | "archive" | "pools" | "admin" | "admin-detail" | "tools" | "splitter" | "sheet";
   className?: string;
 };
 
@@ -50,6 +52,23 @@ function PoolCardSkeleton() {
   );
 }
 
+function DlCardSkeleton() {
+  return (
+    <div className="pool-card dl-card" aria-hidden="true" style={{ pointerEvents: "none" }}>
+      <Skeleton className="h-5 w-16 rounded-full shrink-0" />
+      <Skeleton className="h-9 w-9 rounded-full shrink-0" />
+      <div className="pool-card-info">
+        <Skeleton className="h-3.5 w-[60%] max-w-[180px] rounded" />
+        <Skeleton className="h-3 w-[48%] max-w-[140px] rounded" />
+      </div>
+      <div className="pool-card-actions" style={{ display: "flex", gap: 6 }}>
+        <Skeleton className="h-7 w-16 rounded-md" />
+        <Skeleton className="h-7 w-14 rounded-md" />
+      </div>
+    </div>
+  );
+}
+
 function AdminRowSkeleton() {
   return (
     <div className="admin-user-card" aria-hidden="true" style={{ pointerEvents: "none" }}>
@@ -79,7 +98,7 @@ export default function PageSkeleton({ variant = "files", className }: PageSkele
     return (
       <Wrap className={cn("w-full", className)}>
         <div className="files-grid">
-          {Array.from({ length: 5 }, (_, i) => (
+          {Array.from({ length: FILE_SKELETON_COUNT }, (_, i) => (
             <FileCardSkeleton key={i} withDaysLeft={variant === "archive"} />
           ))}
         </div>
@@ -133,6 +152,15 @@ export default function PageSkeleton({ variant = "files", className }: PageSkele
             <PoolCardSkeleton key={i} />
           ))}
         </div>
+
+        <div style={{ marginTop: 16 }}>
+          <Skeleton className="h-3.5 w-32 rounded mb-2" />
+          <div className="card-list" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {Array.from({ length: 3 }, (_, i) => (
+              <DlCardSkeleton key={i} />
+            ))}
+          </div>
+        </div>
       </Wrap>
     );
   }
@@ -185,9 +213,28 @@ export default function PageSkeleton({ variant = "files", className }: PageSkele
           </div>
         </div>
         <div className="files-grid">
-          {Array.from({ length: 4 }, (_, i) => (
+          {Array.from({ length: FILE_SKELETON_COUNT }, (_, i) => (
             <FileCardSkeleton key={i} />
           ))}
+        </div>
+      </Wrap>
+    );
+  }
+
+  if (variant === "tools") {
+    return (
+      <Wrap className={cn("w-full", className)}>
+        <Skeleton className="h-5 w-14 rounded" style={{ marginBottom: 4 }} />
+        <Skeleton className="h-3 w-28 rounded" style={{ marginBottom: 16 }} />
+        <div className="files-grid">
+          <div className="file-card" aria-hidden="true" style={{ minHeight: 110, pointerEvents: "none" }}>
+            <div className="file-card-icon" style={{ background: "var(--bg3)" }}>
+              <Skeleton className="h-4 w-4 rounded-sm" />
+            </div>
+            <Skeleton className="h-[13px] w-16 rounded" />
+            <Skeleton className="h-3 w-28 rounded" />
+            <Skeleton className="h-[18px] w-12 rounded" />
+          </div>
         </div>
       </Wrap>
     );
@@ -196,15 +243,14 @@ export default function PageSkeleton({ variant = "files", className }: PageSkele
   if (variant === "splitter") {
     return (
       <Wrap className={cn("w-full", className)}>
-        <Skeleton className="h-7 w-20 rounded-md mb-4" />
-        <Skeleton className="h-4 w-16 rounded mb-2" />
-        <Skeleton className="h-3 w-48 rounded mb-4" />
+        <Skeleton className="h-7 w-20 rounded-md" style={{ marginBottom: 16 }} />
+        <Skeleton className="h-4 w-16 rounded" style={{ marginBottom: 2 }} />
+        <Skeleton className="h-3 w-48 rounded" style={{ marginBottom: 16 }} />
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
           <Skeleton className="h-9 w-28 rounded-md" />
           <Skeleton className="h-9 w-28 rounded-md" />
         </div>
-        <Skeleton className="h-9 w-[260px] max-w-full rounded-md mb-3" />
-        <Skeleton className="h-8 w-40 rounded-md mb-3" />
+        <Skeleton className="h-9 w-28 rounded-md" style={{ marginBottom: 12 }} />
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 16, background: "var(--bg)" }} aria-hidden="true">
           <Skeleton className="h-3 w-16 rounded mb-3" />
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
@@ -283,7 +329,7 @@ export default function PageSkeleton({ variant = "files", className }: PageSkele
   return (
     <Wrap className={cn("w-full", className)}>
       <div className="files-grid">
-        {Array.from({ length: 5 }, (_, i) => (
+        {Array.from({ length: FILE_SKELETON_COUNT }, (_, i) => (
           <FileCardSkeleton key={i} />
         ))}
       </div>

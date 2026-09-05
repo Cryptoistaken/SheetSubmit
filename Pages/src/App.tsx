@@ -33,7 +33,7 @@ function getBubbleFileId(): string | null {
   return null;
 }
 
-type DetailedSkeletonVariant = "files" | "archive" | "pools" | "admin" | "admin-detail" | "splitter" | "sheet";
+type DetailedSkeletonVariant = "files" | "archive" | "pools" | "admin" | "admin-detail" | "tools" | "splitter" | "sheet";
 
 function skeletonForPath(pathname: string): DetailedSkeletonVariant {
   if (pathname.includes("/file/")) return "sheet";
@@ -41,7 +41,8 @@ function skeletonForPath(pathname: string): DetailedSkeletonVariant {
   if (pathname.startsWith("/pools")) return "pools";
   if (pathname.startsWith("/admin/user/")) return "admin-detail";
   if (pathname.startsWith("/admin")) return "admin";
-  if (pathname.startsWith("/tools")) return "splitter";
+  if (pathname === "/tools" || pathname === "/tools/") return "tools";
+  if (pathname === "/tools/splitter" || pathname === "/tools/splitter/") return "splitter";
   if (pathname.startsWith("/bubble-design")) return "splitter";
   return "files";
 }

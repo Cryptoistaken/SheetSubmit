@@ -97,7 +97,6 @@ export function useAvatarUrl(
     void getCached(userId).then((c) => {
       if (!live) return;
       if (c && Date.now() - c.ts < MAX_AGE) show(c.blob);
-      else if (!alreadyInflight) setSrc(photoUrl); // only first caller sets network src
       inflight.get(userId)!.then(async (blob) => {
         if (!blob || !live) return;
         const hash = await sha256(blob);

@@ -68,13 +68,28 @@ async function request<T>(path: string, init?: RequestInit, opts?: { keepalive?:
   return res.json() as Promise<T>;
 }
 
-async function call<T>(op: string, args: object | undefined, httpFn: () => Promise<T>, opts?: { keepalive?: boolean }): Promise<T> {
-  if (opts?.keepalive) return httpFn();
-  if (!(await wsWaitOpen())) return httpFn();
+function wsDebug(op: string, transport: "ws" | "http", detail?: unknown) {
   try {
-    return await wsCall<T>(op, args);
-  } catch {
+    if (localStorage.getItem("ss_ws_debug") === "1") console.debug(`[transport:${transport}] ${op}`, detail ?? "");
+  } catch {}
+}
+
+async function call<T>(op: string, args: object | undefined, httpFn: () => Promise<T>, opts?: { keepalive?: boolean }): Promise<T> {
+  if (opts?.keepalive) {
+    wsDebug(op, "http", "keepalive");
     return httpFn();
+  }
+  if (!(await wsWaitOpen())) {
+    wsDebug(op, "ws", "not open");
+    throw new Error(`ws not open: ${op}`);
+  }
+  try {
+    const result = await wsCall<T>(op, args);
+    wsDebug(op, "ws");
+    return result;
+  } catch (error) {
+    wsDebug(op, "ws", error);
+    throw error;
   }
 }
 
@@ -194,7 +209,7 @@ export const api = {
     call<{ ok: boolean; seq?: number; file?: SheetFile }>("file.persist", { id, payload: data }, () => request<{ ok: boolean; seq?: number; file?: SheetFile }>(`/files/${id}/persist`, { method: "PUT", body: JSON.stringify(data) }, opts), opts),
   append: (id: string, data: AppendPayload, opts?: { keepalive?: boolean }) =>
     call<{ ok: boolean; seq: number; file?: SheetFile }>("file.append", { id, payload: data }, () => request<{ ok: boolean; seq: number; file?: SheetFile }>(`/files/${id}/append`, { method: "PUT", body: JSON.stringify(data) }, opts), opts),
-  health: () => request<{ ok: boolean }>("/health"),
+  health: () => call<{ ok: boolean; ts: number; version: string }>("health", {}, () => request<{ ok: boolean; ts: number; version: string }>("/health")),
   getArchive: () => call<ArchiveFile[]>("archive.list", {}, () => request<ArchiveFile[]>("/archive")),
   restoreFile: (id: string) => call<{ ok: boolean }>("archive.restore", { id }, () => request<{ ok: boolean }>(`/archive/${id}/restore`, { method: "POST" })),
   permanentDelete: (id: string) => call<{ ok: boolean }>("archive.delete", { id }, () => request<{ ok: boolean }>(`/archive/${id}`, { method: "DELETE" })),

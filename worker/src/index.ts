@@ -15,7 +15,7 @@ import { fetchPhotoBytes, photoBytes, sniffImage } from "./lib/photo";
 
 const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any worker route change — lets TestApi/health confirm a redeploy landed
-export const API_VERSION = "1.2.2";
+export const API_VERSION = "1.2.3";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => { if (Number(c.req.header("Content-Length")) > 4_000_000) return c.json({ error: "payload too large" }, 413); if (c.req.raw.body) { try { const reader = c.req.raw.clone().body!.getReader(); let size = 0; while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > 4_000_000) { await reader.cancel(); return c.json({ error: "payload too large" }, 413); } } } catch { return c.json({ error: "invalid request body" }, 400); } } return next(); });
 app.get("/api/ws/ticket", async (c) => {

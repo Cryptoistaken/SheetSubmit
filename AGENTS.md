@@ -31,7 +31,7 @@
 ### Worker — `worker/src/` (Hono, entry `src/index.ts`)
 ```
 index.ts              # app setup, routes, API_VERSION (bump on any route change, surfaced by /api/health),
-                      #   GET /api/health, GET /api/ws/ticket + GET /ws (WS gateway via IndexDO wsTicket, x-ws-version),
+                      #   GET /api/health, GET /api/ws/ticket + GET /ws (WS gateway via IndexDO wsTicket, x-ws-version; health op),
                       #   /api/auth/me (verifySession, adds photoUrl+isAdmin), POST /api/auth/logout,
                       #   POST /api/auth/device/claim {token, turnstile} (Turnstile enforced if TURNSTILE_SECRET set),
                       #   /api/auth/photo/:userId (Telegram getUserProfilePhotos→getFile, 24h meta cache),

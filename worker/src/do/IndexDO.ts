@@ -116,9 +116,10 @@ export class IndexDO {
     const { uid, exp } = JSON.parse(raw.v) as { uid: string | null; exp: number };
     if (exp < Date.now()) return Response.json({ error: "invalid ticket" }, { status: 401 });
     const pair = new WebSocketPair();
+    const version = req.headers.get("x-ws-version") || "";
     (this.state as any).acceptWebSocket(pair[1], [uid ?? "anon"]);
-    (pair[1] as any).serializeAttachment({ uid: uid ?? null, did: null });
-    try { pair[1].send(JSON.stringify({ ev: "health", data: { version: req.headers.get("x-ws-version") || "" } })); } catch {}
+    (pair[1] as any).serializeAttachment({ uid: uid ?? null, did: null, version });
+    try { pair[1].send(JSON.stringify({ ev: "health", data: { version } })); } catch {}
     return new Response(null, { status: 101, webSocket: pair[0] as any });
   }
   async webSocketMessage(ws: WebSocket, message: string) {
@@ -135,17 +136,18 @@ export class IndexDO {
   }
   webSocketClose(_ws: WebSocket) {}
   webSocketError(_ws: WebSocket) {}
-  private async handleClientOp(ws: WebSocket, att: { uid: string | null; did: string | null }, op: string, args: any): Promise<unknown> {
+  private async handleClientOp(ws: WebSocket, att: { uid: string | null; did: string | null; version?: string }, op: string, args: any): Promise<unknown> {
     const authed = !!att.uid;
-    if (op !== "ping" && op !== "claim.watch" && !authed) throw new Error("unauthorized");
+    if (op !== "ping" && op !== "health" && op !== "claim.watch" && !authed) throw new Error("unauthorized");
     const s = this.state.storage.sql;
     const requireAdmin = () => { if (!isAdmin(this.env as any, att.uid!)) throw new Error("admin access required"); };
     switch (op) {
       case "ping": return { t: Date.now() };
+      case "health": return { ok: true, ts: Date.now(), version: att.version || "" };
       case "claim.watch": {
         const did = String(args.did || "");
         if (!/^[A-Za-z0-9-]{8,64}$/.test(did)) throw new Error("bad did");
-        (ws as any).serializeAttachment({ uid: att.uid ?? null, did });
+        (ws as any).serializeAttachment({ uid: att.uid ?? null, did, version: att.version || "" });
         return { ok: true };
       }
       case "files.list": return s.exec(`SELECT data FROM file_index WHERE owner_id=? AND archived=0`, att.uid!).toArray().map((r: any) => JSON.parse(r.data));

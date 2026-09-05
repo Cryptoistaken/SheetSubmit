@@ -615,6 +615,17 @@ button, input, select, textarea {
 }
 
 /* ── Home tabs ── */
+#homeTabBar {
+    display: flex;
+    align-items: flex-start;
+}
+#homeTabBar .home-tabs {
+    min-width: 0;
+}
+#homeTabBar .view-switch {
+    flex-shrink: 0;
+    margin: 8px 12px 0 0;
+}
 .home-tabs {
     display: flex;
     gap: 4px;
@@ -863,28 +874,33 @@ button, input, select, textarea {
     gap: 8px;
 }
 .file-card.list-row {
-    display: grid;
-    grid-template-columns: 28px minmax(0, 1fr) auto;
-    gap: 3px 12px;
+    display: flex;
+    flex-direction: row;
     align-items: center;
+    gap: 10px;
     padding: 10px 14px;
     min-height: 0;
 }
 .file-card.list-row .file-card-icon {
-    grid-column: 1;
-    grid-row: 1 / span 2;
     width: 28px;
     height: 28px;
+    flex-shrink: 0;
 }
 .file-card.list-row .file-card-name {
-    grid-column: 2;
-    grid-row: 1;
+    min-width: 40px;
     font-size: 13px;
 }
 .file-card.list-row .file-card-actions {
     position: static;
-    grid-column: 3;
-    grid-row: 1;
+    flex-shrink: 0;
+}
+.file-card.list-row .file-card-actions > span:first-child {
+    position: absolute;
+    top: -7px;
+    right: 10px;
+    z-index: 1;
+    margin-right: 0;
+    border: 1px solid var(--border);
 }
 
 /* ── File type badge ── */

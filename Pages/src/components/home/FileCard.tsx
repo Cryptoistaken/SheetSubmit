@@ -148,7 +148,7 @@ export default function FileCard({
         <FileTypeIcon file={file} size={16} />
       </div>
       <div className="file-card-name">{file.name}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: list ? 0 : "auto", flexWrap: list ? "wrap" : undefined, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: list ? 0 : "auto", flexWrap: list ? "nowrap" : undefined, overflow: list ? "hidden" : undefined, flex: list ? 1 : undefined, minWidth: 0 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           <span className="file-type-badge" title={badge} aria-label={badge} style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={12} /></span>
           <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center" }} title={pwTitle}>{isCustom ? pwLabel : <PasswordIcon password={pw} size={14} />}</span>

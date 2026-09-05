@@ -11,8 +11,11 @@ function lazyRetry(fn: () => Promise<{ default: ComponentType<any> }>) {
     try {
       return await fn();
     } catch {
-      if (!sessionStorage.getItem("ss_chunk_reload")) {
-        sessionStorage.setItem("ss_chunk_reload", "1");
+      // 10s window = infinite-reload-loop guard; past it, self-heal again
+      // (long-open tabs survive many deploys and need repeated recovery).
+      const last = Number(sessionStorage.getItem("ss_chunk_reload") ?? 0);
+      if (Date.now() - last > 10000) {
+        sessionStorage.setItem("ss_chunk_reload", String(Date.now()));
         window.location.reload();
       }
       throw new Error("Chunk failed — reloaded");

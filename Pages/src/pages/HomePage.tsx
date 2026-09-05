@@ -456,9 +456,7 @@ export default function HomePage() {
         ) : null}
           </div>
         )}
-        {!(tab === "files" && selectionMode) && !(tab === "archive" && archSel.size > 0) ? (
-          <ViewSwitch view={view} setViewMode={setViewMode} />
-        ) : null}
+        <ViewSwitch view={view} setViewMode={setViewMode} />
       </div>
 
       {tab === "files" ? (

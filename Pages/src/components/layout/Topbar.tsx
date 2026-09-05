@@ -163,7 +163,7 @@ export default function Topbar() {
     <div className="topbar">
       <div className="topbar-l">
         <img
-          src={theme === "dark" ? "/logo-dark.svg" : "/logo-light.svg"}
+          src="/logo.svg"
           className="topbar-logo"
           alt="Logo"
           style={hideHome}

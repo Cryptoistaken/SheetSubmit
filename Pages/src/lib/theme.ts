@@ -26,9 +26,7 @@ export function useTheme() {
     } catch {
       // ignore
     }
-    // Swap favicon for the active theme, like the original app.
-    const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (favicon) favicon.href = theme === "dark" ? "/favicon-dark.svg" : "/favicon-light.svg";
+    // Single logo/favicon for both themes — no favicon swap.
     // Keep the browser chrome color in sync with the page background.
     const metaColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (metaColor) metaColor.content = theme === "dark" ? "#000000" : "#ffffff";

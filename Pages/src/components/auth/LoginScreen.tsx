@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
-import { getInitialTheme } from "@/lib/theme";
 import { wsCall, wsConnect, wsOn } from "@/lib/ws";
 
 const TURNSTILE_SITE_KEY = "0x4AAAAAAEmGwKWEZqnHmgYU";
@@ -34,7 +33,6 @@ export default function LoginScreen({ notice }: { notice?: string }) {
   const [waiting, setWaiting] = useState(false);
   const [checking, setChecking] = useState(false);
   const [showRecheck, setShowRecheck] = useState(false);
-  const [dark] = useState(() => getInitialTheme() === "dark");
   const didRef = useRef<string | null>(null);
   const [turnstileReady, setTurnstileReady] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -135,7 +133,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
       <div className="login-wrap">
         <div className="login-card">
           <div className="login-logo">
-            <img src={dark ? "/logo-light.svg" : "/logo-dark.svg"} alt="Sheet Submit" style={{ width: 48, height: 48 }} />
+            <img src="/logo.svg" alt="Sheet Submit" style={{ width: 48, height: 48 }} />
           </div>
           <h1>Login to <span className="login-brand">Sheet Submit</span></h1>
           {notice && <p className="login-hint" style={{ color: "#ef4444", marginBottom: 12 }}>{notice}</p>}

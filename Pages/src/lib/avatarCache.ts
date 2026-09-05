@@ -87,18 +87,18 @@ export function useAvatarUrl(
       objUrl = URL.createObjectURL(blob);
       if (live) setSrc(objUrl);
     };
+    // Mark in-flight synchronously so concurrent components skip <img src=photoUrl>
+    const alreadyInflight = inflight.has(userId);
+    if (!alreadyInflight) {
+      const p = fetchAvatar(photoUrl);
+      inflight.set(userId, p);
+      p.finally(() => inflight.delete(userId));
+    }
     void getCached(userId).then((c) => {
       if (!live) return;
       if (c && Date.now() - c.ts < MAX_AGE) show(c.blob);
-      else setSrc(photoUrl);
-      // Dedup: reuse in-flight fetch for same userId
-      let p = inflight.get(userId);
-      if (!p) {
-        p = fetchAvatar(photoUrl);
-        inflight.set(userId, p);
-        p.finally(() => inflight.delete(userId));
-      }
-      p.then(async (blob) => {
+      else if (!alreadyInflight) setSrc(photoUrl); // only first caller sets network src
+      inflight.get(userId)!.then(async (blob) => {
         if (!blob || !live) return;
         const hash = await sha256(blob);
         if (!live) return;

@@ -95,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const off = wsOn("authError", () => {
       if (localStorage.getItem(HAD_SESSION) === "1") {
         localStorage.removeItem(HAD_SESSION);
-        window.location.href = "/";
+        window.location.href = "/login";
       }
     });
     return off;

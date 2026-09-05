@@ -170,7 +170,7 @@ export default function Topbar() {
   const logout = () => {
     api
       .logout()
-      .then(() => window.location.reload())
+      .then(() => { window.location.href = "/login"; })
       .catch(() => showToast("Could not log out. Try again."));
   };
 

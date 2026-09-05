@@ -25,7 +25,11 @@ const INITIAL_DELAY_MS = 10000;
 const POLL_MS = 1000;
 const MAX_ATTEMPTS = 60;
 
-export default function LoginScreen({ notice }: { notice?: string }) {
+function safeNext(raw: unknown): string {
+  return typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+}
+
+export default function LoginScreen({ notice, next }: { notice?: string; next?: string }) {
   const [label, setLabel] = useState("Connecting…");
   const [href, setHref] = useState<string | null>(null);
   const [fallbackHref, setFallbackHref] = useState<string | null>(null);
@@ -91,7 +95,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
         claimedDoneRef.current = true;
         localStorage.setItem(HAD_SESSION, "1");
         setWaiting(true);
-        window.location.href = "/";
+        window.location.href = safeNext(next);
       }).catch(() => {});
     });
     const offHealth = wsOn("health", () => {
@@ -103,7 +107,7 @@ export default function LoginScreen({ notice }: { notice?: string }) {
       if (did) wsCall("claim.watch", { did }).catch(() => {});
     }, 1000);
     return () => { offClaimed(); offHealth(); clearTimeout(t); };
-  }, [href]);
+  }, [href, next]);
 
   // Claim polling
   useEffect(() => {
@@ -118,24 +122,21 @@ export default function LoginScreen({ notice }: { notice?: string }) {
       attempts++;
       api.claimDeviceSession(didRef.current ?? "", turnstileTokenRef.current).then((res) => {
         if (stop || claimedDoneRef.current) return;
-        if (res.ok) { claimedDoneRef.current = true; stop = true; localStorage.setItem(HAD_SESSION, "1"); setWaiting(true); window.location.href = "/"; return; }
+        if (res.ok) { claimedDoneRef.current = true; stop = true; localStorage.setItem(HAD_SESSION, "1"); setWaiting(true); window.location.href = safeNext(next); return; }
         if (attempts >= MAX_ATTEMPTS) { stop = true; if (iv) clearInterval(iv); setChecking(false); setShowRecheck(true); }
       }).catch(() => { if (stop) return; if (attempts >= MAX_ATTEMPTS) { stop = true; if (iv) clearInterval(iv); setChecking(false); setShowRecheck(true); } });
     };
     const first = setTimeout(() => { if (stop) return; iv = setInterval(tick, POLL_MS); tick(); }, INITIAL_DELAY_MS);
     return () => { stop = true; clearTimeout(first); if (iv) clearInterval(iv); };
-  }, [href, turnstileToken]);
+  }, [href, turnstileToken, next]);
 
-  const recheck = () => { localStorage.removeItem("ss_login_did"); window.location.href = "/"; };
+  const recheck = () => { localStorage.removeItem("ss_login_did"); window.location.reload(); };
 
   return (
     <main id="loginScreen" aria-labelledby="login-title">
       <div className="login-wrap">
         <div className="login-card">
-          <div className="login-logo">
-            <img src="/logo.svg" alt="Sheet Submit" style={{ width: 48, height: 48 }} />
-          </div>
-          <h1 id="login-title">Login to <span className="login-brand">Sheet Submit</span></h1>
+          <h1 id="login-title">Login to <img src="/logo.svg" alt="" className="login-title-logo" /><span className="login-brand">Sheet Submit</span></h1>
           {notice && <p role="alert" aria-live="assertive" className="login-hint" style={{ color: "var(--red)", marginBottom: 12 }}>{notice}</p>}
           {showRecheck ? (
             <button className="login-btn ready" onClick={recheck} type="button">

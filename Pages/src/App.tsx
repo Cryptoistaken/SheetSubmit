@@ -127,42 +127,79 @@ function AdminFileFallback() {
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <Layout />,
+    element: <RequireAuth />,
     children: [
-      { index: true, element: <HomePage /> },
-      { path: "files", element: <HomePage /> },
-      { path: "archive", element: <HomePage /> },
-      { path: "wallet", element: <HomePage /> },
-      { path: "pools", element: <Navigate to="/pools/dgddigital/cookies_only" replace /> },
-      { path: "pools/:password/:poolId", element: <HomePage /> },
-      { path: "admin", element: <HomePage /> },
-      { path: "tools", element: <HomePage /> },
-      { path: "tools/splitter", element: <HomePage /> },
-      { path: "admin/user", element: <Navigate to="/admin" replace /> },
-      { path: "admin/user/:userId", element: <HomePage /> },
-      { path: "admin/user/:userId/file", element: <AdminFileFallback /> },
-      { path: "admin/user/:userId/file/:fileId", element: <SheetPage /> },
-      { path: "file/:id", element: <SheetPage /> },
-      { path: "bubble-design", element: <BubbleDesignPage /> },
+      {
+        element: <Layout />,
+        children: [
+          { index: true, element: <HomePage /> },
+          { path: "files", element: <HomePage /> },
+          { path: "archive", element: <HomePage /> },
+          { path: "wallet", element: <HomePage /> },
+          { path: "pools", element: <Navigate to="/pools/dgddigital/cookies_only" replace /> },
+          { path: "pools/:password/:poolId", element: <HomePage /> },
+          { path: "admin", element: <HomePage /> },
+          { path: "tools", element: <HomePage /> },
+          { path: "tools/splitter", element: <HomePage /> },
+          { path: "admin/user", element: <Navigate to="/admin" replace /> },
+          { path: "admin/user/:userId", element: <HomePage /> },
+          { path: "admin/user/:userId/file", element: <AdminFileFallback /> },
+          { path: "admin/user/:userId/file/:fileId", element: <SheetPage /> },
+          { path: "file/:id", element: <SheetPage /> },
+          { path: "bubble-design", element: <BubbleDesignPage /> },
+        ],
+      },
     ],
   },
+  { path: "login", element: <LoginRoute /> },
 ]);
 
-export default function App() {
-  // Apply the saved theme on first paint — the login screen has no theme toggle of its own.
-  useTheme();
+// Public sign-in page. Reads the redirect-back destination + expired flag from
+// RequireAuth's navigation state; already-logged-in visitors bounce to the app.
+function LoginRoute() {
+  const { user, loading } = useAuth();
+  const { state } = useLocation() as { state?: { from?: unknown; expired?: boolean } };
+  const next = typeof state?.from === "string" && state.from.startsWith("/") && !state.from.startsWith("//")
+    ? state.from
+    : "/";
+  if (loading) return <LoadingShell variant="files" />;
+  if (user) return <Navigate to={next} replace />;
+  return (
+    <div className="flex h-dvh flex-col">
+      <LoginScreen
+        notice={state?.expired ? "Session expired. Please log in again." : undefined}
+        next={next}
+      />
+    </div>
+  );
+}
+
+// Gate for everything except /login: loading shell → bounce to /login carrying
+// the original destination → Android bubble → the authed Layout tree.
+function RequireAuth() {
   const { user, loading, sessionExpired } = useAuth();
+  const location = useLocation();
   const bubbleFileId = useMemo(() => getBubbleFileId(), []);
 
   if (loading) {
     return bubbleFileId
       ? <PageSkeleton variant="sheet" className="min-h-dvh" sheetToolbar={false} />
-      : <LoadingShell variant={skeletonForPath(window.location.pathname)} />;
+      : <LoadingShell variant={skeletonForPath(location.pathname)} />;
+  }
+
+  if (!user) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: location.pathname + location.search, expired: sessionExpired }}
+      />
+    );
   }
 
   // Android floating-bubble mini window (?bubble=1&file=<id>) — code-split so the
   // main bundle stays lean; only loads inside the Android WebView.
-  if (user && bubbleFileId) {
+  if (bubbleFileId) {
     return (
       <Suspense fallback={<PageSkeleton variant="sheet" className="min-h-dvh" sheetToolbar={false} />}>
         <BubbleMode fileId={bubbleFileId} />
@@ -170,12 +207,11 @@ export default function App() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="flex h-dvh flex-col">
-        <LoginScreen notice={sessionExpired ? "Session expired. Please log in again." : undefined} />
-      </div>
-    );
-  }
+  return <Outlet />;
+}
+
+export default function App() {
+  // Apply the saved theme on first paint — the login screen has no theme toggle of its own.
+  useTheme();
   return <RouterProvider router={router} />;
 }

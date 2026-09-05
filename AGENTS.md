@@ -63,7 +63,7 @@ wrangler.jsonc         # DO bindings INDEX/FILES/POOLS, cron 0 */6 * * *, vars (
 ### Pages — `Pages/src/` (Vite 8, entry `main.tsx`)
 ```
 main.tsx              # StrictMode, Toast>Confirm>Auth>App
-App.tsx               # createBrowserRouter: Layout (Topbar+Outlet); gate: bubble mode vs LoginScreen vs RouterProvider
+App.tsx               # createBrowserRouter: RequireAuth gate (unauth → /login with redirect-back state) → Layout (Topbar+Outlet); public /login route (LoginRoute, bounces authed users back); bubble mode
 index.css / app.css   # tailwind v4 + shadcn + geist + legacy styles
 vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000 + /ws (ws:true), vendor-react chunk
 components.json       # shadcn Nova, neutral, cssVariables, lucide
@@ -95,15 +95,15 @@ functions/webhook/[[path]].ts
 
 ### Auth flow
 1. User opens site → AuthContext checks `ss_had_session` localStorage flag.
-2. No flag → skip `/me`, show LoginScreen immediately (zero wasted requests).
+2. No flag → skip `/me`, RequireAuth bounces to `/login` immediately (zero wasted requests).
 3. Flag exists → call `GET /api/auth/me`:
-   - No cookie → 401 `not_authenticated` → clear flag, show login.
-   - Invalid/expired cookie → 401 `session_expired` → clear flag, show login with notice.
+   - No cookie → 401 `not_authenticated` → clear flag, bounce to `/login`.
+   - Invalid/expired cookie → 401 `session_expired` → clear flag, `/login` with notice.
    - Valid → 200 user JSON → set user.
 4. LoginScreen: fetch bot info → generate `did` → show "Open Telegram" link.
 5. User opens Telegram bot → `/start login_<did>` → bot stores `device:<did>` → webhook sets session.
 6. LoginScreen: WS `claim.watch` fast-path (`claimed` push → `POST /api/auth/device/claim {token, turnstile}`) + fallback poll: waits 10s, then 1/s for 60s, **only while tab focused** (Turnstile token required in body).
-7. On success → set `ss_had_session` flag, reload → AuthContext picks up cookie.
+7. On success → set `ss_had_session` flag, reload to saved destination (default `/`) → AuthContext picks up cookie.
 8. On timeout → show "Recheck login" button → regenerates did, restarts flow.
 
 ## Rules

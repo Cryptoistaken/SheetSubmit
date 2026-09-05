@@ -248,6 +248,17 @@ export default function HomePage() {
 
   const unselectAll = () => setSelected(new Set());
 
+  const [dlBusy, setDlBusy] = useState(false);
+  const downloadSelected = async () => {
+    if (!files || dlBusy) return;
+    setDlBusy(true);
+    for (const id of selected) {
+      const f = files.find((x) => x.id === id);
+      if (f) await downloadFile(f);
+    }
+    setDlBusy(false);
+  };
+
   const deleteSelected = async () => {
     if (!selectionMode) return;
     const ids = Array.from(selected);
@@ -495,14 +506,17 @@ export default function HomePage() {
       <div className={`sel-bar${selectionMode ? " open" : ""}`}>
         <span className="sel-bar-count">{selected.size} selected</span>
         <div className="sel-bar-actions">
+          <button className="sel-btn sel-btn-primary" disabled={dlBusy} onClick={() => void downloadSelected()}>
+            Download
+          </button>
+          <button className="sel-btn danger" onClick={() => void deleteSelected()}>
+            Delete
+          </button>
           <button className="sel-btn" onClick={selectAll}>
-            Select All
+            Select all
           </button>
           <button className="sel-btn" onClick={unselectAll}>
-            Unselect All
-          </button>
-          <button className="sel-btn danger" onClick={deleteSelected}>
-            Delete
+            Unselect all
           </button>
         </div>
       </div>

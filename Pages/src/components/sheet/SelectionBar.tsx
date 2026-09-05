@@ -10,9 +10,15 @@ export default function SelectionBar() {
   if (!selectionMode || size === 0) return null;
 
   return (
-    <div className="sel-bar open">
+    <div className="sel-bar below open">
       <span className="sel-bar-count">{size} selected</span>
       <div className="sel-bar-actions">
+        <button
+          className="sel-btn"
+          onClick={() => void useSheetStore.getState().copySelected()}
+        >
+          Copy
+        </button>
         <button
           className="sel-btn danger"
           onClick={async () => {
@@ -25,21 +31,15 @@ export default function SelectionBar() {
         </button>
         <button
           className="sel-btn"
-          onClick={() => void useSheetStore.getState().copySelected()}
-        >
-          Copy
-        </button>
-        <button
-          className="sel-btn"
           onClick={() => useSheetStore.getState().selectAllCells()}
         >
-          Select All
+          Select all
         </button>
         <button
           className="sel-btn"
           onClick={() => useSheetStore.getState().unselectAll()}
         >
-          Unselect All
+          Unselect all
         </button>
       </div>
     </div>

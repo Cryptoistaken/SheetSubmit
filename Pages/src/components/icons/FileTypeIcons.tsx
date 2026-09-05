@@ -63,7 +63,7 @@ export const PageIcon = ({ size = 12, ...props }: { size?: number } & React.SVGP
 
 export const PasswordIcon = ({ password, size = 14 }: { password: string; size?: number }) =>
   password === "dgddigital" ? (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M22 12a1 1 0 0 1-10 0 1 1 0 0 0-10 0" />
       <path d="M7 20.7a1 1 0 1 1 5-8.7 1 1 0 1 0 5-8.6" />
       <path d="M7 3.3a1 1 0 1 1 5 8.6 1 1 0 1 0 5 8.6" />

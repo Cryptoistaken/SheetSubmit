@@ -146,17 +146,17 @@ export default function ArchiveView() {
       <div className={`sel-bar${selectionMode ? " open" : ""}`}>
         <span className="sel-bar-count">{selected.size} selected</span>
         <div className="sel-bar-actions">
-          <button className="sel-btn" onClick={selectAll}>
-            Select All
-          </button>
-          <button className="sel-btn" onClick={unselectAll}>
-            Unselect All
-          </button>
-          <button className="sel-btn" onClick={restoreSelected}>
+          <button className="sel-btn sel-btn-primary" onClick={restoreSelected}>
             Restore
           </button>
           <button className="sel-btn danger" onClick={deleteSelected}>
             Delete
+          </button>
+          <button className="sel-btn" onClick={selectAll}>
+            Select all
+          </button>
+          <button className="sel-btn" onClick={unselectAll}>
+            Unselect all
           </button>
         </div>
       </div>

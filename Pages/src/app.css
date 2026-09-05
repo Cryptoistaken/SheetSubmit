@@ -443,7 +443,10 @@ button, input, select, textarea {
     position: absolute;
     inset: 0;
     background: conic-gradient(from 0deg, transparent 0 68%, rgba(255,255,255,.95) 80%, transparent 92%);
-    animation: ringOrbit 3s linear infinite;
+    opacity: 0;
+}
+.avatar-ring.pulse::before {
+    animation: ringOrbit 1.2s linear 1;
 }
 @keyframes ringOrbit {
     0% { transform: rotate(0); opacity: 0; }
@@ -475,7 +478,7 @@ button, input, select, textarea {
     font-weight: 700;
 }
 @media (prefers-reduced-motion: reduce) {
-    .avatar-ring::before { animation: none; }
+    .avatar-ring::before, .avatar-ring.pulse::before { animation: none; opacity: 0; }
 }
 
 /* ── Settings panel ── */
@@ -1338,8 +1341,22 @@ button, input, select, textarea {
     min-width: 0;
     max-width: calc(100vw - 16px);
     left: 8px;
-    bottom: 5vh;
     right: 8px;
+    top: 54px;
+    bottom: auto;
+    animation: selIn .18s var(--ease-out) both;
+}
+@keyframes selIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.sel-bar.below {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-width: none;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    animation: qebIn .22s var(--ease-out) both;
 }
 .sel-bar.open {
     display: flex;
@@ -1361,9 +1378,9 @@ button, input, select, textarea {
     flex-shrink: 0;
 }
 .sel-btn {
-    padding: 5px 10px;
+    padding: 6px 12px;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--text2);
     background: var(--bg3);
     border: 1px solid var(--border);
@@ -1371,6 +1388,20 @@ button, input, select, textarea {
     cursor: pointer;
     transition: background 0.1s;
     white-space: nowrap;
+}
+.sel-btn.sel-btn-primary {
+    color: #fff;
+    background: var(--blue);
+    border-color: var(--blue);
+}
+.sel-btn.sel-btn-primary:hover {
+    background: var(--blue);
+    color: #fff;
+    filter: brightness(1.08);
+}
+.sel-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 .sel-btn:hover {
     background: var(--bg4);

@@ -43,6 +43,7 @@ export default function Topbar() {
   const file = useSheetStore((s) => s.file);
 
   const [conn, setConn] = useState<ConnState>({ cls: "", text: "Connecting..." });
+  const [ringPulse, setRingPulse] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -87,6 +88,8 @@ export default function Topbar() {
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const check = () => {
+      setRingPulse(true);
+      setTimeout(() => setRingPulse(false), 1200);
       api
         .health()
         .then((h) => {
@@ -228,7 +231,7 @@ export default function Topbar() {
             <WorkspaceIcon size={14} />
           </span>
           <span className="profile-pill-divider"></span>
-          <span className={`avatar-ring${!user.photoUrl || photoBusted || (avatarReady && avatarSrc) ? " show" : ""}`} style={{ background: ringColor, color: ringColor }}>
+          <span className={`avatar-ring${!user.photoUrl || photoBusted || (avatarReady && avatarSrc) ? " show" : ""}${ringPulse ? " pulse" : ""}`} style={{ background: ringColor, color: ringColor }}>
              <Avatar className="size-full border-0 after:hidden">
                {!photoBusted && avatarSrc ? <AvatarImage key={avatarSrc} src={avatarSrc} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setAvatarReady(true)} onError={() => setPhotoBusted(true)} /> : null}
                <AvatarFallback className="bg-transparent text-inherit">{(displayName || "?").slice(0, 1).toUpperCase()}</AvatarFallback>

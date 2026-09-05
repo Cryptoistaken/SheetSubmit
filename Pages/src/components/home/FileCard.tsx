@@ -1,6 +1,7 @@
 import { Download, MoreHorizontal, Pencil, RotateCcw, Square, Trash2 } from "lucide-react";
 import { CookieIcon, PageIcon, PasswordIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { FacebookIcon } from "@/components/icons/FacebookIcon";
 import { fileTypeDef } from "@/lib/types";
@@ -41,8 +42,18 @@ export default function FileCard({
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const suppressClickRef = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const dotsRef = useRef<HTMLButtonElement>(null);
+
+  const toggleMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!menuOpen) {
+      const r = dotsRef.current!.getBoundingClientRect();
+      setMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+    }
+    setMenuOpen((o) => !o);
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -124,6 +135,8 @@ export default function FileCard({
     <span title={title} style={{ width: 10, height: 10, borderRadius: 3, background: bg, border: "1px solid var(--border)", flexShrink: 0 }} />
   );
 
+  const actionLabel = ({ created: "Newly Created", renamed: "Renamed", modified: "Last Modified", restored: "Last Restored", archived: "Last Archived" } as Record<string, string>)[file.lastAction ?? (file.deletedAt ? "archived" : "modified")] ?? "Last Modified";
+
   return (
     <div
       className={`file-card${selected ? " selected" : ""}`}
@@ -145,15 +158,8 @@ export default function FileCard({
       <div className="file-card-icon">
         <FileIcon size={16} />
       </div>
-      {recent ? (
-        <span title={"Last action: " + (file.lastAction ?? "modified")} style={{ position: "absolute", top: 0, left: 0, fontSize: 9, fontWeight: 600, color: "var(--text2)", background: "var(--bg3)", padding: "2px 6px", borderBottomRightRadius: 6, letterSpacing: "-0.01em" }}>
-          {({ created: "Newly Created", renamed: "Renamed", modified: "Last Modified", restored: "Last Restored", archived: "Last Archived" } as Record<string, string>)[file.lastAction ?? (file.deletedAt ? "archived" : "modified")] ?? "Last Modified"}
-        </span>
-      ) : null}
       <div className="file-card-name">{file.name}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 2 }}>
-        <span className="file-type-badge" title={badge} aria-label={badge} style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={12} /></span>
-        <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center" }} title={pwTitle}>{isCustom ? pwLabel : <PasswordIcon password={pw} size={14} />}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 2 }}>
         <span className="file-card-meta" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--text)", "rows")}{count}</span>
           {(file.liveCount ?? 0) + (file.deadCount ?? 0) > 0 ? (
@@ -169,10 +175,7 @@ export default function FileCard({
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow)", "duplicates")}{file.dupCount}</span>
           ) : null}
           {crossDupCount ? (
-            <>
-              {" · "}
-              <span className="cd-badge">{crossDupCount} dup</span>
-            </>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow)", "cross-file duplicates")}{crossDupCount}</span>
           ) : null}
           {daysLeft !== undefined ? (
             <>
@@ -182,53 +185,60 @@ export default function FileCard({
           ) : null}
         </span>
       </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: "auto" }}>
+        <span className="file-type-badge" title={badge} aria-label={badge} style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={12} /></span>
+        <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center" }} title={pwTitle}>{isCustom ? pwLabel : <PasswordIcon password={pw} size={14} />}</span>
+      </div>
       <div className="file-card-actions">
+        {recent ? (
+          <span title={"Last action: " + (file.lastAction ?? "modified")} style={{ fontSize: 9, fontWeight: 600, color: "var(--text2)", background: "var(--bg3)", padding: "3px 7px", borderRadius: 6, letterSpacing: "-0.01em", whiteSpace: "nowrap", marginRight: 2 }}>
+            {actionLabel}
+          </span>
+        ) : null}
         <button
           ref={dotsRef}
           className="file-card-btn file-card-more"
           title="More"
           aria-label="More actions"
           aria-expanded={menuOpen}
-          onClick={(e) => {
-            e.stopPropagation();
-            setMenuOpen((o) => !o);
-          }}
+          onClick={toggleMenu}
           onPointerDown={(e) => e.stopPropagation()}
           onPointerUp={(e) => e.stopPropagation()}
         >
           <MoreHorizontal size={14} />
         </button>
-        {menuOpen ? (
-          <div ref={menuRef} role="menu" style={{ position: "absolute", top: 26, right: 3, minWidth: 140, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-lg)", padding: 4, display: "flex", flexDirection: "column", zIndex: 50 }}>
-            <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onToggleSelect(); }}>
-              <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Square size={13} /></span>
-              Select
-            </button>
-            {onRestore ? (
-              <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onRestore(); }}>
-                <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><RotateCcw size={13} /></span>
-                Restore
-              </button>
-            ) : null}
-            {onDownload ? (
-              <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDownload(); }}>
-                <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Download size={13} /></span>
-                Download
-              </button>
-            ) : null}
-            {onRename ? (
-              <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onRename(); }}>
-                <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Pencil size={13} /></span>
-                Rename
-              </button>
-            ) : null}
-            <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500, color: "var(--red)" }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(); }}>
-              <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--red-bg)", color: "var(--red)" }}><Trash2 size={13} /></span>
-              {onRestore ? "Delete Permanently" : "Delete"}
-            </button>
-          </div>
-        ) : null}
       </div>
+      {menuOpen ? createPortal(
+        <div ref={menuRef} role="menu" style={{ position: "fixed", top: menuPos.top, right: menuPos.right, minWidth: 140, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-lg)", padding: 4, display: "flex", flexDirection: "column", zIndex: 1000 }}>
+          <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onToggleSelect(); }}>
+            <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Square size={13} /></span>
+            Select
+          </button>
+          {onRestore ? (
+            <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onRestore(); }}>
+              <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><RotateCcw size={13} /></span>
+              Restore
+            </button>
+          ) : null}
+          {onDownload ? (
+            <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDownload(); }}>
+              <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Download size={13} /></span>
+              Download
+            </button>
+          ) : null}
+          {onRename ? (
+            <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onRename(); }}>
+              <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Pencil size={13} /></span>
+              Rename
+            </button>
+          ) : null}
+          <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500, color: "var(--red)" }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(); }}>
+            <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--red-bg)", color: "var(--red)" }}><Trash2 size={13} /></span>
+            {onRestore ? "Delete Permanently" : "Delete"}
+          </button>
+        </div>,
+        document.body
+      ) : null}
     </div>
   );
 }

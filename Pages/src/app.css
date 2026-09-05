@@ -624,7 +624,7 @@ button, input, select, textarea {
 }
 #homeTabBar .view-switch {
     flex-shrink: 0;
-    margin: 8px 12px 0 0;
+    margin: 8px 0 0 4px;
 }
 .home-tabs {
     display: flex;
@@ -823,45 +823,47 @@ button, input, select, textarea {
 .view-switch {
     position: relative;
     display: inline-flex;
-    height: 36px;
-    padding: 0 1px;
-    border-radius: var(--rl);
+    gap: 4px;
+    padding: 3px;
+    border-radius: 8px;
     background: var(--bg3);
-    overflow: hidden;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
 }
 .view-switch-thumb {
     position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 1px;
-    width: 36px;
-    margin: 1px 0;
-    border-radius: calc(var(--rl) - 3px);
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: 0;
+    border-radius: 6px;
     background: var(--bg);
     box-shadow: var(--shadow-sm);
-    transition: left 0.18s ease;
-}
-.view-switch-thumb.right {
-    left: 37px;
+    transition: left 0.18s ease, width 0.18s ease;
 }
 .view-switch button {
     position: relative;
     z-index: 1;
-    width: 36px;
-    margin: 1px 0;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 600;
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 6px;
+    color: var(--text2);
     background: transparent;
-    border: none;
-    border-radius: calc(var(--rl) - 3px);
-    color: var(--text3);
+    border: 1px solid transparent;
+    border-radius: 6px;
     cursor: pointer;
-    padding: 0;
-    transition: color 0.15s;
+    white-space: nowrap;
+    transition: color 0.12s;
 }
 .view-switch button.on {
     color: var(--text);
+    background: var(--bg);
+    border-color: var(--border2);
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
 }
 .view-switch svg {
     display: block;

@@ -15,7 +15,7 @@ import { fetchPhotoBytes, photoBytes, sniffImage } from "./lib/photo";
 
 const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any worker route change — lets TestApi/health confirm a redeploy landed
-export const API_VERSION = "1.2.0";
+export const API_VERSION = "1.2.1";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => { if (Number(c.req.header("Content-Length")) > 4_000_000) return c.json({ error: "payload too large" }, 413); if (c.req.raw.body) { try { const reader = c.req.raw.clone().body!.getReader(); let size = 0; while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > 4_000_000) { await reader.cancel(); return c.json({ error: "payload too large" }, 413); } } } catch { return c.json({ error: "invalid request body" }, 400); } } return next(); });
 app.get("/api/ws/ticket", async (c) => {
@@ -26,16 +26,15 @@ app.get("/api/ws/ticket", async (c) => {
   return c.json({ ticket: r.ticket });
 });
 app.get("/ws", async (c) => {
-  if (c.req.header("Upgrade") !== "websocket") return c.text("expected websocket", 426);
+  if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") return c.text("expected websocket", 426);
   const origin = c.req.header("Origin") || "";
   const allowed = [c.env.FRONTEND_URL, "http://localhost:5173", "http://127.0.0.1:5173"].filter(Boolean) as string[];
   if (origin && !allowed.includes(origin)) return c.text("forbidden", 403);
-  const t = c.req.query("t");
-  if (!t) return c.text("missing ticket", 401);
+  if (!c.req.query("t")) return c.text("missing ticket", 401);
   const stub = c.env.INDEX.get(c.env.INDEX.idFromName("global"));
-  const res = await stub.fetch("https://do/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op: "wsConnect", args: { ticket: t, version: API_VERSION } }) });
-  if (res.status !== 101) return c.text("invalid ticket", 401);
-  return res;
+  const hdrs = new Headers(c.req.raw.headers);
+  hdrs.set("x-ws-version", API_VERSION);
+  return await stub.fetch(c.req.raw, { headers: hdrs });
 });
 app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now(), version: API_VERSION }));
 app.route("/api/files", files);

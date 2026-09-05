@@ -71,6 +71,7 @@ const shapeUser = (env: Env, u: any) => ({ id: String(u.user_id), name: u.name |
 export class IndexDO {
   constructor(private readonly state: DurableObjectState, private readonly env: Env) { state.blockConcurrencyWhile(async () => { const s = state.storage.sql; s.exec("CREATE TABLE IF NOT EXISTS users (user_id TEXT PRIMARY KEY, name TEXT, username TEXT, photo_url TEXT, banned INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS file_index (file_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, exp INTEGER NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)"); }); }
   async fetch(req: Request) {
+    if ((req.headers.get("Upgrade") || "").toLowerCase() === "websocket") return this.wsUpgrade(req);
     const { op, args = {} } = await req.json() as Op; const s = this.state.storage.sql; switch (op) {
     case "ensureUser": s.exec("INSERT INTO users(user_id,name,username,photo_url,created_at) VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,username=excluded.username,photo_url=excluded.photo_url", args.id, args.name || "", args.username || "", args.photoUrl || null, Date.now()); return Response.json({ ok: true });
     case "user": return Response.json(s.exec("SELECT * FROM users WHERE user_id=?", args.id).toArray()[0] || null);
@@ -99,25 +100,27 @@ export class IndexDO {
      case "deviceDelete": { const r: any = s.exec("SELECT v FROM meta WHERE k=?", `device:${args.did}`).toArray()[0]; if (r) s.exec("DELETE FROM meta WHERE k=?", `deviceByChat:${JSON.parse(r.v).chatId}`); s.exec("DELETE FROM meta WHERE k=?", `device:${args.did}`); return Response.json({ ok: true }); }
      case "deviceByChat": { const r: any = s.exec("SELECT v FROM meta WHERE k=?", `deviceByChat:${args.chatId}`).toArray()[0]; return Response.json(r ? JSON.parse(r.v) : null); }
      case "wsTicket": { const ticket = crypto.randomUUID().replaceAll("-", ""); s.exec("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)", `wsTicket:${ticket}`, JSON.stringify({ uid: args.uid ?? null, exp: Date.now() + 60000 })); return Response.json({ ticket }); }
-    case "wsConnect": {
-      const raw: any = s.exec("SELECT v FROM meta WHERE k=?", `wsTicket:${args.ticket}`).toArray()[0];
-      if (!raw) return Response.json({ error: "invalid ticket" }, { status: 401 });
-      s.exec("DELETE FROM meta WHERE k=?", `wsTicket:${args.ticket}`);
-      const { uid, exp } = JSON.parse(raw.v) as { uid: string | null; exp: number };
-      if (exp < Date.now()) return Response.json({ error: "invalid ticket" }, { status: 401 });
-      const pair = new WebSocketPair();
-      (this.state as any).acceptWebSocket(pair[1], [uid ?? "anon"]);
-      (pair[1] as any).serializeAttachment({ uid: uid ?? null, did: null });
-      try { pair[1].send(JSON.stringify({ ev: "health", data: { version: args.version } })); } catch {}
-      return new Response(null, { status: 101, webSocket: pair[0] as any });
-    }
     case "deviceSession": {
       const current: any = s.exec("SELECT v FROM meta WHERE k=?", `device:${args.did}`).toArray()[0]; if (current) s.exec("DELETE FROM meta WHERE k=?", `deviceByChat:${JSON.parse(current.v).chatId}`); const previous: any = s.exec("SELECT v FROM meta WHERE k=?", `deviceByChat:${args.chatId}`).toArray()[0]; if (previous) s.exec("DELETE FROM meta WHERE k=?", `device:${JSON.parse(previous.v).did}`); s.exec("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)", `device:${args.did}`, JSON.stringify({ chatId: args.chatId })); s.exec("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)", `deviceByChat:${args.chatId}`, JSON.stringify({ did: args.did }));
       for (const ws of (this.state as any).getWebSockets() as WebSocket[]) { try { const att: any = (ws as any).deserializeAttachment() || {}; if (att.did === args.did) ws.send(JSON.stringify({ ev: "claimed", data: {} })); } catch {} }
       return Response.json({ ok: true });
     }
-    default: return Response.json({ error: "unknown operation" }, { status: 400 });
+     default: return Response.json({ error: "unknown operation" }, { status: 400 });
    } }
+  private wsUpgrade(req: Request): Response {
+    const s = this.state.storage.sql;
+    const ticket = new URL(req.url).searchParams.get("t") || "";
+    const raw: any = s.exec("SELECT v FROM meta WHERE k=?", `wsTicket:${ticket}`).toArray()[0];
+    if (!raw) return Response.json({ error: "invalid ticket" }, { status: 401 });
+    s.exec("DELETE FROM meta WHERE k=?", `wsTicket:${ticket}`);
+    const { uid, exp } = JSON.parse(raw.v) as { uid: string | null; exp: number };
+    if (exp < Date.now()) return Response.json({ error: "invalid ticket" }, { status: 401 });
+    const pair = new WebSocketPair();
+    (this.state as any).acceptWebSocket(pair[1], [uid ?? "anon"]);
+    (pair[1] as any).serializeAttachment({ uid: uid ?? null, did: null });
+    try { pair[1].send(JSON.stringify({ ev: "health", data: { version: req.headers.get("x-ws-version") || "" } })); } catch {}
+    return new Response(null, { status: 101, webSocket: pair[0] as any });
+  }
   async webSocketMessage(ws: WebSocket, message: string) {
     let msg: any;
     try { msg = JSON.parse(typeof message === "string" ? message : String(message)); } catch { try { ws.send(JSON.stringify({ id: 0, ok: false, error: "bad message" })); } catch {} return; }

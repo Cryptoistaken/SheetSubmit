@@ -159,12 +159,12 @@ export default function FileCard({
         <FileIcon size={16} />
       </div>
       <div className="file-card-name">{file.name}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: "auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           <span className="file-type-badge" title={badge} aria-label={badge} style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={12} /></span>
           <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center" }} title={pwTitle}>{isCustom ? pwLabel : <PasswordIcon password={pw} size={14} />}</span>
         </span>
-        <span className="file-card-meta" style={{ display: "inline-flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+        <span className="file-card-meta" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--text)", "rows")}{count}</span>
           {(file.liveCount ?? 0) + (file.deadCount ?? 0) > 0 ? (
             <>

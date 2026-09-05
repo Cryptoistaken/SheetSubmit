@@ -27,6 +27,8 @@
     --green-bg: rgba(22, 163, 74, 0.08);
     --cyan: #00b4d8;
     --yellow: #f5a623;
+    --yellow-dark: #a16207;
+    --yellow-light: #eab308;
     --yellow-bg: rgba(245, 166, 35, 0.08);
     --amber: #f59e0b;
     --fb: #6366f1;
@@ -2001,6 +2003,7 @@ th.rh:hover {
 }
 .check-split-main:hover { background: var(--blue-dark, #2563eb); }
 .check-split-main:active { transform: scale(0.97); }
+.check-split-main:disabled { opacity: 0.5; cursor: not-allowed; }
 .check-split-main.warning { border-color: #ffa000 !important; color: #ffa000 !important; }
 .dark .check-split-main.warning { border-color: #ffa000 !important; color: #ffa000 !important; }
 .check-split-arrow {

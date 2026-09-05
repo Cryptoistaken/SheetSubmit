@@ -172,10 +172,10 @@ export default function FileCard({
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--cyan)", "page eligible")}{file.pageCount}</span>
           ) : null}
           {(file.dupCount ?? 0) > 0 ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow)", "duplicates")}{file.dupCount}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow-dark)", "duplicates in file")}{file.dupCount}</span>
           ) : null}
           {crossDupCount ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow)", "cross-file duplicates")}{crossDupCount}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow-light)", "cross-file duplicates")}{crossDupCount}</span>
           ) : null}
           {daysLeft !== undefined ? (
             <>

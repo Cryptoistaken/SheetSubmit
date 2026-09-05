@@ -49,6 +49,7 @@ export default function SheetToolbar() {
   const columns = useSheetStore((s) => s.columns);
   const visibleCols = useSheetStore((s) => s.visibleCols);
   const checkRunning = useSheetStore((s) => s.checkRunning);
+  const hasDups = useSheetStore((s) => s.dupRows.size > 0);
   const { user } = useAuth();
 
   const [open, setOpen] = useState(false);
@@ -231,6 +232,8 @@ export default function SheetToolbar() {
       <div className="check-split-wrap" data-check={checkRunning ? "checking" : ""}>
         <button
           className="check-split-main"
+          disabled={hasDups}
+          title={hasDups ? "Remove duplicate rows first" : undefined}
           onClick={() => void useSheetStore.getState().runCheck()}
         >
           {checkRunning ? "Checking..." : "Check"}

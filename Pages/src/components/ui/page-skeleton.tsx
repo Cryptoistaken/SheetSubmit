@@ -5,6 +5,7 @@ const FILE_SKELETON_COUNT = 10;
 type PageSkeletonProps = {
   variant?: "files" | "archive" | "pools" | "admin" | "admin-detail" | "tools" | "splitter" | "sheet";
   className?: string;
+  sheetToolbar?: boolean;
 };
 
 export function Skeleton({ className, style }: { className?: string; style?: React.CSSProperties }) {
@@ -93,7 +94,7 @@ function Wrap({ children, className }: { children: React.ReactNode; className?: 
   );
 }
 
-export default function PageSkeleton({ variant = "files", className }: PageSkeletonProps) {
+export default function PageSkeleton({ variant = "files", className, sheetToolbar = true }: PageSkeletonProps) {
   if (variant === "files" || variant === "archive") {
     return (
       <Wrap className={cn("w-full", className)}>
@@ -274,15 +275,17 @@ export default function PageSkeleton({ variant = "files", className }: PageSkele
   if (variant === "sheet") {
     return (
       <Wrap className={cn("flex min-h-0 w-full flex-col bg-background", className)}>
-        <div style={{ height: 40, borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8, padding: "0 12px", flexShrink: 0 }} aria-hidden="true">
-          <Skeleton className="h-6 w-28 rounded" />
-          <Skeleton className="h-6 w-20 rounded" />
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-            <Skeleton className="h-7 w-16 rounded-md" />
-            <Skeleton className="h-7 w-16 rounded-md" />
-            <Skeleton className="h-7 w-20 rounded-md" />
+        {sheetToolbar ? (
+          <div style={{ height: 40, borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8, padding: "0 12px", flexShrink: 0 }} aria-hidden="true">
+            <Skeleton className="h-6 w-28 rounded" />
+            <Skeleton className="h-6 w-20 rounded" />
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+              <Skeleton className="h-7 w-16 rounded-md" />
+              <Skeleton className="h-7 w-16 rounded-md" />
+              <Skeleton className="h-7 w-20 rounded-md" />
+            </div>
           </div>
-        </div>
+        ) : null}
         <div style={{ flex: 1, overflow: "auto" }}>
           <div style={{ minWidth: 640 }}>
             <table className="grid" aria-hidden="true" cellSpacing={0} cellPadding={0} style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>

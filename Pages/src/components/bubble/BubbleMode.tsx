@@ -229,7 +229,7 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
   }
 
   if (status === "loading" || status === "idle") {
-    return <PageSkeleton variant="sheet" className="min-h-dvh" />;
+    return <PageSkeleton variant="sheet" className="min-h-dvh" sheetToolbar={false} />;
   }
 
   return (

@@ -133,7 +133,7 @@ export default function SheetPage() {
   }
 
   if (status === "loading" || status === "idle") {
-    return <PageSkeleton variant="sheet" />;
+    return <PageSkeleton variant="sheet" sheetToolbar={false} />;
   }
 
   return (

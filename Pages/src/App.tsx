@@ -9,7 +9,7 @@ import {
 } from "react-router";
 
 import LoginScreen from "@/components/auth/LoginScreen";
-import PageSkeleton from "@/components/ui/page-skeleton";
+import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 
 import Topbar from "@/components/layout/Topbar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -47,6 +47,53 @@ function skeletonForPath(pathname: string): DetailedSkeletonVariant {
   return "files";
 }
 
+function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
+  const sheet = variant === "sheet";
+  const paneStyle = variant === "pools"
+    ? { padding: "24px", maxWidth: 960 }
+    : variant === "tools" || variant === "splitter"
+      ? { padding: "32px 24px", maxWidth: 960 }
+      : undefined;
+  const paneId = variant === "pools"
+    ? "homePanePools"
+    : variant === "tools" || variant === "splitter"
+      ? "homePaneTools"
+      : variant === "archive"
+        ? "homePaneArchive"
+        : variant === "admin" || variant === "admin-detail"
+          ? "homePaneAdmin"
+          : "homePaneFiles";
+  return (
+    <div className="flex h-dvh flex-col">
+      <header>
+        <div className="topbar" aria-hidden="true">
+          <div className="topbar-l">
+            <Skeleton className="h-5 w-5 rounded-sm" />
+            <Skeleton className="h-4 w-28 rounded" />
+          </div>
+          <Skeleton className="h-8 w-8 rounded-full" />
+        </div>
+      </header>
+      <main id="main-content" className="flex flex-1 min-h-0 flex-col">
+        {!sheet ? (
+          <div id="homeTabBar" aria-hidden="true">
+            <div className="home-tabs">
+              {Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-9 w-24 rounded-md" />)}
+            </div>
+          </div>
+        ) : null}
+        <div
+          id={!sheet ? paneId : undefined}
+          className={!sheet ? "home-pane" : undefined}
+          style={paneStyle ? { ...paneStyle, margin: "0 auto", width: "100%" } : undefined}
+        >
+          <PageSkeleton variant={variant} className="min-h-0" sheetToolbar={false} />
+        </div>
+      </main>
+    </div>
+  );
+}
+
 function Layout() {
   const { pathname } = useLocation();
   const variant = skeletonForPath(pathname);
@@ -62,7 +109,7 @@ function Layout() {
         <Topbar />
       </header>
       <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 focus:outline-none">
-        <Suspense fallback={<PageSkeleton variant={variant} className="min-h-full" />}>
+        <Suspense fallback={<PageSkeleton variant={variant} className="min-h-0" sheetToolbar={variant !== "sheet"} />}>
           <Outlet />
         </Suspense>
       </main>
@@ -107,13 +154,17 @@ export default function App() {
   const { user, loading, sessionExpired } = useAuth();
   const bubbleFileId = useMemo(() => getBubbleFileId(), []);
 
-  if (loading) return <PageSkeleton variant={skeletonForPath(window.location.pathname)} className="min-h-dvh" />;
+  if (loading) {
+    return bubbleFileId
+      ? <PageSkeleton variant="sheet" className="min-h-dvh" sheetToolbar={false} />
+      : <LoadingShell variant={skeletonForPath(window.location.pathname)} />;
+  }
 
   // Android floating-bubble mini window (?bubble=1&file=<id>) — code-split so the
   // main bundle stays lean; only loads inside the Android WebView.
   if (user && bubbleFileId) {
     return (
-      <Suspense fallback={<PageSkeleton variant="sheet" className="min-h-dvh" />}>
+      <Suspense fallback={<PageSkeleton variant="sheet" className="min-h-dvh" sheetToolbar={false} />}>
         <BubbleMode fileId={bubbleFileId} />
       </Suspense>
     );

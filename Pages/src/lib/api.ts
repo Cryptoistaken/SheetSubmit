@@ -10,6 +10,7 @@ import type {
   User,
 } from "./types";
 import { wsCall, wsWaitOpen } from "./ws";
+import { captureMock, isCapture } from "./mock";
 
 const RUNTIME_BASE = (window.APP_CONFIG?.apiBase ?? import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
 declare global {
@@ -75,6 +76,11 @@ function wsDebug(op: string, transport: "ws" | "http", detail?: unknown) {
 }
 
 async function call<T>(op: string, args: object | undefined, httpFn: () => Promise<T>, opts?: { keepalive?: boolean }): Promise<T> {
+  if (isCapture) {
+    const mocked = captureMock(op);
+    if (mocked === undefined) throw new Error(`boneyard: no mock for ${op}`);
+    return mocked as T;
+  }
   if (opts?.keepalive) {
     wsDebug(op, "http", "keepalive");
     return httpFn();

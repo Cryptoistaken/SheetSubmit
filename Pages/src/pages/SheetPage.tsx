@@ -9,49 +9,6 @@ import { useConfirm } from "@/lib/confirm";
 import { usePersist } from "@/hooks/usePersist";
 import { useSheetStore } from "@/stores/sheetStore";
 
-function GridFixture() {
-  return (
-    <div className="sheet-wrap">
-      <table className="grid" cellSpacing={0} cellPadding={0}>
-        <thead>
-          <tr>
-            <th className="corner" />
-            <th className="ch">cookies</th>
-            <th className="ch">2fa key</th>
-            <th className="ch">uid</th>
-            <th className="ch-dot" />
-          </tr>
-        </thead>
-        <tbody>
-          {Array.from({ length: 24 }, (_, i) => (
-            <tr key={i}>
-              <th className="rh">{i + 1}</th>
-              <td className="dc">
-                <div className="cell-inner">
-                  <span className="cell-text">sample cookie value</span>
-                </div>
-              </td>
-              <td className="dc">
-                <div className="cell-inner">
-                  <span className="cell-text">2FAKEY</span>
-                </div>
-              </td>
-              <td className="dc">
-                <div className="cell-inner">
-                  <span className="cell-text">12345</span>
-                </div>
-              </td>
-              <td className="dot-cell">
-                <span className="row-dot" />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 export default function SheetPage() {
   const params = useParams();
   const navigate = useNavigate();
@@ -175,23 +132,6 @@ export default function SheetPage() {
     );
   }
 
-  if (
-    typeof window !== "undefined" &&
-    (window as unknown as Record<string, unknown>).__BONEYARD_BUILD === true
-  ) {
-    return (
-      <Skeleton
-        name="sheet-grid"
-        loading
-        color="#ececec"
-        darkColor="#262626"
-        fixture={<GridFixture />}
-      >
-        <div />
-      </Skeleton>
-    );
-  }
-
   return (
     <Skeleton
       name="sheet-grid"
@@ -206,7 +146,6 @@ export default function SheetPage() {
           </div>
         </div>
       }
-      fixture={<GridFixture />}
     >
       <div className="sheet-view">
         <SheetGrid />

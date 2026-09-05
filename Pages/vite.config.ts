@@ -10,7 +10,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     boneyardPlugin({
-      routes: ["/", "/archive", "/admin", "/pools/dgddigital/cookies_only", "/tools/splitter", "/file/smoke"],
+      routes: ["/", "/archive", "/admin", "/admin/user/demo", "/pools/dgddigital/cookies_only", "/tools/splitter", "/file/smoke"],
       wait: 1200,
     }),
   ],

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { api, normalizeUser } from "@/lib/api";
+import { captureUser, isCapture } from "@/lib/mock";
 import { wsConnect, wsDisconnect, wsOn } from "@/lib/ws";
 import type { User } from "@/lib/types";
 
@@ -28,6 +29,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
+
+    // Boneyard capture: mock admin user, no /me round-trip, no WS.
+    if (isCapture) {
+      setUser(captureUser);
+      setLoading(false);
+      return;
+    }
 
     // No cookie has ever been issued to this browser → skip the /me call.
     if (localStorage.getItem(HAD_SESSION) !== "1") {
@@ -87,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (isCapture) return;
     if (user) void wsConnect();
     else wsDisconnect();
   }, [user]);

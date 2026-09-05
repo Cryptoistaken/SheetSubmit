@@ -1,5 +1,7 @@
 {
-  "routes": ["/file/smoke"],
+  "routes": ["/", "/archive", "/admin", "/pools/dgddigital/cookies_only", "/tools/splitter", "/file/smoke"],
+  "animate": "shimmer",
+  "transition": 300,
   "auth": {
     "cookies": [
       { "name": "session", "value": "smoke", "domain": "localhost", "path": "/" }

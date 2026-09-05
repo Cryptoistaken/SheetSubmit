@@ -1,7 +1,16 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { configureBoneyard } from "boneyard-js/react";
 
 import App from "./App";
+
+configureBoneyard({
+  animate: "shimmer",
+  color: "#ececec",
+  darkColor: "#262626",
+  transition: 300,
+  select: "viewport",
+});
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ConfirmProvider } from "@/lib/confirm";
 import { ToastProvider } from "@/lib/toast";

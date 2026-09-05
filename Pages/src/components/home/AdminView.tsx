@@ -1,6 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { Skeleton as BoneSkeleton } from "boneyard-js/react";
 
 import { api } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
@@ -223,7 +224,11 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   };
 
   if (initialUserId && !detailUser && users === null) {
-    return <PageSkeleton variant="list" />;
+    return (
+      <BoneSkeleton name="home-admin-detail" loading fallback={<PageSkeleton variant="list" />}>
+        <div />
+      </BoneSkeleton>
+    );
   }
 
   if (detailUser) {
@@ -377,7 +382,8 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   }
 
   return (
-    <>
+    <BoneSkeleton name="home-admin-data" loading={users === null} fallback={<PageSkeleton variant="list" />}>
+      <>
       <div className="admin-stats">
         <div className="admin-stat-card" aria-busy={stats === null}>
           <div className="admin-stat-value">{stats ? stats.totalUsers : "—"}</div>
@@ -476,6 +482,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                 );
               })}
       </div>
-    </>
+      </>
+    </BoneSkeleton>
   );
 }

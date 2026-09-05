@@ -9,7 +9,10 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    boneyardPlugin({ routes: ["/file/smoke"], skipInitial: true }),
+    boneyardPlugin({
+      routes: ["/", "/archive", "/admin", "/pools/dgddigital/cookies_only", "/tools/splitter", "/file/smoke"],
+      wait: 1200,
+    }),
   ],
   resolve: {
     alias: {

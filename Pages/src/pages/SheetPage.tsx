@@ -175,27 +175,6 @@ export default function SheetPage() {
     );
   }
 
-  if (status === "loading" || status === "idle") {
-    return (
-      <Skeleton
-        name="sheet-grid"
-        loading
-        color="#ececec"
-        darkColor="#262626"
-        fallback={
-          <div className="home-pane">
-            <div className="empty-state">
-              <div className="empty-state-title">Loading…</div>
-            </div>
-          </div>
-        }
-        fixture={<GridFixture />}
-      >
-        <div />
-      </Skeleton>
-    );
-  }
-
   if (
     typeof window !== "undefined" &&
     (window as unknown as Record<string, unknown>).__BONEYARD_BUILD === true
@@ -214,10 +193,26 @@ export default function SheetPage() {
   }
 
   return (
-    <div className="sheet-view">
-      <SheetGrid />
-      <QuickEditBar />
-      <SelectionBar />
-    </div>
+    <Skeleton
+      name="sheet-grid"
+      loading={status === "loading" || status === "idle"}
+      transition={300}
+      color="#ececec"
+      darkColor="#262626"
+      fallback={
+        <div className="home-pane">
+          <div className="empty-state">
+            <div className="empty-state-title">Loading…</div>
+          </div>
+        </div>
+      }
+      fixture={<GridFixture />}
+    >
+      <div className="sheet-view">
+        <SheetGrid />
+        <QuickEditBar />
+        <SelectionBar />
+      </div>
+    </Skeleton>
   );
 }

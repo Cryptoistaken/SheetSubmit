@@ -172,12 +172,6 @@ export default function FileCard({
           {crossDupCount ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow-light)", "cross-file duplicates")}{crossDupCount}</span>
           ) : null}
-          {daysLeft !== undefined ? (
-            <>
-              {" · "}
-              {daysLeft} days left
-            </>
-          ) : null}
         </span>
       </div>
       <div className="file-card-actions">
@@ -199,6 +193,9 @@ export default function FileCard({
           <MoreHorizontal size={14} />
         </button>
       </div>
+      {daysLeft !== undefined ? (
+        <span className="file-card-days" title="Days until permanent deletion">{daysLeft}d left</span>
+      ) : null}
       {menuOpen ? createPortal(
         <div ref={menuRef} role="menu" style={{ position: "fixed", top: menuPos.top, right: menuPos.right, minWidth: 140, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-lg)", padding: 4, display: "flex", flexDirection: "column", zIndex: 1000 }}
           onPointerDown={(e) => e.stopPropagation()}

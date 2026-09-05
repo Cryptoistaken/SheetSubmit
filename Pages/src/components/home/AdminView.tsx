@@ -17,7 +17,7 @@ function userName(u: { firstName?: string; lastName?: string }): string {
   return ((u.firstName ?? "") + " " + (u.lastName ?? "")).trim() || "Unknown";
 }
 
-export default function AdminView({ initialUserId }: { initialUserId?: string }) {
+export default function AdminView({ initialUserId, view = "grid" }: { initialUserId?: string; view?: "grid" | "list" }) {
   const showToast = useToast();
   const confirm = useConfirm();
   const { user: me } = useAuth();
@@ -284,7 +284,7 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
           </div>
         </div>
 
-        <div className="admin-file-list">
+        <div className={"admin-file-list" + (view === "list" ? " list" : "")}>
           {(userFileTab === "files" ? files : detailArchived).length === 0 && userFileTab === "files" ? <div style={{ gridColumn: "1/-1", padding: 16, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>No files</div> : null}
           {(userFileTab === "archive" && detailArchived.length === 0) ? <div style={{ gridColumn: "1/-1", padding: 16, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>No archived files</div> : null}
           {(userFileTab === "files" ? files : []).map((f) => {
@@ -292,7 +292,7 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
             return (
               <div
                 key={f.id}
-                className="file-card"
+                className={"file-card" + (view === "list" ? " list-row" : "")}
                 role="button"
                 tabIndex={0}
                 title={"Open " + f.name}
@@ -359,7 +359,7 @@ export default function AdminView({ initialUserId }: { initialUserId?: string })
                   30 - Math.floor((Date.now() - (f.deletedAt || 0)) / 86400000),
                 );
                 return (
-                  <div key={f.id} className="file-card" style={{ opacity: 0.85 }}>
+                  <div key={f.id} className={"file-card" + (view === "list" ? " list-row" : "")} style={{ opacity: 0.85 }}>
                     <div className="file-card-icon" style={{ opacity: 0.5 }}>
                       <Archive size={16} />
                     </div>

@@ -1,5 +1,5 @@
 import { Download, MoreHorizontal, Pencil, RotateCcw, Square, Trash2 } from "lucide-react";
-import { CookieIcon, PageIcon, PasswordIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
+import { FileTypeIcon, PasswordIcon } from "@/components/icons/FileTypeIcons";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -21,6 +21,7 @@ interface FileCardProps {
   disableOpen?: boolean;
   daysLeft?: number;
   recent?: boolean;
+  list?: boolean;
 }
 
 export default function FileCard({
@@ -37,6 +38,7 @@ export default function FileCard({
   disableOpen = false,
   daysLeft,
   recent = false,
+  list = false,
 }: FileCardProps) {
   const movedRef = useRef(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
@@ -113,19 +115,6 @@ export default function FileCard({
   const pwTitle = pw;
   const _presetKind = (file.preset ?? file.poolKind) as string | undefined;
   const isPage = _presetKind === "page" || (!_presetKind && file.name.toLowerCase().startsWith("page"));
-  const FileIcon = _presetKind
-    ? _presetKind === "page"
-      ? PageIcon
-      : _presetKind === "combo"
-        ? TwoFaIcon
-        : CookieIcon
-      : file.name.toLowerCase().startsWith("cookie")
-      ? CookieIcon
-      : file.name.toLowerCase().startsWith("2fa")
-        ? TwoFaIcon
-        : file.name.toLowerCase().startsWith("page")
-          ? PageIcon
-          : CookieIcon;
   const pwStyle: React.CSSProperties = isCustom
     ? { background: "var(--fb-bg)", color: "var(--fb)" }
     : pw === "dgddigital"
@@ -139,7 +128,7 @@ export default function FileCard({
 
   return (
     <div
-      className={`file-card${selected ? " selected" : ""}`}
+      className={`file-card${selected ? " selected" : ""}${list ? " list-row" : ""}`}
       role="button"
       tabIndex={0}
       style={{ touchAction: "manipulation", userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}
@@ -156,10 +145,10 @@ export default function FileCard({
       }}
     >
       <div className="file-card-icon">
-        <FileIcon size={16} />
+        <FileTypeIcon file={file} size={16} />
       </div>
       <div className="file-card-name">{file.name}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: list ? 0 : "auto", flexWrap: list ? "wrap" : undefined, minWidth: 0 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           <span className="file-type-badge" title={badge} aria-label={badge} style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={12} /></span>
           <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center" }} title={pwTitle}>{isCustom ? pwLabel : <PasswordIcon password={pw} size={14} />}</span>

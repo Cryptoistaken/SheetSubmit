@@ -808,6 +808,63 @@ button, input, select, textarea {
     background: var(--blue-light) !important;
 }
 
+/* ── View switcher (grid / list) ── */
+.view-switch {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    overflow: hidden;
+    background: var(--bg);
+}
+.view-switch button {
+    width: 30px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text3);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+    padding: 0;
+}
+.view-switch button + button {
+    border-left: 1px solid var(--border);
+}
+.view-switch button.on {
+    background: var(--bg3);
+    color: var(--text);
+}
+
+/* ── Files list view ── */
+.files-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.file-card.list-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    min-height: 0;
+    padding: 10px 14px;
+}
+.file-card.list-row .file-card-icon {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+}
+.file-card.list-row .file-card-name {
+    flex: 1;
+    min-width: 60px;
+    font-size: 13px;
+}
+.file-card.list-row .file-card-actions {
+    position: static;
+    flex-shrink: 0;
+}
+
 /* ── File type badge ── */
 .file-type-badge {
     font-size: 10px;
@@ -1180,6 +1237,11 @@ button, input, select, textarea {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 12px;
+}
+.admin-file-list.list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 /* ── Buttons ── */

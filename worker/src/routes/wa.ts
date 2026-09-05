@@ -13,7 +13,7 @@ const waCacheKey = (uid: string, cuser: string) => `wa:${uid}:${cuser}`;
 async function waCacheSet(env: Env, uid: string, cuser: string, v: unknown) { await rpc(env.INDEX, "global", "metaSet", { k: waCacheKey(uid, cuser), v }).catch(() => {}); }
 async function waCacheDel(env: Env, uid: string, cuser: string) { await rpc(env.INDEX, "global", "metaDel", { k: waCacheKey(uid, cuser) }).catch(() => {}); }
 
-wa.post("/fb/check", async (c) => { const body = await c.req.json<{ uids?: unknown[] }>().catch(() => ({}) as { uids?: unknown[] }); const uids = [...new Set(Array.isArray(body.uids) ? body.uids.map(String).filter((v) => /^\d{5,20}$/.test(v)) : [])].slice(0, 500); if (!uids.length) return c.json({ error: "Invalid UIDs" }, 400); const rateKey = `fbcheck:${c.get("uid")}`; const last: any = await rpc(c.env.INDEX, "global", "metaGet", { k: rateKey }).catch(() => null); if (last && Date.now() - Number(last) < 60_000) return c.json({ error: "Rate limited" }, 429); await rpc(c.env.INDEX, "global", "metaSet", { k: rateKey, v: Date.now() }).catch(() => {}); try { const r = await fetch("https://check.fb.tools/api/check/facebook", { method: "POST", headers: { accept: "application/x-ndjson", "content-type": "application/json" }, signal: AbortSignal.timeout(10_000), body: JSON.stringify({ inputData: uids, userLang: "en", checkFriends: false }) }); if (!r.ok) return c.json({ error: `Upstream returned ${r.status}` }, 502); const text = await r.text(); if (text.length > 1_000_000) return c.json({ error: "Upstream response too large" }, 502); const valid: string[] = [], dead: string[] = []; for (const line of text.split("\n")) { try { const x = JSON.parse(line.slice(line.indexOf("{"))); const uid = String(x.data?.uid || x.data?.account || ""); (x.data?.status?.name === "valid" ? valid : dead).push(uid); } catch {} } return c.json({ valid, dead, uncertain: [] }); } catch { return c.json({ error: "Service unavailable" }, 502); } });
+wa.post("/fb/check", async (c) => { const body = await c.req.json<{ uids?: unknown[] }>().catch(() => ({}) as { uids?: unknown[] }); const uids = [...new Set(Array.isArray(body.uids) ? body.uids.map(String).filter((v) => /^\d{5,20}$/.test(v)) : [])].slice(0, 500); if (!uids.length) return c.json({ error: "Invalid UIDs" }, 400); try { const r = await fetch("https://check.fb.tools/api/check/facebook", { method: "POST", headers: { accept: "application/x-ndjson", "content-type": "application/json" }, signal: AbortSignal.timeout(10_000), body: JSON.stringify({ inputData: uids, userLang: "en", checkFriends: false }) }); if (!r.ok) return c.json({ error: `Upstream returned ${r.status}` }, 502); const text = await r.text(); if (text.length > 1_000_000) return c.json({ error: "Upstream response too large" }, 502); const valid: string[] = [], dead: string[] = []; for (const line of text.split("\n")) { try { const x = JSON.parse(line.slice(line.indexOf("{"))); const uid = String(x.data?.uid || x.data?.account || ""); (x.data?.status?.name === "valid" ? valid : dead).push(uid); } catch {} } return c.json({ valid, dead, uncertain: [] }); } catch { return c.json({ error: "Service unavailable" }, 502); } });
 
 wa.post("/fb/page-check", async (c) => {
   const { cookie } = await c.req.json<{ cookie?: string }>().catch(() => ({}) as { cookie?: string });
@@ -67,11 +67,14 @@ const WA_TTL = 86400_000;
 wa.get("/wa/cache", async (c) => {
   const uids = (c.req.query("uids") || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 1000);
   const uid = c.get("uid");
+  const raw: Record<string, any> = uids.length ? await rpc(c.env.INDEX, "global", "metaGetMany", { keys: uids.map((u) => waCacheKey(uid, u)) }).catch(() => ({})) : {};
   const cache: Record<string, unknown> = {};
+  const stale: string[] = [];
   for (const u of uids) {
-    const v: any = await rpc(c.env.INDEX, "global", "metaGet", { k: waCacheKey(uid, u) }).catch(() => null);
-    if (!v || v.status !== "eligible" || (v.ts && Date.now() - v.ts > WA_TTL)) { if (v) await waCacheDel(c.env, uid, u); continue; }
+    const v = raw[waCacheKey(uid, u)];
+    if (!v || v.status !== "eligible" || (v.ts && Date.now() - v.ts > WA_TTL)) { if (v) stale.push(u); continue; }
     cache[u] = { status: v.status ?? null, banReason: v.banReason ?? null, error: v.error ?? null, pageName: v.pageName ?? null, linkedNumber: v.linkedNumber ?? null, ts: v.ts ?? null };
   }
+  await Promise.all(stale.map((u) => waCacheDel(c.env, uid, u)));
   return c.json({ cache });
 });

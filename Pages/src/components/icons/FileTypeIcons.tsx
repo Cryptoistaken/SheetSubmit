@@ -61,6 +61,14 @@ export const PageIcon = ({ size = 12, ...props }: { size?: number } & React.SVGP
   </svg>
 );
 
+export function FileTypeIcon({ file, size = 16 }: { file?: { preset?: unknown; poolKind?: unknown; name?: string } | null; size?: number }) {
+  const kind = (file?.preset ?? file?.poolKind) as string | undefined;
+  const name = (file?.name ?? "").toLowerCase();
+  const Icon = kind === "page" ? PageIcon : kind === "combo" ? TwoFaIcon : kind ? CookieIcon
+    : name.startsWith("cookie") ? CookieIcon : name.startsWith("2fa") ? TwoFaIcon : name.startsWith("page") ? PageIcon : CookieIcon;
+  return <Icon size={size} />;
+}
+
 export const PasswordIcon = ({ password, size = 14 }: { password: string; size?: number }) =>
   password === "dgddigital" ? (
     <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

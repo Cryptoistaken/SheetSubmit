@@ -1,5 +1,5 @@
 import { Download, MessageCircle, Palette, RefreshCw } from "lucide-react";
-import { WorkspaceIcon } from "@/components/icons/FileTypeIcons";
+import { WorkspaceIcon, FileTypeIcon } from "@/components/icons/FileTypeIcons";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -211,6 +211,7 @@ export default function Topbar() {
           title={file ? file.name : "Rename file"}
           onClick={openRename}
         >
+          {file ? <FileTypeIcon file={file} size={14} /> : null}
           {fileName}
         </button>
       </div>

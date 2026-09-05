@@ -12,9 +12,11 @@ import FileCard from "./FileCard";
 export default function ArchiveView({
   selected,
   setSelected,
+  view = "grid",
 }: {
   selected: Set<string>;
   setSelected: React.Dispatch<React.SetStateAction<Set<string>>>;
+  view?: "grid" | "list";
 }) {
   const [archived, setArchived] = useState<ArchiveFile[] | null>(null);
   const showToast = useToast();
@@ -126,7 +128,7 @@ export default function ArchiveView({
       {archived.length === 0 ? (
         <EmptyState title="No archived files" sub="Deleted files appear here for 30 days" />
       ) : (
-        <div className="files-grid">
+        <div className={view === "list" ? "files-list" : "files-grid"}>
           {[...archived].sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0)).map((f, i) => {
             const daysLeft = Math.max(
               0,
@@ -137,6 +139,7 @@ export default function ArchiveView({
                 key={f.id}
                 file={f}
                 recent={i === 0}
+                list={view === "list"}
                 selected={selected.has(f.id)}
                 selectionMode={selectionMode}
                 disableOpen

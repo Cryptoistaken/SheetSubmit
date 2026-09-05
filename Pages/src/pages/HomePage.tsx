@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { ComponentType } from "react";
+import { LayoutGrid, List } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router";
 
 // Stale chunk after a fresh deploy (old tab imports a hashed asset the new
@@ -104,6 +105,11 @@ export default function HomePage() {
 
   const [files, setFiles] = useState<SheetFile[] | null>(null);
   const [dupCounts, setDupCounts] = useState<Record<string, number>>({});
+  const [view, setView] = useState<"grid" | "list">(() => (localStorage.getItem("ss_fileView") === "list" ? "list" : "grid"));
+  const setViewMode = (v: "grid" | "list") => {
+    setView(v);
+    localStorage.setItem("ss_fileView", v);
+  };
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [archSel, setArchSel] = useState<Set<string>>(new Set());
   const [renameFileId, setRenameFileId] = useState<string | null>(null);
@@ -447,12 +453,25 @@ export default function HomePage() {
               </button>
             </div>
           ) : null}
+          {files !== null && !bubblePickMode ? (
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+              <div className="view-switch" role="group" aria-label="View mode">
+                <button className={view === "grid" ? "on" : ""} aria-label="Grid view" title="Grid view" aria-pressed={view === "grid"} onClick={() => setViewMode("grid")}>
+                  <LayoutGrid size={14} />
+                </button>
+                <button className={view === "list" ? "on" : ""} aria-label="List view" title="List view" aria-pressed={view === "list"} onClick={() => setViewMode("list")}>
+                  <List size={14} />
+                </button>
+              </div>
+            </div>
+          ) : null}
           {files !== null ? (
             <FileGrid
               files={files}
               crossDupCounts={dupCounts}
               selectedIds={selected}
               selectionMode={selectionMode}
+              view={view}
               onOpen={bubblePickMode ? pickBubbleFile : openFile}
               onDownload={downloadFile}
               onRename={openRename}
@@ -466,7 +485,7 @@ export default function HomePage() {
       {tab === "archive" ? (
         <div className="home-pane" id="homePaneArchive">
           <Suspense fallback={null}>
-            <ArchiveView selected={archSel} setSelected={setArchSel} />
+            <ArchiveView selected={archSel} setSelected={setArchSel} view={view} />
           </Suspense>
         </div>
       ) : null}
@@ -487,7 +506,7 @@ export default function HomePage() {
       {tab === "admin" && user?.isAdmin ? (
         <div className="home-pane" id="homePaneAdmin">
           <Suspense fallback={null}>
-            <AdminView initialUserId={userId} />
+            <AdminView initialUserId={userId} view={view} />
           </Suspense>
         </div>
       ) : null}
@@ -550,10 +569,18 @@ export default function HomePage() {
               { preset: "cookie" as FilePreset, name: "Cookie", desc: "cookies and uid", Icon: CookieIcon },
               { preset: "combo" as FilePreset, name: "2fa", desc: "cookies and 2fa and uid", Icon: TwoFaIcon },
               { preset: "page" as FilePreset, name: "Page", desc: "full columns", Icon: PageIcon },
-            ] as const).filter((o) => !typePick?.has2fa || o.preset !== "cookie").map((o) => {
+            ] as const).map((o) => {
               const detected = typePick && ((o.preset === "cookie" && !typePick.has2fa) || (o.preset === "combo" && typePick.has2fa) || (o.preset === "page" && typePick.pageHint));
+              const disabled = !!typePick?.has2fa && o.preset === "cookie";
               return (
-                <button className="home-fab-item" key={o.preset} onClick={() => pickUploadType(o.preset)}>
+                <button
+                  className="home-fab-item"
+                  key={o.preset}
+                  disabled={disabled}
+                  title={disabled ? "File has 2FA data — pick 2fa or Page" : undefined}
+                  style={disabled ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+                  onClick={() => pickUploadType(o.preset)}
+                >
                   <span className="home-fab-ic" style={{ background: "var(--bg3)", color: "var(--text)" }}><o.Icon size={15} /></span>
                   <span>
                     <span style={{ display: "flex", alignItems: "center", gap: 6 }}>

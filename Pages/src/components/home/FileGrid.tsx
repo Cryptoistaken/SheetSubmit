@@ -8,6 +8,7 @@ interface FileGridProps {
   crossDupCounts: Record<string, number>;
   selectedIds: Set<string>;
   selectionMode: boolean;
+  view?: "grid" | "list";
   onOpen: (id: string) => void;
   onDownload: (file: SheetFile) => void;
   onRename: (file: SheetFile) => void;
@@ -20,6 +21,7 @@ export default function FileGrid({
   crossDupCounts,
   selectedIds,
   selectionMode,
+  view = "grid",
   onOpen,
   onDownload,
   onRename,
@@ -31,12 +33,13 @@ export default function FileGrid({
   }
   const sorted = [...files].sort((a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0));
   return (
-    <div className="files-grid">
+    <div className={view === "list" ? "files-list" : "files-grid"}>
       {sorted.map((f, i) => (
         <FileCard
           key={f.id}
           file={f}
           recent={i === 0}
+          list={view === "list"}
           crossDupCount={crossDupCounts[f.id]}
           selected={selectedIds.has(f.id)}
           selectionMode={selectionMode}

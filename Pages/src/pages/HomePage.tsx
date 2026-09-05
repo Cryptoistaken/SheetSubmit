@@ -538,7 +538,7 @@ export default function HomePage() {
       ) : null}
 
       {tab === "files" ? <Fab onCreate={createFile} onUpload={uploadFile} /> : null}
-      <ViewSwitch view={view} setViewMode={setViewMode} />
+      {tab === "files" || tab === "archive" || tab === "admin" ? <ViewSwitch view={view} setViewMode={setViewMode} /> : null}
 
       <div
         className={`modal-overlay${renameFileId ? " open" : ""}`}

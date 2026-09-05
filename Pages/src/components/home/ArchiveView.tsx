@@ -85,40 +85,46 @@ export default function ArchiveView({
 
   const unselectAll = () => setSelected(new Set());
 
+  // Worker caps: batch-delete ≤20 ids, batch-restore ≤40 (files.ts) — chunk to fit.
+  const chunk = <T,>(arr: T[], n: number) =>
+    arr.length <= n ? [arr] : Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, (i + 1) * n));
+
+  const runBatched = async (
+    ids: string[],
+    cap: number,
+    op: (batch: string[]) => Promise<number>,
+  ): Promise<{ done: number; failed: number }> => {
+    const results = await Promise.allSettled(chunk(ids, cap).map((b) => op(b)));
+    const done = results.reduce((s, r) => s + (r.status === "fulfilled" ? r.value : 0), 0);
+    return { done, failed: results.filter((r) => r.status === "rejected").length };
+  };
+
+  const plural = (n: number) => n + " file" + (n !== 1 ? "s" : "");
+
   const restoreSelected = async () => {
     const ids = Array.from(selected);
-    const ok = await confirm(
-      "Restore " + ids.length + " file" + (ids.length > 1 ? "s" : "") + "?",
-      "Restore",
-    );
+    const ok = await confirm("Restore " + plural(ids.length) + "?", "Restore");
     if (!ok) return;
-    try {
-      await api.batchRestore(ids);
-    } catch {
-      showToast("Restore failed");
-      return;
-    }
+    const { done, failed } = await runBatched(ids, 40, async (b) => {
+      await api.batchRestore(b);
+      return b.length;
+    });
     setSelected(new Set());
     load();
-    showToast(ids.length + " file" + (ids.length > 1 ? "s" : "") + " restored");
+    showToast(failed ? "Restore failed for some files" : plural(done) + " restored");
   };
 
   const deleteSelected = async () => {
     const ids = Array.from(selected);
     const ok = await confirm(
-      "Permanently delete " + ids.length + " file" + (ids.length > 1 ? "s" : "") + "?",
+      "Permanently delete " + plural(ids.length) + "?",
       "Delete Forever",
     );
     if (!ok) return;
-    try {
-      await api.batchDelete(ids);
-    } catch {
-      showToast("Delete failed");
-      return;
-    }
+    const { done, failed } = await runBatched(ids, 20, async (b) => (await api.batchDelete(b)).deleted);
     setSelected(new Set());
     load();
-    showToast(ids.length + " file" + (ids.length > 1 ? "s" : "") + " permanently deleted");
+    showToast(failed ? "Delete failed for some files" : plural(done) + " permanently deleted");
   };
 
   if (archived === null) return null;

@@ -190,17 +190,6 @@ button, input, select, textarea {
     z-index: 1;
     animation: loginFadeIn 0.5s var(--ease-out) both;
 }
-.login-logo {
-    width: 56px;
-    height: 56px;
-    border-radius: 14px;
-    background: var(--text);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 16px;
-    box-shadow: var(--shadow-md);
-}
 .login-card h1 {
     font-size: 22px;
     font-weight: 700;
@@ -208,6 +197,12 @@ button, input, select, textarea {
     margin: 0 0 24px;
     font-family: var(--sans);
     color: var(--text);
+}
+.login-card h1 .login-title-logo {
+    width: 28px;
+    height: 28px;
+    vertical-align: -6px;
+    margin-right: 2px;
 }
 .login-card h1 .login-brand {
     color: var(--text);

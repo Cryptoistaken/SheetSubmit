@@ -209,7 +209,11 @@ export default function FileCard({
         </button>
       </div>
       {menuOpen ? createPortal(
-        <div ref={menuRef} role="menu" style={{ position: "fixed", top: menuPos.top, right: menuPos.right, minWidth: 140, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-lg)", padding: 4, display: "flex", flexDirection: "column", zIndex: 1000 }}>
+        <div ref={menuRef} role="menu" style={{ position: "fixed", top: menuPos.top, right: menuPos.right, minWidth: 140, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-lg)", padding: 4, display: "flex", flexDirection: "column", zIndex: 1000 }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onPointerMove={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}>
           <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onToggleSelect(); }}>
             <span className="home-fab-ic" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Square size={13} /></span>
             Select

@@ -11,6 +11,9 @@ const DB = "sheet-submit";
 const STORE = "avatars";
 const MAX_AGE = 7 * 24 * 3600 * 1000;
 
+// In-flight dedup: one fetch per userId across all components
+const inflight = new Map<string, Promise<Blob | null>>();
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB, 1);
@@ -54,6 +57,16 @@ async function sha256(blob: Blob): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Fetch photo + hash, shared across all callers for the same userId. */
+function fetchAvatar(photoUrl: string): Promise<Blob | null> {
+  return fetch(photoUrl)
+    .then(async (r) => {
+      if (!r.ok) return null;
+      return await r.blob();
+    })
+    .catch(() => null);
+}
+
 /** Cached-first avatar URL: paints the stored bytes instantly, then swaps
  *  to the network image only if its hash actually changed. */
 export function useAvatarUrl(
@@ -78,18 +91,22 @@ export function useAvatarUrl(
       if (!live) return;
       if (c && Date.now() - c.ts < MAX_AGE) show(c.blob);
       else setSrc(photoUrl);
-      fetch(photoUrl)
-        .then(async (r) => {
-          if (!r.ok) return;
-          const blob = await r.blob();
-          const hash = await sha256(blob);
-          if (!live) return;
-          if (!c || c.hash !== hash) {
-            await putCached({ userId, hash, blob, ts: Date.now() });
-            show(blob);
-          }
-        })
-        .catch(() => {});
+      // Dedup: reuse in-flight fetch for same userId
+      let p = inflight.get(userId);
+      if (!p) {
+        p = fetchAvatar(photoUrl);
+        inflight.set(userId, p);
+        p.finally(() => inflight.delete(userId));
+      }
+      p.then(async (blob) => {
+        if (!blob || !live) return;
+        const hash = await sha256(blob);
+        if (!live) return;
+        if (!c || c.hash !== hash) {
+          await putCached({ userId, hash, blob, ts: Date.now() });
+          show(blob);
+        }
+      });
     });
     return () => {
       live = false;

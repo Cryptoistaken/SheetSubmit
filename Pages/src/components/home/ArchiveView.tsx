@@ -7,6 +7,7 @@ import { useToast } from "@/lib/toast";
 import type { ArchiveFile } from "@/lib/types";
 
 import EmptyState from "./EmptyState";
+import PageSkeleton from "@/components/ui/page-skeleton";
 import FileCard from "./FileCard";
 
 export default function ArchiveView({
@@ -128,11 +129,7 @@ export default function ArchiveView({
   };
 
   if (archived === null) {
-    return (
-      <div role="status" aria-live="polite" aria-busy="true" style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>
-        Loading…
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

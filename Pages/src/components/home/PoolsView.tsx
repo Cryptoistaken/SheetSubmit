@@ -7,6 +7,7 @@ import { useToast } from "@/lib/toast";
 import { useProfileCache } from "@/stores/profileCache";
 import { CookieIcon, PageIcon, PasswordIcon, SearchIcon, TwoFaIcon, UnknownUserIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import EmptyState from "./EmptyState";
+import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 import DownloadDetailModal from "./DownloadDetailModal";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 
@@ -423,7 +424,7 @@ export default function PoolsView() {
       {/* user list */}
       <div className="card-list" style={{ marginTop: 12 }}>
         {detail === null ? (
-          <div role="status" aria-live="polite" aria-busy="true" style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13, border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>Loading…</div>
+          <PageSkeleton variant="list" />
         ) : filtered.length === 0 ? (
           <EmptyState title="No contributors yet" sub={search.trim() ? "No match for your search" : "Contributors appear here when they push rows"} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
         ) : filtered.map((u) => {
@@ -464,7 +465,7 @@ export default function PoolsView() {
               {expanded && (
                 <div className="file-row" style={{ padding: "4px 0 8px 42px" }}>
                   {loadingFiles && !uf ? (
-                    <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>Loading…</div>
+                    <Skeleton className="h-4 w-20" />
                   ) : !uf || uf.files.length === 0 ? (
                     <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>No files in pool</div>
                   ) : (
@@ -495,7 +496,7 @@ export default function PoolsView() {
       <div style={{ marginTop: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Recent downloads</div>
         {!downloads || downloads.length === 0 ? (
-          <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>{downloads === null ? "Loading…" : "No downloads yet"}</div>
+          downloads === null ? <Skeleton className="h-20 w-full" /> : <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>No downloads yet</div>
         ) : (
           <div className="card-list">
             {(downloads as unknown as { id: string; at: number; ts?: number; poolId: string; password: string; claimed: number; filename: string; reverted?: boolean; claimedBy?: string | null }[]).map((d) => {

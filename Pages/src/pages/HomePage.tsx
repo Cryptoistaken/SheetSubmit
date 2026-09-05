@@ -53,6 +53,7 @@ const SplitterTool = lazyRetry(() => import("@/components/tools/SplitterTool"));
 const PoolsView = lazyRetry(() => import("@/components/home/PoolsView"));
 import Fab from "@/components/home/Fab";
 import FileGrid from "@/components/home/FileGrid";
+import PageSkeleton from "@/components/ui/page-skeleton";
 import { useModalA11y } from "@/hooks/useModalA11y";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
@@ -484,9 +485,7 @@ export default function HomePage() {
             </div>
           ) : null}
           {files === null ? (
-            <div role="status" aria-live="polite" aria-busy="true" style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>
-              Loading…
-            </div>
+            <PageSkeleton />
           ) : (
             <FileGrid
               files={files}
@@ -506,7 +505,7 @@ export default function HomePage() {
 
       {tab === "archive" ? (
         <div className="home-pane" id="homePaneArchive">
-          <Suspense fallback={null}>
+          <Suspense fallback={<PageSkeleton variant="list" />}>
             <ArchiveView selected={archSel} setSelected={setArchSel} view={view} />
           </Suspense>
         </div>
@@ -519,7 +518,7 @@ export default function HomePage() {
 
       {tab === "pools" && user?.isAdmin ? (
         <div className="home-pane" id="homePanePools" style={{ padding: "24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
-          <Suspense fallback={null}>
+          <Suspense fallback={<PageSkeleton variant="list" />}>
             <PoolsView />
           </Suspense>
         </div>
@@ -527,7 +526,7 @@ export default function HomePage() {
 
       {tab === "admin" && user?.isAdmin ? (
         <div className="home-pane" id="homePaneAdmin">
-          <Suspense fallback={null}>
+          <Suspense fallback={<PageSkeleton variant="list" />}>
             <AdminView initialUserId={userId} view={view} />
           </Suspense>
         </div>
@@ -536,7 +535,7 @@ export default function HomePage() {
       {tab === "tools" && user?.isAdmin ? (
         <div className="home-pane" id="homePaneTools" style={{ padding: "32px 24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
           {path === "/tools/splitter" ? (
-            <Suspense fallback={null}>
+            <Suspense fallback={<PageSkeleton variant="list" />}>
               <SplitterTool />
             </Suspense>
           ) : (

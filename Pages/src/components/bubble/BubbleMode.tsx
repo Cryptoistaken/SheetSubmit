@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 
 import QuickEditBar from "@/components/sheet/QuickEditBar";
 import SheetGrid from "@/components/sheet/SheetGrid";
+import PageSkeleton from "@/components/ui/page-skeleton";
 import { usePersist } from "@/hooks/usePersist";
 import { toast } from "@/lib/toast";
 import { useSheetStore } from "@/stores/sheetStore";
@@ -228,7 +229,7 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
   }
 
   if (status === "loading" || status === "idle") {
-    return <div className="flex h-dvh flex-col" />;
+    return <PageSkeleton variant="sheet" className="min-h-dvh" />;
   }
 
   return (

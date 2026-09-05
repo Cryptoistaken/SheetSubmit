@@ -13,6 +13,7 @@ import type { AdminUser, ArchiveFile, SheetFile } from "@/lib/types";
 import { downloadXlsx } from "@/lib/xlsx";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import EmptyState from "./EmptyState";
+import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 import FileCard from "./FileCard";
 
 function userName(u: { name?: string; firstName?: string; lastName?: string; username?: string }): string {
@@ -222,11 +223,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   };
 
   if (initialUserId && !detailUser && users === null) {
-    return (
-      <div role="status" aria-live="polite" aria-busy="true" style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>
-        Loading…
-      </div>
-    );
+    return <PageSkeleton variant="list" />;
   }
 
   if (detailUser) {
@@ -392,7 +389,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 12, color: "var(--text3)", fontWeight: 500 }}>{users === null ? "Loading…" : `${users.length} users`}</div>
+        <div style={{ fontSize: 12, color: "var(--text3)", fontWeight: 500 }}>{users === null ? <Skeleton className="h-4 w-20" /> : `${users.length} users`}</div>
         <label style={{ position: "relative", display: "inline-flex", alignItems: "center", marginLeft: "auto" }}>
           <SearchIcon size={14} style={{ position: "absolute", left: 10, color: "var(--text3)", pointerEvents: "none" } as React.CSSProperties} />
           <input
@@ -410,9 +407,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       <div className="admin-user-list">
         {users === null
           ? (
-              <div role="status" aria-live="polite" aria-busy="true" style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>
-                Loading…
-              </div>
+              <PageSkeleton variant="list" />
             )
           : users.length === 0
             ? (

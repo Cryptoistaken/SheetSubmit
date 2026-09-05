@@ -8,6 +8,7 @@ import {
 } from "react-router";
 
 import LoginScreen from "@/components/auth/LoginScreen";
+import PageSkeleton from "@/components/ui/page-skeleton";
 
 import Topbar from "@/components/layout/Topbar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -44,7 +45,7 @@ function Layout() {
         <Topbar />
       </header>
       <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 focus:outline-none">
-        <Suspense fallback={<div className="flex h-dvh flex-col" />}>
+        <Suspense fallback={<PageSkeleton variant="list" className="min-h-full" />}>
           <Outlet />
         </Suspense>
       </main>
@@ -89,13 +90,13 @@ export default function App() {
   const { user, loading, sessionExpired } = useAuth();
   const bubbleFileId = useMemo(() => getBubbleFileId(), []);
 
-  if (loading) return <div className="flex h-dvh flex-col" />;
+  if (loading) return <PageSkeleton className="min-h-dvh" />;
 
   // Android floating-bubble mini window (?bubble=1&file=<id>) — code-split so the
   // main bundle stays lean; only loads inside the Android WebView.
   if (user && bubbleFileId) {
     return (
-      <Suspense fallback={<div className="flex h-dvh flex-col" />}>
+      <Suspense fallback={<PageSkeleton variant="sheet" className="min-h-dvh" />}>
         <BubbleMode fileId={bubbleFileId} />
       </Suspense>
     );

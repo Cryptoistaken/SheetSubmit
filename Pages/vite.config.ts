@@ -32,16 +32,23 @@ export default defineConfig({
     },
   },
   build: {
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (
-            id.includes("node_modules/react/") ||
-            id.includes("node_modules/react-dom/") ||
-            id.includes("node_modules/react-router/") ||
-            id.includes("node_modules/react-router-dom/")
-          ) {
-            return "vendor-react";
+          if (id.includes("node_modules")) {
+            if (
+              id.includes("node_modules/react/") ||
+              id.includes("node_modules/react-dom/") ||
+              id.includes("node_modules/react-router")
+            )
+              return "vendor-react";
+            if (id.includes("node_modules/boneyard-js")) return "vendor-boneyard";
+            if (id.includes("node_modules/xlsx")) return "xlsx";
+            if (id.includes("node_modules/lucide-react") || id.includes("node_modules/radix-ui"))
+              return "vendor-ui";
+            if (id.includes("node_modules/zustand")) return "vendor-state";
+            return "vendor";
           }
         },
       },

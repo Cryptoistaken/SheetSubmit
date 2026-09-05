@@ -631,12 +631,6 @@ button, input, select, textarea {
     -webkit-overflow-scrolling: touch;
 }
 .home-tabs::-webkit-scrollbar { display: none; }
-.home-tabs.sel-tabs {
-    width: 100%;
-    justify-content: space-between;
-    animation: selIn .18s var(--ease-out) both;
-}
-@keyframes selIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .home-tab.sel-danger { color: var(--red); }
 .home-tab.sel-danger:hover { background: var(--red-bg); }
 .home-tab.sel-primary { color: var(--blue); }

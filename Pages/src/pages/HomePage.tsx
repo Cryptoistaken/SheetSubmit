@@ -356,7 +356,7 @@ export default function HomePage() {
     <>
       <div id="homeTabBar">
         {tab === "files" && selectionMode ? (
-          <div className="home-tabs sel-tabs">
+          <div className="home-tabs">
             {selected.size > 2 ? (
               <button className="home-tab" onClick={unselectAll}>Unselect all</button>
             ) : null}

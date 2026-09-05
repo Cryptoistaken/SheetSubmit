@@ -14,46 +14,49 @@
 
 ### Root
 ```
-. / package.json          # orchestrator: dev:web/build/test (bun --cwd)
+. / package.json          # orchestrator: dev:web/build/typecheck/test (bun --cwd)
   AGENTS.md               # this file
   deploy.env              # gitignored — CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN
   .github/workflows/
-    build-android.yml     # APK CI only (JDK17, assembleRelease)
+    build-android.yml     # APK CI (assembleRelease + keystore-decode, release publish/changelog)
+    generate-keystore.yml # one-time Android keystore generator
   worker/                 # Cloudflare Worker (Hono + DO)
   Pages/                  # React SPA (Vite)
-  android/                # CI-only wrapper (never build locally). Config.java BASE_URL = sheetsubmit.pages.dev
+  android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev
   scripts/TestApi.ts      # live API test suite (mirrors every worker route, all must pass) — run: bun scripts/TestApi.ts (secret auto-loads from scripts/.env)
-                        #   subset: append filter — number (59), range (55-70), or name substring (claim) — e.g. `bun scripts/TestApi.ts 90-97`, `--help` for usage
+                        #   subset: TEST_FILTER env or argv — number (59), range (55-70), or name substring (claim), comma/space-combined — e.g. `bun scripts/TestApi.ts 90-97`, `bun scripts/TestApi.ts claim pools`, `--filter=`/`--only=`/`--grep=` prefixes stripped, `h`/`--help` for usage
 ```
 
 ### Worker — `worker/src/` (Hono, entry `src/index.ts`)
 ```
 index.ts              # app setup, routes, API_VERSION (bump on any route change, surfaced by /api/health),
-                      #   /api/auth/me (verifySession, adds photoUrl+isAdmin), /api/auth/logout,
-                      #   /api/auth/device/claim, /api/auth/photo/:userId (Telegram getUserProfilePhotos→getFile, 24h meta cache),
-                      #   /api/auth/turnstile-verify, /api/bot/info, ensureWebhook on first request
-lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, WORKER_URL, FRONTEND_URL, HITOOLS_CHECK_URL, TURNSTILE_SECRET, DO bindings INDEX/FILES/POOLS)
+                      #   GET /api/health, GET /api/ws/ticket + GET /ws (WS gateway via IndexDO wsTicket, x-ws-version),
+                      #   /api/auth/me (verifySession, adds photoUrl+isAdmin), POST /api/auth/logout,
+                      #   POST /api/auth/device/claim {token, turnstile} (Turnstile enforced if TURNSTILE_SECRET set),
+                      #   /api/auth/photo/:userId (Telegram getUserProfilePhotos→getFile, 24h meta cache),
+                      #   POST /api/auth/turnstile-verify, GET /api/bot/info, ensureWebhook on first request
+lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, WORKER_URL, FRONTEND_URL, HITOOLS_CHECK_URL, TURNSTILE_SECRET, TURNSTILE_SITE_KEY, DO bindings INDEX/FILES/POOLS)
 lib/session.ts        # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
 lib/do.ts             # rpc(namespace, name, op, args) — single fetch to DO
-lib/ids.ts            # genFileId, generateToken
-do/IndexDO.ts         # singleton global: users, file_index, sessions, device tokens, meta KV (SQLite).
-                      #   ops: ensureUser/user/users/adminUsers(file+archive counts)/ban/deleteUser/register/file/files(archived filter)/archive/batchArchive/purge/batchPurge/session*/device*/metaSet/metaGet/metaDel/stats
-do/FileDO.ts          # per-file: meta, rows, logs (cap 200) (SQLite). save increments seq counter. wipe returns rows before deletion for pool cleanup
+lib/photo.ts          # fetchPhotoBytes, sniffImage, refreshPhoto, photoBytes (IDs inline via crypto.randomUUID)
+do/IndexDO.ts         # singleton global: users, file_index, sessions, device tokens, meta KV, WS gateway (SQLite).
+                      #   ops: ensureUser/user/users/adminUsers(file+archive counts)/ban/deleteUser/register/file/files(archived filter)/archive/batchArchive/purge/batchPurge/allFiles/session/getSession/deleteSession/deviceSet/deviceGet/deviceDelete/deviceByChat/wsTicket/deviceSession/metaSet/metaGet/metaGetMany/metaDel/stats + wsUpgrade/webSocketMessage/handleClientOp (pools.list, pool.claim, admin.*, wa.cache…)
+do/FileDO.ts          # per-file: init/meta/seq/rows/full/save/getLogs(200 cap)/wipe (SQLite). save increments seq counter. wipe returns rows before deletion for pool cleanup
 do/PoolDO.ts          # per-pool-password: pool_rows, ledger, downloads (SQLite).
-                      #   ops: add/counts/detail/claim(records download, returns downloadId)/downloads/download/revertDownload/revert/removeAvailable/ledger
+                      #   ops: add/counts/detail/claim(records download, returns downloadId+filename)/verifiedCounts(+pageCounts alias)/userFiles/downloads/download/downloadDetail/revertDownload/revert/removeAvailable/ledger
 routes/files.ts       # files router (GET/POST /, PUT/:id, DELETE/:id=archive, PUT/:id/persist|append (feeds pools), GET/:id/rows|full)
                       #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup)
                       #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
-routes/pools.ts       # admin: GET / (PoolSummary[]), GET|POST /downloads, GET|POST /downloads/:id (xlsx blob / revert),
-                      #   GET /:pwd/:pool (PoolDetail), /rows (paginated), /ledger, POST /:pwd/:pool/claim (→ downloadId+filename)
+routes/pools.ts       # admin: GET / (PoolSummary[]), GET /downloads, GET /downloads/:id/detail, GET /downloads/:id (xlsx blob, ?format=json), POST /downloads/:id/revert,
+                      #   GET /:pwd/:pool (PoolDetail), /rows (paginated+verifiedOnly/unverifiedOnly), /ledger, /verified-counts, /page-counts (alias), /user-files, POST /:pwd/:pool/claim (→ downloadId+filename), POST /:pwd/:pool/revert
 routes/admin.ts       # GET /stats, /users, /users/search, /user/:id (+files), /user/:id/archive, /file/:id,
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist,
-                      #   POST /user/:id/ban|unban, POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id
-routes/wa.ts          # POST /fb/check (check.fb.tools proxy), /fb/page-check + /fb/wa-check (FB graphql ports),
+                      #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id
+routes/wa.ts          # POST /fb/check (check.fb.tools proxy), /fb/page-check + /fb/wa-check (FB graphql ports, requireAuth),
                       #   GET /wa/cache?uids= (meta-backed, eligible-only, 24h TTL)
-routes/bot.ts         # ensureWebhook, POST /webhook/tg (handleBotUpdate), GET /bot/info
+routes/bot.ts         # ensureWebhook, POST /webhook/tg (handleBotUpdate) — GET /bot/info lives in index.ts
 scheduled.ts          # cron: ensureWebhook
-wrangler.jsonc         # DO bindings INDEX/FILES/POOLS, cron 0 */6 * * *, vars
+wrangler.jsonc         # DO bindings INDEX/FILES/POOLS, cron 0 */6 * * *, vars (FRONTEND_URL/HITOOLS_CHECK_URL/WORKER_URL)
 ```
 
 ### Pages — `Pages/src/` (Vite 8, entry `main.tsx`)
@@ -61,28 +64,30 @@ wrangler.jsonc         # DO bindings INDEX/FILES/POOLS, cron 0 */6 * * *, vars
 main.tsx              # StrictMode, Toast>Confirm>Auth>App
 App.tsx               # createBrowserRouter: Layout (Topbar+Outlet); gate: bubble mode vs LoginScreen vs RouterProvider
 index.css / app.css   # tailwind v4 + shadcn + geist + legacy styles
-vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000
+vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000 + /ws (ws:true), boneyardPlugin, vendor-react chunk
 components.json       # shadcn Nova, neutral, cssVariables, lucide
-pages/HomePage.tsx    # /,/files,/archive,/pools/:password/:poolId,/admin,/tools
+pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/tools (+/pools redirect, /tools/splitter, /admin/user/:userId, /bubble-design)
 pages/SheetPage.tsx   # /file/:id + /admin/user/:userId/file/:fileId
-pages/AdminPage.tsx / BubbleDesignPage.tsx
-components/layout/Topbar.tsx + OfflineBanner.tsx
-components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, Fab.tsx
+pages/AdminPage.tsx (empty stub) / BubbleDesignPage.tsx   # AdminPage logic lives in components/home/AdminView.tsx
+components/layout/Topbar.tsx
+components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, Fab.tsx, EmptyState.tsx, DownloadDetailModal.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
-components/auth/LoginScreen.tsx    # Telegram bot login, lazy did, 10s+60s claim poll, focus-only
-components/ui/button.tsx           # shadcn cva variants
-contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect
+components/auth/LoginScreen.tsx    # Telegram bot login + Turnstile widget, WS claimed fast-path, lazy did, 10s+60s claim poll, focus-only
+components/ui/button.tsx, avatar.tsx  # shadcn cva variants
+contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, WS connect, retry 3×1.5s
 stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection
 stores/bubbleStore.ts     # {on, pickMode}
+stores/profileCache.ts    # profile cache (WS-fed)
 hooks/useUndoRedo.ts, usePersist.ts (beforeunload→flushPersist), useModalA11y.ts
 lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, files/persist/append/WA/admin/pools, me/logout/botInfo/claimDeviceSession
+lib/ws.ts                 # wsConnect/wsCall/wsOn (WS gateway client)
 lib/types.ts              # FileType, ColumnDef, SheetFile, Row
 lib/xlsx.ts               # importXlsx/buildXlsx/downloadXlsx/parseSheetRows
 lib/downloadOpts.ts       # buildDownloadOpts counts
-lib/utils.ts (cn), theme.ts, device.ts, toast.tsx, confirm.tsx
+lib/utils.ts (cn), theme.ts, device.ts, toast.tsx, confirm.tsx, avatarCache.ts (useAvatarUrl)
 features/filetypes/index.ts, fbcookie.ts, validation.ts, totp.ts
-public/config.js          # injected at runtime: window.APP_CONFIG={apiBase:""}
+public/config.js          # injected at runtime: window.APP_CONFIG={apiBase:"", wsBase:"https://…workers.dev"}
 functions/api/[[path]].ts # Pages Functions proxy → BACKEND_URL
 functions/webhook/[[path]].ts
 ```
@@ -96,7 +101,7 @@ functions/webhook/[[path]].ts
    - Valid → 200 user JSON → set user.
 4. LoginScreen: fetch bot info → generate `did` → show "Open Telegram" link.
 5. User opens Telegram bot → `/start login_<did>` → bot stores `device:<did>` → webhook sets session.
-6. LoginScreen polls `GET /api/auth/device/claim?token=<did>`: waits 10s, then 1/s for 60s, **only while tab focused**.
+6. LoginScreen: WS `claim.watch` fast-path (`claimed` push → `POST /api/auth/device/claim {token, turnstile}`) + fallback poll: waits 10s, then 1/s for 60s, **only while tab focused** (Turnstile token required in body).
 7. On success → set `ss_had_session` flag, reload → AuthContext picks up cookie.
 8. On timeout → show "Recheck login" button → regenerates did, restarts flow.
 

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { api, type AppendOp, type AppendPayload } from "@/lib/api";
 import {
-  fileTypeDef,
+  fileColumns,
   isNo2FAMark,
   NO_2FA_MARK,
   type ColumnDef,
@@ -460,7 +460,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       const f = full.file;
       if (!f?.id) throw new Error("File not found");
       if (seq !== openSeq) return;
-      const columns = f.columns ?? fileTypeDef(f.type).columns;
+      const columns = fileColumns(f);
       let visibleCols = new Set<string>(columns.map((c) => c.key));
       try {
         const saved = localStorage.getItem(`ss_cols_${id}`);
@@ -573,7 +573,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       ]);
       if (!f?.id) throw new Error("File not found");
       if (seq !== openSeq) return;
-      const columns = f.columns ?? fileTypeDef(f.type).columns;
+      const columns = fileColumns(f);
       let visibleCols = new Set<string>(columns.map((c) => c.key));
       try {
         const saved = localStorage.getItem(`ss_cols_${id}`);
@@ -738,7 +738,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const run = async () => {
       const s = get();
       if (!s.fileId || !s.file) return;
-      const columns = fileTypeDef(s.file.type).columns;
+      const columns = fileColumns(s.file);
       let dataCount = 0;
       let lastData = -1;
       s.rows.forEach((row, idx) => {
@@ -834,7 +834,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
               const f = fresh.file;
               const cur = get();
               if (!f?.id || cur.fileId !== s.fileId) return;
-              const freshCols = fileTypeDef(f.type).columns;
+              const freshCols = fileColumns(f);
               const rows: Row[] = [...(fresh.rows ?? [])];
               while (rows.length < 100) rows.push(makeEmptyRow(freshCols));
               s.changeJournal.forEach((op) => {
@@ -2151,10 +2151,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   bubbleGetActiveRow: () => {
     const s = get();
-    const isCookieOnly =
-      s.file?.preset === "cookie" ||
-      s.file?.poolKind === "cookie" ||
-      (s.file?.columns ? !s.file.columns.some((c) => c.key === "twofakey") : false);
+    const isCookieOnly = !fileColumns(s.file).some((c) => c.key === "twofakey");
     const complete = (r: Row) =>
       isCookieOnly ? !!r.cookies : !!(r.cookies && r.twofakey);
     // Keep the current in-progress row (missing cookie or missing key).
@@ -2200,10 +2197,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       toast("Duplicate @ " + (dupe + 1));
       return;
     }
-    const isCookieOnly =
-      s.file?.preset === "cookie" ||
-      s.file?.poolKind === "cookie" ||
-      (s.file?.columns ? !s.file.columns.some((c) => c.key === "twofakey") : false);
+    const isCookieOnly = !fileColumns(s.file).some((c) => c.key === "twofakey");
     const idx = get().bubbleGetActiveRow();
     if (!isCookieOnly && s.rows[idx].cookies) {
       // Row already has a cookie — this paste was NOT saved (it's a cookie,
@@ -2259,10 +2253,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   bubbleSaveKey: async (text) => {
     const s = get();
-    const isCookieOnly =
-      s.file?.preset === "cookie" ||
-      s.file?.poolKind === "cookie" ||
-      (s.file?.columns ? !s.file.columns.some((c) => c.key === "twofakey") : false);
+    const isCookieOnly = !fileColumns(s.file).some((c) => c.key === "twofakey");
     if (isCookieOnly) return;
     const key = normalizeBubbleKey(text);
     if (bubbleKeyIndex(s.rows).has(key)) {
@@ -2319,10 +2310,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   bubbleSkipNo2FA: () => {
     const s = get();
-    const isCookieOnly =
-      s.file?.preset === "cookie" ||
-      s.file?.poolKind === "cookie" ||
-      (s.file?.columns ? !s.file.columns.some((c) => c.key === "twofakey") : false);
+    const isCookieOnly = !fileColumns(s.file).some((c) => c.key === "twofakey");
     if (isCookieOnly) return;
     const idx = s.bubbleActiveRow >= 0 ? s.bubbleActiveRow : s.bubbleGetActiveRow();
     const row = s.rows[idx];
@@ -2402,7 +2390,7 @@ async function refreshCrossDups(fileId: string | null) {
 function trimMemoryRows() {
   const s = useSheetStore.getState();
   if (!s.fileId || !s.file) return;
-  const columns = fileTypeDef(s.file.type).columns;
+  const columns = fileColumns(s.file);
   useSheetStore.setState((prev) => {
     if (prev.isDirty) return {};
     let lastData = -1;

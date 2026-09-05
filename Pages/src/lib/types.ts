@@ -84,6 +84,19 @@ export function fileTypeDef(type?: string): FileTypeDef {
   return (type && t in FILE_TYPE_DEFS ? FILE_TYPE_DEFS[t] : FILE_TYPE_DEFS.fb_cookie);
 }
 
+/** Columns for a file: stored columns first, else preset-derived (cookie files
+ * never get a 2fa column), else name-derived, else the type default. */
+export function fileColumns(f?: { columns?: ColumnDef[]; preset?: string; poolKind?: string; name?: string; type?: string } | null): ColumnDef[] {
+  if (f?.columns?.length) return f.columns;
+  const preset = (f?.preset ?? f?.poolKind) as FilePreset | undefined;
+  if (preset && preset in COLUMN_PRESETS) return COLUMN_PRESETS[preset];
+  const name = (f?.name ?? "").toLowerCase();
+  if (name.startsWith("cookie")) return COLUMN_PRESETS.cookie;
+  if (name.startsWith("2fa")) return COLUMN_PRESETS.combo;
+  if (name.startsWith("page")) return COLUMN_PRESETS.page;
+  return fileTypeDef(f?.type).columns;
+}
+
 /** Marker the bubble writes into the 2fa cell when the user long-press-skips
  * 2FA ("set empty by the bubble action"). Display-only — never exported. */
 export const NO_2FA_MARK = "No_2Fa";

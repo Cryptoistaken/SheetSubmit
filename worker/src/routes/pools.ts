@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/shared";
 import { requireAuth, isAdmin } from "../lib/session";
 import { rpc } from "../lib/do";
+import { checkRate, ipKey } from "../lib/rateLimit";
 export const pools = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 function admin(c: any) { return isAdmin(c.env, c.get("uid")); }
 const PASSWORDS = ["dgddigital", "L0VE@12345"];
@@ -27,7 +28,11 @@ const detailRows = async (c: any, password: string, pool: string) => rpc(c.env.P
 pools.use("/*", requireAuth);
 const DL_PASSWORDS = ["dgddigital", "L0VE@12345"];
 const dlMeta = (m: any) => ({ id: m.id, at: m.ts, claimedBy: m.claimedBy, password: m.password, poolId: m.poolId || m.pool_id, claimed: m.claimed, filename: m.filename, reverted: !!m.reverted });
-const findDownload = async (c: any, id: string) => { for (const pwd of DL_PASSWORDS) { const d: any = await rpc(c.env.POOLS, pwd, "download", { id }).catch(() => null); if (d) return { ...d, password: pwd }; } return null; };
+const findDownload = async (c: any, id: string) => {
+  const results = await Promise.all(DL_PASSWORDS.map((pwd) => rpc(c.env.POOLS, pwd, "download", { id }).catch(() => null) as any));
+  for (let i = 0; i < results.length; i++) if (results[i]) return { ...results[i], password: DL_PASSWORDS[i] };
+  return null;
+};
 pools.get("/downloads", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const results = await Promise.all(DL_PASSWORDS.map((pwd) => rpc(c.env.POOLS, pwd, "downloads").catch(() => ({ downloads: [] })))); const all = results.flatMap((r, i) => (r.downloads || []).map((d: any) => dlMeta({ ...d, password: DL_PASSWORDS[i] }))); all.sort((a, b) => b.at - a.at); return c.json(all.slice(0, 50)); });
 pools.get("/downloads/:id/detail", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
@@ -44,8 +49,8 @@ pools.post("/downloads/:id/revert", async (c) => { if (!admin(c)) return c.json(
 pools.get("/", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const out = await Promise.all(PASSWORDS.flatMap((pwd) => POOL_IDS.map(async (pid) => {
-    const s = summarize(await detailRows(c, pwd, pid));
-    return { id: pid, ...META[pid], password: pwd, available: s.available, claimed: s.claimed, users: s.users.length };
+    const st: any = await rpc(c.env.POOLS, pwd, "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0 }));
+    return { id: pid, ...META[pid], password: pwd, available: st.available, claimed: st.claimed, users: st.users };
   })));
   return c.json({ pools: out });
 });
@@ -98,11 +103,13 @@ pools.get("/:password/:pool", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const pid = c.req.param("pool");
   if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
-  const s = summarize(await detailRows(c, c.req.param("password"), pid));
-  return c.json({ pool: { id: pid, ...META[pid] }, password: c.req.param("password"), totals: { available: s.available, claimed: s.claimed, users: s.users.length }, users: s.users });
+  const st: any = await rpc(c.env.POOLS, c.req.param("password"), "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0 }));
+  const rows: any[] = await detailRows(c, c.req.param("password"), pid).catch(() => []) as any; const summ = summarize(rows);
+  return c.json({ pool: { id: pid, ...META[pid] }, password: c.req.param("password"), totals: { available: st.available, claimed: st.claimed, users: st.users }, users: summ.users });
 });
 pools.post("/:password/:pool/claim", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
+  if (!checkRate(ipKey(c, "pool.claim"), 10, 60000)) return c.json({ error: "rate limited" }, 429);
   const pid = c.req.param("pool");
   const pwd = c.req.param("password");
   if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);

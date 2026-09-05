@@ -47,7 +47,7 @@ async function removePoolRows(env: Env, password: string, rows: Row[], uid: stri
   const preset = file ? resolvePreset(file) : null;
   const byPool = new Map<string, Set<string>>();
   rows.forEach((row) => { const pool = poolForRowWithPreset(row, preset); if (!pool) return; const key = poolId(row); if (key) (byPool.get(pool) || byPool.set(pool, new Set()).get(pool)!).add(key); });
-  await Promise.all([...byPool].map(([pool, keys]) => rpc(env.POOLS, password, "removeAvailable", { pool, keys: [...keys], uid }).catch(() => {})));
+  await Promise.all([...byPool].map(([pool, keys]) => rpc(env.POOLS, password, "removeAvailable", { pool, keys: [...keys], uid }).catch((e: any) => console.error("removeAvailable failed", pool, e?.message ?? e))));
 }
 const PASSWORDS = ["dgddigital", "L0VE@12345"];
 const POOL_IDS = ["cookies_only", "cookies_2fa", "page"] as const;
@@ -72,7 +72,11 @@ export class IndexDO {
   constructor(private readonly state: DurableObjectState, private readonly env: Env) { state.blockConcurrencyWhile(async () => { const s = state.storage.sql; s.exec("CREATE TABLE IF NOT EXISTS users (user_id TEXT PRIMARY KEY, name TEXT, username TEXT, photo_url TEXT, banned INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS file_index (file_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, exp INTEGER NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)"); }); }
   async fetch(req: Request) {
     if ((req.headers.get("Upgrade") || "").toLowerCase() === "websocket") return this.wsUpgrade(req);
-    const { op, args = {} } = await req.json() as Op; const s = this.state.storage.sql; switch (op) {
+    let body: any; try { body = await req.json(); } catch { return Response.json({ error: "invalid json" }, { status: 400 }); }
+    const op = body?.op; const args = body?.args ?? {};
+    if (typeof op !== "string" || !op || op.length > 64) return Response.json({ error: "invalid op" }, { status: 400 });
+    if (typeof args !== "object" || args === null || Array.isArray(args)) return Response.json({ error: "invalid args" }, { status: 400 });
+    const s = this.state.storage.sql; switch (op) {
     case "ensureUser": s.exec("INSERT INTO users(user_id,name,username,photo_url,created_at) VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,username=excluded.username,photo_url=excluded.photo_url", args.id, args.name || "", args.username || "", args.photoUrl || null, Date.now()); return Response.json({ ok: true });
     case "user": return Response.json(s.exec("SELECT * FROM users WHERE user_id=?", args.id).toArray()[0] || null);
     case "users": return Response.json(s.exec("SELECT * FROM users ORDER BY created_at DESC").toArray());
@@ -163,7 +167,7 @@ export class IndexDO {
         const file: SheetFile = { id: crypto.randomUUID().replaceAll("-", "").slice(0, 12), name: String(body.name || "Untitled"), type: body.type === "fb_cookie" ? "fb_cookie" : "fb_cookie", ...(preset ? { preset, poolKind: preset } : {}), password: String(body.password || "dgddigital"), poolEnabled: body.poolEnabled !== false, ...(Array.isArray(body.columns) ? { columns: body.columns } : {}), createdAt: Date.now(), updatedAt: Date.now(), rowCount: rows.length, dataCount: body.dataCount ?? 0, lastAction: "created" } as any; Object.assign(file, ldCounts(rows));
         s.exec("INSERT OR REPLACE INTO file_index(file_id,owner_id,archived,data) VALUES(?,?,?,?)", file.id, att.uid!, 0, JSON.stringify(file));
         await rpc(this.env.FILES, file.id, "init", { file, rows });
-        if (rows.length && (file as any).poolEnabled !== false && (file as any).password) { const preset2 = resolvePreset(file); await rpc(this.env.POOLS, (file as any).password, "add", { rows, uid: att.uid!, srcUid: att.uid!, srcFileId: file.id, preset: preset2, poolKind: preset2 }).catch(() => {}); }
+        if (rows.length && (file as any).poolEnabled !== false && (file as any).password) { const preset2 = resolvePreset(file); await rpc(this.env.POOLS, (file as any).password, "add", { rows, uid: att.uid!, srcUid: att.uid!, srcFileId: file.id, preset: preset2, poolKind: preset2 }).catch((e: any) => console.error("pool add failed", e?.message ?? e)); }
         return file;
       }
       case "file.update": {
@@ -189,20 +193,19 @@ export class IndexDO {
         const id = String(args.id || ""); const row: any = s.exec("SELECT data,owner_id,archived FROM file_index WHERE file_id=?", id).toArray()[0]; if (!row || row.owner_id !== att.uid! || row.archived) throw new Error("file not found");
         const file: any = JSON.parse(row.data); const payload: any = args.payload || {}; const rows: Row[] = payload.rows || []; Object.assign(file, ldCounts(rows)); if (payload.dataCount !== undefined) file.dataCount = payload.dataCount; file.rowCount = rows.length; file.updatedAt = Date.now(); file.lastAction = "modified";
         const saved: any = await rpc(this.env.FILES, id, "save", { file, rows, action: payload.action || "edit" }); s.exec("INSERT OR REPLACE INTO file_index(file_id,owner_id,archived,data) VALUES(?,?,?,?)", file.id, att.uid!, 0, JSON.stringify(file));
-        if ((file as any).poolEnabled !== false && (file as any).password) { const preset = resolvePreset(file); await rpc(this.env.POOLS, file.password, "add", { rows, uid: att.uid!, srcUid: att.uid!, srcFileId: file.id, preset, poolKind: preset }).catch(() => {}); }
+        if ((file as any).poolEnabled !== false && (file as any).password) { const preset = resolvePreset(file); await rpc(this.env.POOLS, file.password, "add", { rows, uid: att.uid!, srcUid: att.uid!, srcFileId: file.id, preset, poolKind: preset }).catch((e: any) => console.error("pool add failed", e?.message ?? e)); }
         return { ok: true, seq: saved.seq, file };
       }
       case "file.append": {
         const id = String(args.id || ""); const row: any = s.exec("SELECT data,owner_id,archived FROM file_index WHERE file_id=?", id).toArray()[0]; if (!row || row.owner_id !== att.uid! || row.archived) throw new Error("file not found");
         const payload: any = args.payload || {}; if (!Number.isInteger(payload.base) || !Array.isArray(payload.ops) || payload.ops.length > 10000) throw new Error("invalid append payload");
         const file: any = JSON.parse(row.data);
-        const rows: Row[] = await rpc(this.env.FILES, id, "rows") as Row[];
-        const seqObj: any = await rpc(this.env.FILES, id, "seq"); if (payload.base !== seqObj.seq) throw new Error("version conflict");
-        for (const op of payload.ops) { while (rows.length <= op.rowIdx) rows.push({}); rows[op.rowIdx] = { ...rows[op.rowIdx], ...op.cols }; }
-        Object.assign(file, ldCounts(rows)); file.rowCount = rows.length; file.updatedAt = Date.now(); file.lastAction = "modified";
-        const saved: any = await rpc(this.env.FILES, id, "save", { file, rows, action: payload.action || "append" }); s.exec("INSERT OR REPLACE INTO file_index(file_id,owner_id,archived,data) VALUES(?,?,?,?)", file.id, att.uid!, 0, JSON.stringify(file));
-        if ((file as any).poolEnabled !== false && (file as any).password) { const preset = resolvePreset(file); await rpc(this.env.POOLS, file.password, "add", { rows, uid: att.uid!, srcUid: att.uid!, srcFileId: file.id, preset, poolKind: preset }).catch(() => {}); }
-        return { ok: true, seq: saved.seq, file };
+        let saved: any;
+        try { saved = await rpc(this.env.FILES, id, "append", { base: payload.base, ops: payload.ops, file, action: payload.action || "append", dataCount: payload.dataCount }); } catch (e: any) { if (String(e?.message ?? e).includes("409") || String(e?.message ?? e).includes("version conflict")) throw new Error("version conflict"); throw e; }
+        if (saved?.error) throw new Error(saved.error);
+        const updated = saved.file ?? file; s.exec("INSERT OR REPLACE INTO file_index(file_id,owner_id,archived,data) VALUES(?,?,?,?)", id, att.uid!, 0, JSON.stringify(updated));
+        if ((updated as any).poolEnabled !== false && (updated as any).password) { const preset = resolvePreset(updated); const rows: Row[] = saved.rows ?? []; const feedRows = rows.length ? rows : await rpc(this.env.FILES, id, "rows").catch(() => []) as Row[]; await rpc(this.env.POOLS, (updated as any).password, "add", { rows: feedRows, uid: att.uid!, srcUid: att.uid!, srcFileId: id, preset, poolKind: preset }).catch((e: any) => console.error("pool add failed", e?.message ?? e)); }
+        return { ok: true, seq: saved.seq, file: updated };
       }
       case "archive.list": return s.exec("SELECT data FROM file_index WHERE owner_id=? AND archived=1", att.uid!).toArray().map((r: any) => JSON.parse(r.data));
       case "archive.restore": {
@@ -238,8 +241,8 @@ export class IndexDO {
           if (targetType && typeKey !== targetType) continue;
           const tf = byType[typeKey]; if (tf.length < 2) continue;
           const uidMap: Record<string, any[]> = {};
-          const rowsByFile = await Promise.all(tf.map((f) => rpc(this.env.FILES, f.id, "rows") as Promise<Row[]>));
-          rowsByFile.forEach((rows, i) => rows.forEach((row, ri) => { const dk = poolId(row); if (!dk) return; (uidMap[dk] ||= []).push({ fileId: tf[i].id, fileName: tf[i].name, rowIdx: ri }); }));
+          const keysByFile = await Promise.all(tf.map((f) => rpc(this.env.FILES, f.id, "dupKeys", { limit: 10000 }) as Promise<{ k: string; i: number }[]>));
+          keysByFile.forEach((keys, i) => keys.forEach(({ k, i: ri }) => { const dk = k; if (!dk) return; (uidMap[dk] ||= []).push({ fileId: tf[i].id, fileName: tf[i].name, rowIdx: ri }); }));
           for (const dk in uidMap) if (uidMap[dk].length > 1) { allDups[dk] = uidMap[dk]; for (const e of uidMap[dk]) counts[e.fileId]++; }
         }
         if (fileIdQ) { const filtered: any = {}; for (const dk in allDups) if (allDups[dk].some((e: any) => e.fileId === fileIdQ)) filtered[dk] = allDups[dk]; return { counts, dups: filtered }; }
@@ -248,20 +251,21 @@ export class IndexDO {
       case "pools.list": {
         requireAdmin();
         const out = await Promise.all(PASSWORDS.flatMap((pwd) => POOL_IDS.map(async (pid) => {
-          const rows: any[] = await rpc(this.env.POOLS, pwd, "detail", { pool: pid }) as any; const summ = summarize(rows); return { id: pid, ...META[pid], password: pwd, available: summ.available, claimed: summ.claimed, users: summ.users.length };
+          const st: any = await rpc(this.env.POOLS, pwd, "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0 }));
+          return { id: pid, ...META[pid], password: pwd, available: st.available, claimed: st.claimed, users: st.users };
         })));
         return { pools: out };
       }
       case "pool.detail": {
         requireAdmin(); const pwd = String(args.password || ""); const pid = String(args.poolId || args.pool || ""); if (!isPool(pid)) throw new Error("invalid poolId"); if (!pwd || pwd.length > 64) throw new Error("invalid password");
-        const rows: any[] = await rpc(this.env.POOLS, pwd, "detail", { pool: pid }) as any; const summ = summarize(rows); return { pool: { id: pid, ...META[pid] }, password: pwd, totals: { available: summ.available, claimed: summ.claimed, users: summ.users.length }, users: summ.users };
+        const st: any = await rpc(this.env.POOLS, pwd, "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0 }));
+        const rows: any[] = await rpc(this.env.POOLS, pwd, "detail", { pool: pid }).catch(() => []) as any; const summ = summarize(rows);
+        return { pool: { id: pid, ...META[pid] }, password: pwd, totals: { available: st.available, claimed: st.claimed, users: st.users }, users: summ.users };
       }
       case "pool.rows": {
         requireAdmin(); const pid = String(args.poolId || args.pool || ""); const pwd = String(args.password || ""); if (!isPool(pid)) throw new Error("invalid poolId"); if (!pwd || pwd.length > 64) throw new Error("invalid password");
         const limit = Math.min(1000, Math.max(1, Number(args.limit) || 100)); const offset = Math.max(0, Number(args.offset) || 0);
         const rawUser = String(args.userId || args.srcUid || ""); const rawFile = String(args.fileId || args.srcFileId || "");
-        const vOnly = args.verifiedOnly ? "true" : args.vOnly ? String(args.vOnly) : undefined; const uvOnly = args.unverifiedOnly ? "true" : undefined;
-        // args may contain verifiedOnly as boolean
         const verifiedOnly = !!args.verifiedOnly; const unverifiedOnly = !!args.unverifiedOnly;
         if (verifiedOnly && unverifiedOnly) throw new Error("verifiedOnly and unverifiedOnly are mutually exclusive");
         if ((verifiedOnly || unverifiedOnly) && pid !== "page") throw new Error("verified filters only for page pool");
@@ -294,13 +298,16 @@ export class IndexDO {
       case "pool.downloads": { requireAdmin(); const results = await Promise.all(DL_PASSWORDS.map((pwd) => rpc(this.env.POOLS, pwd, "downloads").catch(() => ({ downloads: [] })) as any)); const all = results.flatMap((r: any, i) => (r.downloads || []).map((d: any) => dlMeta({ ...d, password: DL_PASSWORDS[i] }))); all.sort((a, b) => b.at - a.at); return all.slice(0, 50); }
       case "pool.downloadDetail": {
         requireAdmin(); const id = String(args.id || ""); if (!id || id.length > 128) throw new Error("invalid id");
-        const find = async (fid: string) => { for (const pwd of DL_PASSWORDS) { const d: any = await rpc(this.env.POOLS, pwd, "download", { id: fid }).catch(() => null); if (d) return { ...d, password: pwd }; } return null; };
-        const d: any = await find(id); if (!d) throw new Error("not found");
+        const results = await Promise.all(DL_PASSWORDS.map((pwd) => rpc(this.env.POOLS, pwd, "download", { id }).catch(() => null) as any));
+        let d: any = null; for (let i = 0; i < results.length; i++) if (results[i]) { d = { ...results[i], password: DL_PASSWORDS[i] }; break; }
+        if (!d) throw new Error("not found");
         const detail: any = await rpc(this.env.POOLS, d.password, "downloadDetail", { id: d.id }).catch(() => null); if (!detail) throw new Error("not found");
         return { ...dlMeta({ ...detail, password: d.password }), rows: detail.rows, keys: detail.keys, groups: detail.groups ?? [] };
       }
       case "pool.revertDownload": {
-        requireAdmin(); const id = String(args.id || ""); const find2 = async (fid: string) => { for (const pwd of DL_PASSWORDS) { const d: any = await rpc(this.env.POOLS, pwd, "download", { id: fid }).catch(() => null); if (d) return { ...d, password: pwd }; } return null; }; const d: any = await find2(id); if (!d) throw new Error("not found"); return await rpc(this.env.POOLS, d.password, "revertDownload", { id: d.id, uid: att.uid! });
+        requireAdmin(); const id = String(args.id || ""); const results = await Promise.all(DL_PASSWORDS.map((pwd) => rpc(this.env.POOLS, pwd, "download", { id }).catch(() => null) as any));
+        let d: any = null; for (let i = 0; i < results.length; i++) if (results[i]) { d = { ...results[i], password: DL_PASSWORDS[i] }; break; }
+        if (!d) throw new Error("not found"); return await rpc(this.env.POOLS, d.password, "revertDownload", { id: d.id, uid: att.uid! });
       }
       case "admin.stats": { requireAdmin(); return { totalUsers: Number(s.exec("SELECT COUNT(*) n FROM users").toArray()[0].n), totalFiles: Number(s.exec("SELECT COUNT(*) n FROM file_index WHERE archived=0").toArray()[0].n) }; }
       case "admin.users": { requireAdmin(); const rows = s.exec("SELECT * FROM users ORDER BY created_at DESC").toArray() as any[]; const counts = s.exec("SELECT owner_id, SUM(CASE WHEN archived=0 THEN 1 ELSE 0 END) fc, SUM(CASE WHEN archived=1 THEN 1 ELSE 0 END) ac FROM file_index GROUP BY owner_id").toArray() as any[]; const byOwner = new Map(counts.map((r: any) => [r.owner_id, { fc: Number(r.fc), ac: Number(r.ac) }])); const users = rows.map((u) => ({ ...u, fileCount: byOwner.get(u.user_id)?.fc || 0, archivedCount: byOwner.get(u.user_id)?.ac || 0 })); return users.map((u) => shapeUser(this.env as any, u)); }
@@ -313,7 +320,7 @@ export class IndexDO {
       case "admin.file.update": {
         requireAdmin(); const fid = String(args.fileId || ""); const found: any = s.exec("SELECT data,owner_id FROM file_index WHERE file_id=?", fid).toArray()[0]; if (!found) throw new Error("file not found");
         const file: any = JSON.parse(found.data); const body: any = args.data || {}; for (const k of ["name", "type", "columns", "password", "poolEnabled"]) if (k in body) file[k] = body[k]; file.updatedAt = Date.now(); file.lastAction = "modified";
-        const rows = await rpc(this.env.FILES, fid, "rows") as any[]; Object.assign(file, ldCounts(rows)); await rpc(this.env.FILES, fid, "save", { file, rows }); s.exec("UPDATE file_index SET data=? WHERE file_id=?", JSON.stringify(file), fid); return file;
+        await rpc(this.env.FILES, fid, "save", { file }); s.exec("UPDATE file_index SET data=? WHERE file_id=?", JSON.stringify(file), fid); return file;
       }
       case "admin.file.delete": { requireAdmin(); const fid = String(args.fileId || ""); const found: any = s.exec("SELECT data FROM file_index WHERE file_id=?", fid).toArray()[0]; if (!found) throw new Error("file not found"); const file: any = JSON.parse(found.data); file.deletedAt = Date.now(); file.lastAction = "archived"; s.exec("UPDATE file_index SET archived=?,data=? WHERE file_id=?", 1, JSON.stringify(file), fid); return { ok: true }; }
       case "admin.file.rows": { requireAdmin(); return await rpc(this.env.FILES, String(args.fileId || ""), "rows"); }

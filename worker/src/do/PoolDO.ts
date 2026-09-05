@@ -13,13 +13,15 @@ export class PoolDO {
       s.exec("CREATE TABLE IF NOT EXISTS pool_rows(pool_id TEXT NOT NULL, row_key TEXT NOT NULL, data TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'available', claimed_by TEXT, claimed_at INTEGER, PRIMARY KEY(pool_id,row_key)) WITHOUT ROWID");
       s.exec("CREATE TABLE IF NOT EXISTS ledger(id INTEGER PRIMARY KEY AUTOINCREMENT,pool_id TEXT,row_key TEXT,user_id TEXT,action TEXT,ts INTEGER)");
       s.exec("CREATE TABLE IF NOT EXISTS downloads(id TEXT PRIMARY KEY,pool_id TEXT NOT NULL,claimed_by TEXT,claimed INTEGER NOT NULL DEFAULT 0,filename TEXT,keys TEXT NOT NULL,rows TEXT NOT NULL DEFAULT '[]',reverted INTEGER NOT NULL DEFAULT 0,ts INTEGER NOT NULL)");
-      // ponytail: safe ALTER — ignores if column already exists
       try { s.exec("ALTER TABLE pool_rows ADD COLUMN src_uid TEXT"); } catch {}
       try { s.exec("ALTER TABLE pool_rows ADD COLUMN src_file_id TEXT"); } catch {}
     });
   }
   async fetch(req: Request) {
-    const { op, args = {} } = await req.json() as any;
+    let body: any; try { body = await req.json(); } catch { return Response.json({ error: "invalid json" }, { status: 400 }); }
+    const op = body?.op; const args = body?.args ?? {};
+    if (typeof op !== "string" || !op || op.length > 64) return Response.json({ error: "invalid op" }, { status: 400 });
+    if (typeof args !== "object" || args === null || Array.isArray(args)) return Response.json({ error: "invalid args" }, { status: 400 });
     const s = this.state.storage.sql;
     switch (op) {
       case "add": {
@@ -29,8 +31,6 @@ export class PoolDO {
         for (const row of args.rows as Row[]) {
           const p = classifyRow(row, preset), k = key(row);
           if (!p || !k) continue;
-          // migration: prevent stale duplicate across pools for same src_file_id/key
-          // page preset with real 2FA+unverified previously lived in cookies_2fa; combo/cookie clear opposite pool(s)
           if (srcFileId && preset) {
             if (p === "page") s.exec("DELETE FROM pool_rows WHERE pool_id='cookies_2fa' AND row_key=? AND src_file_id=? AND state='available'", k, srcFileId);
             else if (p === "cookies_2fa") s.exec("DELETE FROM pool_rows WHERE pool_id='page' AND row_key=? AND src_file_id=? AND state='available'", k, srcFileId);
@@ -49,6 +49,14 @@ export class PoolDO {
         return Response.json({ added });
       }
       case "counts": return Response.json(Object.fromEntries(pools.map((p) => [p, Number(s.exec("SELECT COUNT(*) n FROM pool_rows WHERE pool_id=? AND state='available'", p).toArray()[0].n)])));
+      case "summary": {
+        const pool = String(args.pool || "");
+        if (!pools.includes(pool as Pool)) return Response.json({ error: "invalid pool" }, { status: 400 });
+        const available = Number(s.exec("SELECT COUNT(*) n FROM pool_rows WHERE pool_id=? AND state='available'", pool).toArray()[0].n);
+        const claimed = Number(s.exec("SELECT COUNT(*) n FROM pool_rows WHERE pool_id=? AND state='claimed'", pool).toArray()[0].n);
+        const users = Number(s.exec("SELECT COUNT(DISTINCT claimed_by) n FROM pool_rows WHERE pool_id=? AND state='claimed' AND claimed_by IS NOT NULL", pool).toArray()[0].n);
+        return Response.json({ available, claimed, users });
+      }
       case "detail": return Response.json(s.exec("SELECT row_key,data,state,claimed_by,claimed_at,src_uid,src_file_id FROM pool_rows WHERE pool_id=?", args.pool).toArray().map((r: any) => ({ ...JSON.parse(r.data), _key: r.row_key, _state: r.state, _claimedBy: r.claimed_by, _claimedAt: r.claimed_at, _srcUid: r.src_uid, _srcFileId: r.src_file_id })));
       case "claim": {
         const pool = String(args.pool || "");
@@ -62,8 +70,6 @@ export class PoolDO {
         if ((verifiedOnly || unverifiedOnly) && pool !== "page") return Response.json({ error: "verified filters only for page pool" }, { status: 400 });
         let rows: any[] = [];
         if (verifiedOnly || unverifiedOnly) {
-          // page rows contain both verified (eligible) and unverified (not eligible) — filter within page itself
-          // ponytail: bounded scan 5000, upgrade to paginated scan if page pool exceeds cap; no SQL JSON parsing
           const SCAN_CAP = 5000;
           let q = "SELECT row_key,data FROM pool_rows WHERE pool_id=? AND state='available'";
           const qArgs: any[] = [pool];
@@ -102,8 +108,6 @@ export class PoolDO {
         const pool = String(args.pool || "");
         if (!pools.includes(pool as Pool)) return Response.json({ error: "invalid pool" }, { status: 400 });
         if (pool === "page") {
-          // verified/unverified both live in page pool — count by wa_status within page itself
-          // ponytail: O(n) bounded scan 5000, paginated scan if page pool exceeds cap to keep CPU bounded
           const SCAN_CAP = 5000;
           const totalAvailable = Number(s.exec("SELECT COUNT(*) n FROM pool_rows WHERE pool_id='page' AND state='available'").toArray()[0].n);
           const rows = s.exec("SELECT data FROM pool_rows WHERE pool_id='page' AND state='available' LIMIT ?", SCAN_CAP).toArray() as any[];
@@ -111,11 +115,8 @@ export class PoolDO {
           for (const r of rows) { try { const d = JSON.parse(r.data); if (isEligible(d)) verified++; } catch {} }
           const unverified = rows.length - verified;
           const truncated = totalAvailable > SCAN_CAP;
-          // keep legacy alias totalCookies2faAvailable for compat
           return Response.json({ pool, verified, unverified, totalAvailable, totalCookies2faAvailable: totalAvailable, unverifiedScanned: rows.length, truncated, scanCap: SCAN_CAP });
         }
-        // non-page pools: cheap verified/unverified split within same pool (no cross-pool)
-        // ponytail: bounded scan 5000 — cheap counts without SQL JSON parsing, paginated scan if pool exceeds cap
         const SCAN_CAP = 5000;
         const rows = s.exec("SELECT data FROM pool_rows WHERE pool_id=? AND state='available' LIMIT ?", pool, SCAN_CAP).toArray() as any[];
         let verified = 0;
@@ -128,11 +129,8 @@ export class PoolDO {
       }
       case "userFiles": {
         const pool = args.pool as string;
-        // Group available rows by src_uid → src_file_id
         const avail = s.exec("SELECT src_uid, src_file_id, COUNT(*) n FROM pool_rows WHERE pool_id=? AND state='available' AND src_uid IS NOT NULL GROUP BY src_uid, src_file_id", pool).toArray() as any[];
-        // Group claimed rows by src_uid → src_file_id
         const claimed = s.exec("SELECT src_uid, src_file_id, COUNT(*) n FROM pool_rows WHERE pool_id=? AND state='claimed' AND src_uid IS NOT NULL GROUP BY src_uid, src_file_id", pool).toArray() as any[];
-        // Fallback: rows without src_uid — group by claimed_by as "unknown source"
         const noSrcAvail = Number(s.exec("SELECT COUNT(*) n FROM pool_rows WHERE pool_id=? AND state='available' AND src_uid IS NULL", pool).toArray()[0].n);
         const users = new Map<string, Map<string, { available: number; claimed: number }>>();
         for (const r of avail) {

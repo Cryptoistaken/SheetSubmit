@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/shared";
 import { requireAuth } from "../lib/session";
 import { rpc } from "../lib/do";
+import { checkRate, ipKey } from "../lib/rateLimit";
 export const wa = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 wa.use("/fb/*", requireAuth);
 wa.use("/wa/*", requireAuth);
@@ -13,9 +14,12 @@ const waCacheKey = (uid: string, cuser: string) => `wa:${uid}:${cuser}`;
 async function waCacheSet(env: Env, uid: string, cuser: string, v: unknown) { await rpc(env.INDEX, "global", "metaSet", { k: waCacheKey(uid, cuser), v }).catch(() => {}); }
 async function waCacheDel(env: Env, uid: string, cuser: string) { await rpc(env.INDEX, "global", "metaDel", { k: waCacheKey(uid, cuser) }).catch(() => {}); }
 
-wa.post("/fb/check", async (c) => { const body = await c.req.json<{ uids?: unknown[] }>().catch(() => ({}) as { uids?: unknown[] }); const uids = [...new Set(Array.isArray(body.uids) ? body.uids.map(String).filter((v) => /^\d{5,20}$/.test(v)) : [])].slice(0, 500); if (!uids.length) return c.json({ error: "Invalid UIDs" }, 400); try { const r = await fetch("https://check.fb.tools/api/check/facebook", { method: "POST", headers: { accept: "application/x-ndjson", "content-type": "application/json" }, signal: AbortSignal.timeout(10_000), body: JSON.stringify({ inputData: uids, userLang: "en", checkFriends: false }) }); if (!r.ok) return c.json({ error: `Upstream returned ${r.status}` }, 502); const text = await r.text(); if (text.length > 1_000_000) return c.json({ error: "Upstream response too large" }, 502); const valid: string[] = [], dead: string[] = []; for (const line of text.split("\n")) { try { const x = JSON.parse(line.slice(line.indexOf("{"))); const uid = String(x.data?.uid || x.data?.account || ""); (x.data?.status?.name === "valid" ? valid : dead).push(uid); } catch {} } return c.json({ valid, dead, uncertain: [] }); } catch { return c.json({ error: "Service unavailable" }, 502); } });
+wa.post("/fb/check", async (c) => {
+  if (!checkRate(ipKey(c, "fb.check"), 10, 60000)) return c.json({ error: "rate limited" }, 429);
+  const body = await c.req.json<{ uids?: unknown[] }>().catch(() => ({}) as { uids?: unknown[] }); const uids = [...new Set(Array.isArray(body.uids) ? body.uids.map(String).filter((v) => /^\d{5,20}$/.test(v)) : [])].slice(0, 500); if (!uids.length) return c.json({ error: "Invalid UIDs" }, 400); try { const r = await fetch("https://check.fb.tools/api/check/facebook", { method: "POST", headers: { accept: "application/x-ndjson", "content-type": "application/json" }, signal: AbortSignal.timeout(10_000), body: JSON.stringify({ inputData: uids, userLang: "en", checkFriends: false }) }); if (!r.ok) return c.json({ error: `Upstream returned ${r.status}` }, 502); const text = await r.text(); if (text.length > 1_000_000) return c.json({ error: "Upstream response too large" }, 502); const valid: string[] = [], dead: string[] = []; for (const line of text.split("\n")) { try { const x = JSON.parse(line.slice(line.indexOf("{"))); const uid = String(x.data?.uid || x.data?.account || ""); (x.data?.status?.name === "valid" ? valid : dead).push(uid); } catch {} } return c.json({ valid, dead, uncertain: [] }); } catch { return c.json({ error: "Service unavailable" }, 502); } });
 
 wa.post("/fb/page-check", async (c) => {
+  if (!checkRate(ipKey(c, "fb.page-check"), 10, 60000)) return c.json({ error: "rate limited" }, 429);
   const { cookie } = await c.req.json<{ cookie?: string }>().catch(() => ({}) as { cookie?: string });
   if (!cookie) return c.json({ error: "Cookie required" }, 400);
   const fail = (error: string | null) => c.json({ eligible: false, banReason: null, linkedNumber: null, pageName: null, error });
@@ -32,6 +36,7 @@ wa.post("/fb/page-check", async (c) => {
 });
 
 wa.post("/fb/wa-check", async (c) => {
+  if (!checkRate(ipKey(c, "fb.wa-check"), 10, 60000)) return c.json({ error: "rate limited" }, 429);
   const { cookie } = await c.req.json<{ cookie?: string }>().catch(() => ({}) as { cookie?: string });
   if (!cookie) return c.json({ error: "Cookie required" }, 400);
   const fail = (error: string) => c.json({ eligible: false, banReason: null, linkedNumber: null, error });

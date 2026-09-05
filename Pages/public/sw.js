@@ -1,5 +1,5 @@
 const CACHE_NAME = "sheet-submit-v2";
-const APP_SHELL_URLS = ["/config.js", "/favicon.svg"];
+const APP_SHELL_URLS = ["/config.js", "/logo.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -20,7 +20,7 @@ self.addEventListener("install", (event) => {
           for (const raw of urls) {
             const u = new URL(raw, self.location.origin);
             if (u.origin !== self.location.origin) continue;
-            if (u.pathname.startsWith("/assets/") || u.pathname.startsWith("/favicon")) {
+            if (u.pathname.startsWith("/assets/") || u.pathname.startsWith("/logo")) {
               const res = await fetch(u.href, { cache: "reload" });
               if (res.ok) await cache.put(u.href, res);
             }
@@ -60,7 +60,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/favicon")) {
+  if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/logo")) {
     event.respondWith(cacheFirst(request));
     return;
   }

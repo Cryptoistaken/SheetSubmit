@@ -257,7 +257,7 @@ export default function PoolsView() {
     showToast("No file found for this user");
   };
 
-  if (detail === null) return <PageSkeleton variant="list" />;
+  if (detail === null) return <PageSkeleton variant="pools" />;
 
   return (
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -425,9 +425,7 @@ export default function PoolsView() {
 
       {/* user list */}
       <div className="card-list" style={{ marginTop: 12 }}>
-        {detail === null ? (
-          <PageSkeleton variant="list" />
-        ) : filtered.length === 0 ? (
+        {filtered.length === 0 ? (
           <EmptyState title="No contributors yet" sub={search.trim() ? "No match for your search" : "Contributors appear here when they push rows"} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
         ) : filtered.map((u) => {
           const d = displayName(u);

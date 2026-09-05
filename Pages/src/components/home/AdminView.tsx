@@ -223,7 +223,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   };
 
   if (initialUserId && !detailUser && users === null) {
-    return <PageSkeleton variant="list" />;
+    return <PageSkeleton variant="admin-detail" />;
   }
 
   if (detailUser) {
@@ -376,7 +376,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     );
   }
 
-  if (users === null) return <PageSkeleton variant="list" />;
+  if (users === null) return <PageSkeleton variant="admin" />;
 
   return (
       <>
@@ -409,7 +409,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       <div className="admin-user-list">
         {users === null
           ? (
-              <PageSkeleton variant="list" />
+              <PageSkeleton variant="admin" />
             )
           : users.length === 0
             ? (

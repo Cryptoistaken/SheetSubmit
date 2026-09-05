@@ -484,7 +484,7 @@ export default function HomePage() {
               </button>
             </div>
           ) : null}
-          {files === null ? <PageSkeleton /> : (
+          {files === null ? <PageSkeleton variant="files" /> : (
             <FileGrid
               files={files}
               crossDupCounts={dupCounts}
@@ -503,7 +503,7 @@ export default function HomePage() {
 
       {tab === "archive" ? (
         <div className="home-pane" id="homePaneArchive">
-          <Suspense fallback={<PageSkeleton variant="list" />}>
+          <Suspense fallback={<PageSkeleton variant="archive" />}>
             <ArchiveView selected={archSel} setSelected={setArchSel} view={view} />
           </Suspense>
         </div>
@@ -516,7 +516,7 @@ export default function HomePage() {
 
       {tab === "pools" && user?.isAdmin ? (
         <div className="home-pane" id="homePanePools" style={{ padding: "24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
-          <Suspense fallback={<PageSkeleton variant="list" />}>
+          <Suspense fallback={<PageSkeleton variant="pools" />}>
             <PoolsView />
           </Suspense>
         </div>
@@ -524,7 +524,7 @@ export default function HomePage() {
 
       {tab === "admin" && user?.isAdmin ? (
         <div className="home-pane" id="homePaneAdmin">
-          <Suspense fallback={<PageSkeleton variant="list" />}>
+          <Suspense fallback={<PageSkeleton variant={userId ? "admin-detail" : "admin"} />}>
             <AdminView initialUserId={userId} view={view} />
           </Suspense>
         </div>
@@ -533,7 +533,7 @@ export default function HomePage() {
       {tab === "tools" && user?.isAdmin ? (
         <div className="home-pane" id="homePaneTools" style={{ padding: "32px 24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
           {path === "/tools/splitter" ? (
-            <Suspense fallback={<PageSkeleton variant="list" />}>
+            <Suspense fallback={<PageSkeleton variant="splitter" />}>
               <SplitterTool />
             </Suspense>
           ) : (

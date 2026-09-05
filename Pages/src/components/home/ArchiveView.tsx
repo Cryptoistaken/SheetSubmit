@@ -129,7 +129,7 @@ export default function ArchiveView({
   };
 
   if (archived === null) {
-    return <PageSkeleton />;
+    return <PageSkeleton variant="archive" />;
   }
 
   return (

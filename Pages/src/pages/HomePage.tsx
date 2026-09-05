@@ -250,17 +250,6 @@ export default function HomePage() {
 
   const unselectAll = () => setSelected(new Set());
 
-  const [dlBusy, setDlBusy] = useState(false);
-  const downloadSelected = async () => {
-    if (!files || dlBusy) return;
-    setDlBusy(true);
-    for (const id of selected) {
-      const f = files.find((x) => x.id === id);
-      if (f) await downloadFile(f);
-    }
-    setDlBusy(false);
-  };
-
   const deleteSelected = async () => {
     if (!selectionMode) return;
     const ids = Array.from(selected);
@@ -368,21 +357,11 @@ export default function HomePage() {
       <div id="homeTabBar">
         {tab === "files" && selectionMode ? (
           <div className="home-tabs sel-tabs">
-            <span className="sel-bar-count">{selected.size} selected</span>
-            <div className="sel-bar-actions">
-              <button className="sel-btn sel-btn-primary" disabled={dlBusy} onClick={() => void downloadSelected()}>
-                Download
-              </button>
-              <button className="sel-btn danger" onClick={() => void deleteSelected()}>
-                Delete
-              </button>
-              <button className="sel-btn" onClick={selectAll}>
-                Select all
-              </button>
-              <button className="sel-btn" onClick={unselectAll}>
-                Unselect all
-              </button>
-            </div>
+            {selected.size > 2 ? (
+              <button className="home-tab" onClick={unselectAll}>Unselect all</button>
+            ) : null}
+            <button className="home-tab sel-danger" onClick={() => void deleteSelected()}>Delete ({selected.size})</button>
+            <button className="home-tab" onClick={selectAll}>Select all ({files?.length ?? 0})</button>
           </div>
         ) : tab === "archive" && archSel.size > 0 ? null : (
           <div className="home-tabs" role="tablist" aria-label="Home sections">

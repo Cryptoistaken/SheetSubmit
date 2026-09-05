@@ -637,8 +637,10 @@ button, input, select, textarea {
     animation: selIn .18s var(--ease-out) both;
 }
 @keyframes selIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
-.sel-tabs .sel-btn { background: var(--bg); }
-.sel-tabs .sel-bar-count { padding: 0 6px 0 10px; }
+.home-tab.sel-danger { color: var(--red); }
+.home-tab.sel-danger:hover { background: var(--red-bg); }
+.home-tab.sel-primary { color: var(--blue); }
+.home-tab.sel-primary:hover { background: var(--blue-light); }
 .home-tab {
     display: inline-flex;
     align-items: center;

@@ -152,21 +152,12 @@ export default function ArchiveView({
       {selectionMode &&
         createPortal(
           <div className="home-tabs sel-tabs">
-            <span className="sel-bar-count">{selected.size} selected</span>
-            <div className="sel-bar-actions">
-              <button className="sel-btn sel-btn-primary" onClick={() => void restoreSelected()}>
-                Restore
-              </button>
-              <button className="sel-btn danger" onClick={() => void deleteSelected()}>
-                Delete
-              </button>
-              <button className="sel-btn" onClick={selectAll}>
-                Select all
-              </button>
-              <button className="sel-btn" onClick={unselectAll}>
-                Unselect all
-              </button>
-            </div>
+            {selected.size > 2 ? (
+              <button className="home-tab" onClick={unselectAll}>Unselect all</button>
+            ) : null}
+            <button className="home-tab sel-primary" onClick={() => void restoreSelected()}>Restore ({selected.size})</button>
+            <button className="home-tab sel-danger" onClick={() => void deleteSelected()}>Delete ({selected.size})</button>
+            <button className="home-tab" onClick={selectAll}>Select all ({archived?.length ?? 0})</button>
           </div>,
           document.getElementById("homeTabBar")!,
         )}

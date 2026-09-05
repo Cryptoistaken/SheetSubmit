@@ -1,7 +1,6 @@
-import { lazy, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { BoneSuspense, Skeleton } from "boneyard-js/react";
 
 // Stale chunk after a fresh deploy (old tab imports a hashed asset the new
 // deploy deleted) — reload once to fetch the fresh index.html instead of
@@ -485,8 +484,7 @@ export default function HomePage() {
               </button>
             </div>
           ) : null}
-          <Skeleton name="home-files" loading={files === null} fallback={<PageSkeleton />}>
-            {files === null ? <div /> : (
+          {files === null ? <PageSkeleton /> : (
             <FileGrid
               files={files}
               crossDupCounts={dupCounts}
@@ -500,15 +498,14 @@ export default function HomePage() {
               onToggleSelect={toggleSelect}
             />
             )}
-          </Skeleton>
         </div>
       ) : null}
 
       {tab === "archive" ? (
         <div className="home-pane" id="homePaneArchive">
-          <BoneSuspense name="home-archive" fixture={<PageSkeleton variant="list" />}>
+          <Suspense fallback={<PageSkeleton variant="list" />}>
             <ArchiveView selected={archSel} setSelected={setArchSel} view={view} />
-          </BoneSuspense>
+          </Suspense>
         </div>
       ) : null}
 
@@ -519,26 +516,26 @@ export default function HomePage() {
 
       {tab === "pools" && user?.isAdmin ? (
         <div className="home-pane" id="homePanePools" style={{ padding: "24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
-          <BoneSuspense name="home-pools" fixture={<PageSkeleton variant="list" />}>
+          <Suspense fallback={<PageSkeleton variant="list" />}>
             <PoolsView />
-          </BoneSuspense>
+          </Suspense>
         </div>
       ) : null}
 
       {tab === "admin" && user?.isAdmin ? (
         <div className="home-pane" id="homePaneAdmin">
-          <BoneSuspense name="home-admin" fixture={<PageSkeleton variant="list" />}>
+          <Suspense fallback={<PageSkeleton variant="list" />}>
             <AdminView initialUserId={userId} view={view} />
-          </BoneSuspense>
+          </Suspense>
         </div>
       ) : null}
 
       {tab === "tools" && user?.isAdmin ? (
         <div className="home-pane" id="homePaneTools" style={{ padding: "32px 24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
           {path === "/tools/splitter" ? (
-            <BoneSuspense name="tools-splitter" fixture={<PageSkeleton variant="list" />}>
+            <Suspense fallback={<PageSkeleton variant="list" />}>
               <SplitterTool />
-            </BoneSuspense>
+            </Suspense>
           ) : (
             <ToolsList onOpenSplitter={() => navigate("/tools/splitter")} />
           )}

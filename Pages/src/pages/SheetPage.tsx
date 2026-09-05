@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Skeleton } from "boneyard-js/react";
 
 import QuickEditBar from "@/components/sheet/QuickEditBar";
 import SelectionBar from "@/components/sheet/SelectionBar";
 import SheetGrid from "@/components/sheet/SheetGrid";
+import PageSkeleton from "@/components/ui/page-skeleton";
 import { useConfirm } from "@/lib/confirm";
 import { usePersist } from "@/hooks/usePersist";
 import { useSheetStore } from "@/stores/sheetStore";
@@ -132,26 +132,15 @@ export default function SheetPage() {
     );
   }
 
+  if (status === "loading" || status === "idle") {
+    return <PageSkeleton variant="sheet" />;
+  }
+
   return (
-    <Skeleton
-      name="sheet-grid"
-      loading={status === "loading" || status === "idle"}
-      transition={300}
-      color="#ececec"
-      darkColor="#262626"
-      fallback={
-        <div className="home-pane">
-          <div className="empty-state">
-            <div className="empty-state-title">Loading…</div>
-          </div>
-        </div>
-      }
-    >
-      <div className="sheet-view">
-        <SheetGrid />
-        <QuickEditBar />
-        <SelectionBar />
-      </div>
-    </Skeleton>
+    <div className="sheet-view">
+      <SheetGrid />
+      <QuickEditBar />
+      <SelectionBar />
+    </div>
   );
 }

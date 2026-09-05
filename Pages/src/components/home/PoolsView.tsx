@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Skeleton as BoneSkeleton } from "boneyard-js/react";
 import { api } from "@/lib/api";
 import type { PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
@@ -258,8 +257,9 @@ export default function PoolsView() {
     showToast("No file found for this user");
   };
 
+  if (detail === null) return <PageSkeleton variant="list" />;
+
   return (
-    <BoneSkeleton name="home-pools-data" loading={detail === null} fallback={<PageSkeleton variant="list" />}>
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
       <style>{`
         .pool-switch{display:inline-flex;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px}
@@ -576,6 +576,5 @@ export default function PoolsView() {
       ) : null}
       <DownloadDetailModal downloadId={detailId} onClose={() => setDetailId(null)} />
       </div>
-    </BoneSkeleton>
   );
 }

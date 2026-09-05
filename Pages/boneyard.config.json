@@ -1,5 +1,0 @@
-{
-  "routes": ["/", "/archive", "/admin", "/admin/user/demo", "/pools/dgddigital/cookies_only", "/tools/splitter", "/file/smoke"],
-  "animate": "shimmer",
-  "transition": 300
-}

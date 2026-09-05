@@ -2,18 +2,10 @@ import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { boneyardPlugin } from "boneyard-js/vite";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),
-    boneyardPlugin({
-      routes: ["/", "/archive", "/admin", "/admin/user/demo", "/pools/dgddigital/cookies_only", "/tools/splitter", "/file/smoke"],
-      wait: 1200,
-    }),
-  ],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),
@@ -43,7 +35,6 @@ export default defineConfig({
               id.includes("node_modules/react-router")
             )
               return "vendor-react";
-            if (id.includes("node_modules/boneyard-js")) return "vendor-boneyard";
             if (id.includes("node_modules/xlsx")) return "xlsx";
             if (id.includes("node_modules/lucide-react") || id.includes("node_modules/radix-ui"))
               return "vendor-ui";

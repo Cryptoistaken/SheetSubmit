@@ -65,7 +65,7 @@ wrangler.jsonc         # DO bindings INDEX/FILES/POOLS, cron 0 */6 * * *, vars (
 main.tsx              # StrictMode, Toast>Confirm>Auth>App
 App.tsx               # createBrowserRouter: Layout (Topbar+Outlet); gate: bubble mode vs LoginScreen vs RouterProvider
 index.css / app.css   # tailwind v4 + shadcn + geist + legacy styles
-vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000 + /ws (ws:true), boneyardPlugin, vendor-react chunk
+vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000 + /ws (ws:true), vendor-react chunk
 components.json       # shadcn Nova, neutral, cssVariables, lucide
 pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/tools (+/pools redirect, /tools/splitter, /admin/user/:userId, /bubble-design)
 pages/SheetPage.tsx   # /file/:id + /admin/user/:userId/file/:fileId
@@ -87,7 +87,6 @@ lib/types.ts              # FileType, ColumnDef, SheetFile, Row
 lib/xlsx.ts               # importXlsx/buildXlsx/downloadXlsx/parseSheetRows
 lib/downloadOpts.ts       # buildDownloadOpts counts
 lib/utils.ts (cn), theme.ts, device.ts, toast.tsx, confirm.tsx, avatarCache.ts (useAvatarUrl)
-lib/mock.ts              # boneyard capture mocks — when window.__BONEYARD_BUILD (set by CLI/vite plugin), api.call() serves mock data + AuthContext injects a mock admin user, so skeletons snapshot real loaded layouts (not login screen). Regenerate bones: run `bun run dev` → plugin auto-captures to src/bones (or `bunx boneyard-js build --force`)
 features/filetypes/index.ts, fbcookie.ts, validation.ts, totp.ts
 public/config.js          # injected at runtime: window.APP_CONFIG={apiBase:"", wsBase:"https://…workers.dev"}
 functions/api/[[path]].ts # Pages Functions proxy → BACKEND_URL

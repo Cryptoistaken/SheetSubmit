@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Skeleton } from "boneyard-js/react";
 
 import { api } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
@@ -130,16 +129,11 @@ export default function ArchiveView({
   };
 
   if (archived === null) {
-    return (
-      <Skeleton name="home-archive-data" loading fallback={<PageSkeleton />}>
-        <div />
-      </Skeleton>
-    );
+    return <PageSkeleton />;
   }
 
   return (
-    <Skeleton name="home-archive-data" loading={false}>
-      <>
+    <>
       {archived.length === 0 ? (
         <EmptyState title="No archived files" sub="Archived files appear here for 30 days" />
       ) : (
@@ -179,7 +173,6 @@ export default function ArchiveView({
           </div>,
           document.getElementById("homeTabBar")!,
         )}
-      </>
-    </Skeleton>
+    </>
   );
 }

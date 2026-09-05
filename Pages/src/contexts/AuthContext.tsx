@@ -86,6 +86,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Preload the avatar so the browser fires the request before first paint.
+  // photoUrl is now relative (/api/auth/photo/...) so same-origin — no CORS.
+  useEffect(() => {
+    if (!user?.photoUrl) return;
+    if (document.querySelector(`link[rel="preload"][href="${user.photoUrl}"]`)) return;
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = user.photoUrl;
+    link.setAttribute("fetchpriority", "high");
+    document.head.appendChild(link);
+  }, [user?.photoUrl]);
+
   useEffect(() => {
     if (user) void wsConnect();
     else wsDisconnect();

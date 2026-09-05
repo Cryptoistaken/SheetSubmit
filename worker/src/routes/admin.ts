@@ -6,7 +6,7 @@ import { ldCounts } from "./files";
 export const admin = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 admin.use("/*", requireAuth);
 admin.use("/*", async (c, next) => isAdmin(c.env, c.get("uid")) ? next() : c.json({ error: "admin access required" }, 403));
-const photoUrl = (env: Env, uid: string) => `https://${env.WORKER_URL || ""}/api/auth/photo/${uid}`;
+const photoUrl = (_env: Env, uid: string) => `/api/auth/photo/${uid}`;
 const shapeUser = (env: Env, u: any) => ({ id: String(u.user_id), name: u.name || "", username: u.username || "", photoUrl: photoUrl(env, String(u.user_id)), banned: !!u.banned, createdAt: u.created_at, fileCount: u.fileCount ?? 0, archivedCount: u.archivedCount ?? 0, isAdmin: isAdmin(env, String(u.user_id)) });
 admin.get("/stats", async (c) => c.json(await rpc(c.env.INDEX, "global", "stats")));
 admin.get("/users", async (c) => { const users = await rpc(c.env.INDEX, "global", "adminUsers") as any[]; return c.json(users.map((u) => shapeUser(c.env, u))); });

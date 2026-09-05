@@ -1037,7 +1037,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     try {
       text = await navigator.clipboard.readText();
     } catch {
-      toast("Cannot read clipboard");
+      toast("Could not read clipboard. Check permissions and try again.");
       return;
     }
     if (!text) return;
@@ -1062,7 +1062,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       vibrate();
       toast("Copied");
     } catch {
-      toast("Cannot copy");
+      toast("Could not copy. Try again.");
     }
   },
 
@@ -1292,7 +1292,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     });
     get().exitSelectionMode();
     get().persist();
-    toast("Deleted");
+    toast("Cleared");
   },
 
   copySelected: async () => {
@@ -1326,7 +1326,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     });
     const text = lines.join("\n");
     if (!text) {
-      toast("Nothing to copy");
+      toast("No cells to copy. Select cells first.");
       return;
     }
     try {
@@ -1334,7 +1334,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       toast(`Copied ${s.selectedItems.size} cells`);
       get().exitSelectionMode();
     } catch {
-      toast("Cannot copy");
+      toast("Could not copy. Try again.");
     }
   },
 
@@ -1357,7 +1357,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       try {
         text = await navigator.clipboard.readText();
       } catch {
-        toast("Cannot read clipboard");
+        toast("Could not read clipboard. Check permissions and try again.");
         return;
       }
       if (!text) return;
@@ -1370,7 +1370,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         vibrate();
         toast("Copied");
       } catch {
-        toast("Cannot copy");
+        toast("Could not copy. Try again.");
       }
     }
     // The first tap of the double-tap already opened the QEB with a stale
@@ -1393,13 +1393,14 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           toast("Row copied");
         })
         .catch(() => {
-          toast("Cannot copy");
+          toast("Could not copy. Try again.");
         });
     } else {
       let text: string;
       try {
         text = await navigator.clipboard.readText();
       } catch {
+        toast("Could not read clipboard. Check permissions and try again.");
         return;
       }
       if (!text) return;
@@ -1430,13 +1431,14 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           toast(`Copied ${vals.length} cells`);
         })
         .catch(() => {
-          toast("Cannot copy");
+          toast("Could not copy. Try again.");
         });
     } else {
       let text: string;
       try {
         text = await navigator.clipboard.readText();
       } catch {
+        toast("Could not read clipboard. Check permissions and try again.");
         return;
       }
       if (!text) return;
@@ -1648,7 +1650,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     } catch (e) {
       set({ checkRunning: false, pendingAutoCheck: false });
       pendingAutoTriggerRow = null;
-      toast("Check failed: " + (e instanceof Error ? e.message : String(e)));
+      toast("Check failed: " + (e instanceof Error ? e.message : String(e)) + " Try again.");
     }
   },
 
@@ -2076,7 +2078,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       if (columns.some((c) => row[c.key])) lastDataIdx = idx;
     });
     if (lastDataIdx < 0) {
-      toast("Nothing to compact");
+      toast("Nothing to compact. No rows found.");
       return;
     }
     const used = s.rows.slice(0, lastDataIdx + 1);
@@ -2119,7 +2121,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       if (row.status === "bad") deadIdx.push(idx);
     });
     if (!deadIdx.length) {
-      toast("No dead rows to delete");
+      toast("No dead rows found");
       return;
     }
     const undoStack: UndoEntry[] = [

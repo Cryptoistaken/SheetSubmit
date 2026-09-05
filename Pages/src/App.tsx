@@ -33,14 +33,22 @@ function getBubbleFileId(): string | null {
 
 function Layout() {
   return (
-    <>
-      <div className="flex h-dvh flex-col">
+    <div className="flex h-dvh flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded-md focus:bg-[var(--bg)] focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-[var(--text)] focus:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+      >
+        Skip to content
+      </a>
+      <header>
         <Topbar />
+      </header>
+      <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 focus:outline-none">
         <Suspense fallback={<div className="flex h-dvh flex-col" />}>
           <Outlet />
         </Suspense>
-      </div>
-    </>
+      </main>
+    </div>
   );
 }
 

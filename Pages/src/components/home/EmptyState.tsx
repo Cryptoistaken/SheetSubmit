@@ -1,11 +1,12 @@
 interface EmptyStateProps {
   title: string;
   sub: string;
+  action?: { label: string; onClick: () => void };
 }
 
-export default function EmptyState({ title, sub }: EmptyStateProps) {
+export default function EmptyState({ title, sub, action }: EmptyStateProps) {
   return (
-    <div className="empty-state">
+    <div className="empty-state" role="status" aria-live="polite">
       <svg
         width="48"
         height="48"
@@ -15,6 +16,7 @@ export default function EmptyState({ title, sub }: EmptyStateProps) {
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
+        aria-hidden="true"
       >
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
         <polyline points="14 2 14 8 20 8" />
@@ -23,6 +25,11 @@ export default function EmptyState({ title, sub }: EmptyStateProps) {
       </svg>
       <div className="empty-state-title">{title}</div>
       <div className="empty-state-sub">{sub}</div>
+      {action ? (
+        <button className="btn btn-primary btn-sm" style={{ marginTop: 12 }} onClick={action.onClick}>
+          {action.label}
+        </button>
+      ) : null}
     </div>
   );
 }

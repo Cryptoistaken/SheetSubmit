@@ -108,7 +108,7 @@ export default function SheetToolbar() {
       }
       setUploadRows(rows);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to read file");
+      showToast(err instanceof Error ? err.message : "Could not read file. Check the file and try again.");
     }
   };
 
@@ -164,7 +164,7 @@ export default function SheetToolbar() {
     close();
     const s = useSheetStore.getState();
     if (!s.rows.length) {
-      showToast("No data");
+      showToast("No rows to copy. Add content first.");
       return;
     }
     const cols = s.columns;
@@ -178,13 +178,13 @@ export default function SheetToolbar() {
       }
     }
     if (!hasData) {
-      showToast("No data");
+      showToast("No rows to copy. Add content first.");
       return;
     }
     navigator.clipboard
       .writeText(lines.join("\n"))
       .then(() => showToast(`Copied ${lines.length - 1} rows`))
-      .catch(() => showToast("Cannot copy"));
+      .catch(() => showToast("Could not copy. Try again."));
   };
 
   const startUpload = (merge: boolean) => {
@@ -198,7 +198,7 @@ export default function SheetToolbar() {
     const s = useSheetStore.getState();
     const dead = s.rows.filter((r) => r.status === "bad").length;
     if (!dead) {
-      showToast("No dead rows to delete");
+      showToast("No dead rows found");
       return;
     }
     const ok = await confirm(
@@ -236,16 +236,18 @@ export default function SheetToolbar() {
           title={hasDups ? "Remove duplicate rows first" : undefined}
           onClick={() => void useSheetStore.getState().runCheck()}
         >
-          {checkRunning ? "Checking..." : "Check"}
+          {checkRunning ? "Checking…" : "Check"}
         </button>
         <button
           ref={checkArrowRef}
           className={"check-split-arrow" + (checkOpen ? " open" : "")}
           title="More check options"
           aria-label="More check options"
+          aria-expanded={checkOpen}
+          aria-haspopup="menu"
           onClick={toggleCheck}
         >
-          <svg width="9" height="9" viewBox="0 0 10 6" fill="currentColor">
+          <svg width="9" height="9" viewBox="0 0 10 6" fill="currentColor" aria-hidden="true">
             <path d="M0 0l5 6 5-6z" />
           </svg>
         </button>
@@ -254,9 +256,15 @@ export default function SheetToolbar() {
         ref={checkMenuRef}
         className={"check-dropdown" + (checkOpen ? " open" : "")}
         style={{ top: checkPos.top, right: checkPos.right }}
+        role="menu"
+        aria-label="Check options"
+        aria-hidden={!checkOpen}
       >
-        <div className="check-dropdown-label">UID check</div>
+        <div className="check-dropdown-label" id="check-uid-label">UID check</div>
         <button
+          role="switch"
+          aria-checked={autoCheckOn}
+          aria-labelledby="check-uid-label"
           className={"autocheck-toggle" + (autoCheckOn ? " on" : "")}
           onClick={() => {
             const next = !autoCheckOn;
@@ -264,15 +272,18 @@ export default function SheetToolbar() {
             localStorage.setItem("ss_autoCheck", String(next));
           }}
         >
-          <span className="autocheck-track"></span>
+          <span className="autocheck-track" aria-hidden="true"></span>
           UID check
         </button>
         {isPageFile ? (
           <>
-            <div className="check-dropdown-label" style={{ marginTop: 8 }}>
+            <div className="check-dropdown-label" style={{ marginTop: 8 }} id="check-page-label">
               Page Check
             </div>
             <button
+              role="switch"
+              aria-checked={waCheckOn}
+              aria-labelledby="check-page-label"
               className={"autocheck-toggle" + (waCheckOn ? " on" : "")}
               onClick={() => {
                 const next = !waCheckOn;
@@ -284,13 +295,16 @@ export default function SheetToolbar() {
                 }
               }}
             >
-              <span className="autocheck-track"></span>
+              <span className="autocheck-track" aria-hidden="true"></span>
               Page Check
             </button>
-            <div className="check-dropdown-label" style={{ marginTop: 8 }}>
+            <div className="check-dropdown-label" style={{ marginTop: 8 }} id="check-wa-label">
               WA Check
             </div>
             <button
+              role="switch"
+              aria-checked={checkWaOn}
+              aria-labelledby="check-wa-label"
               className={"autocheck-toggle" + (checkWaOn ? " on" : "")}
               onClick={() => {
                 const next = !checkWaOn;
@@ -302,7 +316,7 @@ export default function SheetToolbar() {
                 }
               }}
             >
-              <span className="autocheck-track"></span>
+              <span className="autocheck-track" aria-hidden="true"></span>
               WA Check
             </button>
           </>
@@ -313,6 +327,8 @@ export default function SheetToolbar() {
         className="sheet-more-btn"
         title="More actions"
         aria-label="More actions"
+        aria-expanded={open}
+        aria-haspopup="menu"
         onClick={toggle}
       >
         ⋮
@@ -321,8 +337,11 @@ export default function SheetToolbar() {
         ref={menuRef}
         className={"sheet-more-menu" + (open ? " open" : "")}
         style={{ top: pos.top, right: pos.right }}
+        role="menu"
+        aria-label="Sheet actions"
+        aria-hidden={!open}
       >
-        <button className="sheet-more-item" onClick={copyAll}>
+        <button role="menuitem" className="sheet-more-item" onClick={copyAll}>
           <svg
             width="14"
             height="14"
@@ -330,6 +349,7 @@ export default function SheetToolbar() {
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
+            aria-hidden="true"
           >
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
@@ -337,6 +357,7 @@ export default function SheetToolbar() {
           Copy all data
         </button>
         <button
+          role="menuitem"
           className="sheet-more-item"
           onClick={() => {
             close();
@@ -350,6 +371,7 @@ export default function SheetToolbar() {
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
+            aria-hidden="true"
           >
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="7 10 12 15 17 10" />
@@ -359,6 +381,7 @@ export default function SheetToolbar() {
         </button>
         {user?.isAdmin ? (
           <button
+            role="menuitem"
             className="sheet-more-item"
             onClick={() => {
               close();
@@ -372,6 +395,7 @@ export default function SheetToolbar() {
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
+              aria-hidden="true"
             >
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
@@ -382,6 +406,7 @@ export default function SheetToolbar() {
         ) : null}
         {user?.isAdmin && isPageFile ? (
           <button
+            role="menuitem"
             className="sheet-more-item"
             onClick={() => {
               close();
@@ -389,14 +414,14 @@ export default function SheetToolbar() {
             }}
           >
             {/* shield-check icon — lucide */}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               <path d="M9 12l2 2 4-4" />
             </svg>
             WA Check
           </button>
         ) : null}
-        <button className="sheet-more-item" onClick={() => startUpload(false)}>
+        <button role="menuitem" className="sheet-more-item" onClick={() => startUpload(false)}>
           <svg
             width="14"
             height="14"
@@ -404,6 +429,7 @@ export default function SheetToolbar() {
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
+            aria-hidden="true"
           >
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="17 8 12 3 7 8" />
@@ -411,7 +437,7 @@ export default function SheetToolbar() {
           </svg>
           Upload xlsx
         </button>
-        <button className="sheet-more-item" onClick={() => startUpload(true)}>
+        <button role="menuitem" className="sheet-more-item" onClick={() => startUpload(true)}>
           <svg
             width="14"
             height="14"
@@ -419,6 +445,7 @@ export default function SheetToolbar() {
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
+            aria-hidden="true"
           >
             <circle cx="18" cy="18" r="3" />
             <circle cx="6" cy="6" r="3" />
@@ -427,6 +454,7 @@ export default function SheetToolbar() {
           Merge
         </button>
         <button
+          role="menuitem"
           className="sheet-more-item"
           title="Compact - remove empty rows between used rows"
           aria-label="Compact rows"
@@ -444,6 +472,7 @@ export default function SheetToolbar() {
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
+            aria-hidden="true"
           >
             <polyline points="8 3 4 3 4 7" />
             <polyline points="16 3 20 3 20 7" />
@@ -453,7 +482,7 @@ export default function SheetToolbar() {
           </svg>
           Compact
         </button>
-        <button className="sheet-more-item" onClick={() => void deleteDead()}>
+        <button role="menuitem" className="sheet-more-item" onClick={() => void deleteDead()}>
           <svg
             width="14"
             height="14"
@@ -461,6 +490,7 @@ export default function SheetToolbar() {
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
+            aria-hidden="true"
           >
             <polyline points="3 6 5 6 21 6" />
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -469,12 +499,12 @@ export default function SheetToolbar() {
           </svg>
           Delete Dead
         </button>
-        <div className="sheet-more-sep"></div>
+        <div className="sheet-more-sep" role="separator"></div>
         {columns.map((col) => (
           <div
             key={col.key}
             className="sheet-more-col-item"
-            role="checkbox"
+            role="menuitemcheckbox"
             aria-checked={visibleCols.has(col.key)}
             tabIndex={0}
             onClick={() => {

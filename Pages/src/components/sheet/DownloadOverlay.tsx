@@ -3,6 +3,7 @@ import { useSheetStore } from "@/stores/sheetStore";
 import { downloadSheetRows } from "@/lib/xlsx";
 import { buildDownloadOpts } from "@/lib/downloadOpts";
 import { useToast } from "@/lib/toast";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 export default function DownloadOverlay({
   open,
@@ -32,9 +33,12 @@ export default function DownloadOverlay({
     }, 500);
   };
 
-  if (!open) return null;
   const toggle = (k: string) => setSel((p) => { if (!p) return p; const s = new Set(p); s.has(k) ? s.delete(k) : s.add(k); return s; });
   const handleClose = () => { setSel(null); onClose(); };
+  const modalRef = useModalA11y(open, handleClose);
+  const titleId = "download-title";
+
+  if (!open) return null;
   const downloadMulti = async () => {
     if (!sel?.size) return;
     let n = 0;
@@ -49,13 +53,17 @@ export default function DownloadOverlay({
 
   return (
     <div
+      ref={modalRef}
       className="download-opt-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div className="download-opt-box">
-        <div className="download-opt-title">Download</div>
+        <div id={titleId} className="download-opt-title">Download</div>
         {opts.map((o) => {
           const selected = sel?.has(o.key) ?? false;
           return (

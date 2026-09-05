@@ -53,7 +53,7 @@ export default function UploadOverlay({
                 n +
                 " rows? Your file currently holds " +
                 currentCount +
-                " rows. Existing data will be **permanently replaced**. Continue?",
+                " rows. Existing data will be permanently replaced. Continue?",
               "Yes, replace",
             );
             if (!ok) return;

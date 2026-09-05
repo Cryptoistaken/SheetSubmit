@@ -1,26 +1,26 @@
 /* ── Design tokens (ported from css/base.css, Geist values) ── */
 :root {
     color-scheme: light;
-    /* Backgrounds */
-    --bg: #ffffff;
+    /* Backgrounds — aliased to shadcn where values are byte-identical */
+    --bg: var(--background);
     --bg2: #fafafa;
-    --bg3: #f5f5f5;
+    --bg3: var(--muted);
     --bg4: #eaeaea;
 
-    /* Text */
-    --text: #000000;
-    --text2: #666666;
+    /* Text — aliased to shadcn where byte-identical */
+    --text: var(--foreground);
+    --text2: var(--muted-foreground);
     --text3: #999999;
 
-    /* Borders */
+    /* Borders — aliased where byte-identical */
     --border: #eaeaea;
-    --border2: #d4d4d4;
+    --border2: var(--input);
 
-    /* Brand — Vercel */
-    --blue: #0070f3;
+    /* Brand — Vercel — aliased where byte-identical */
+    --blue: var(--ring);
     --blue-dark: #0060df;
     --blue-light: rgba(0, 112, 243, 0.08);
-    --red: #ee0000;
+    --red: var(--destructive);
     --red-bg: rgba(238, 0, 0, 0.08);
     --green: #16a34a;
     --green-dark: #15803d;
@@ -37,10 +37,10 @@
     /* Selection highlight */
     --sel-bg: rgba(0, 112, 243, 0.08);
     --sel-border: rgba(0, 112, 243, 0.4);
-    --sel-outline: #0070f3;
+    --sel-outline: var(--ring);
 
-    /* Focus ring */
-    --focus-ring: 0 0 0 2px #0070f3;
+    /* Focus ring — alias to shadcn --ring */
+    --focus-ring: 0 0 0 2px var(--ring);
 
     /* Shape */
     --r: 6px;
@@ -69,15 +69,15 @@
 /* ── Dark theme ── */
 .dark {
     color-scheme: dark;
-    --bg: #000000;
-    --bg2: #0a0a0a;
-    --bg3: #111111;
+    --bg: var(--background);
+    --bg2: var(--card);
+    --bg3: var(--muted);
     --bg4: #1a1a1a;
-    --text: #ededed;
-    --text2: #888888;
+    --text: var(--foreground);
+    --text2: var(--muted-foreground);
     --text3: #666666;
     --border: #222222;
-    --border2: #333333;
+    --border2: var(--input);
     --blue-light: rgba(0, 112, 243, 0.15);
     --red-bg: rgba(238, 0, 0, 0.15);
     --green-bg: rgba(22, 163, 74, 0.15);
@@ -242,7 +242,7 @@ button, input, select, textarea {
     margin: 14px 0 0;
     font-size: 13px;
     line-height: 1.5;
-    color: var(--text-2);
+    color: var(--text2);
     font-family: var(--sans);
 }
 .login-hint b {
@@ -252,7 +252,7 @@ button, input, select, textarea {
     display: inline-block;
     margin: 12px 0 0;
     font-size: 12px;
-    color: var(--text-2);
+    color: var(--text2);
     text-decoration: underline;
 }
 
@@ -1729,7 +1729,7 @@ table.grid td.dot-cell:hover {
 
 /* taken row lock — blue cell + white text + whole-row cut */
 tr.row-taken { position: relative; }
-tr.row-taken td.dc.cell-taken { background: #0070f3 !important; color: rgba(255,255,255,0.72) !important; border-color: #0070f3 !important; }
+tr.row-taken td.dc.cell-taken { background: var(--blue) !important; color: rgba(255,255,255,0.72) !important; border-color: var(--blue) !important; }
 tr.row-taken td.dc.cell-taken.cell-editing { color: #fff !important; }
 tr.row-taken::after { content: ''; position: absolute; left: 36px; right: 36px; top: 50%; height: 1.25px; background: rgba(255,255,255,0.45); pointer-events: none; z-index: 1; }
 
@@ -3463,3 +3463,225 @@ body.bubble-mode tr.add-row .add-col { font-size: 11px; }
 .offline-banner .btn.btn-sm {
     flex-shrink: 0;
 }
+
+/* ── A11y / layout resilience fixes (additive, no TSX change) ── */
+
+/* 1) Visible focus rings — explicit custom controls only (no global input/select/textarea outline reset) */
+.btn:focus-visible,
+.home-tab:focus-visible,
+.view-switch button:focus-visible,
+.pool-switch button:focus-visible,
+.file-card:focus-visible,
+.file-card-btn:focus-visible,
+.qeb-icon-btn:focus-visible,
+.sel-btn:focus-visible,
+.home-fab:focus-visible,
+.home-fab-item:focus-visible,
+.sheet-more-item:focus-visible,
+.sheet-more-col-item:focus-visible,
+.check-split-main:focus-visible,
+.check-split-arrow:focus-visible,
+.sheet-more-btn:focus-visible,
+.version-kebab:focus-visible,
+.version-menu-item:focus-visible,
+.download-opt-btn:focus-visible,
+.admin-user-card:focus-visible,
+.profile-btn:focus-visible,
+.back-btn:focus-visible,
+.sheet-title-btn:focus-visible,
+.toggle-switch input:focus-visible + .toggle-track,
+.autocheck-toggle:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+}
+.file-card:focus-visible,
+.admin-user-card:focus-visible { outline-offset: 2px; }
+
+/* 2) Modal / download / menu max-width + overflow (prevents viewport overflow at narrow/zoom) */
+.modal-overlay,
+.download-opt-overlay {
+    padding: 16px;
+    padding-block: 16px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.modal-box {
+    width: min(320px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    max-height: min(88vh, 640px);
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+}
+.download-opt-box {
+    width: min(220px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    max-height: min(86vh, 560px);
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+}
+.download-opt-box[style*="width"] { max-width: calc(100vw - 24px); }
+.home-fab-menu {
+    max-width: min(280px, calc(100vw - 24px));
+    max-height: min(70vh, 420px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overflow-wrap: anywhere;
+}
+.sheet-more-menu {
+    max-width: min(240px, calc(100vw - 24px));
+    max-height: min(70vh, 400px);
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+}
+.check-dropdown {
+    max-width: min(220px, calc(100vw - 24px));
+    max-height: min(60vh, 360px);
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+}
+.gear-settings-panel {
+    max-width: min(220px, calc(100vw - 16px));
+    max-height: min(80vh, 520px);
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+}
+.file-ctx-popup { max-width: min(140px, calc(100vw - 24px)); overflow: hidden; }
+.version-kebab-menu { max-width: min(180px, calc(100vw - 24px)); overflow-wrap: anywhere; }
+.modal-title, .download-opt-title, .home-fab-name, .file-card-name { overflow-wrap: anywhere; word-break: break-word; }
+
+/* 3) Selection / QEB bars: wrap or scroll at narrow widths */
+.sel-bar {
+    flex-wrap: wrap;
+    gap: 8px 6px;
+    align-items: center;
+    min-height: 0;
+    overflow: visible;
+}
+.sel-bar-count { flex: 1 1 140px; min-width: 0; }
+.sel-bar-actions { flex-wrap: wrap; gap: 6px 4px; max-width: 100%; }
+.qeb-bar { flex-wrap: wrap; min-width: 0; }
+.qeb-toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    max-width: 100%;
+    justify-content: center;
+    gap: 6px;
+}
+.qeb-toolbar::-webkit-scrollbar { height: 4px; }
+.qeb-formula-bar { min-width: 0; max-width: 100%; }
+.qeb-input { min-width: 0; }
+
+/* 4) 320px / 200% zoom resilience */
+@media (max-width: 360px) {
+    .files-grid { grid-template-columns: 1fr; }
+    .login-card { max-width: 100%; }
+    .login-wrap { padding: 16px; }
+    .home-tabs { max-width: 100%; overflow-x: auto; }
+    .view-switch { max-width: 100%; }
+    .qeb-toolbar { justify-content: flex-start; flex-wrap: wrap; }
+    .sel-bar { padding-inline: 10px; }
+    .modal-box,
+    .download-opt-box { width: calc(100vw - 24px); }
+}
+.sheet-wrap,
+.home-pane,
+#homePaneFiles,
+#homePaneArchive,
+#homePaneAdmin { min-width: 0; max-width: 100%; }
+table.grid { min-width: 0; }
+
+/* 5) Safe-area bottom padding for fixed bars / FABs */
+.sel-bar { padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+.qeb-bar { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+.home-fab { bottom: max(28px, calc(16px + env(safe-area-inset-bottom))); right: 24px; inset-inline-end: 24px; }
+.view-switch-fab { bottom: max(28px, calc(16px + env(safe-area-inset-bottom))); left: 16px; inset-inline-start: 16px; }
+.file-sel-bar { bottom: max(12px, env(safe-area-inset-bottom)); left: 8px; right: 8px; inset-inline: 8px; }
+.toast-wrap { bottom: max(18px, env(safe-area-inset-bottom)); }
+.sheet-wrap { padding-bottom: calc(140px + env(safe-area-inset-bottom)); }
+.home-fab-menu { bottom: max(84px, calc(72px + env(safe-area-inset-bottom))); right: 24px; inset-inline-end: 24px; }
+
+/* 6) 40px+ touch targets — only list/menu primary actions (toolbar/card icons keep original size to avoid overlap) */
+.btn,
+.home-fab-item,
+.sheet-more-item,
+.download-opt-btn,
+.sel-btn,
+.version-menu-item,
+.download-opt-cancel,
+.sheet-more-col-item { min-height: 40px; }
+
+/* 7) Hover styles gated for fine pointers (coarse/touch gets no hover) */
+@media (hover: hover) and (pointer: fine) {
+    .btn:hover:not(:disabled),
+    .file-card-btn:hover,
+    .sel-btn:hover,
+    .home-fab-item:hover,
+    .sheet-more-item:hover,
+    .sheet-more-col-item:hover,
+    .file-ctx-item:hover,
+    .download-opt-btn:hover:not(.disabled),
+    .download-opt-cancel:hover,
+    .home-tab:hover,
+    .admin-user-card:hover,
+    .admin-stat-card:hover,
+    .qeb-icon-btn:hover,
+    .qeb-picker-close:hover,
+    .version-item:hover,
+    .version-menu-item:hover,
+    .ghdiff-icon-btn:hover,
+    .check-split-main:hover,
+    .check-split-arrow:hover,
+    .autocheck-toggle:hover,
+    .version-kebab:hover,
+    .back-btn:hover,
+    .sheet-title-btn:hover,
+    .profile-btn:hover { filter: none; }
+    .login-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+    .home-fab:hover::after { opacity: 1; }
+    .home-fab:hover::before { opacity: 0; }
+}
+@media (hover: none), (pointer: coarse) {
+    .btn:hover:not(:disabled),
+    .file-card-btn:hover,
+    .sel-btn:hover,
+    .home-fab-item:hover { background: initial; }
+}
+
+/* 8) Mobile input font-size floor (prevents iOS zoom) */
+@media (max-width: 640px) {
+    .modal-input,
+    .admin-search-input,
+    .version-name-input,
+    .qeb-input,
+    input[type="text"],
+    input[type="password"],
+    input[type="search"],
+    input[type="email"],
+    select, textarea { font-size: 16px; }
+}
+
+/* 9) Logical properties where direction-dependent — physical fallback first, then logical */
+.topbar { padding-inline: 16px; }
+.sel-bar { left: 0; right: 0; inset-inline: 0; }
+.qeb-bar { left: 0; right: 0; inset-inline: 0; }
+.gear-settings-panel { right: 8px; inset-inline-end: 8px; }
+.sheet-more-menu,
+.check-dropdown { right: 0; inset-inline-end: 0; }
+.file-ctx-popup { inset-inline-start: auto; }
+.login-wrap { padding-inline: 24px; }
+
+/* 10) Reduced-motion preserved for new animations */
+@media (prefers-reduced-motion: reduce) {
+    .qeb-bar, .sel-bar, .modal-box, .download-opt-box, .home-fab-menu, .sheet-more-menu, .check-dropdown, .gear-settings-panel, .file-ctx-popup {
+        animation: none !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* 11) Typography audit — minimal additive fixes */
+.admin-user-name,
+.admin-detail-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: isolate; }
+.admin-stat-value, .admin-user-stat-val, .file-card-meta { font-variant-numeric: tabular-nums; }

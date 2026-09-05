@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSheetStore } from "@/stores/sheetStore";
 import { useToast } from "@/lib/toast";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
   const rows = useSheetStore((s) => s.rows);
@@ -16,6 +17,8 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
   const noPageCount = useMemo(() => rows.filter((r) => r.status === "good" && r.wa_status !== "eligible" && !!r.cookies && /c_user=\d+/.test(r.cookies)).length, [rows]);
 
   const handleClose = () => { setCustom(false); setSel(new Set()); setPhase("idle"); setTargets([]); setDoneCounts(null); setRunning(false); onClose(); };
+  const modalRef = useModalA11y(open, handleClose);
+  const titleId = "wa-check-title";
 
   if (!open) return null;
 
@@ -47,13 +50,13 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
 
   const isProgress = phase === "checking" || phase === "done";
   return (
-    <div className="download-opt-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
+    <div ref={modalRef} className="download-opt-overlay" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className="download-opt-box" style={{ width: custom || isProgress ? 300 : 220 }}>
-        <div className="download-opt-title">{phase === "checking" ? "Checking…" : phase === "done" ? "Result" : "WA Check"}</div>
+        <div id={titleId} className="download-opt-title">{phase === "checking" ? "Checking…" : phase === "done" ? "Result" : "WA Check"}</div>
         {isProgress ? (
           <>
-            <div style={{ fontSize: 12, color: "var(--text2)", display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-              {phase === "checking" ? <><span className="spin-icon" style={{ width: 12, height: 12, border: "2px solid var(--border2)", borderTopColor: "var(--blue)", borderRadius: "50%" }} /> Checking {targets.length}…</> : <span style={{ color: "var(--text)", fontWeight: 600 }}>{doneCounts ? `${doneCounts.page} page · ${doneCounts.noPage} no page` : `${targets.length} checked`}</span>}
+            <div aria-live="polite" style={{ fontSize: 12, color: "var(--text2)", display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              {phase === "checking" ? <><span className="spin-icon" aria-hidden="true" style={{ width: 12, height: 12, border: "2px solid var(--border2)", borderTopColor: "var(--blue)", borderRadius: "50%" }} /> Checking {targets.length}…</> : <span style={{ color: "var(--text)", fontWeight: 600 }}>{doneCounts ? `${doneCounts.page} page · ${doneCounts.noPage} no page` : `${targets.length} checked`}</span>}
             </div>
             <div style={{ maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4, border: "1px solid var(--border)", borderRadius: "var(--r)", padding: 6 }}>
               {targets.map((idx) => {
@@ -66,7 +69,7 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
                 const dotCls = isChecking ? "row-dot d-spin" : r.wa_status === "eligible" ? "row-dot d-green" : "row-dot";
                 return (
                   <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: "var(--r)", background: "var(--bg2)", border: "1px solid var(--border)" }}>
-                    <span className={dotCls} style={isChecking ? undefined : { background: dotBg, width: 8, height: 8 }} />
+                    <span className={dotCls} aria-hidden="true" style={isChecking ? undefined : { background: dotBg, width: 8, height: 8 }} />
                     <span style={{ fontSize: 12, fontFamily: "var(--mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{uid ? uid.slice(-8) : r.cookies?.slice(-12) ?? ""} #{idx + 1}</span>
                     <span style={{ fontSize: 11, color: isChecking ? "var(--blue)" : r.wa_status === "eligible" ? "var(--green)" : "var(--text3)", flexShrink: 0 }}>{isChecking ? "…" : r.wa_status === "eligible" ? "page" : "no page"}</span>
                   </div>
@@ -92,9 +95,9 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
                 const uid = (r.uid as string) || (r.cookies.match(/c_user=(\d+)/)?.[1] ?? "") || "";
                 const dot = r.wa_status === "eligible" ? "var(--green)" : r.wa_status === "ineligible" ? "var(--text3)" : r.status === "good" ? "var(--cyan)" : "var(--border2)";
                 return (
-                  <div key={idx} onClick={() => toggle(idx)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: "var(--r)", cursor: "pointer", background: checked ? "var(--blue-light)" : "transparent", border: checked ? "1px solid var(--blue)" : "1px solid transparent" }}>
-                    <span style={{ width: 14, height: 14, borderRadius: 3, border: "1.5px solid " + (checked ? "var(--blue)" : "var(--border2)"), background: checked ? "var(--blue)" : "var(--bg)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10 }}>{checked ? "✓" : ""}</span>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+                  <div key={idx} role="checkbox" aria-checked={checked} tabIndex={0} onClick={() => toggle(idx)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(idx); } }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: "var(--r)", cursor: "pointer", background: checked ? "var(--blue-light)" : "transparent", border: checked ? "1px solid var(--blue)" : "1px solid transparent" }}>
+                    <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: 3, border: "1.5px solid " + (checked ? "var(--blue)" : "var(--border2)"), background: checked ? "var(--blue)" : "var(--bg)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10 }}>{checked ? "✓" : ""}</span>
+                    <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
                     <span style={{ fontSize: 12, fontFamily: "var(--mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{uid ? uid.slice(-8) : r.cookies.slice(-12)} #{idx + 1}</span>
                   </div>
                 );

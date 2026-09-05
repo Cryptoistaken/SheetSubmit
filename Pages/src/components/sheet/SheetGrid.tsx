@@ -554,7 +554,8 @@ export default function SheetGrid() {
                             margin: "2px 0 0",
                             fontSize: 11,
                             whiteSpace: "pre-wrap",
-                            wordBreak: "break-all",
+                            overflowWrap: "anywhere",
+                            wordBreak: "break-word",
                             color: "var(--text)",
                             fontFamily: "var(--mono)",
                             background: "var(--bg3)",
@@ -717,9 +718,11 @@ const GridCell = memo(function GridCell({
         ) : (
           <span
             className="cell-text"
+            dir="auto"
             style={{
               color: styles?.color || undefined,
               fontWeight: styles?.bold ? 700 : undefined,
+              unicodeBidi: "isolate",
             }}
           >
             {draft ?? value}

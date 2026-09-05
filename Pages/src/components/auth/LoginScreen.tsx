@@ -26,7 +26,7 @@ const POLL_MS = 1000;
 const MAX_ATTEMPTS = 60;
 
 export default function LoginScreen({ notice }: { notice?: string }) {
-  const [label, setLabel] = useState("Connecting...");
+  const [label, setLabel] = useState("Connecting…");
   const [href, setHref] = useState<string | null>(null);
   const [fallbackHref, setFallbackHref] = useState<string | null>(null);
   const [showFallback, setShowFallback] = useState(false);
@@ -68,14 +68,14 @@ export default function LoginScreen({ notice }: { notice?: string }) {
       .botInfo()
       .then((info) => {
         if (stop) return;
-        if (!info.username) { setLabel("Bot not available"); return; }
+        if (!info.username) { setLabel("Bot unavailable — try again later"); return; }
         const did = getOrCreateDid();
         didRef.current = did;
         setHref("tg://resolve?domain=" + info.username + "&start=login_" + did);
         setFallbackHref("https://t.me/" + info.username + "?start=login_" + did);
         setLabel("Open Telegram");
       })
-      .catch(() => { if (!stop) setLabel("Connection failed"); });
+      .catch(() => { if (!stop) setLabel("Connection failed — try again"); });
     return () => { stop = true; };
   }, []);
 
@@ -129,24 +129,28 @@ export default function LoginScreen({ notice }: { notice?: string }) {
   const recheck = () => { localStorage.removeItem("ss_login_did"); window.location.href = "/"; };
 
   return (
-    <div id="loginScreen">
+    <main id="loginScreen" aria-labelledby="login-title">
       <div className="login-wrap">
         <div className="login-card">
           <div className="login-logo">
             <img src="/logo.svg" alt="Sheet Submit" style={{ width: 48, height: 48 }} />
           </div>
-          <h1>Login to <span className="login-brand">Sheet Submit</span></h1>
-          {notice && <p className="login-hint" style={{ color: "#ef4444", marginBottom: 12 }}>{notice}</p>}
+          <h1 id="login-title">Login to <span className="login-brand">Sheet Submit</span></h1>
+          {notice && <p role="alert" aria-live="assertive" className="login-hint" style={{ color: "var(--red)", marginBottom: 12 }}>{notice}</p>}
           {showRecheck ? (
             <button className="login-btn ready" onClick={recheck} type="button">
               <span className="btn-label">Recheck login</span>
             </button>
           ) : (
             <>
-              <div ref={turnstileBoxRef} style={{ marginBottom: 12, display: turnstileToken ? "none" : undefined }} />
+              <div ref={turnstileBoxRef} role="group" aria-label="Human verification" style={{ marginBottom: 12, display: turnstileToken ? "none" : undefined }} />
               <a
                 className={`login-btn${href && turnstileToken ? " ready" : " loading"}${checking ? " checking" : ""}`}
-                href={href && turnstileToken ? href : "#"}
+                href={href && turnstileToken ? href : undefined}
+                aria-disabled={!href || !turnstileToken ? "true" : undefined}
+                aria-busy={checking ? "true" : undefined}
+                aria-label={label}
+                tabIndex={!href || !turnstileToken ? 0 : undefined}
                 onClick={(e) => {
                   if (!href || !turnstileToken) { e.preventDefault(); return; }
                   setShowFallback(true);
@@ -162,10 +166,10 @@ export default function LoginScreen({ notice }: { notice?: string }) {
               Can't open? Open in browser
             </a>
           )}
-          {waiting && <p className="login-hint">Logged in — opening your workspace…</p>}
+          {waiting && <p role="status" aria-live="polite" className="login-hint">Logged in — opening your workspace…</p>}
           {showRecheck && <p className="login-hint">No login detected yet. Tap "Recheck login" when you've finished in Telegram.</p>}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

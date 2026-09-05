@@ -3,6 +3,7 @@ import { useSheetStore } from "@/stores/sheetStore";
 import { buildDownloadOpts } from "@/lib/downloadOpts";
 import { downloadCustomRows } from "@/lib/xlsx";
 import { useToast } from "@/lib/toast";
+import { useModalA11y } from "@/hooks/useModalA11y";
 
 const PW_KEY = "ss_customDlPw";
 
@@ -38,6 +39,8 @@ export default function CustomDownloadOverlay({
   };
   const toggle = (k: string) => setSel((p) => { if (!p) return p; const s = new Set(p); s.has(k) ? s.delete(k) : s.add(k); return s; });
   const handleClose = () => { setSel(null); onClose(); };
+  const modalRef = useModalA11y(open, handleClose);
+  const titleId = step === 1 ? "custom-download-title-pw" : "custom-download-title-opts";
   const downloadMulti = async () => {
     if (!sel?.size) return;
     let n = 0;
@@ -59,7 +62,11 @@ export default function CustomDownloadOverlay({
 
   return (
     <div
+      ref={modalRef}
       className="download-opt-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
@@ -67,11 +74,12 @@ export default function CustomDownloadOverlay({
       <div className="download-opt-box">
         {step === 1 ? (
           <>
-            <div className="download-opt-title">Custom download</div>
+            <div id={titleId} className="download-opt-title">Custom download</div>
             <input
               className="modal-input download-opt-pw"
               type="password"
               placeholder="Password"
+              aria-label="Password"
               value={pw}
               autoFocus
               onChange={(e) => setPw(e.target.value)}
@@ -88,7 +96,7 @@ export default function CustomDownloadOverlay({
           </>
         ) : (
           <>
-            <div className="download-opt-title">Download custom format</div>
+            <div id={titleId} className="download-opt-title">Download custom format</div>
             {opts.map((o) => {
               const selected = sel?.has(o.key) ?? false;
               return (

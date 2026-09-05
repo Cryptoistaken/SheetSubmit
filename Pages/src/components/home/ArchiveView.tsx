@@ -49,7 +49,7 @@ export default function ArchiveView({
     try {
       await api.restoreFile(id);
     } catch {
-      showToast("Restore failed");
+      showToast("Could not restore file. Try again.");
       return;
     }
     showToast("File restored");
@@ -62,12 +62,12 @@ export default function ArchiveView({
   };
 
   const deleteOne = async (id: string) => {
-    const ok = await confirm("Permanently delete this file?", "Delete Forever");
+    const ok = await confirm("Permanently delete this file?", "Delete forever");
     if (!ok) return;
     try {
       await api.permanentDelete(id);
     } catch {
-      showToast("Delete failed");
+      showToast("Could not delete file. Try again.");
       return;
     }
     showToast("Permanently deleted");
@@ -111,28 +111,34 @@ export default function ArchiveView({
     });
     setSelected(new Set());
     load();
-    showToast(failed ? "Restore failed for some files" : plural(done) + " restored");
+    showToast(failed ? "Could not restore some files. Try again." : plural(done) + " restored");
   };
 
   const deleteSelected = async () => {
     const ids = Array.from(selected);
     const ok = await confirm(
       "Permanently delete " + plural(ids.length) + "?",
-      "Delete Forever",
+      "Delete forever",
     );
     if (!ok) return;
     const { done, failed } = await runBatched(ids, 20, async (b) => (await api.batchDelete(b)).deleted);
     setSelected(new Set());
     load();
-    showToast(failed ? "Delete failed for some files" : plural(done) + " permanently deleted");
+    showToast(failed ? "Could not delete some files. Try again." : plural(done) + " permanently deleted");
   };
 
-  if (archived === null) return null;
+  if (archived === null) {
+    return (
+      <div role="status" aria-live="polite" aria-busy="true" style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>
+        Loading…
+      </div>
+    );
+  }
 
   return (
     <>
       {archived.length === 0 ? (
-        <EmptyState title="No archived files" sub="Deleted files appear here for 30 days" />
+        <EmptyState title="No archived files" sub="Archived files appear here for 30 days" />
       ) : (
         <div className={view === "list" ? "files-list" : "files-grid"}>
           {[...archived].sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0)).map((f, i) => {
@@ -165,7 +171,7 @@ export default function ArchiveView({
               <button className="home-tab" onClick={unselectAll}>Unselect all</button>
             ) : null}
             <button className="home-tab sel-primary" onClick={() => void restoreSelected()}>Restore ({selected.size})</button>
-            <button className="home-tab sel-danger" onClick={() => void deleteSelected()}>Delete ({selected.size})</button>
+            <button className="home-tab sel-danger" onClick={() => void deleteSelected()}>Delete forever ({selected.size})</button>
             <button className="home-tab" onClick={selectAll}>Select all ({archived?.length ?? 0})</button>
           </div>,
           document.getElementById("homeTabBar")!,

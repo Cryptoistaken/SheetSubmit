@@ -209,7 +209,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
 
   const deleteArchived = async (fileId: string) => {
     if (!detailUser) return;
-    const ok = await confirm("Permanently delete this file?", "Delete Forever");
+    const ok = await confirm("Permanently delete this file?", "Delete forever");
     if (!ok) return;
     try {
       await api.adminDeleteArchived(detailUser.id, fileId);
@@ -220,6 +220,14 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     showToast("Permanently deleted");
     showDetail(detailUser.id);
   };
+
+  if (initialUserId && !detailUser && users === null) {
+    return (
+      <div role="status" aria-live="polite" aria-busy="true" style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>
+        Loading…
+      </div>
+    );
+  }
 
   if (detailUser) {
     const files = detailUser.files ?? [];
@@ -243,7 +251,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
               ) : null}
             </div>
             <div className="admin-detail-info">
-              <div className="admin-detail-name">{userName(detailUser)}</div>
+              <div className="admin-detail-name" dir="auto" style={{ unicodeBidi: "isolate" }}>{userName(detailUser)}</div>
               <div className="admin-detail-meta">
                 {detailUser.username ? "@" + detailUser.username : "ID: " + detailUser.id}
               </div>
@@ -307,7 +315,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
             </div>
           )
         ) : detailArchived.length === 0 ? (
-          <EmptyState title="No archived files" sub="Deleted files appear here for 30 days" />
+          <EmptyState title="No archived files" sub="Archived files appear here for 30 days" />
         ) : (
           <div className={view === "list" ? "files-list" : "files-grid"}>
             {detailArchived.map((f) => {
@@ -374,17 +382,17 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   return (
     <>
       <div className="admin-stats">
-        <div className="admin-stat-card">
-          <div className="admin-stat-value">{stats?.totalUsers ?? 0}</div>
+        <div className="admin-stat-card" aria-busy={stats === null}>
+          <div className="admin-stat-value">{stats ? stats.totalUsers : "—"}</div>
           <div className="admin-stat-label">Total Users</div>
         </div>
-        <div className="admin-stat-card">
-          <div className="admin-stat-value">{stats?.totalFiles ?? 0}</div>
+        <div className="admin-stat-card" aria-busy={stats === null}>
+          <div className="admin-stat-value">{stats ? stats.totalFiles : "—"}</div>
           <div className="admin-stat-label">Total Files</div>
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 12, color: "var(--text3)", fontWeight: 500 }}>{users ? `${users.length} users` : ""}</div>
+        <div style={{ fontSize: 12, color: "var(--text3)", fontWeight: 500 }}>{users === null ? "Loading…" : `${users.length} users`}</div>
         <label style={{ position: "relative", display: "inline-flex", alignItems: "center", marginLeft: "auto" }}>
           <SearchIcon size={14} style={{ position: "absolute", left: 10, color: "var(--text3)", pointerEvents: "none" } as React.CSSProperties} />
           <input
@@ -401,12 +409,14 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       </div>
       <div className="admin-user-list">
         {users === null
-          ? null
+          ? (
+              <div role="status" aria-live="polite" aria-busy="true" style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>
+                Loading…
+              </div>
+            )
           : users.length === 0
             ? (
-                <div className="empty-state">
-                  <div className="empty-state-title">No users found</div>
-                </div>
+                <EmptyState title="No users found" sub={search.trim() ? "Try a different search" : "No users yet"} />
               )
             : users.map((u) => {
                 const name = userName(u);
@@ -437,8 +447,8 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                       ) : null}
                     </div>
                     <div className="admin-user-info">
-                      <div className="admin-user-name">
-                        {name}
+                      <div className="admin-user-name" dir="auto" style={{ unicodeBidi: "isolate" }}>
+                        <span dir="auto" style={{ unicodeBidi: "isolate" }}>{name}</span>
                         {u.banned ? (
                           <span
                             style={{

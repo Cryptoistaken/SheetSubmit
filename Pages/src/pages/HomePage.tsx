@@ -53,6 +53,7 @@ const SplitterTool = lazyRetry(() => import("@/components/tools/SplitterTool"));
 const PoolsView = lazyRetry(() => import("@/components/home/PoolsView"));
 import Fab from "@/components/home/Fab";
 import FileGrid from "@/components/home/FileGrid";
+import { useModalA11y } from "@/hooks/useModalA11y";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
@@ -203,7 +204,7 @@ export default function HomePage() {
   const downloadFile = async (f: SheetFile) => {
     const rows = await api.getRows(f.id);
     if (!rows || !rows.length) {
-      showToast("No data");
+      showToast("No rows to download. Add content first.");
       return;
     }
     try {
@@ -302,6 +303,7 @@ export default function HomePage() {
   };
 
   const [pwModal, setPwModal] = useState<null | { type: FileType; preset: FilePreset; choice: string; custom: string }>(null);
+  const renameRef = useModalA11y(!!renameFileId, closeRename);
 
   const openCreatePw = (type: FileType, preset: FilePreset) => setPwModal({ type, preset, choice: "dgddigital", custom: "" });
 
@@ -342,6 +344,8 @@ export default function HomePage() {
 
   const [uploadPending, setUploadPending] = useState<null | { id: string; name: string; type: FileType; rows: import("@/lib/types").Row[]; dataCount: number; cacheReady: Promise<void> }>(null);
   const [typePick, setTypePick] = useState<null | { has2fa: boolean; pageHint: boolean }>(null);
+  const typePickRef = useModalA11y(!!typePick, () => { setTypePick(null); setUploadPending(null); });
+  const pwRef = useModalA11y(!!pwModal, () => { setPwModal(null); setUploadPending(null); });
 
   const pickUploadType = (preset: FilePreset) => {
     if (!uploadPending) return;
@@ -392,7 +396,7 @@ export default function HomePage() {
             {selected.size > 2 ? (
               <button className="home-tab" onClick={unselectAll}>Unselect all</button>
             ) : null}
-            <button className="home-tab sel-danger" onClick={() => void deleteSelected()}>Delete ({selected.size})</button>
+              <button className="home-tab sel-danger" onClick={() => void deleteSelected()}>Move to archive ({selected.size})</button>
             <button className="home-tab" onClick={selectAll}>Select all ({files?.length ?? 0})</button>
           </div>
         ) : tab === "archive" && archSel.size > 0 ? null : (
@@ -479,7 +483,11 @@ export default function HomePage() {
               </button>
             </div>
           ) : null}
-          {files !== null ? (
+          {files === null ? (
+            <div role="status" aria-live="polite" aria-busy="true" style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>
+              Loading…
+            </div>
+          ) : (
             <FileGrid
               files={files}
               crossDupCounts={dupCounts}
@@ -492,7 +500,7 @@ export default function HomePage() {
               onDelete={deleteFile}
               onToggleSelect={toggleSelect}
             />
-          ) : null}
+          )}
         </div>
       ) : null}
 
@@ -546,8 +554,8 @@ export default function HomePage() {
           if (e.target === e.currentTarget) closeRename();
         }}
       >
-        <div className="modal-box" role="dialog" aria-modal="true" aria-label="Rename file">
-          <div className="modal-title">Rename file</div>
+        <div ref={renameRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="rename-title">
+          <div id="rename-title" className="modal-title">Rename file</div>
           <input
             className="modal-input"
             type="text"
@@ -577,8 +585,8 @@ export default function HomePage() {
       </div>
 
       <div className={`modal-overlay${typePick ? " open" : ""}`} onClick={(e) => { if (e.target === e.currentTarget) { setTypePick(null); setUploadPending(null); } }}>
-        <div className="modal-box" role="dialog" aria-modal="true" aria-label="Choose file type" style={{ width: 300 }}>
-          <div className="modal-title">Choose file type</div>
+        <div ref={typePickRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="typepick-title" style={{ width: 300 }}>
+          <div id="typepick-title" className="modal-title">Choose file type</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 10 }}>
             {([
               { preset: "cookie" as FilePreset, name: "Cookie", desc: "cookies and uid", Icon: CookieIcon },
@@ -596,7 +604,7 @@ export default function HomePage() {
                   style={disabled ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
                   onClick={() => pickUploadType(o.preset)}
                 >
-                  <span className="home-fab-ic" style={{ background: "var(--bg3)", color: "var(--text)" }}><o.Icon size={15} /></span>
+                  <span className="home-fab-ic" aria-hidden="true" style={{ background: "var(--bg3)", color: "var(--text)" }}><o.Icon size={15} aria-hidden="true" /></span>
                   <span>
                     <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span className="home-fab-name">{o.name}</span>
@@ -612,8 +620,8 @@ export default function HomePage() {
       </div>
 
       <div className={`modal-overlay${pwModal ? " open" : ""}`} onClick={(e) => { if (e.target === e.currentTarget) { setPwModal(null); setUploadPending(null); } }}>
-        <div className="modal-box" role="dialog" aria-modal="true" aria-label="Pick a password" style={{ width: 340 }}>
-          <div className="modal-title">Pick a password</div>
+        <div ref={pwRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="pw-title" style={{ width: 340 }}>
+          <div id="pw-title" className="modal-title">Pick a password</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginTop: 12 }}>
             {[
               { id: "dgddigital" },
@@ -625,7 +633,7 @@ export default function HomePage() {
                 style={{ display: "flex", flexDirection: "row", gap: 12, textAlign: "left", padding: "14px 16px", minHeight: 56, justifyContent: "flex-start", alignItems: "center", borderColor: "var(--border2)" }}
                 onClick={() => { if (uploadPending) doUploadWithPassword(c.id); else createWithPassword(c.id); }}
               >
-                <span style={{ display: "inline-flex", flexShrink: 0 }}><PasswordIcon password={c.id} size={18} /></span>
+                <span style={{ display: "inline-flex", flexShrink: 0 }} aria-hidden="true"><PasswordIcon password={c.id} size={18} aria-hidden="true" /></span>
                 <span className="file-card-name" style={{ fontSize: 13, fontWeight: 600 }}>{c.id}</span>
               </button>
             ))}

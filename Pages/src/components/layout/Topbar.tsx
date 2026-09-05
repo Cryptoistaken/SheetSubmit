@@ -48,6 +48,7 @@ export default function Topbar() {
   const [panelOpen, setPanelOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  useModalA11y(panelOpen, () => setPanelOpen(false), panelRef);
   const [renameOpen, setRenameOpen] = useState(false);
   const [avatarReady, setAvatarReady] = useState(false);
   const [photoBusted, setPhotoBusted] = useState(false);
@@ -119,6 +120,20 @@ export default function Topbar() {
     return () => document.removeEventListener("click", onDoc);
   }, []);
 
+  // Escape closes settings panel and returns focus to trigger.
+  useEffect(() => {
+    if (!panelOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setPanelOpen(false);
+        btnRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [panelOpen]);
+
   if (!user) return null;
 
   const ringColor = conn.cls === "ok" ? "var(--green)" : conn.cls === "err" ? "var(--red)" : "var(--text3)";
@@ -145,7 +160,7 @@ export default function Topbar() {
       if (st.adminMode) await api.adminUpdateFile(file.id, { name });
       else await api.updateFile(file.id, { name });
     } catch {
-      showToast("Rename failed");
+      showToast("Could not rename file. Try again.");
       return;
     }
     useSheetStore.setState((s) => (s.file ? { file: { ...s.file, name } } : {}));
@@ -156,7 +171,7 @@ export default function Topbar() {
     api
       .logout()
       .then(() => window.location.reload())
-      .catch(() => showToast("Logout failed"));
+      .catch(() => showToast("Could not log out. Try again."));
   };
 
   return (
@@ -199,6 +214,10 @@ export default function Topbar() {
           ref={btnRef}
           className={`profile-btn${user.photoUrl ? " loaded" : ""}`}
           title="User menu"
+          aria-label={displayName ? `User menu for ${displayName}` : "User menu"}
+          aria-expanded={panelOpen}
+          aria-haspopup="dialog"
+          aria-controls="user-settings-panel"
           style={hideHome}
           onClick={(e) => {
             e.stopPropagation();
@@ -217,7 +236,7 @@ export default function Topbar() {
              </Avatar>
           </span>
         </button>
-        <div ref={panelRef} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
+        <div ref={panelRef} id="user-settings-panel" role="dialog" aria-modal="true" aria-label="Settings" aria-hidden={!panelOpen} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
           <div className="gear-user-card">
              <ProfileAvatar userId={user.id} photoUrl={user.photoUrl} fallback={(displayName || "?").slice(0, 1).toUpperCase()} className="gear-user-avatar" />
             <div className="gear-user-info">

@@ -50,8 +50,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="toast-wrap">
-        <div className={`toast${show ? " show" : ""}`}>{message}</div>
+      <div className="toast-wrap" aria-live="polite" aria-atomic="true">
+        <div role="status" className={`toast${show ? " show" : ""}`}>
+          {message}
+        </div>
       </div>
     </ToastContext.Provider>
   );

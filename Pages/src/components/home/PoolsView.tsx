@@ -6,6 +6,7 @@ import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { useProfileCache } from "@/stores/profileCache";
 import { CookieIcon, PageIcon, PasswordIcon, SearchIcon, TwoFaIcon, UnknownUserIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
+import EmptyState from "./EmptyState";
 import DownloadDetailModal from "./DownloadDetailModal";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 
@@ -325,9 +326,9 @@ export default function PoolsView() {
 
       {/* stats */}
       <div className="pools-stats" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 16 }}>
-        <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
+        <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }} aria-busy={detail === null}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Available in {poolMeta.label}</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{totals.available}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.available : "—"}</div>
           <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>{cur === "cookies_only" ? "Cookies only" : cur === "cookies_2fa" ? "Cookies + 2FA" : "Full"}</div>
           {cur === "page" && verified ? (
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -337,14 +338,14 @@ export default function PoolsView() {
             </div>
           ) : null}
         </div>
-        <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
+        <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }} aria-busy={detail === null}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Claimed</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{totals.claimed}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.claimed : "—"}</div>
           <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>By contributors</div>
         </div>
-        <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
+        <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }} aria-busy={detail === null}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Contributors</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{totals.users}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.users : "—"}</div>
         </div>
       </div>
 
@@ -421,8 +422,10 @@ export default function PoolsView() {
 
       {/* user list */}
       <div className="card-list" style={{ marginTop: 12 }}>
-        {filtered.length === 0 ? (
-          <div style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13, border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>No contributors yet</div>
+        {detail === null ? (
+          <div role="status" aria-live="polite" aria-busy="true" style={{ padding: 24, textAlign: "center", color: "var(--text3)", fontSize: 13, border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>Loading…</div>
+        ) : filtered.length === 0 ? (
+          <EmptyState title="No contributors yet" sub={search.trim() ? "No match for your search" : "Contributors appear here when they push rows"} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
         ) : filtered.map((u) => {
           const d = displayName(u);
            const isAdmin = Boolean(u.isAdmin || cachedProfiles[u.userId]?.isAdmin);
@@ -461,7 +464,7 @@ export default function PoolsView() {
               {expanded && (
                 <div className="file-row" style={{ padding: "4px 0 8px 42px" }}>
                   {loadingFiles && !uf ? (
-                    <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>Loading...</div>
+                    <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>Loading…</div>
                   ) : !uf || uf.files.length === 0 ? (
                     <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>No files in pool</div>
                   ) : (
@@ -492,7 +495,7 @@ export default function PoolsView() {
       <div style={{ marginTop: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Recent downloads</div>
         {!downloads || downloads.length === 0 ? (
-          <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>{downloads === null ? "Loading..." : "No downloads yet"}</div>
+          <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>{downloads === null ? "Loading…" : "No downloads yet"}</div>
         ) : (
           <div className="card-list">
             {(downloads as unknown as { id: string; at: number; ts?: number; poolId: string; password: string; claimed: number; filename: string; reverted?: boolean; claimedBy?: string | null }[]).map((d) => {

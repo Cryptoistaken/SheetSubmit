@@ -44,7 +44,7 @@ export default function SplitterTool() {
       setName(res.name);
       showToast(`Loaded ${res.rows.length} rows`);
     } catch (e) {
-      showToast((e as Error).message || "Parse failed");
+      showToast((e as Error).message || "Could not parse file. Check the file and try again.");
       setRows(null); setCols(null); setName("");
     } finally { setLoading(false); }
   };
@@ -56,25 +56,25 @@ export default function SplitterTool() {
     setLoading(true);
     try {
       const r = await api.getRows(id);
-      if (!r || !r.length) throw new Error("No data");
+      if (!r || !r.length) throw new Error("No rows found");
       const c = fileTypeDef(file.type).columns;
       const dl = c.filter((x) => x.key !== "uid");
       const filtered = r.filter((row) => dl.some((col) => row[col.key]));
-      if (!filtered.length) throw new Error("No data");
+      if (!filtered.length) throw new Error("No rows found");
       setRows(filtered);
       setCols(c);
       setName(file.name);
     } catch (e) {
-      showToast((e as Error).message || "Failed to load");
+      showToast((e as Error).message || "Could not load file. Try again.");
       setRows(null); setCols(null);
     } finally { setLoading(false); }
   };
 
   const doSplit = async () => {
-    if (!rows || !cols || !name) { showToast("Load a file first"); return; }
+    if (!rows || !cols || !name) { showToast("Load a file first. Upload an .xlsx or choose an existing file."); return; }
     const parts = effectiveN;
-    if (!Number.isFinite(parts) || parts < 1 || parts > 100) { showToast("Pick 1-100 parts"); return; }
-    if (parts === 1) { showToast("Pick at least 2"); return; }
+    if (!Number.isFinite(parts) || parts < 1 || parts > 100) { showToast("Choose between 2 and 100 parts."); return; }
+    if (parts === 1) { showToast("Choose at least 2 parts."); return; }
     const dlCols = source === "existing" ? cols.filter((c) => c.key !== "uid") : cols;
     const dataRows = rows.filter((r) => dlCols.some((c) => r[c.key]));
     if (!dataRows.length) { showToast("Empty file"); return; }
@@ -90,7 +90,7 @@ export default function SplitterTool() {
       }
       showToast(`Downloaded ${chunks.length} files`);
     } catch {
-      showToast("Download failed");
+      showToast("Could not download files. Try again.");
     }
   };
 

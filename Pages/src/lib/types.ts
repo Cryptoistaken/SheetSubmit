@@ -119,13 +119,14 @@ export function exportCellValue(colKey: string, value: string | null | undefined
 /** Authenticated Telegram user. */
 export interface User {
   id: string;
+  name?: string;
+  createdAt?: number;
   firstName?: string;
   lastName?: string;
   username?: string;
   photoUrl?: string | null;
   isAdmin?: boolean;
   fileId?: string | null;
-  lastLogin?: number;
   fileCount?: number;
   archivedCount?: number;
   files?: SheetFile[];

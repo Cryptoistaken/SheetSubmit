@@ -15,8 +15,8 @@ import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import EmptyState from "./EmptyState";
 import FileCard from "./FileCard";
 
-function userName(u: { firstName?: string; lastName?: string }): string {
-  return ((u.firstName ?? "") + " " + (u.lastName ?? "")).trim() || "Unknown";
+function userName(u: { name?: string; firstName?: string; lastName?: string; username?: string }): string {
+  return u.name?.trim() || ((u.firstName ?? "") + " " + (u.lastName ?? "")).trim() || (u.username ? "@" + u.username : "") || "Unknown";
 }
 
 export default function AdminView({ initialUserId, view = "grid" }: { initialUserId?: string; view?: "grid" | "list" }) {
@@ -248,10 +248,10 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                 {detailUser.username ? "@" + detailUser.username : "ID: " + detailUser.id}
               </div>
               <div className="admin-detail-meta">
-                Last login:{" "}
-                {detailUser.lastLogin
-                  ? new Date(detailUser.lastLogin).toLocaleString()
-                  : "Never"}
+                Joined{" "}
+                {detailUser.createdAt
+                  ? new Date(detailUser.createdAt).toLocaleDateString()
+                  : "—"}
               </div>
               <div className="admin-detail-meta">
                 {detailUser.fileCount || 0} files, {detailUser.archivedCount || 0} archived
@@ -410,9 +410,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
               )
             : users.map((u) => {
                 const name = userName(u);
-                const lastLogin = u.lastLogin
-                  ? new Date(u.lastLogin).toLocaleDateString()
-                  : "Never";
+                const joined = u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "";
                 return (
                   <div
                     key={u.id}
@@ -466,7 +464,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                         <span className="admin-user-stat-val">{u.fileCount || 0}</span> files
                       </div>
                       <div className="admin-user-stat">
-                        <span className="admin-user-stat-val">{lastLogin}</span>
+                        <span className="admin-user-stat-val">{joined}</span>
                       </div>
                     </div>
                   </div>

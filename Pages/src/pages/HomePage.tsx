@@ -1,6 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { ComponentType } from "react";
-import { LayoutGrid, List } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router";
 
 // Stale chunk after a fresh deploy (old tab imports a hashed asset the new
@@ -456,11 +455,12 @@ export default function HomePage() {
           {files !== null && !bubblePickMode ? (
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
               <div className="view-switch" role="group" aria-label="View mode">
+                <div className={"view-switch-thumb" + (view === "list" ? " right" : "")} aria-hidden="true" />
                 <button className={view === "grid" ? "on" : ""} aria-label="Grid view" title="Grid view" aria-pressed={view === "grid"} onClick={() => setViewMode("grid")}>
-                  <LayoutGrid size={14} />
+                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 256 256" aria-hidden="true"><path d="M104,40H56A16,16,0,0,0,40,56v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40Zm0,64H56V56h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,64H152V56h48v48Zm-96,32H56a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,104,136Zm0,64H56V152h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,200,136Zm0,64H152V152h48v48Z"></path></svg>
                 </button>
                 <button className={view === "list" ? "on" : ""} aria-label="List view" title="List view" aria-pressed={view === "list"} onClick={() => setViewMode("list")}>
-                  <List size={14} />
+                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 256 256" aria-hidden="true"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM40,72H216a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16ZM216,184H40a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Z"></path></svg>
                 </button>
               </div>
             </div>

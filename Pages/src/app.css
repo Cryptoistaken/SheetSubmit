@@ -810,31 +810,50 @@ button, input, select, textarea {
 
 /* ── View switcher (grid / list) ── */
 .view-switch {
+    position: relative;
     display: inline-flex;
-    border: 1px solid var(--border);
-    border-radius: var(--r);
+    height: 36px;
+    padding: 0 1px;
+    border-radius: var(--rl);
+    background: var(--bg3);
     overflow: hidden;
+}
+.view-switch-thumb {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 1px;
+    width: 36px;
+    margin: 1px 0;
+    border-radius: calc(var(--rl) - 3px);
     background: var(--bg);
+    box-shadow: var(--shadow-sm);
+    transition: left 0.18s ease;
+}
+.view-switch-thumb.right {
+    left: 37px;
 }
 .view-switch button {
-    width: 30px;
-    height: 28px;
+    position: relative;
+    z-index: 1;
+    width: 36px;
+    margin: 1px 0;
     display: flex;
     align-items: center;
     justify-content: center;
     background: transparent;
     border: none;
+    border-radius: calc(var(--rl) - 3px);
     color: var(--text3);
     cursor: pointer;
-    transition: background 0.1s, color 0.1s;
     padding: 0;
-}
-.view-switch button + button {
-    border-left: 1px solid var(--border);
+    transition: color 0.15s;
 }
 .view-switch button.on {
-    background: var(--bg3);
     color: var(--text);
+}
+.view-switch svg {
+    display: block;
 }
 
 /* ── Files list view ── */
@@ -844,25 +863,28 @@ button, input, select, textarea {
     gap: 8px;
 }
 .file-card.list-row {
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 3px 12px;
     align-items: center;
-    gap: 12px;
-    min-height: 0;
     padding: 10px 14px;
+    min-height: 0;
 }
 .file-card.list-row .file-card-icon {
+    grid-column: 1;
+    grid-row: 1 / span 2;
     width: 28px;
     height: 28px;
-    flex-shrink: 0;
 }
 .file-card.list-row .file-card-name {
-    flex: 1;
-    min-width: 60px;
+    grid-column: 2;
+    grid-row: 1;
     font-size: 13px;
 }
 .file-card.list-row .file-card-actions {
     position: static;
-    flex-shrink: 0;
+    grid-column: 3;
+    grid-row: 1;
 }
 
 /* ── File type badge ── */

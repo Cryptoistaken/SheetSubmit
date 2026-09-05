@@ -35,6 +35,14 @@
     --fb: #6366f1;
     --fb-bg: #eef2ff;
 
+    /* Indicator gradients — light theme (dark overrides below) */
+    --grad-rows: linear-gradient(#525252 0%, #000000 100%);
+    --grad-live: linear-gradient(#4ade80 0%, #16a34a 100%);
+    --grad-page: linear-gradient(oklch(0.640619 0.197547 260) 0%, oklch(0.5772 0.2324 260) 100%);
+    --grad-dead: linear-gradient(#f87171 0%, #ee0000 100%);
+    --grad-dup: linear-gradient(#fde047 0%, #eab308 100%);
+    --grad-cross: linear-gradient(#fdba74 0%, #f6821f 100%);
+
     /* Selection highlight */
     --sel-bg: rgba(0, 112, 243, 0.08);
     --sel-border: rgba(0, 112, 243, 0.4);
@@ -86,6 +94,12 @@
     --fb-bg: rgba(99, 102, 241, 0.15);
     --sel-bg: rgba(0, 112, 243, 0.15);
     --sel-border: rgba(0, 112, 243, 0.5);
+    --grad-rows: #ededed;
+    --grad-live: #22c55e;
+    --grad-page: #3b82f6;
+    --grad-dead: #ef4444;
+    --grad-dup: #facc15;
+    --grad-cross: #fb923c;
     --overlay-light: rgba(0, 0, 0, 0.5);
     --overlay-mid: rgba(0, 0, 0, 0.6);
     --overlay-dark: rgba(0, 0, 0, 0.7);
@@ -2190,23 +2204,23 @@ th.rh:hover {
     height: 20px;
     flex-shrink: 0;
     background: var(--bg4);
-    border-radius: 10px;
-    border: 1.5px solid var(--border2);
+    border-radius: 999px;
+    border: 2px solid var(--border2);
     transition: background 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
 }
 .autocheck-toggle .autocheck-track::after {
     content: '';
     position: absolute;
-    top: 1.5px;
-    left: 1.5px;
-    width: 14px;
-    height: 14px;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
     background: var(--bg);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
     transition: transform 0.2s var(--ease-out);
 }
-.autocheck-toggle.on .autocheck-track { background: var(--blue); border-color: var(--blue); }
+.autocheck-toggle.on .autocheck-track { background: var(--grad-page); border-color: transparent; }
 .autocheck-toggle.on .autocheck-track::after { transform: translateX(16px); }
 
 /* ── Touch devices (port of old css/touch.css) ── */

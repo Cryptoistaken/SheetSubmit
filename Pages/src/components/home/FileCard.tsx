@@ -135,7 +135,7 @@ export default function FileCard({
       ? { background: "transparent", color: "#2563eb", border: "1px solid transparent" }
       : { background: "var(--bg3)", color: "var(--text2)" };
   const sq = (bg: string, title: string) => (
-    <span title={title} style={{ width: 12, height: 12, borderRadius: 2.5, background: bg, border: "1px solid var(--border)", flexShrink: 0 }} />
+    <span title={title} style={{ width: 10, height: 10, borderRadius: 2.5, background: bg, border: "1px solid var(--border)", flexShrink: 0 }} />
   );
 
   const actionLabel = ({ created: "Newly Created", renamed: "Renamed", modified: "Last Modified", restored: "Last Restored", archived: "Last Archived" } as Record<string, string>)[file.lastAction ?? (file.deletedAt ? "archived" : "modified")] ?? "Last Modified";
@@ -170,21 +170,21 @@ export default function FileCard({
           <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center" }} title={pwTitle}>{isCustom ? pwLabel : <PasswordIcon password={pw} size={14} />}</span>
         </span>
         <span className="file-card-meta" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--text)", "rows")}{count}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-rows)", "rows")}{count}</span>
           {(file.liveCount ?? 0) + (file.deadCount ?? 0) > 0 ? (
-            <>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--green)", "live")}{file.liveCount}</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--red)", "dead")}{file.deadCount}</span>
-            </>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-live)", "live")}{file.liveCount}</span>
           ) : null}
           {isPage && (file.pageCount ?? 0) > 0 ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("linear-gradient(oklch(0.640619 0.197547 260) 0%, oklch(0.5772 0.2324 260) 100%)", "page eligible")}{file.pageCount}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-page)", "page eligible")}{file.pageCount}</span>
+          ) : null}
+          {(file.liveCount ?? 0) + (file.deadCount ?? 0) > 0 ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-dead)", "dead")}{file.deadCount}</span>
           ) : null}
           {(file.dupCount ?? 0) > 0 ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--yellow-light)", "duplicates in file")}{file.dupCount}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-dup)", "duplicates in file")}{file.dupCount}</span>
           ) : null}
           {crossDupCount ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--orange)", "cross-file duplicates")}{crossDupCount}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-cross)", "cross-file duplicates")}{crossDupCount}</span>
           ) : null}
         </span>
       </div>

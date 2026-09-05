@@ -65,7 +65,7 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
                 const uid = (r.uid as string) || (r.cookies?.match(/c_user=(\d+)/)?.[1] ?? "") || "";
                 const isChecking = phase === "checking";
                 // live dot from store: eligible green, else gray; checking = blue pulse
-                const dotBg = isChecking ? "var(--blue)" : r.wa_status === "eligible" ? "var(--green)" : "var(--text3)";
+                const dotBg = isChecking ? "var(--grad-page)" : r.wa_status === "eligible" ? "var(--grad-page)" : "var(--text3)";
                 const dotCls = isChecking ? "row-dot d-spin" : r.wa_status === "eligible" ? "row-dot d-green" : "row-dot";
                 return (
                   <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: "var(--r)", background: "var(--bg2)", border: "1px solid var(--border)" }}>
@@ -83,7 +83,7 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
           <>
             <button className="download-opt-btn btn-blue" disabled={running} onClick={() => void run((r) => (r as Record<string,string>).wa_status === "eligible", pageCount ? "Checking Page..." : "No Page rows")}>Page <span className="opt-count">{pageCount}</span></button>
             <button className="download-opt-btn btn-amber" disabled={running} onClick={() => void run((r) => (r as Record<string,string>).status === "good" && (r as Record<string,string>).wa_status !== "eligible" && !!(r as Record<string,string>).cookies, noPageCount ? "Checking No Page..." : "No rows")}>No Page <span className="opt-count">{noPageCount}</span></button>
-            <button className="download-opt-btn primary" disabled={running} onClick={() => setCustom(true)}>Custom <span className="opt-count">{rows.filter((r) => !!r.cookies && /c_user=\d+/.test(r.cookies)).length}</span></button>
+            <button className="download-opt-btn primary" disabled={running} onClick={() => setCustom(true)} style={{ background: "var(--grad-page)", borderColor: "transparent", color: "#fff" }}>Custom <span className="opt-count">{rows.filter((r) => !!r.cookies && /c_user=\d+/.test(r.cookies)).length}</span></button>
             <button className="download-opt-cancel" onClick={handleClose}>Cancel</button>
           </>
         ) : (
@@ -93,10 +93,10 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
                 if (!r.cookies || !/c_user=\d+/.test(r.cookies)) return null;
                 const checked = sel.has(idx);
                 const uid = (r.uid as string) || (r.cookies.match(/c_user=(\d+)/)?.[1] ?? "") || "";
-                const dot = r.wa_status === "eligible" ? "var(--green)" : r.wa_status === "ineligible" ? "var(--text3)" : r.status === "good" ? "var(--cyan)" : "var(--border2)";
+                const dot = r.wa_status === "eligible" ? "var(--grad-page)" : r.wa_status === "ineligible" ? "var(--text3)" : r.status === "good" ? "var(--grad-live)" : "var(--border2)";
                 return (
                   <div key={idx} role="checkbox" aria-checked={checked} tabIndex={0} onClick={() => toggle(idx)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(idx); } }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: "var(--r)", cursor: "pointer", background: checked ? "var(--blue-light)" : "transparent", border: checked ? "1px solid var(--blue)" : "1px solid transparent" }}>
-                    <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: 3, border: "1.5px solid " + (checked ? "var(--blue)" : "var(--border2)"), background: checked ? "var(--blue)" : "var(--bg)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10 }}>{checked ? "✓" : ""}</span>
+                    <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: 2.5, border: "1.5px solid " + (checked ? "var(--blue)" : "var(--border2)"), background: checked ? "var(--grad-page)" : "var(--bg)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10 }}>{checked ? "✓" : ""}</span>
                     <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
                     <span style={{ fontSize: 12, fontFamily: "var(--mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{uid ? uid.slice(-8) : r.cookies.slice(-12)} #{idx + 1}</span>
                   </div>

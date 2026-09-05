@@ -116,6 +116,7 @@ functions/webhook/[[path]].ts
 8. Worker API change flow (TestApi.ts hits the LIVE worker, so order matters): bump `API_VERSION` in `worker/src/index.ts` → `bun run typecheck` + `bun run test` in `worker/` → push so Cloudflare auto-deploys → confirm via `GET /api/health` `version` → then run `EXPECT_VERSION=<new> bun scripts/TestApi.ts` (secret auto-loads from `scripts/.env`, all must pass).
 9. New API endpoint → new `test()` in `scripts/TestApi.ts` in the same change (happy path + 400/401/404). Never ship an untested route.
 10. **Commit & push after completing each batch of changes.** After finishing a set of modifications (typecheck + tests pass), immediately `git add` only the files you changed, commit with a concise message, and `git push`. Never leave a stack of uncommitted changes sitting around — the user expects each completed feature/fix to be pushed to the repo.
+11. **Keep this file fresh.** Any change that adds, removes, renames, or moves a route, file, DO op, store, or workflow → update the Codebase map + Auth flow above in the SAME commit, or the next agent works blind.
 
 ## Capacity
 | Resource | Limit |

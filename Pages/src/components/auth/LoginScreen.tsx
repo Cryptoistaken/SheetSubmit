@@ -99,7 +99,10 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
         setWaiting(true);
         window.location.href = safeNext(next);
       };
-      const options = { client_id: Number(tgClientId), scope: ["openid", "profile", "phone", "write"], redirect_uri: `${window.location.origin}/login` };
+      // NOTE: the library ignores redirect_uri here — it always uses the
+      // current page URL (our /login, registered in BotFather). scope is the
+      // only knob: "write" maps to telegram:bot_access server-side.
+      const options = { client_id: Number(tgClientId), scope: ["openid", "profile", "phone", "write"] };
       if (!Number.isSafeInteger(options.client_id) || options.client_id <= 0) throw new Error("Invalid Telegram client ID");
       await new Promise<void>((resolve, reject) => {
         const timer = window.setTimeout(() => reject(new Error("Telegram login timed out")), 120000);

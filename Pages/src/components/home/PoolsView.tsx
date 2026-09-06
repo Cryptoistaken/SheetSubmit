@@ -517,7 +517,7 @@ export default function PoolsView() {
                   style={{ cursor: "pointer" }}
                 >
                   {(() => { const PoolIcon = (POOL_META[poolLabel] ?? POOL_META.cookies_only).Icon; return (
-                  <span title={poolLabel} style={{ flexShrink: 0, display: "inline-flex", filter: "grayscale(1)" }}><PoolIcon size={16} /></span>
+                  <span title={poolLabel} style={{ flexShrink: 0, display: "inline-flex" }}><PoolIcon size={16} /></span>
                   ); })()}
                   <span title={claimer?.name ?? (d.claimedBy ? String(d.claimedBy) : "Claimer unknown — before tracking")} style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg3)", border: "1.5px solid var(--border)", flexShrink: 0, color: "var(--text2)" }}>
                      {claimer ? <ProfileAvatar photoUrl={claimer.photoUrl} fallback={initials || "?"} className="size-9 border-0" /> : <UnknownUserIcon size={16} />}

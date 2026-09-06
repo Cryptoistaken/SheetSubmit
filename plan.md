@@ -1,113 +1,272 @@
-# SheetSubmit Railway Migration Execution Plan
+# SheetSubmit Postgres Migration and Railway Cutover Plan
 
-**Goal:** Make the backend deployable on Railway while keeping the React frontend on Cloudflare Pages and preserving the Pages Functions proxy as the browser-facing API.
+**Goal:** Move the backend from Cloudflare Durable Objects to Railway Postgres, run it as a Railway HTTP service, and keep Cloudflare Pages as the only browser-facing origin.
 
-**Target architecture:** Railway runs the Hono API as a standard Node/Bun HTTP service. Railway Postgres replaces Cloudflare Durable Objects as the system of record. Railway Redis provides distributed cache, rate limiting, and short-lived session/device state where appropriate. Cloudflare Pages remains the public origin and proxies `/api/*` to Railway through `BACKEND_URL`.
+**Architecture:** The browser calls `https://sheetsubmit.pages.dev/api/*`. The Pages Function proxies those requests to the Railway Hono service through `BACKEND_URL`. Railway Postgres is the durable source of truth for users, files, rows, pools, claims, holds, wallets, sessions, downloads, and ledgers. Redis remains provisioned but is not part of the first cutover; it can be added later only for measured cache/rate-limit bottlenecks.
 
-**Non-goals:** Do not move the frontend from Pages. Do not expose Railway directly to browser calls. Do not delete the Cloudflare Worker until rollback and production verification are complete. Do not promise an arbitrary 10x speedup; measure each hot path, remove avoidable round trips, add indexes/transactions, and retain only improvements proven by benchmarks.
+**Tech stack:** Hono, Bun HTTP server, Railway Postgres, `postgres` client, Cloudflare Pages Functions, Telegram OIDC/JWKS, `xlsx`.
 
-## Evidence and Decisions
+## Global Constraints
 
-- Cloudflare Worker `sheetsubmit` is live at API version `1.5.1`; it uses `IndexDO`, `FileDO`, and `PoolDO` SQLite Durable Objects.
-- Cloudflare Pages project `sheetsubmit` is healthy, uses Functions, and currently has production `BACKEND_URL=https://sheetsubmit.traderspopy.workers.dev`.
-- Railway project `SheetSubmit` has production services: app `d0ec267b-f343-4e09-8683-42c773c6d676`, Postgres `cc34a9ae-d761-4e86-8035-043788b9d574`, Redis `f636a177-32ea-4cd6-87d9-04f144b239e8`.
-- Railway app deployments currently fail because the repository has no Railway HTTP entrypoint and still depends on Cloudflare-only bindings.
-- The Pages proxy added approximately 25ms median on `/api/health` in live sampling (`143ms` direct Worker vs `167ms` proxied). Keep it: it preserves same-origin cookies and avoids cross-site credential/CORS/CSRF risk. Large file transfers must be benchmarked separately.
+- Do not move the frontend from Cloudflare Pages.
+- Do not expose Railway directly to browser calls.
+- Keep the Cloudflare Worker deployed and usable as the rollback target until the observation window closes.
+- Do not migrate historical data; the target Railway database is intentionally fresh and empty.
+- Preserve every existing route, validation rule, authorization check, response shape, cookie flag, and data-loss safeguard unless a documented compatibility fix is required.
+- Keep `worker/` unchanged by the Railway migration. All Railway runtime code belongs under `backend/`.
+- Keep `backend/` free of test scripts temporarily, as requested. Before production cutover, restore focused contract/concurrency verification outside the runtime package or in a separate test package.
+- Use parameterized SQL only. Never interpolate user input into SQL text.
+- Use Postgres transactions and row locks for allocation and status transitions.
+- Use one bounded Postgres pool per process with connection, idle, and statement timeouts.
+- Do not add Redis to business-critical writes during this migration.
+- Never print or commit values from `deploy.env`, `scripts/.env`, database URLs, bot tokens, session secrets, GitHub tokens, Railway tokens, or Cloudflare tokens.
+- Use Railway GraphQL API and Cloudflare REST API for deployment/configuration. Do not use Railway CLI or Wrangler deployment commands.
+- Commit and push each completed bounded batch after local verification.
+- Update `AGENTS.md` whenever the codebase map or runtime entrypoint changes.
 
-## Required Engineering Rules
+## Current State
 
-- Read and preserve the existing route contracts and response shapes before changing storage.
-- Keep `worker/src/lib/do.ts` as the compatibility seam initially; port behavior behind it before simplifying callers.
-- Use Postgres transactions and row locks for claim/hold/revert operations; the Durable Object's serialized behavior must not be lost.
-- Add explicit Postgres constraints and indexes for every lookup, FIFO selection, ownership filter, and status transition used by production routes.
-- Use one bounded Postgres pool and one Redis client per process; set connection, idle, and statement timeouts.
-- Never use an unbounded in-memory cache or rate limiter in a multi-instance Railway deployment.
-- Preserve validation, authorization, CSRF protection, data-loss safeguards, cookie flags, and error responses.
-- All changed routes need happy-path, validation, unauthorized, and not-found coverage in `scripts/TestApi.ts` where applicable.
-- Bump `API_VERSION` only with a tested API behavior change; verify the new version through both Railway and Pages proxy.
-- Do not commit `deploy.env` or print any secret in logs, agent output, commits, or issue text.
-- Commit and push each completed batch; update `AGENTS.md` whenever the codebase map changes.
+- `worker/` is the live Cloudflare Worker and remains the rollback implementation.
+- `backend/` is a copied migration tree and currently contains the old Durable Object implementation plus the initial Postgres schema/bootstrap files.
+- `backend/sql/001_initial.sql` defines the fresh-install Postgres tables and indexes.
+- `backend/scripts/schema.ts` provides `schema:bootstrap` and `schema:verify` commands.
+- Backend test files and the Vitest configuration were removed temporarily by request.
+- Railway project: `SheetSubmit`.
+- Railway services: app `SheetSubmit`, Postgres `Postgres`, Redis `Redis`.
+- Railway credentials and IDs are loaded only from `B:\Studio\Tools\SheetSubmit\deploy.env`.
+- Cloudflare Pages project: `sheetsubmit`.
+- Current Pages production `BACKEND_URL` points to the Worker and must not change until Railway verification passes.
 
-## Parallel Workstreams
+## Data Mapping
 
-The following workstreams may run in parallel only where their dependency is satisfied. Each agent must first inspect current code and existing uncommitted changes, then report files changed, tests run, risks, and exact follow-up dependencies. Agents must not rewrite unrelated work or deploy production without the cutover gate.
+| Durable Object | Postgres tables | Required behavior |
+| --- | --- | --- |
+| `IndexDO` | `users`, `file_index`, `sessions`, `meta`, `wallets` | User identity, ownership, archive state, sessions, device tokens, WA cache, wallet balances |
+| `FileDO` | `file_meta`, `file_rows`, `file_logs` | File metadata, rows, sequence increments, append conflicts, 200-log cap, wipe |
+| `PoolDO` | `pool_settings`, `pool_rows`, `pool_ledger`, `downloads` | FIFO allocation, source filters, holds, claims, approvals, reverts, price snapshots |
 
-### Workstream 1: Runtime and Railway deployment
+Pool allocation must use `SELECT ... FOR UPDATE SKIP LOCKED` or an equivalent transaction-safe strategy. A row must never be allocated to two concurrent claims or holds.
 
-Implement the Railway HTTP entrypoint over the existing Hono `fetch` handler. Configure Bun/Node runtime, `PORT`, `0.0.0.0`, graceful shutdown, health/readiness behavior, and Railway service build/start settings. Confirm the app can boot without Cloudflare bindings by using explicit dependency injection or a temporary fail-fast diagnostic, not silent mock data.
+## Implementation Tasks
 
-**Acceptance:** Railway app deploy reaches `SUCCESS`; `/api/health` returns 200; startup logs contain no secret values; SIGTERM closes database/Redis resources cleanly.
+### Task 1: Normalize the fresh Postgres schema
 
-### Workstream 2: Fresh Postgres schema foundation
+**Files:**
 
-There is no production data in the Cloudflare Durable Objects, so do not build an export/import or historical data migration. Research every SQLite schema and operation in `IndexDO.ts`, `FileDO.ts`, and `PoolDO.ts`. Produce a versioned fresh-install Postgres schema, preserving data types and semantics while adding constraints, foreign keys where safe, composite indexes for real query predicates, and timestamps in UTC. Include an idempotent bootstrap and a schema verification command. The database must start empty and ready for new users/files after deployment.
+- Modify `backend/sql/001_initial.sql`.
+- Modify `backend/scripts/schema.ts`.
+- Modify `backend/package.json` only if schema commands need adjustment.
 
-**Acceptance:** Fresh Railway Postgres bootstrap succeeds twice; schema verification reports expected tables/indexes/constraints; the application can create its first user/file/pool; no data-copy or destructive migration runs.
+**Steps:**
 
-### Workstream 3: IndexDO repository port
+- Keep the migration idempotent and versioned through `schema_migrations`.
+- Preserve millisecond timestamps where route responses currently expose numeric timestamps.
+- Ensure ownership, archive, state, price, and non-negative count constraints are explicit.
+- Ensure indexes cover owner/archive listing, file logs, pool FIFO, pool source filters, hold lookup, ledger history, download status, and session expiry.
+- Make `schema:bootstrap` safe to execute twice.
+- Make `schema:verify` check expected tables, indexes, constraints, and migration version.
 
-Port all `IndexDO` operations behind the existing `lib/do.ts` interface. Preserve user, file index, sessions, device tokens, metadata, admin, statistics, and wallet behavior. Use parameterized SQL, explicit transactions for multi-write operations, and pagination limits. Remove DO transport only after repository contract tests pass.
+**Gate:** Run both commands against the Railway Postgres service using the private Railway connection URL. The second bootstrap must make no destructive changes.
 
-**Acceptance:** Existing admin, auth, file-index, session, metadata, and wallet API tests pass against a local Railway-compatible runtime and staging Railway service.
+### Task 2: Replace the Durable Object transport with a Postgres repository seam
 
-### Workstream 4: FileDO repository port
+**Files:**
 
-Port file metadata, rows, sequence counters, append/save, logs, duplicate-key queries, full reads, and wipe behavior. Design indexes from actual filters and enforce sequence updates transactionally. Preserve the 200-log cap and wipe-before-pool-cleanup behavior. Stream or paginate large reads instead of materializing avoidable copies.
+- Create `backend/src/lib/pg.ts`.
+- Modify `backend/src/lib/do.ts`.
+- Modify `backend/src/lib/shared.ts`.
+- Remove `backend/src/do/IndexDO.ts`.
+- Remove `backend/src/do/FileDO.ts`.
+- Remove `backend/src/do/PoolDO.ts`.
 
-**Acceptance:** Upload, persist, append, rows, full, logs, undo, archive, and wipe flows pass with row-count and sequence invariants; large-file benchmark records memory and latency.
+**Interface:** Keep callers using:
 
-### Workstream 5: PoolDO repository port and concurrency correctness
+```ts
+rpc(namespace, name, operation, args)
+```
 
-Port pool rows, prices, ledger, downloads, holds, claims, approvals, rejection/revert, verified counts, and user-file queries. Use short Postgres transactions with `FOR UPDATE SKIP LOCKED` or an equivalent safe allocation strategy. Prove FIFO ordering, source-file/user filters, price snapshots, idempotent transitions, and no double-claim behavior with concurrent tests.
+Route `INDEX` operations to the global repository, `FILES` operations to the file repository keyed by `name`, and `POOLS` operations to the pool repository keyed by `name`.
 
-**Acceptance:** Pool API suite passes; concurrent claim/hold stress test produces no duplicate row allocation, negative availability, incorrect totals, or invalid status transitions.
+**Index operations to implement:**
 
-### Workstream 6: Redis, authentication, and security portability
+`ensureUser`, `user`, `users`, `ban`, `register`, `file`, `files`, `archive`, `batchArchive`, `purge`, `batchPurge`, `deleteUser`, `walletCredit`, `walletGet`, `adminUsers`, `metaSet`, `metaGet`, `metaGetMany`, `metaDel`, `allFiles`, `stats`, `session`, `getSession`, `deleteSession`, `deviceSet`, `deviceGet`, `deviceDelete`, `deviceByChat`, and `deviceSession`.
 
-Research current session, Telegram OIDC/JWKS, device claim, rate-limit, and WA-cache behavior. Port only state that benefits from Redis; keep durable business records in Postgres. Replace Cloudflare-only crypto/runtime APIs with Node-compatible implementations while retaining algorithm, expiry, constant-time comparison, cookie attributes, and failure behavior. Add origin checks for state-changing requests where required. Keep browser requests same-origin through Pages, so do not weaken the existing `SameSite=Lax` cookie to enable direct Railway calls.
+**File operations to implement:**
 
-**Acceptance:** Login/logout/session expiry/device claim/Telegram verification/rate-limit/WA cache tests pass; invalid signatures and expired sessions fail closed; Redis outage has an intentional safe failure mode; no credential appears in responses/logs.
+`init`, `meta`, `seq`, `rows`, `full`, `counts`, `keys`, `dupKeys`, `projection`, `append`, `save`, `getLogs`, and `wipe`.
 
-### Workstream 7: API contract and performance audit
+**Pool operations to implement:**
 
-Inventory every route in `index.ts` and route modules. Build a compact benchmark matrix for health, auth, file list, rows/full, pool rows, claim/hold, admin search, and download. Capture p50/p95 latency, query count, response bytes, database time, Redis time, and memory. Use evidence to remove N+1 queries, duplicate reads, unnecessary serialization, missing indexes, and oversized selected columns. Add response compression only where it does not break the Pages proxy or binary downloads.
+`priceGet`, `priceSet`, `downloadDelete`, `add`, `counts`, `summary`, `detail`, `claim`, `hold`, `verifiedCounts`, `pageCounts`, `pageVerifiedCounts`, `userFiles`, `downloads`, `download`, `downloadDetail`, `holds`, `holdApprove`, `holdReject`, `holdRevert`, `holdReturn`, `revertDownload`, `removeAvailable`, `ledger`, and `revert`.
 
-**Acceptance:** Before/after benchmark is committed as a report artifact outside secrets; every claimed optimization has a measured result; no endpoint regresses correctness or p95 latency. A 10x result is accepted only where measurement demonstrates it, otherwise report the actual improvement.
+**Transaction rules:**
 
-### Workstream 8: Test harness
+- `append` and `save` lock the file metadata row before reading or incrementing `seq`.
+- `claim` and `hold` select available rows in FIFO order and lock them before changing state.
+- Approval, rejection, and revert lock the download record before changing its rows and status.
+- Multi-row ledger and download writes occur in the same transaction as the state change.
+- Price is read and snapshotted in the same transaction that creates a download.
 
-Add repository contract tests that run against disposable Postgres/Redis-compatible services and expand `scripts/TestApi.ts` for changed route/error cases. Test first-user/file/pool creation, ownership, pool availability, ledger totals, wallets, sessions, and timestamps from an empty database. Keep test credentials and production secrets out of fixtures.
+**Gate:** Every existing route call remains on the `rpc` seam. No route imports the Postgres client directly.
 
-**Acceptance:** Typecheck, unit/contract tests, route tests, concurrency tests, and empty-database bootstrap verification pass.
+### Task 3: Port the Railway runtime
 
-### Workstream 9: Pages proxy, observability, and rollback
+**Files:**
 
-Verify the existing Pages Functions proxy preserves methods, query strings, request bodies, `Set-Cookie`, binary downloads, status codes, and timeout behavior when `BACKEND_URL` points to Railway. Add safe request correlation and latency metrics without logging cookies, tokens, spreadsheet rows, or Telegram identifiers. Define health, readiness, error-rate, and rollback checks. Keep the Worker URL available as a rollback target.
+- Create `backend/src/server.ts`.
+- Modify `backend/src/index.ts`.
+- Modify `backend/src/lib/shared.ts`.
+- Modify `backend/src/lib/rateLimit.ts`.
+- Modify `backend/src/routes/files.ts`.
+- Remove `backend/src/scheduled.ts` from the Railway runtime.
+- Remove `backend/wrangler.jsonc` from the Railway runtime.
+- Modify `backend/package.json`.
+- Modify `backend/tsconfig.json`.
+- Modify `backend/bun.lock` through `bun install`.
 
-**Acceptance:** Pages `/api/health` and authenticated smoke flows pass through Railway; binary download/upload tests pass; rollback is one Pages environment-variable change; proxy and Railway failures are distinguishable in logs.
+**Runtime requirements:**
 
-### Workstream 10: Cutover and decommission gate
+- Listen on `0.0.0.0` and `process.env.PORT`.
+- Export the Hono app independently from the server bootstrap.
+- Build `Env` from Railway environment variables without Cloudflare Durable Object bindings.
+- Run a best-effort Telegram webhook check without blocking the first response.
+- Handle `SIGTERM` and `SIGINT` by stopping the HTTP server and closing the Postgres pool.
+- Keep `/api/health` independent of database availability for Railway diagnostics, while database routes fail explicitly rather than using mock data.
+- Use `x-forwarded-for` as a fallback when `cf-connecting-ip` is absent.
+- Replace Cloudflare-only `executionCtx.waitUntil` calls with bounded background promises that report failures without blocking responses.
+- Add a `start` command using `bun src/server.ts`.
 
-Bootstrap the empty Railway Postgres schema on a staging/isolated Railway environment first, then deploy the app with production variables. Confirm Railway direct health, Pages-proxied health, first-user registration/login, files, pools, downloads, admin, Telegram webhook, and scheduled webhook maintenance. Change only Pages production `BACKEND_URL` for cutover. Monitor for at least 48 hours with rollback ready before disabling the Worker.
+**Gate:** Run `bun --cwd backend run typecheck`, start the server with a local `PORT`, and confirm `/api/health` returns 200 without Cloudflare bindings.
 
-**Acceptance:** Railway deployment is healthy, Pages remains the public origin, an empty database supports first-use flows, all route tests pass against the new backend, no critical error/latency regression occurs during the observation window, and the Worker is not deleted until the rollback window closes.
+### Task 4: Preserve route behavior during storage replacement
 
-## Execution Order and Gates
+**Files:**
 
-1. Run Workstreams 1, 2, 7, and 9 as discovery/foundation work; do not cut over.
-2. After schema approval, run Workstreams 3, 4, and 5 in parallel against repository contracts.
-3. Run Workstreams 6 and 8 after the database interfaces are stable; run security and concurrency tests before deployment.
-4. Run Workstream 10 only after all acceptance gates pass and the data migration verification is signed off.
-5. At each gate: inspect `git diff`, run typecheck/tests, commit only the bounded batch, push, and record the deployment/result.
+- Review and modify `backend/src/routes/files.ts`.
+- Review and modify `backend/src/routes/pools.ts`.
+- Review and modify `backend/src/routes/admin.ts`.
+- Review and modify `backend/src/routes/wa.ts`.
+- Review and modify `backend/src/routes/bot.ts`.
+- Review and modify `backend/src/lib/session.ts`.
+- Review and modify `backend/src/lib/telegramOidc.ts` only where Node/Bun compatibility requires it.
 
-## Final Verification Commands
+**Required checks:**
+
+- New file creation registers the index record before inserting child rows.
+- Ownership checks use the Postgres file index and reject archived/unowned files.
+- Archive and purge preserve wipe-before-pool-cleanup behavior.
+- Append conflicts return HTTP 409.
+- Pool filters preserve `srcUid`, `srcFileId`, verified/unverified, FIFO, and pick-mode behavior.
+- Download price snapshots remain immutable after claim/hold creation.
+- Hold status transitions are idempotent and reject invalid transitions.
+- Cookies remain `HttpOnly`, `Secure`, `SameSite=Lax`, and scoped to `/`.
+- Telegram OIDC rejects invalid issuer, audience, signature, and expiry.
+- Same-origin Pages proxy behavior remains the browser contract.
+
+**Gate:** Compare representative Worker and backend responses for health, auth errors, file-not-found, pool validation, and download status behavior.
+
+### Task 5: Restore verification outside the backend runtime package
+
+Backend test scripts are intentionally absent for the current coding phase. Before cutover, create a separate verification surface without adding test dependencies to the Railway runtime package.
+
+**Files:**
+
+- Modify `scripts/TestApi.ts` to accept `TEST_BASE` while preserving the Worker default.
+- Create `scripts/railway-smoke.ts` for health, empty-database auth errors, first-user setup, file ownership, pool allocation, and rollback checks.
+- Create a disposable contract harness under `scripts/contract/` only if it can run against Railway Postgres without production data.
+- Do not place production secrets in fixtures.
+
+**Required concurrency checks:**
+
+- Two simultaneous claims cannot return the same `row_key`.
+- Two simultaneous holds cannot return the same `row_key`.
+- Rejecting a hold returns rows to `available` exactly once.
+- Approving a hold changes rows to `claimed` exactly once.
+- Reverting a download never creates negative availability or duplicate ledger effects.
+
+**Gate:** Run typecheck, schema verification, smoke tests, route checks, and concurrency checks against an isolated empty Railway database before changing Pages.
+
+### Task 6: Configure Railway through GraphQL API
+
+**Inputs:** `deploy.env`, read locally without printing values.
+
+**Railway resources:**
+
+- Project: `SheetSubmit`.
+- Environment: `production`.
+- App service: `SheetSubmit`.
+- Database service: `Postgres`.
+
+**API actions:**
+
+- Configure the app service to deploy `Cryptoistaken/SheetSubmit` with root directory `/backend`.
+- Set build command to `bun install` when required by the service builder.
+- Set start command to `bun run start`.
+- Set healthcheck path to `/api/health`.
+- Set `DATABASE_URL` to the Railway Postgres private reference.
+- Set `FRONTEND_URL=https://sheetsubmit.pages.dev`.
+- Set `TELEGRAM_LOGIN_CLIENT_ID=8667114953`.
+- Set `ADMIN_IDS=8447133985,1772093705`.
+- Set `HITOOLS_CHECK_URL` to the existing configured value.
+- Set `WORKER_URL` to the Railway public domain only after the domain exists.
+- Set optional Telegram/Turnstile secrets only when present in the approved secret store.
+- Trigger deployment through Railway GraphQL API.
+- Poll deployment status until `SUCCESS` or capture the failure reason without exposing secrets.
+- Create or retrieve the Railway public domain through GraphQL API.
+
+**Gate:** Direct `GET https://<railway-domain>/api/health` returns `{ok:true}` and the expected API version. Database bootstrap and first-use smoke tests pass.
+
+### Task 7: Point Cloudflare Pages to Railway through REST API
+
+**Cloudflare API actions:**
+
+- Read the current Pages project configuration without printing tokens.
+- Update only the production `BACKEND_URL` to the verified Railway HTTPS domain.
+- Trigger or wait for the Pages deployment generated by the environment change.
+- Do not modify the Worker route or delete the Worker.
+
+**Proxy checks:**
+
+- `GET https://sheetsubmit.pages.dev/api/health` returns the Railway version.
+- `OPTIONS` returns 204 and preserves allowed-origin headers.
+- `Set-Cookie` survives the proxy.
+- JSON request bodies and query strings survive the proxy.
+- Binary download responses survive the proxy.
+- Railway failure and Pages proxy failure remain distinguishable in deployment logs.
+
+**Rollback:** Restore the previous Pages production `BACKEND_URL=https://sheetsubmit.traderspopy.workers.dev` through the Cloudflare API. Do not make direct browser calls to Railway.
+
+### Task 8: Observe and close the migration
+
+- Monitor Railway deployment health, Postgres connection errors, 4xx/5xx rates, response latency, memory, and database query latency for at least 48 hours.
+- Compare health and authenticated smoke-flow latency against the existing Worker baseline.
+- Do not claim a speedup without p50/p95 measurements.
+- Keep the Worker deployed throughout the observation window.
+- Disable or decommission the Worker only after rollback is no longer required and the user explicitly approves it.
+
+## Execution Gates
+
+1. Schema and runtime typecheck pass locally.
+2. Postgres bootstrap succeeds twice on an isolated Railway database.
+3. Repository operations pass route and concurrency verification.
+4. Railway direct health and first-use flows pass.
+5. Pages proxy health and authenticated smoke flows pass.
+6. Rollback to the Worker is verified before production observation.
+7. The 48-hour observation window completes without a critical regression.
+
+## Verification Commands
 
 ```text
-bun --cwd worker run typecheck
-bun --cwd worker run test
-EXPECT_VERSION=<new-version> bun scripts/TestApi.ts
+bun --cwd backend run typecheck
+bun --cwd backend run schema:bootstrap
+bun --cwd backend run schema:verify
+bun scripts/railway-smoke.ts
 GET https://<railway-domain>/api/health
 GET https://sheetsubmit.pages.dev/api/health
 ```
 
-The final production configuration is: browser → `https://sheetsubmit.pages.dev/api/*` → Pages Function → Railway API. Direct browser calls to Railway are not part of this migration.
+Final traffic path:
+
+```text
+Browser → https://sheetsubmit.pages.dev/api/* → Cloudflare Pages Function → Railway Hono API → Railway Postgres
+```

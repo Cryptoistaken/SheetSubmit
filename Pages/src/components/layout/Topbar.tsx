@@ -50,6 +50,7 @@ export default function Topbar() {
   useModalA11y(panelOpen, () => setPanelOpen(false), panelRef);
   const [renameOpen, setRenameOpen] = useState(false);
   const [photoBusted, setPhotoBusted] = useState(false);
+  const [photoLoaded, setPhotoLoaded] = useState(false);
   const [renameName, setRenameName] = useState("");
   const renameRef = useModalA11y(renameOpen && !!file, () => setRenameOpen(false));
   const [isAndroid, setIsAndroid] = useState(() => !!getAndroid());
@@ -96,6 +97,7 @@ export default function Topbar() {
   // Reset the broken-photo flag when the photo changes.
   useEffect(() => {
     setPhotoBusted(false);
+    setPhotoLoaded(false);
   }, [user?.photoUrl]);
 
   // Close gear panel on outside click.
@@ -207,7 +209,7 @@ export default function Topbar() {
         {isFilePage && <SheetToolbar />}
         <button
           ref={btnRef}
-          className={`profile-btn${user.photoUrl ? " loaded" : ""}`}
+          className={`profile-btn${photoLoaded ? " loaded" : ""}`}
           title="User menu"
           aria-label={displayName ? `User menu for ${displayName}` : "User menu"}
           aria-expanded={panelOpen}
@@ -224,16 +226,16 @@ export default function Topbar() {
             <WorkspaceIcon size={14} />
           </span>
           <span className="profile-pill-divider"></span>
-          <span className={`avatar-ring show${ringPulse ? " pulse" : ""}`} style={{ background: ringColor, color: ringColor }}>
+          <span className={`avatar-ring${photoLoaded ? " show" : ""}${ringPulse && photoLoaded ? " pulse" : ""}`} style={{ background: ringColor, color: ringColor }}>
              <Avatar className="size-full border-0 after:hidden">
-               {!photoBusted && user.photoUrl ? <AvatarImage key={user.photoUrl} src={user.photoUrl} alt="" fetchPriority="high" loading="eager" decoding="async" onError={() => setPhotoBusted(true)} /> : null}
-               <AvatarFallback className="bg-transparent text-inherit">{(displayName || "?").slice(0, 1).toUpperCase()}</AvatarFallback>
-             </Avatar>
+                {!photoBusted && user.photoUrl ? <AvatarImage src={user.photoUrl} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setPhotoLoaded(true)} onError={() => setPhotoBusted(true)} /> : null}
+                <AvatarFallback className="bg-transparent text-inherit">{(displayName || "?").slice(0, 1).toUpperCase()}</AvatarFallback>
+              </Avatar>
           </span>
         </button>
         <div ref={panelRef} id="user-settings-panel" role="dialog" aria-modal="true" aria-label="Settings" aria-hidden={!panelOpen} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
           <div className="gear-user-card">
-             <ProfileAvatar photoUrl={user.photoUrl} fallback={(displayName || "?").slice(0, 1).toUpperCase()} className="gear-user-avatar" />
+             {panelOpen ? <ProfileAvatar photoUrl={user.photoUrl} fallback={(displayName || "?").slice(0, 1).toUpperCase()} className="gear-user-avatar" /> : null}
             <div className="gear-user-info">
               <div className="gear-user-name">{displayName}</div>
               <div className="gear-user-username">

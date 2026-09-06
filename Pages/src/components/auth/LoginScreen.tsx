@@ -143,10 +143,9 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
         if (typeof idToken !== "string" || !idToken) throw new Error("No id_token returned");
         await completeLogin(idToken);
       };
-      // NOTE: the library ignores redirect_uri here — it always uses the
-      // current page URL (our /login, registered in BotFather). scope is the
-      // only knob: "write" maps to telegram:bot_access server-side.
-      const options = { client_id: Number(tgClientId), scope: ["openid", "profile", "phone", "write"] };
+      // The JS SDK implicitly requests the required openid scope; its public
+      // scope option only accepts profile, phone, and write.
+      const options = { client_id: Number(tgClientId), scope: ["profile", "phone", "write"] };
       if (!Number.isSafeInteger(options.client_id) || options.client_id <= 0) throw new Error("Invalid Telegram client ID");
       await new Promise<void>((resolve, reject) => {
         const timer = window.setTimeout(() => reject(new Error("Telegram login timed out")), 120000);

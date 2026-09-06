@@ -37,7 +37,7 @@
                       #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS, stores picture+phone),
                       #   POST /api/auth/turnstile-verify, GET /api/bot/info, ensureWebhook on first request
 lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, WORKER_URL, FRONTEND_URL, HITOOLS_CHECK_URL, TURNSTILE_*, TELEGRAM_LOGIN_CLIENT_ID, DO bindings INDEX/FILES/POOLS)
-lib/telegramOidc.ts   # Telegram Login OIDC RS256/JWKS token verification
+lib/telegramOidc.ts     # Telegram Login OIDC/JWKS token verification
 lib/session.ts        # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
 lib/do.ts             # rpc(namespace, name, op, args) — single fetch to DO
 do/IndexDO.ts         # singleton global: users, file_index, sessions, device tokens, meta KV, WS gateway (SQLite).
@@ -74,7 +74,7 @@ components/layout/Topbar.tsx
 components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, Fab.tsx, EmptyState.tsx, DownloadDetailModal.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
-components/auth/LoginScreen.tsx    # official Telegram Login OIDC (web widget + Turnstile, openid+profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed
+components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed
 components/ui/button.tsx, avatar.tsx  # shadcn cva variants
 contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, WS connect, retry 3×1.5s
 stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection

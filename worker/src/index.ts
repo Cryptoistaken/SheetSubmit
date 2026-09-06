@@ -17,7 +17,7 @@ import { signSession as signSessionFn } from "./lib/session";
 
 const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any worker route change — lets TestApi/health confirm a redeploy landed
-export const API_VERSION = "1.2.7";
+export const API_VERSION = "1.2.8";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
@@ -68,10 +68,20 @@ app.get("/api/bot/info", async (c) => { if (!c.env.TG_BOT_TOKEN) return c.json({
 app.get("/api/auth/telegram/config", (c) => c.json({ clientId: c.env.TELEGRAM_LOGIN_CLIENT_ID || "" }));
 app.post("/api/auth/telegram/verify", async (c) => {
   if (!checkRate(ipKey(c, "telegram.verify"), 20, 60000)) return c.json({ ok: false, error: "rate limited" }, 429);
-  let body: { id_token?: string; turnstile?: string }; try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "invalid body" }, 400); }
-  const idToken = String(body.id_token || "").trim();
-  if (!idToken || idToken.length > 8192) return c.json({ ok: false, error: "missing id_token" }, 400);
-  const clientId = c.env.TELEGRAM_LOGIN_CLIENT_ID;
+   let body: { id_token?: string; turnstile?: string }; try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "invalid body" }, 400); }
+   const idToken = String(body.id_token || "").trim();
+   if (!idToken || idToken.length > 8192) return c.json({ ok: false, error: "missing id_token" }, 400);
+   const origin = c.req.header("Origin");
+   if (c.env.TURNSTILE_SECRET && origin) {
+     const tsToken = body.turnstile;
+     if (!tsToken || tsToken.length > 2048) return c.json({ ok: false, error: "human verification required" }, 403);
+     try {
+       const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: AbortSignal.timeout(10000), body: new URLSearchParams({ secret: c.env.TURNSTILE_SECRET, response: tsToken, remoteip: c.req.header("CF-Connecting-IP") || "" }) });
+       const result = await r.json() as { success: boolean };
+       if (!r.ok || !result.success) return c.json({ ok: false, error: "human verification failed" }, 403);
+     } catch { return c.json({ ok: false, error: "human verification failed" }, 403); }
+   }
+   const clientId = c.env.TELEGRAM_LOGIN_CLIENT_ID;
   if (!clientId) return c.json({ ok: false, error: "telegram login not configured" }, 503);
   if (!c.env.SESSION_SECRET) return c.json({ error: "Server configuration error" }, 500);
   let claims: { uid: string; name: string; username: string; picture: string; phone: string };

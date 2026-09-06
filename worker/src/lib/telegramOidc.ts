@@ -3,7 +3,7 @@ type Jwk = { kty: string; kid?: string; n?: string; e?: string; alg?: string; us
 let jwksCache: { keys: Jwk[]; exp: number } | null = null;
 const JWKS_TTL = 3600_000;
 const ISS = "https://oauth.telegram.org";
-const JWKS_URLS = ["https://oauth.telegram.org/.well-known/jwks.json", "https://oauth.telegram.org/.well-known/openid-configuration"];
+const JWKS_URL = "https://oauth.telegram.org/.well-known/jwks.json";
 
 function b64urlDecode(s: string): Uint8Array {
   const pad = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
@@ -19,20 +19,13 @@ function b64urlJson(s: string): any {
 async function fetchJwks(): Promise<Jwk[]> {
   if (jwksCache && jwksCache.exp > Date.now()) return jwksCache.keys;
   let keys: Jwk[] | null = null;
-  for (const url of JWKS_URLS) {
-    try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      if (!r.ok) continue;
+  try {
+    const r = await fetch(JWKS_URL, { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
       const j: any = await r.json();
-      if (Array.isArray(j.keys)) { keys = j.keys; break; }
-      if (j.jwks_uri) {
-        const r2 = await fetch(j.jwks_uri, { signal: AbortSignal.timeout(8000) });
-        if (!r2.ok) continue;
-        const j2: any = await r2.json();
-        if (Array.isArray(j2.keys)) { keys = j2.keys; break; }
-      }
-    } catch {}
-  }
+      if (Array.isArray(j.keys)) keys = j.keys;
+    }
+  } catch {}
   if (!keys) throw new Error("jwks unavailable");
   jwksCache = { keys, exp: Date.now() + JWKS_TTL };
   return keys;
@@ -77,7 +70,6 @@ export async function verifyTelegramIdToken(idToken: string, clientId: string): 
   const iat = Number(payload.iat);
   if (!Number.isFinite(exp) || exp <= now) throw new Error("token expired");
   if (!Number.isFinite(iat) || iat > now + 60) throw new Error("invalid iat");
-  if (exp - iat > 86400) throw new Error("exp too far");
   const sub = String(payload.sub || payload.id || payload.user_id || payload.telegram_id || "");
   if (!/^\d{3,20}$/.test(sub)) throw new Error("invalid sub");
   const username = String(payload.preferred_username || payload.username || payload.tg_username || "");

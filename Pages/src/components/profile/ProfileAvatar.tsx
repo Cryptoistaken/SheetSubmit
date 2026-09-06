@@ -17,7 +17,7 @@ export default function ProfileAvatar({
 
   return (
     <Avatar className={cn("border border-border", className)}>
-      {photoUrl && !busted ? <AvatarImage src={photoUrl} alt="" onError={() => setBusted(true)} /> : null}
+      {photoUrl && !busted ? <AvatarImage src={photoUrl} alt="" loading="lazy" decoding="async" onError={() => setBusted(true)} /> : null}
       <AvatarFallback>{fallback}</AvatarFallback>
     </Avatar>
   );

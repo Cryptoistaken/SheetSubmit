@@ -404,7 +404,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
           <div className="admin-stat-label">Total Files</div>
         </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16, marginBottom: 8 }}>
         <div style={{ fontSize: 12, color: "var(--text3)", fontWeight: 500 }}>{users === null ? <Skeleton className="h-4 w-20" /> : `${users.length} users`}</div>
         <SearchInput
             placeholder="Search users..."
@@ -412,7 +412,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
             autoComplete="off"
             value={search}
             onChange={(e) => onSearch(e.target.value)}
-            containerStyle={{ width: 240, maxWidth: "48vw", marginLeft: "auto" }}
+            containerStyle={{ width: "100%" }}
         />
       </div>
       <div className="admin-user-list">

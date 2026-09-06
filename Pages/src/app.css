@@ -1759,7 +1759,7 @@ table.grid td.dot-cell:hover {
 .row-dot {
     width: 8px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: 2.5px;
     background: var(--border2);
     display: inline-block;
     transition: none;

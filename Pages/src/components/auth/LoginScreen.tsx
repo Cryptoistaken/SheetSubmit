@@ -183,7 +183,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
             <span>{tgLoading ? "Verifying…" : "Continue with Telegram"}</span>
           </button>
           {tgError && <p role="alert" className="login-hint" style={{ color: "var(--red)", marginTop: 8 }}>{tgError}</p>}
-          {waiting && <p role="status" aria-live="polite" className="login-hint">Logged in — opening your workspace…</p>}
+          {waiting && <p role="status" aria-live="polite" className="login-hint">Logged in! Opening your workspace…</p>}
         </div>
       </div>
     </main>

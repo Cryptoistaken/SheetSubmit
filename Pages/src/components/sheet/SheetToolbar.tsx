@@ -236,7 +236,25 @@ export default function SheetToolbar() {
           title={hasDups ? "Remove duplicate rows first" : undefined}
           onClick={() => void useSheetStore.getState().runCheck()}
         >
-          {checkRunning ? "Checking…" : "Check"}
+          {checkRunning ? (
+            <>
+              Checking{" "}
+              <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+                <title>loading-twotone-loop</title>
+                <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}>
+                  <path strokeDasharray="18" d="M12 3c4.97 0 9 4.03 9 9">
+                    <animate fill="freeze" attributeName="stroke-dashoffset" dur="0.3s" values="18;0" />
+                    <animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12" />
+                  </path>
+                  <path strokeDasharray="60" d="M12 3c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9c0 -4.97 4.03 -9 9 -9Z" opacity=".3">
+                    <animate fill="freeze" attributeName="stroke-dashoffset" dur="1.2s" values="60;0" />
+                  </path>
+                </g>
+              </svg>
+            </>
+          ) : (
+            "Check"
+          )}
         </button>
         <button
           ref={checkArrowRef}
@@ -247,8 +265,9 @@ export default function SheetToolbar() {
           aria-haspopup="menu"
           onClick={toggleCheck}
         >
-          <svg width="9" height="9" viewBox="0 0 10 6" fill="currentColor" aria-hidden="true">
-            <path d="M0 0l5 6 5-6z" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
+            <title>vercel-solid</title>
+            <path fill="currentColor" d="M13 5h2v3h2v3h2v3h2v3h2v3H1v-3h2v-3h2v-3h2V8h2V5h2V3h2z" />
           </svg>
         </button>
       </div>

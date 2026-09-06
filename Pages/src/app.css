@@ -2156,6 +2156,7 @@ th.rh:hover {
     border-radius: var(--r);
     overflow: hidden;
     border: 1px solid var(--blue);
+    background: var(--blue);
     transition: opacity 0.15s var(--ease-out);
 }
 .check-split-wrap[data-check="disabled"] { opacity: 0.38; border-color: var(--border2); pointer-events: none; }
@@ -2174,7 +2175,9 @@ th.rh:hover {
     white-space: nowrap;
     line-height: 1;
     font-family: var(--sans);
-    transition: background 0.1s;
+    transition: background 0.1s, transform 0.12s var(--ease-out), width 0.22s var(--ease-out);
+    interpolate-size: allow-keywords;
+    overflow: hidden;
 }
 .check-split-main:hover { background: var(--blue-dark, #2563eb); }
 .check-split-main:active { transform: scale(0.97); }
@@ -2189,13 +2192,12 @@ th.rh:hover {
     background: var(--blue);
     color: #fff;
     border: none;
-    border-left: 1px solid rgba(255, 255, 255, 0.25);
     cursor: pointer;
     transition: background 0.1s, transform 0.12s var(--ease-out);
 }
 .check-split-arrow:hover { background: var(--blue-dark, #2563eb); }
 .check-split-arrow:active { transform: scale(0.93); }
-.check-split-arrow svg { transition: transform 0.15s var(--ease-out); }
+.check-split-arrow svg { transition: transform 0.2s var(--ease-out); }
 .check-split-arrow.open svg { transform: rotate(180deg); }
 .check-dropdown {
     position: fixed;
@@ -2207,8 +2209,9 @@ th.rh:hover {
     padding: 8px 12px;
     display: none;
     min-width: 150px;
+    transform-origin: top right;
 }
-.check-dropdown.open { display: block; animation: smIn 0.15s var(--ease-out); }
+.check-dropdown.open { display: block; animation: smIn 0.18s var(--ease-out); }
 .check-dropdown-label {
     font-size: 10px;
     font-weight: 600;
@@ -2229,10 +2232,11 @@ th.rh:hover {
     font-weight: 500;
     color: var(--text2);
     font-family: var(--sans);
-    transition: color 0.1s;
+    transition: color 0.1s, transform 0.12s var(--ease-out);
     width: 100%;
 }
 .autocheck-toggle:hover { color: var(--text); }
+.autocheck-toggle:active { transform: scale(0.97); }
 .autocheck-toggle .autocheck-track {
     position: relative;
     width: 36px;

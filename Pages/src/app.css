@@ -920,14 +920,6 @@ button, input, select, textarea {
     position: static;
     flex-shrink: 0;
 }
-.file-card.list-row .file-card-actions > span:first-child {
-    position: absolute;
-    top: -7px;
-    right: 10px;
-    z-index: 1;
-    margin-right: 0;
-    border: 1px solid var(--border);
-}
 
 /* ── File type badge ── */
 .file-type-badge {

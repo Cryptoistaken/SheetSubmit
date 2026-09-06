@@ -138,7 +138,7 @@ export default function ArchiveView({
         <EmptyState title="No archived files" sub="Archived files appear here for 30 days" />
       ) : (
         <div className={view === "list" ? "files-list" : "files-grid"}>
-          {[...archived].sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0)).map((f, i) => {
+          {[...archived].sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0)).map((f) => {
             const daysLeft = Math.max(
               0,
               30 - Math.floor((Date.now() - (f.deletedAt || 0)) / 86400000),
@@ -147,7 +147,6 @@ export default function ArchiveView({
               <FileCard
                 key={f.id}
                 file={f}
-                recent={i === 0}
                 list={view === "list"}
                 selected={selected.has(f.id)}
                 selectionMode={selectionMode}

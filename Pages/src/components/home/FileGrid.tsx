@@ -34,11 +34,10 @@ export default function FileGrid({
   const sorted = [...files].sort((a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0));
   return (
     <div className={view === "list" ? "files-list" : "files-grid"}>
-      {sorted.map((f, i) => (
+      {sorted.map((f) => (
         <FileCard
           key={f.id}
           file={f}
-          recent={i === 0}
           list={view === "list"}
           crossDupCount={crossDupCounts[f.id]}
           selected={selectedIds.has(f.id)}

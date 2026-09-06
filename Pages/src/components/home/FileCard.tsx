@@ -20,7 +20,6 @@ interface FileCardProps {
   onToggleSelect: () => void;
   disableOpen?: boolean;
   daysLeft?: number;
-  recent?: boolean;
   list?: boolean;
   selectable?: boolean;
 }
@@ -38,7 +37,6 @@ export default function FileCard({
   onToggleSelect,
   disableOpen = false,
   daysLeft,
-  recent = false,
   list = false,
   selectable = true,
 }: FileCardProps) {
@@ -151,7 +149,6 @@ export default function FileCard({
       : [])),
   ];
 
-  const actionLabel = ({ created: "Newly Created", renamed: "Renamed", modified: "Last Modified", restored: "Last Restored", archived: "Last Archived" } as Record<string, string>)[file.lastAction ?? (file.deletedAt ? "archived" : "modified")] ?? "Last Modified";
   const dt = file.updatedAt ?? file.createdAt ? new Date((file.updatedAt ?? file.createdAt) as number) : null;
   const tsStr = dt ? dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " + dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
   // List rows adapt to count: ≤3 single line, else balanced 2 rows (4→2+2, 5→3+2, 6→3+3)
@@ -200,11 +197,6 @@ export default function FileCard({
       </div>
       )}
       <div className="file-card-actions">
-        {recent ? (
-          <span title={"Last action: " + (file.lastAction ?? "modified")} style={{ fontSize: 9, fontWeight: 600, color: "var(--text2)", background: "var(--bg3)", padding: "3px 7px", borderRadius: 6, letterSpacing: "-0.01em", whiteSpace: "nowrap", marginRight: 2 }}>
-            {actionLabel}
-          </span>
-        ) : null}
         <button
           ref={dotsRef}
           className="file-card-btn file-card-more"

@@ -66,7 +66,7 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
                 const isChecking = phase === "checking";
                 // live dot from store: eligible green, else gray; checking = blue pulse
                 const dotBg = isChecking ? "var(--grad-page)" : r.wa_status === "eligible" ? "var(--grad-page)" : "var(--text3)";
-                const dotCls = isChecking ? "row-dot d-spin" : r.wa_status === "eligible" ? "row-dot d-green" : "row-dot";
+                const dotCls = isChecking ? "row-dot d-spin" : r.wa_status === "eligible" ? "row-dot d-blue" : "row-dot";
                 return (
                   <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: "var(--r)", background: "var(--bg2)", border: "1px solid var(--border)" }}>
                     <span className={dotCls} aria-hidden="true" style={isChecking ? undefined : { background: dotBg, width: 8, height: 8 }} />

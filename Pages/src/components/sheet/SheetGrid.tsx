@@ -601,9 +601,9 @@ const GridRow = memo(function GridRow({
       : status === "bad"
         ? "d-red"
         : row?.wa_status === "eligible"
-          ? "d-green"
+          ? "d-blue"
           : status === "good" || status === "done"
-            ? "d-blue"
+            ? "d-green"
             : status === "pending"
               ? "d-spin d-yellow"
               : "";

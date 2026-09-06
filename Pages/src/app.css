@@ -1769,8 +1769,8 @@ table.grid td.dot-cell:hover {
     transition: none;
 }
 
-.row-dot.d-blue { background: var(--cyan); }
-.row-dot.d-green { background: var(--green); }
+.row-dot.d-blue { background: var(--grad-page); }
+.row-dot.d-green { background: var(--grad-live); }
 .row-dot.d-yellow { background: var(--yellow); }
 .row-dot.d-red { background: var(--red); }
 

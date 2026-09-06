@@ -32,7 +32,11 @@ export default defineConfig({
             )
               return "vendor-react";
             if (id.includes("node_modules/xlsx")) return "xlsx";
-            if (id.includes("node_modules/lucide-react") || id.includes("node_modules/radix-ui"))
+            if (
+              id.includes("node_modules/lucide-react") ||
+              id.includes("node_modules/radix-ui") ||
+              id.includes("node_modules/@radix-ui/")
+            )
               return "vendor-ui";
             if (id.includes("node_modules/zustand")) return "vendor-state";
             return "vendor";

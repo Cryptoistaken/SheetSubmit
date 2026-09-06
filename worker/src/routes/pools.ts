@@ -14,14 +14,21 @@ const META: Record<PoolId, { label: string; badge: string; cols: string[]; filen
   page: { label: "Page", badge: "Page", cols: ["cookies", "twofakey"], filename: "page_pool.xlsx", rule: 'cookies + 2FA + wa_status === "eligible"' },
 };
 export const PRICES: Record<PoolId, number> = { cookies_only: 0.02, cookies_2fa: 0.05, page: 0.10 };
-// ponytail: pool rows carry no srcUserId (raw row JSON), so per-user attribution is claimer-only;
-// add src_user column in PoolDO if contributor stats matter
 const summarize = (rows: any[]) => {
   const available = rows.filter((r) => r._state === "available").length;
   const claimedRows = rows.filter((r) => r._state === "claimed");
-  const users = new Map<string, number>();
-  for (const r of claimedRows) { const u = String(r._claimedBy || ""); if (u) users.set(u, (users.get(u) || 0) + 1); }
-  return { available, claimed: claimedRows.length, users: [...users].map(([userId, claimed]) => ({ userId, displayName: userId, username: null, photoUrl: null, firstName: null, lastName: null, isAdmin: false, available: 0, claimed })) };
+  const claimed = claimedRows.length;
+  const m = new Map<string, { available: number; claimed: number }>();
+  for (const r of rows) {
+    const uid = String(r._srcUid || "").trim();
+    if (!uid) continue;
+    const cur = m.get(uid) ?? { available: 0, claimed: 0 };
+    if (r._state === "available") cur.available++;
+    else if (r._state === "claimed") cur.claimed++;
+    m.set(uid, cur);
+  }
+  const users = [...m.entries()].map(([userId, c]) => ({ userId, displayName: userId, username: null, photoUrl: null, firstName: null, lastName: null, isAdmin: false, available: c.available, claimed: c.claimed }));
+  return { available, claimed, users };
 };
 const isPool = (v: string): v is PoolId => (POOL_IDS as readonly string[]).includes(v);
 const detailRows = async (c: any, password: string, pool: string) => rpc(c.env.POOLS, password, "detail", { pool }) as Promise<any[]>;
@@ -123,6 +130,16 @@ pools.get("/downloads/:id/detail", async (c) => {
 });
 pools.get("/downloads/:id", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findDownload(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); const st = String((d as any).status || "").toUpperCase(); if (st === "HOLD" && c.req.query("format") !== "json") return c.json({ error: "hold not approved" }, 409); if (c.req.query("format") === "json") return c.json(dlMeta({ ...d, rows: d.rows })); const pid = d.poolId as PoolId; const cols = META[pid]?.cols || ["cookies"]; const XLSX = await import("xlsx"); const ws = XLSX.utils.aoa_to_sheet(d.rows.map((r: any) => cols.map((k) => String(r[k] ?? "")))); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "pool"); const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as unknown as Uint8Array; return new Response(buf, { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${String(d.filename || "download.xlsx").replace(/["\r\n]/g, "_")}"` } }); });
 pools.post("/downloads/:id/revert", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findDownload(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); return c.json(await rpc(c.env.POOLS, d.password, "revertDownload", { id: d.id, uid: c.get("uid") })); });
+pools.delete("/downloads/:id", async (c) => {
+  if (!admin(c)) return c.json({ error: "admin access required" }, 403);
+  const id = c.req.param("id");
+  if (!id || id.length > 128) return c.json({ error: "invalid id" }, 400);
+  const d = await findDownload(c, id);
+  if (!d) return c.json({ error: "not found" }, 404);
+  const r: any = await rpc(c.env.POOLS, d.password, "downloadDelete", { id: d.id });
+  if (r?.error) return c.json({ error: r.error }, r.error === "not found" ? 404 : 400);
+  return c.json(r);
+});
 pools.get("/", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const out = await Promise.all(PASSWORDS.flatMap((pwd) => POOL_IDS.map(async (pid) => {
@@ -254,6 +271,29 @@ pools.get("/:password/:pool/user-files", async (c) => {
   const pid = c.req.param("pool");
   if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
   const r = await rpc(c.env.POOLS, c.req.param("password"), "userFiles", { pool: pid });
+  return c.json(r);
+});
+pools.get("/:password/:pool/price", async (c) => {
+  if (!admin(c)) return c.json({ error: "admin access required" }, 403);
+  const pid = c.req.param("pool");
+  const pwd = c.req.param("password");
+  if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
+  if (!pwd || pwd.length > 64) return c.json({ error: "invalid password" }, 400);
+  const r: any = await rpc(c.env.POOLS, pwd, "priceGet", { pool: pid, password: pwd });
+  if (r?.error) return c.json({ error: r.error }, 400);
+  return c.json(r);
+});
+pools.put("/:password/:pool/price", async (c) => {
+  if (!admin(c)) return c.json({ error: "admin access required" }, 403);
+  const pid = c.req.param("pool");
+  const pwd = c.req.param("password");
+  if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
+  if (!pwd || pwd.length > 64) return c.json({ error: "invalid password" }, 400);
+  const body = await c.req.json().catch(() => ({}) as any);
+  const price = Number(body?.price);
+  if (!Number.isFinite(price) || price < 0 || price > 1000) return c.json({ error: "invalid price" }, 400);
+  const r: any = await rpc(c.env.POOLS, pwd, "priceSet", { pool: pid, password: pwd, price });
+  if (r?.error) return c.json({ error: r.error }, 400);
   return c.json(r);
 });
 pools.post("/:password/:pool/revert", async (c) => {

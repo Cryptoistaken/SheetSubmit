@@ -1196,6 +1196,117 @@ const run = async () => {
     return { ok: true };
   });
 
+  // ── Task 3: durable pool prices + Task 4: download delete ──
+  await test("GET /api/pools/:pwd/:pool/price (default)", async () => {
+    const r = await api("/pools/dgddigital/cookies_only/price", { headers: { Cookie: cookie } });
+    const ok = r.status === 200 && r.json?.poolId === "cookies_only" && r.json?.password === "dgddigital" && typeof r.json?.price === "number" && r.json.price === 0.02;
+    return ok ? { ok: true } : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json).slice(0,200)}` };
+  });
+
+  await test("PUT /api/pools/:pwd/:pool/price (set + get)", async () => {
+    const set = await api("/pools/dgddigital/cookies_only/price", { method: "PUT", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ price: 0.99 }) });
+    if (set.status !== 200 || set.json?.price !== 0.99 || set.json?.poolId !== "cookies_only") return { ok: false, detail: `set status=${set.status} body=${JSON.stringify(set.json).slice(0,200)}` };
+    const get = await api("/pools/dgddigital/cookies_only/price", { headers: { Cookie: cookie } });
+    if (get.status !== 200 || get.json?.price !== 0.99) return { ok: false, detail: `get status=${get.status} body=${JSON.stringify(get.json).slice(0,200)}` };
+    // claim should use stored price
+    const cf = await api("/files", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ name: "PriceDurable"+holdSu, preset: "cookie", password: "dgddigital", poolEnabled: true }) });
+    const fid = cf.json?.id;
+    if (!fid) return { ok: false, detail: `create ${cf.status}` };
+    await api(`/files/${fid}/persist`, { method: "PUT", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ rows: [{ cookies: `c_user=993${holdSu}; xs=x`, uid: `993${holdSu}` }] }) });
+    await pollRowsTotal("dgddigital", "cookies_only", `limit=1000&srcFileId=${fid}`, 1, 5000);
+    const cl = await api("/pools/dgddigital/cookies_only/claim", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ count: 1, srcFileId: fid }) });
+    if (cl.status !== 200 || cl.json?.unitPrice !== 0.99 || cl.json?.total !== 0.99) { await api(`/files/${fid}`, { method: "DELETE", headers: { Cookie: cookie } }); await api("/archive/batch-delete", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ ids: [fid] }) }); return { ok: false, detail: `claim price mismatch unitPrice=${cl.json?.unitPrice} total=${cl.json?.total} body=${JSON.stringify(cl.json).slice(0,200)}` }; }
+    await api(`/pools/downloads/${cl.json.downloadId}/revert`, { method: "POST", headers: { Cookie: cookie } });
+    await api(`/files/${fid}`, { method: "DELETE", headers: { Cookie: cookie } });
+    await api("/archive/batch-delete", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ ids: [fid] }) });
+    // restore default
+    const rst = await api("/pools/dgddigital/cookies_only/price", { method: "PUT", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ price: 0.02 }) });
+    if (rst.status !== 200 || rst.json?.price !== 0.02) return { ok: false, detail: `restore status=${rst.status} body=${JSON.stringify(rst.json).slice(0,200)}` };
+    return { ok: true };
+  });
+
+  await test("PUT /api/pools/:pwd/:pool/price invalid price → 400", async () => {
+    const cases = [{ price: -1 }, { price: 1001 }, { price: "bad" }, {}];
+    for (const b of cases) {
+      const r = await api("/pools/dgddigital/cookies_only/price", { method: "PUT", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify(b) });
+      if (r.status !== 400) return { ok: false, detail: `body=${JSON.stringify(b)} status=${r.status} expected 400 body=${JSON.stringify(r.json)}` };
+    }
+    const badPool = await api("/pools/dgddigital/notapool/price", { method: "PUT", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ price: 1 }) });
+    if (badPool.status !== 400) return { ok: false, detail: `invalid pool should be 400 got ${badPool.status}` };
+    return { ok: true };
+  });
+
+  await test("GET/PUT /api/pools/:pwd/:pool/price no auth → 401", async () => {
+    const g = await api("/pools/dgddigital/cookies_only/price");
+    const p = await api("/pools/dgddigital/cookies_only/price", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ price: 1 }) });
+    return g.status === 401 && p.status === 401 ? { ok: true } : { ok: false, detail: `get=${g.status} put=${p.status}` };
+  });
+
+  await test("DELETE /api/pools/downloads/:id only reverted/rejected (active→400, reverted→ok, missing→404)", async () => {
+    const cf = await api("/files", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ name: "DelDlTest"+holdSu, preset: "cookie", password: "dgddigital", poolEnabled: true }) });
+    const fid = cf.json?.id;
+    if (!fid) return { ok: false, detail: `create ${cf.status}` };
+    await api(`/files/${fid}/persist`, { method: "PUT", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ rows: [{ cookies: `c_user=994${holdSu}; xs=x`, uid: `994${holdSu}` }] }) });
+    await pollRowsTotal("dgddigital", "cookies_only", `limit=1000&srcFileId=${fid}`, 1, 5000);
+    const cl = await api("/pools/dgddigital/cookies_only/claim", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ count: 1, srcFileId: fid }) });
+    const dlId = cl.json?.downloadId;
+    if (!dlId) return { ok: false, detail: `claim failed ${cl.status} ${JSON.stringify(cl.json).slice(0,200)}` };
+    const activeDel = await api(`/pools/downloads/${dlId}`, { method: "DELETE", headers: { Cookie: cookie } });
+    if (activeDel.status !== 400) return { ok: false, detail: `active delete should be 400 got ${activeDel.status} body=${JSON.stringify(activeDel.json)}` };
+    const rev = await api(`/pools/downloads/${dlId}/revert`, { method: "POST", headers: { Cookie: cookie } });
+    if (rev.status !== 200) return { ok: false, detail: `revert ${rev.status}` };
+    const okDel = await api(`/pools/downloads/${dlId}`, { method: "DELETE", headers: { Cookie: cookie } });
+    if (okDel.status !== 200 || !okDel.json?.ok) return { ok: false, detail: `reverted delete status=${okDel.status} body=${JSON.stringify(okDel.json)}` };
+    const gone = await api(`/pools/downloads/${dlId}?format=json`, { headers: { Cookie: cookie } });
+    if (gone.status !== 404) return { ok: false, detail: `deleted download should be 404 got ${gone.status}` };
+    const nf = await api(`/pools/downloads/doesnotexist_del123`, { method: "DELETE", headers: { Cookie: cookie } });
+    if (nf.status !== 404) return { ok: false, detail: `missing delete should be 404 got ${nf.status}` };
+    // also test HOLD → rejected then delete
+    const cf2 = await api("/files", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ name: "DelHoldTest"+holdSu, preset: "cookie", password: "dgddigital", poolEnabled: true }) });
+    const fid2 = cf2.json?.id;
+    await api(`/files/${fid2}/persist`, { method: "PUT", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ rows: [{ cookies: `c_user=995${holdSu}; xs=x`, uid: `995${holdSu}` }] }) });
+    await pollRowsTotal("dgddigital", "cookies_only", `limit=1000&srcFileId=${fid2}`, 1, 5000);
+    const hold = await api("/pools/dgddigital/cookies_only/hold", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ count: 1, mode: "fifo", srcFileId: fid2 }) });
+    const hid = (hold.json as any)?.holdId || (hold.json as any)?.downloadId;
+    const activeHoldDel = await api(`/pools/downloads/${hid}`, { method: "DELETE", headers: { Cookie: cookie } });
+    if (activeHoldDel.status !== 400) return { ok: false, detail: `active hold delete should be 400 got ${activeHoldDel.status}` };
+    await api(`/pools/holds/${hid}/reject`, { method: "POST", headers: { Cookie: cookie } });
+    const rejDel = await api(`/pools/downloads/${hid}`, { method: "DELETE", headers: { Cookie: cookie } });
+    if (rejDel.status !== 200 || !rejDel.json?.ok) return { ok: false, detail: `rejected delete status=${rejDel.status} body=${JSON.stringify(rejDel.json)}` };
+    const noAuth = await api(`/pools/downloads/${hid}`, { method: "DELETE" });
+    if (noAuth.status !== 401) return { ok: false, detail: `no auth delete should be 401 got ${noAuth.status}` };
+    await api(`/files/${fid}`, { method: "DELETE", headers: { Cookie: cookie } });
+    await api(`/files/${fid2}`, { method: "DELETE", headers: { Cookie: cookie } });
+    await api("/archive/batch-delete", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ ids: [fid, fid2] }) });
+    return { ok: true };
+  });
+
+  await test("GET /api/pools/:pwd/:pool delegator aggregation source-user based", async () => {
+    const su = String(Date.now()).slice(-6);
+    const uidA = `996${su}`.slice(0, 12);
+    const uidB = `997${su}`.slice(0, 12);
+    const cf = await api("/files", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ name: "DelegatorTest"+su, preset: "cookie", password: "dgddigital", poolEnabled: true }) });
+    const fid = cf.json?.id;
+    if (!fid) return { ok: false, detail: `create ${cf.status}` };
+    await api(`/files/${fid}/persist`, { method: "PUT", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ rows: [{ cookies: `c_user=${uidA}; xs=a`, uid: uidA }, { cookies: `c_user=${uidB}; xs=b`, uid: uidB }] }) });
+    await pollRowsTotal("dgddigital", "cookies_only", `limit=1000&srcFileId=${fid}`, 2, 5000);
+    const detail = await api("/pools/dgddigital/cookies_only", { headers: { Cookie: cookie } });
+    if (detail.status !== 200 || !Array.isArray(detail.json?.users)) return { ok: false, detail: `detail status=${detail.status} body=${JSON.stringify(detail.json).slice(0,200)}` };
+    const me = detail.json.users.find((u: any) => u.userId === TEST_UID);
+    if (!me) return { ok: false, detail: `delegator ${TEST_UID} missing users=${JSON.stringify(detail.json.users).slice(0,200)}` };
+    if (typeof me.available !== "number" || me.claimed !== "number" || me.available < 2) return { ok: false, detail: `delegator counts available=${me.available} claimed=${me.claimed} expected available>=2` };
+    const cl = await api("/pools/dgddigital/cookies_only/claim", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ count: 1, srcFileId: fid }) });
+    const dlId = cl.json?.downloadId;
+    const after = await api("/pools/dgddigital/cookies_only", { headers: { Cookie: cookie } });
+    const meAfter = Array.isArray(after.json?.users) ? after.json.users.find((u: any) => u.userId === TEST_UID) : null;
+    if (!meAfter) return { ok: false, detail: `delegator missing after claim` };
+    if (meAfter.available !== 1 || meAfter.claimed !== 1) return { ok: false, detail: `after claim available=${meAfter.available} claimed=${meAfter.claimed} expected 1/1` };
+    if (dlId) await api(`/pools/downloads/${dlId}/revert`, { method: "POST", headers: { Cookie: cookie } });
+    await api(`/files/${fid}`, { method: "DELETE", headers: { Cookie: cookie } });
+    await api("/archive/batch-delete", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ ids: [fid] }) });
+    return { ok: true };
+  });
+
   await test("DELETE /api/files/:id (cleanup)", async () => {
     const r = await api(`/files/${testFileId}`, {
       method: "DELETE",

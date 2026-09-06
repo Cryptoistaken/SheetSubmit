@@ -14,6 +14,7 @@ export class PoolDO {
       s.exec("CREATE TABLE IF NOT EXISTS pool_rows(pool_id TEXT NOT NULL, row_key TEXT NOT NULL, data TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'available', claimed_by TEXT, claimed_at INTEGER, PRIMARY KEY(pool_id,row_key)) WITHOUT ROWID");
       s.exec("CREATE TABLE IF NOT EXISTS ledger(id INTEGER PRIMARY KEY AUTOINCREMENT,pool_id TEXT,row_key TEXT,user_id TEXT,action TEXT,ts INTEGER)");
       s.exec("CREATE TABLE IF NOT EXISTS downloads(id TEXT PRIMARY KEY,pool_id TEXT NOT NULL,claimed_by TEXT,claimed INTEGER NOT NULL DEFAULT 0,filename TEXT,keys TEXT NOT NULL,rows TEXT NOT NULL DEFAULT '[]',reverted INTEGER NOT NULL DEFAULT 0,ts INTEGER NOT NULL)");
+      s.exec("CREATE TABLE IF NOT EXISTS pool_settings(pool_id TEXT PRIMARY KEY, price REAL NOT NULL)");
       try { s.exec("ALTER TABLE pool_rows ADD COLUMN src_uid TEXT"); } catch {}
       try { s.exec("ALTER TABLE pool_rows ADD COLUMN src_file_id TEXT"); } catch {}
       try { s.exec("ALTER TABLE pool_rows ADD COLUMN inserted_at INTEGER"); } catch {}
@@ -33,7 +34,36 @@ export class PoolDO {
     if (typeof op !== "string" || !op || op.length > 64) return Response.json({ error: "invalid op" }, { status: 400 });
     if (typeof args !== "object" || args === null || Array.isArray(args)) return Response.json({ error: "invalid args" }, { status: 400 });
     const s = this.state.storage.sql;
+    const getStoredPrice = (poolId: string): number => {
+      const row: any = s.exec("SELECT price FROM pool_settings WHERE pool_id=?", poolId).toArray()[0];
+      if (row && typeof row.price === "number" && Number.isFinite(row.price)) return Number(row.price);
+      return PRICES[poolId as Pool] ?? 0;
+    };
     switch (op) {
+      case "priceGet": {
+        const pool = String(args.pool || "");
+        if (!pools.includes(pool as Pool)) return Response.json({ error: "invalid pool" }, { status: 400 });
+        return Response.json({ poolId: pool, password: args.password ?? null, price: getStoredPrice(pool) });
+      }
+      case "priceSet": {
+        const pool = String(args.pool || "");
+        if (!pools.includes(pool as Pool)) return Response.json({ error: "invalid pool" }, { status: 400 });
+        const p = Number(args.price);
+        if (!Number.isFinite(p) || p < 0 || p > 1000) return Response.json({ error: "invalid price" }, { status: 400 });
+        s.exec("INSERT INTO pool_settings(pool_id, price) VALUES(?,?) ON CONFLICT(pool_id) DO UPDATE SET price=excluded.price", pool, p);
+        return Response.json({ poolId: pool, password: args.password ?? null, price: p });
+      }
+      case "downloadDelete": {
+        const id = String(args.id || "");
+        if (!id) return Response.json({ error: "id required" }, { status: 400 });
+        const d: any = s.exec("SELECT * FROM downloads WHERE id=?", id).toArray()[0];
+        if (!d) return Response.json({ error: "not found" }, { status: 404 });
+        const status = String(d.status || (d.reverted ? "REVERTED" : "CLAIMED")).toUpperCase();
+        const isReverted = !!d.reverted || status === "REVERTED" || status === "REJECTED";
+        if (!isReverted) return Response.json({ error: "active record cannot be deleted" }, { status: 400 });
+        s.exec("DELETE FROM downloads WHERE id=?", id);
+        return Response.json({ ok: true });
+      }
       case "add": {
         let added = 0;
         const preset = normalizePreset(args.preset ?? args.poolKind ?? args.filePreset ?? args.file?.preset ?? args.file?.poolKind);
@@ -106,7 +136,7 @@ export class PoolDO {
           s.exec("INSERT INTO ledger(pool_id,row_key,user_id,action,ts) VALUES(?,?,?,?,?)", pool, r.row_key, args.uid, "claim", Date.now());
         });
         let downloadId: string | null = null;
-        const unitPrice = PRICES[pool as Pool] ?? 0;
+        const unitPrice = getStoredPrice(pool);
         const total = +(unitPrice * rows.length).toFixed(2);
         if (rows.length && args.downloadId) {
           s.exec("INSERT INTO downloads(id,pool_id,claimed_by,claimed,filename,keys,rows,ts,status,unit_price,total,mode,src_uids,src_file_ids,selection) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", args.downloadId, pool, args.uid, rows.length, String(args.filename || "pool.xlsx"), JSON.stringify(rows.map((r: any) => r.row_key)), JSON.stringify(rows.map((r: any) => JSON.parse(r.data))), Date.now(), "CLAIMED", unitPrice, total, "fifo", srcUid ? JSON.stringify([srcUid]) : null, srcFileId ? JSON.stringify([srcFileId]) : null, JSON.stringify({ verifiedOnly, unverifiedOnly }));
@@ -195,7 +225,7 @@ export class PoolDO {
           }
         }
         if (!rows.length) {
-          const unitPrice = PRICES[pool as Pool] ?? 0;
+          const unitPrice = getStoredPrice(pool);
           return Response.json({ claimed: 0, held: 0, count: 0, rows: [], holdId: null, downloadId: null, filename: null, status: "HOLD", unitPrice, total: 0, mode });
         }
         const holdId = String(args.downloadId || args.holdId || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)));
@@ -205,7 +235,7 @@ export class PoolDO {
           s.exec("UPDATE pool_rows SET state='held', hold_id=?, claimed_by=?, claimed_at=? WHERE pool_id=? AND row_key=?", holdId, args.uid, now, pool, r.row_key);
           s.exec("INSERT INTO ledger(pool_id,row_key,user_id,action,ts) VALUES(?,?,?,?,?)", pool, r.row_key, args.uid, "hold", now);
         });
-        const unitPrice = PRICES[pool as Pool] ?? 0;
+        const unitPrice = getStoredPrice(pool);
         const total = +(unitPrice * rows.length).toFixed(2);
         const keys = rows.map((r: any) => r.row_key);
         const rowDatas = rows.map((r: any) => JSON.parse(r.data));

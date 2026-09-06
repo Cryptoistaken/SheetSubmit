@@ -17,7 +17,7 @@ import { signSession as signSessionFn } from "./lib/session";
 
 const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any worker route change — lets TestApi/health confirm a redeploy landed
-export const API_VERSION = "1.4.0";
+export const API_VERSION = "1.5.0";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";

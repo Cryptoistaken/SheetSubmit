@@ -202,6 +202,7 @@ export interface DownloadDetail {
   keys: string[];
   groups: DownloadDetailGroup[];
 }
+export interface PoolPrice { poolId: string; password: string | null; price: number }
 
 export const api = {
   getFiles: () => request<SheetFile[]>("/files"),
@@ -360,6 +361,15 @@ export const api = {
   getDownloadDetail: (id: string) => request<DownloadDetail>(`/pools/downloads/${encodeURIComponent(id)}/detail`),
   getDownloadBlob: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
   revertDownload: (id: string) => request<{ ok: boolean; reverted: number }>(`/pools/downloads/${encodeURIComponent(id)}/revert`, { method: "POST" }),
+  deleteDownload: (id: string) => request<{ ok: boolean }>(`/pools/downloads/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  getPoolPrice: (password: string, poolId: string) => {
+    const enc = (s: string) => encodeURIComponent(s);
+    return request<PoolPrice>(`/pools/${enc(password)}/${enc(poolId)}/price`);
+  },
+  setPoolPrice: (password: string, poolId: string, price: number) => {
+    const enc = (s: string) => encodeURIComponent(s);
+    return request<PoolPrice>(`/pools/${enc(password)}/${enc(poolId)}/price`, { method: "PUT", body: JSON.stringify({ price }) });
+  },
   downloadHistory: () => request<{ downloads: unknown[] } | unknown[]>("/pools/downloads" as string) as Promise<{ downloads: unknown[] } | unknown[]>,
   redownload: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
   downloadById: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),

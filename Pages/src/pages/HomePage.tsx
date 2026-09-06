@@ -395,9 +395,9 @@ export default function HomePage() {
         {tab === "files" && selectionMode ? (
           <div className="home-tabs">
             {selected.size > 2 ? (
-              <button className="home-tab sel-primary" onClick={unselectAll}>Unselect all</button>
+              <button className="home-tab" onClick={unselectAll}>Unselect all</button>
             ) : null}
-              <button className="home-tab sel-primary" onClick={() => void deleteSelected()}>Move to archive</button>
+              <button className="home-tab sel-danger" onClick={() => void deleteSelected()}>Move to archive</button>
             <button className="home-tab sel-primary" onClick={selectAll}>Select all</button>
           </div>
         ) : tab === "archive" && archSel.size > 0 ? null : (

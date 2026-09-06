@@ -165,10 +165,10 @@ export default function ArchiveView({
         createPortal(
           <div className="home-tabs">
             {selected.size > 2 ? (
-              <button className="home-tab sel-primary" onClick={unselectAll}>Unselect all</button>
+              <button className="home-tab" onClick={unselectAll}>Unselect all</button>
             ) : null}
             <button className="home-tab sel-primary" onClick={() => void restoreSelected()}>Restore</button>
-            <button className="home-tab sel-primary" onClick={() => void deleteSelected()}>Delete forever</button>
+            <button className="home-tab sel-danger" onClick={() => void deleteSelected()}>Delete forever</button>
             <button className="home-tab sel-primary" onClick={selectAll}>Select all</button>
           </div>,
           document.getElementById("homeTabBar")!,

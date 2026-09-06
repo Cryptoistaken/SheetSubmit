@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useModalA11y } from "@/hooks/useModalA11y";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface ConfirmState {
   message: string;
@@ -30,8 +31,6 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     setState(head ? { message: head.message, okText: head.okText } : null);
   }, []);
 
-  const modalRef = useModalA11y(!!state, () => close(false));
-
   const confirm = useCallback((message: string, okText?: string) => {
     return new Promise<boolean>((resolve) => {
       queueRef.current.push({ message, okText: okText || "Delete", resolve });
@@ -43,28 +42,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   return (
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
-      <div
-        ref={modalRef}
-        className={`modal-overlay${state ? " open" : ""}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Confirmation"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) close(false);
-        }}
-      >
-        <div className="modal-box">
-          <div className="modal-title">{state?.message ?? ""}</div>
-          <div className="modal-footer">
-            <button className="btn btn-ghost" onClick={() => close(false)}>
-              Cancel
-            </button>
-            <button className="btn btn-danger" onClick={() => close(true)}>
-              {state?.okText ?? "Delete"}
-            </button>
-          </div>
-        </div>
-      </div>
+      <Dialog open={!!state} onOpenChange={(o) => { if (!o) close(false) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{state?.message ?? ""}</DialogTitle>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => close(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => close(true)}>{state?.okText ?? "Delete"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ConfirmContext.Provider>
   );
 }

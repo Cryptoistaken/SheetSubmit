@@ -94,7 +94,7 @@ export class PoolDO {
         if (!pools.includes(pool as Pool)) return Response.json({ error: "invalid pool" }, { status: 400 });
         const available = Number(s.exec("SELECT COUNT(*) n FROM pool_rows WHERE pool_id=? AND state='available'", pool).toArray()[0].n);
         const claimed = Number(s.exec("SELECT COUNT(*) n FROM pool_rows WHERE pool_id=? AND state='claimed'", pool).toArray()[0].n);
-        const users = Number(s.exec("SELECT COUNT(DISTINCT claimed_by) n FROM pool_rows WHERE pool_id=? AND state='claimed' AND claimed_by IS NOT NULL", pool).toArray()[0].n);
+        const users = Number(s.exec("SELECT COUNT(DISTINCT src_uid) n FROM pool_rows WHERE pool_id=? AND src_uid IS NOT NULL", pool).toArray()[0].n);
         return Response.json({ available, claimed, users });
       }
       case "detail": return Response.json(s.exec("SELECT row_key,data,state,claimed_by,claimed_at,src_uid,src_file_id,inserted_at,hold_id FROM pool_rows WHERE pool_id=?", args.pool).toArray().map((r: any) => ({ ...JSON.parse(r.data), _key: r.row_key, _state: r.state, _claimedBy: r.claimed_by, _claimedAt: r.claimed_at, _srcUid: r.src_uid, _srcFileId: r.src_file_id, _insertedAt: r.inserted_at, _holdId: r.hold_id })));
@@ -402,7 +402,7 @@ export class PoolDO {
           s.exec("UPDATE pool_rows SET state='available',claimed_by=NULL,claimed_at=NULL, hold_id=NULL WHERE pool_id=? AND row_key=?", d.pool_id, k);
           s.exec("INSERT INTO ledger(pool_id,row_key,user_id,action,ts) VALUES(?,?,?,?,?)", d.pool_id, k, args.uid, "revert", Date.now());
         }
-        s.exec("UPDATE downloads SET reverted=1 WHERE id=?", args.id);
+        s.exec("UPDATE downloads SET reverted=1, status='REVERTED' WHERE id=?", args.id);
         return Response.json({ ok: true, reverted: keys.length });
       }
       case "removeAvailable": {

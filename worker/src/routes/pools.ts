@@ -199,7 +199,7 @@ pools.get("/:password/:pool", async (c) => {
   if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
   const st: any = await rpc(c.env.POOLS, c.req.param("password"), "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0 }));
   const rows: any[] = await detailRows(c, c.req.param("password"), pid).catch(() => []) as any; const summ = summarize(rows);
-  return c.json({ pool: { id: pid, ...META[pid] }, password: c.req.param("password"), totals: { available: st.available, claimed: st.claimed, users: st.users }, users: summ.users });
+  return c.json({ pool: { id: pid, ...META[pid] }, password: c.req.param("password"), totals: { available: st.available, claimed: st.claimed, users: summ.users.length }, users: summ.users });
 });
 pools.post("/:password/:pool/claim", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);

@@ -197,6 +197,7 @@ export interface DownloadDetail {
   claimed: number;
   claimedBy?: string | null;
   filename: string;
+  status?: string | null;
   reverted: boolean;
   rows: Record<string, unknown>[];
   keys: string[];

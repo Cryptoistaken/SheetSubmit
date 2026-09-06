@@ -1,15 +1,33 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { DownloadDetail } from "@/lib/api";
-import { useModalA11y } from "@/hooks/useModalA11y";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { HoldToDeleteButton } from "@/components/ui/hold-to-delete-button";
+import { InkStamp } from "@/components/ui/ink-stamp";
+import { useToast } from "@/lib/toast";
 
-export default function DownloadDetailModal({ downloadId, onClose }: { downloadId: string | null; onClose: () => void }) {
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const w = window as unknown as { Android?: { download?: (name: string, data: string) => void } };
+  if (typeof w.Android?.download === "function") {
+    const reader = new FileReader();
+    reader.onload = () => w.Android!.download!(filename, String(reader.result));
+    reader.readAsDataURL(blob);
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export default function DownloadDetailModal({ downloadId, onClose, onDeleted }: { downloadId: string | null; onClose: () => void; onDeleted?: () => void }) {
   const open = !!downloadId;
-  const boxRef = useRef<HTMLDivElement>(null);
-  const a11yRef = useModalA11y(open, onClose, boxRef);
   const [detail, setDetail] = useState<DownloadDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [acting, setActing] = useState<"download" | "revert" | "delete" | null>(null);
+  const showToast = useToast();
 
   useEffect(() => {
     if (!downloadId) { setDetail(null); setErr(null); return; }
@@ -19,102 +37,90 @@ export default function DownloadDetailModal({ downloadId, onClose }: { downloadI
     return () => { cancelled = true; };
   }, [downloadId]);
 
-  if (!open) return null;
-  const titleId = "dl-detail-title";
   const dt = detail ? new Date(detail.at || detail.ts) : null;
   const dateStr = dt ? dt.toLocaleString() : "";
+  const rawStatus = (detail as unknown as { status?: string })?.status;
+  const isApproved = rawStatus ? String(rawStatus).toUpperCase() === "APPROVED" : false;
+  const isReverted = !!detail?.reverted || (rawStatus ? String(rawStatus).toUpperCase() === "REVERTED" || String(rawStatus).toUpperCase() === "REJECTED" : false);
+  const users = detail ? Array.from(detail.groups.reduce((map, group) => {
+    const key = group.srcUid || "unknown";
+    const current = map.get(key) ?? [];
+    current.push(group);
+    map.set(key, current);
+    return map;
+  }, new Map<string, DownloadDetail["groups"]>())) : [];
+
+  const doDownload = async () => {
+    if (!detail) return;
+    setActing("download");
+    try { const blob = await api.getDownloadBlob(detail.id); triggerBlobDownload(blob, detail.filename || "download.xlsx"); showToast(`Downloaded ${detail.filename}`) } catch (e) { showToast(String(e instanceof Error ? e.message : e)) } finally { setActing(null) }
+  };
+  const doRevert = async () => {
+    if (!detail) return;
+    setActing("revert");
+    try { await api.revertDownload(detail.id); showToast("Rows returned to pool"); setDetail(d => d ? { ...d, reverted: true } as DownloadDetail : d); onDeleted?.() } catch (e) { showToast(String(e instanceof Error ? e.message : e)) } finally { setActing(null) }
+  };
+  const doDelete = async () => {
+    if (!detail) return;
+    setActing("delete");
+    try { await api.deleteDownload(detail.id); showToast("Deleted"); onClose(); onDeleted?.() } catch (e) { showToast(String(e instanceof Error ? e.message : e)) } finally { setActing(null) }
+  };
 
   return (
-    <div
-      className="modal-overlay open"
-      role="presentation"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ zIndex: 750 }}
-    >
-      <div
-        ref={(el) => { (boxRef as React.MutableRefObject<HTMLDivElement | null>).current = el; (a11yRef as React.MutableRefObject<HTMLDivElement | null>).current = el; }}
-        className="modal-box"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        style={{ width: 560, maxWidth: "96vw", maxHeight: "85vh", overflow: "auto", display: "flex", flexDirection: "column", gap: 12 }}
-      >
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ minWidth: 0 }}>
-            <div id={titleId} className="modal-title" style={{ marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {loading ? "Loading…" : detail?.filename || "Download detail"}
-            </div>
-            {detail ? <div style={{ fontSize: 12, color: "var(--text3)" }}>{dateStr} · {detail.claimed} claimed · {detail.poolId}{detail.reverted ? " · reverted" : ""}</div> : null}
-            {err ? <div style={{ fontSize: 12, color: "var(--red)", marginTop: 6 }}>{err}</div> : null}
-          </div>
-          <button className="btn btn-ghost btn-sm" title="Close" aria-label="Close" onClick={onClose} style={{ flexShrink: 0 }}>✕</button>
-        </div>
-
-        {loading ? <div style={{ fontSize: 13, color: "var(--text3)", padding: "12px 0" }}>Loading…</div> : null}
-
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
+       <DialogContent className="max-w-[560px] max-h-[85vh] overflow-auto">
+        <DialogHeader>
+          <DialogTitle>{loading ? "Loading…" : detail?.filename || "Download detail"}</DialogTitle>
+          {detail ? <DialogDescription>{dateStr} · {detail.claimed} claimed · {detail.poolId}{detail.reverted ? " · reverted" : ""}{rawStatus ? ` · ${String(rawStatus).toUpperCase()}` : ""}</DialogDescription> : null}
+          {err ? <div className="text-sm text-destructive mt-2">{err}</div> : null}
+        </DialogHeader>
+        {isApproved ? <div className="py-1"><InkStamp label="APPROVED" /></div> : null}
+        {loading ? <div className="text-sm text-muted-foreground py-3">Loading…</div> : null}
         {detail ? (
-          <>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--text3)" }}>Source groups</div>
-            {detail.groups.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--text3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: 12, background: "var(--bg2)" }}>No group breakdown available</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {detail.groups.map((g, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "1px solid var(--border)", borderRadius: "var(--r)", background: "var(--bg2)" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {g.srcFileId ? `#${g.srcFileId.slice(-8)}` : g.srcUid ? `uid ${g.srcUid.slice(-8)}` : "Unknown source"}
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {g.srcUid ? <span title={g.srcUid}>uid:{g.srcUid.slice(-8)}</span> : <span style={{ opacity: .7 }}>no uid</span>}
-                        {g.srcFileId ? <span title={g.srcFileId}>file:{g.srcFileId.slice(-8)}</span> : <span style={{ opacity: .7 }}>no file</span>}
+          <div className="flex flex-col gap-4">
+            <div>
+              <div className="text-[11px] font-semibold tracking-wide uppercase text-muted-foreground mb-2">Users and files</div>
+              {users.length === 0 ? (
+                <div className="text-sm text-muted-foreground border rounded-md p-3 bg-muted">No group breakdown available</div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {users.map(([uid, files]) => (
+                    <div key={uid} className="border rounded-md bg-muted p-3">
+                      <div className="text-sm font-semibold">{uid === "unknown" ? "Unknown user" : `User #${uid.slice(-8)}`} <span className="text-xs font-normal text-muted-foreground">{files.reduce((sum, file) => sum + file.count, 0)} rows · {files.length} files</span></div>
+                      <div className="mt-1 flex flex-col gap-1 text-xs text-muted-foreground">
+                        {files.map((file) => <div key={`${file.srcFileId}-${file.count}`}>File #{file.srcFileId?.slice(-8) ?? "unknown"} · {file.count} rows</div>)}
                       </div>
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "var(--mono)", color: "var(--text)", flexShrink: 0 }}>{g.count} rows</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--text3)", marginTop: 4 }}>
-              Rows · {detail.rows.length} {detail.keys.length !== detail.rows.length ? `(${detail.keys.length} keys)` : ""}
+                  ))}
+                </div>
+              )}
             </div>
-            {detail.rows.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--text3)", padding: 8 }}>No rows</div>
-            ) : (
-              <div style={{ border: "1px solid var(--border)", borderRadius: "var(--r)", overflow: "auto", maxHeight: 220 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead style={{ position: "sticky", top: 0, background: "var(--bg2)", borderBottom: "1px solid var(--border)" }}>
-                    <tr>
-                      <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 600, color: "var(--text2)" }}>uid</th>
-                      <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 600, color: "var(--text2)" }}>cookies</th>
-                      <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 600, color: "var(--text2)" }}>2fa</th>
-                      <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 600, color: "var(--text2)" }}>wa</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.rows.slice(0, 100).map((r: Record<string, unknown>, idx) => (
-                      <tr key={idx} style={{ borderTop: "1px solid var(--border)" }}>
-                        <td style={{ padding: "6px 8px", fontFamily: "var(--mono)", whiteSpace: "nowrap", maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis" }}>{String(r.uid ?? r["uid"] ?? "").slice(0, 18)}</td>
-                        <td style={{ padding: "6px 8px", fontFamily: "var(--mono)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={String(r.cookies ?? "")}>{String(r.cookies ?? "").slice(0, 40)}</td>
-                        <td style={{ padding: "6px 8px", fontFamily: "var(--mono)", maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(r.twofakey ?? r["twofakey"] ?? r["2fa key"] ?? "").slice(0, 16)}</td>
-                        <td style={{ padding: "6px 8px", color: "var(--text3)" }}>{String(r.wa_status ?? r.waStatus ?? "").slice(0, 10)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {detail.rows.length > 100 ? <div style={{ fontSize: 11, color: "var(--text3)", padding: "6px 8px", borderTop: "1px solid var(--border)", background: "var(--bg3)" }}>Showing 100 of {detail.rows.length} rows</div> : null}
-              </div>
-            )}
-
-            <div className="modal-footer" style={{ marginTop: 8 }}>
-              <button className="btn btn-ghost" onClick={onClose}>Close</button>
+            <div>
+              <div className="text-[11px] font-semibold tracking-wide uppercase text-muted-foreground mb-2">Rows · {detail.rows.length} {detail.keys.length !== detail.rows.length ? `(${detail.keys.length} keys)` : ""}</div>
+              {detail.rows.length === 0 ? <div className="text-sm text-muted-foreground p-2">No rows</div> : (
+                <div className="border rounded-md overflow-auto max-h-[220px]">
+                  <table className="w-full border-collapse text-xs">
+                    <thead className="sticky top-0 bg-muted border-b">
+                      <tr><th className="text-left p-2 font-semibold text-muted-foreground">uid</th><th className="text-left p-2 font-semibold text-muted-foreground">cookies</th><th className="text-left p-2 font-semibold text-muted-foreground">2fa</th><th className="text-left p-2 font-semibold text-muted-foreground">wa</th></tr>
+                    </thead>
+                    <tbody>
+                      {detail.rows.slice(0, 100).map((r: Record<string, unknown>, idx) => (
+                        <tr key={idx} className="border-t"><td className="p-2 font-mono truncate max-w-[90px]">{String(r.uid ?? "").slice(0, 18)}</td><td className="p-2 font-mono truncate max-w-[160px]" title={String(r.cookies ?? "")}>{String(r.cookies ?? "").slice(0, 40)}</td><td className="p-2 font-mono truncate max-w-[90px]">{String(r.twofakey ?? r["twofakey"] ?? r["2fa key"] ?? "").slice(0, 16)}</td><td className="p-2 text-muted-foreground">{String(r.wa_status ?? r.waStatus ?? "").slice(0, 10)}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {detail.rows.length > 100 ? <div className="text-xs text-muted-foreground p-2 border-t bg-muted">Showing 100 of {detail.rows.length} rows</div> : null}
+                </div>
+              )}
             </div>
-          </>
-        ) : !loading ? (
-          <div className="modal-footer"><button className="btn btn-ghost" onClick={onClose}>Close</button></div>
-        ) : null}
-      </div>
-    </div>
+            <div className="flex flex-wrap gap-2 pt-2">
+              <Button disabled={acting === "download" || isReverted} onClick={doDownload}>{acting === "download" ? "…" : "Download"}</Button>
+              <Button variant="outline" disabled={acting === "revert" || isReverted} onClick={doRevert}>{acting === "revert" ? "…" : isReverted ? "Returned" : "Return"}</Button>
+              <HoldToDeleteButton onConfirm={doDelete} disabled={acting === "delete"} label="Hold to delete" />
+            </div>
+          </div>
+        ) : !loading ? <div className="flex justify-end"><Button variant="ghost" onClick={onClose}>Close</Button></div> : null}
+      </DialogContent>
+    </Dialog>
   );
 }

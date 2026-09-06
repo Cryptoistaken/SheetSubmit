@@ -1,6 +1,6 @@
-import { Download, MessageCircle, Palette, RefreshCw } from "lucide-react";
+import { Download, LogOutIcon, MessageCircle, Palette, RefreshCw } from "lucide-react";
 import { WorkspaceIcon, FileTypeIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 import SheetToolbar from "@/components/sheet/SheetToolbar";
@@ -12,7 +12,8 @@ import { useToast } from "@/lib/toast";
 import { useBubbleStore } from "@/stores/bubbleStore";
 import { useSheetStore } from "@/stores/sheetStore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import ProfileAvatar from "@/components/profile/ProfileAvatar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ThemeTogglerButton } from "@/components/ui/theme-toggler";
 
 interface AndroidBridge {
   isBubbleEnabled?: () => boolean;
@@ -42,10 +43,6 @@ export default function Topbar() {
   const file = useSheetStore((s) => s.file);
 
   const [conn, setConn] = useState<ConnState>({ cls: "", text: "Connecting..." });
-  const [panelOpen, setPanelOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  useModalA11y(panelOpen, () => setPanelOpen(false), panelRef);
   const [renameOpen, setRenameOpen] = useState(false);
   const [photoBusted, setPhotoBusted] = useState(false);
   const [photoLoaded, setPhotoLoaded] = useState(false);
@@ -74,11 +71,6 @@ export default function Topbar() {
     /\/admin\/user\/[^/]+\/file\/[^/]+/.test(location.pathname);
   const hideHome = isFilePage ? { display: "none" as const } : undefined;
 
-  // Close gear panel when leaving the home screen.
-  useEffect(() => {
-    if (isFilePage) setPanelOpen(false);
-  }, [isFilePage]);
-
   const connStatus = useConnStore((s) => s.status);
   useEffect(() => {
     if (connStatus === "ok") setConn({ cls: "ok", text: "Connected" });
@@ -91,37 +83,6 @@ export default function Topbar() {
     setPhotoBusted(false);
     setPhotoLoaded(false);
   }, [user?.photoUrl]);
-
-  // Close gear panel on outside click.
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(t) &&
-        btnRef.current &&
-        !btnRef.current.contains(t)
-      ) {
-        setPanelOpen(false);
-      }
-    };
-    document.addEventListener("click", onDoc);
-    return () => document.removeEventListener("click", onDoc);
-  }, []);
-
-  // Escape closes settings panel and returns focus to trigger.
-  useEffect(() => {
-    if (!panelOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setPanelOpen(false);
-        btnRef.current?.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [panelOpen]);
 
   if (!user) return null;
 
@@ -201,20 +162,11 @@ export default function Topbar() {
       </div>
       <div className="topbar-r">
         {isFilePage && <SheetToolbar />}
+        <ThemeTogglerButton theme={theme} onToggle={toggle} />
         <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, ...hideHome }}>
-        <button
-          ref={btnRef}
-          className={`profile-btn${photoLoaded ? " loaded" : ""}`}
-          title="User menu"
-          aria-label={displayName ? `User menu for ${displayName}` : "User menu"}
-          aria-expanded={panelOpen}
-          aria-haspopup="dialog"
-          aria-controls="user-settings-panel"
-          onClick={(e) => {
-            e.stopPropagation();
-            setPanelOpen((o) => !o);
-          }}
-        >
+        <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+        <button className={`profile-btn${photoLoaded ? " loaded" : ""}`} title="User menu" aria-label={displayName ? `User menu for ${displayName}` : "User menu"}>
           <span className="profile-currency" aria-label="Balance 0">
             <span>0</span>
             <WorkspaceIcon size={14} />
@@ -227,187 +179,46 @@ export default function Topbar() {
               </Avatar>
           </span>
         </button>
+        </DropdownMenuTrigger>
         {user.isAdmin ? (
           <span title="Verified" style={{ position: "absolute", right: 0, bottom: 0, width: 14, height: 14, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))", pointerEvents: "none" }}>
             <VerifiedIcon size={14} />
           </span>
         ) : null}
-        </span>
-        <div ref={panelRef} id="user-settings-panel" role="dialog" aria-modal="true" aria-labelledby="profile-settings-title" hidden={!panelOpen} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
-          <div className="gear-user-card">
-             {panelOpen ? <ProfileAvatar photoUrl={user.photoUrl} fallback={(displayName || "?").slice(0, 1).toUpperCase()} className="gear-user-avatar" verified={user.isAdmin} badgeSize={16} /> : null}
-            <div className="gear-user-info">
-              <div className="gear-user-name">{displayName}</div>
-              <div className="gear-user-username">
-                {user.username ? "@" + user.username : ""}
-              </div>
-              {user.phone ? (
-                <div className="gear-user-username">
-                  {user.phone}
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <div className="gear-divider"></div>
-           <div id="profile-settings-title" className="gear-settings-title">Profile &amp; settings</div>
-          <div className="gear-toggle-row">
-            <div>
-              <div className="gear-toggle-label">Night mode</div>
-              <div className="gear-toggle-sub">Dark background theme</div>
-            </div>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                aria-label="Night mode"
-                checked={theme === "dark"}
-                onChange={toggle}
-              />
-              <span className="toggle-track"></span>
-            </label>
-          </div>
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuLabel className="flex items-center gap-3 py-2">
+            <Avatar className="size-9"><AvatarImage src={user.photoUrl ?? undefined} alt="" /><AvatarFallback>{(displayName || "?").slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>
+            <span className="min-w-0"><span className="block truncate font-semibold">{displayName || "Account"}</span><span className="block truncate text-xs text-muted-foreground">{user.username ? `@${user.username}` : user.phone || ""}</span></span>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
           {isAndroid ? (
             <>
-              <div className="gear-divider"></div>
-              <div className="gear-toggle-row">
-                <div>
-                  <div className="gear-toggle-label">Floating bubble</div>
-                  <div className="gear-toggle-sub">Mini sheet over other apps</div>
-                </div>
-                <label className="toggle-switch">
-                  <input
-                    type="checkbox"
-                    aria-label="Floating bubble"
-                    checked={bubbleOn}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setPanelOpen(false);
-                        useBubbleStore.setState({ pickMode: true });
-                        navigate("/");
-                      } else {
-                        try {
-                          getAndroid()?.disableBubble?.();
-                        } catch {
-                          // bridge missing
-                        }
-                        useBubbleStore.getState().setOn(false);
-                        showToast("Floating bubble off");
-                      }
-                    }}
-                  />
-                  <span className="toggle-track"></span>
-                </label>
-              </div>
-              <div
-                className="gear-toggle-row"
-                style={{ cursor: "pointer" }}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  setPanelOpen(false);
-                  navigate("/bubble-design");
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setPanelOpen(false);
-                    navigate("/bubble-design");
-                  }
-                }}
-              >
-                <div>
-                  <div className="gear-toggle-label">Bubble design</div>
-                  <div className="gear-toggle-sub">Icon, color and size</div>
-                </div>
-                <Palette size={18} />
-              </div>
-              <div className="gear-divider"></div>
-              <div
-                className="gear-toggle-row"
-                style={{ cursor: "pointer" }}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  try {
-                    getAndroid()?.checkForUpdates?.();
-                  } catch {
-                    // bridge missing
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    try {
-                      getAndroid()?.checkForUpdates?.();
-                    } catch {
-                      // bridge missing
-                    }
-                  }
-                }}
-              >
-                <div>
-                  <div className="gear-toggle-label">Check for updates</div>
-                  <div className="gear-toggle-sub">Download the latest version</div>
-                </div>
-                <RefreshCw size={18} />
-              </div>
-              <div
-                className="gear-toggle-row"
-                style={{ cursor: "pointer" }}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  try {
-                    getAndroid()?.openSupport?.();
-                  } catch {
-                    // bridge missing
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    try {
-                      getAndroid()?.openSupport?.();
-                    } catch {
-                      // bridge missing
-                    }
-                  }
-                }}
-              >
-                <div>
-                  <div className="gear-toggle-label">Report an issue</div>
-                  <div className="gear-toggle-sub">Contact us on Telegram</div>
-                </div>
-                <MessageCircle size={18} />
-              </div>
+              <DropdownMenuItem onSelect={() => {
+                if (!bubbleOn) {
+                  useBubbleStore.setState({ pickMode: true });
+                  navigate("/");
+                } else {
+                  try { getAndroid()?.disableBubble?.(); } catch {}
+                  useBubbleStore.getState().setOn(false);
+                  showToast("Floating bubble off");
+                }
+              }}>
+                <span>{bubbleOn ? "Turn floating bubble off" : "Turn floating bubble on"}</span>
+              </DropdownMenuItem>
+              <DropdownMenuGroup>
+                <DropdownMenuItem onSelect={() => navigate("/bubble-design")}><Palette /> Bubble design</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => { try { getAndroid()?.checkForUpdates?.(); } catch {} }}><RefreshCw /> Check for updates</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => { try { getAndroid()?.openSupport?.(); } catch {} }}><MessageCircle /> Report an issue</DropdownMenuItem>
+              </DropdownMenuGroup>
             </>
-          ) : null}
-          {!isAndroid && (
-            <>
-              <div className="gear-divider"></div>
-              <a
-                className="gear-toggle-row"
-                style={{ cursor: "pointer", textDecoration: "none" }}
-                href="https://github.com/Cryptoistaken/SheetSubmit/releases/latest/download/SheetSubmit.apk"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <div>
-                  <div className="gear-toggle-label">Download app</div>
-                  <div className="gear-toggle-sub">Install the latest Android APK</div>
-                </div>
-                <Download size={18} />
-              </a>
-            </>
+          ) : (
+            <DropdownMenuItem onSelect={() => window.open("https://github.com/Cryptoistaken/SheetSubmit/releases/latest/download/SheetSubmit.apk", "_blank", "noopener,noreferrer")}><Download /> Download app</DropdownMenuItem>
           )}
-          <div className="gear-divider"></div>
-          <button type="button"
-            className="btn btn-ghost"
-            style={{ width: "100%", justifyContent: "center" }}
-            onClick={logout}
-          >
-            Logout
-          </button>
-        </div>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onSelect={logout}><LogOutIcon /> Log out</DropdownMenuItem>
+        </DropdownMenuContent>
+        </DropdownMenu>
+        </span>
       </div>
 
       {isFilePage && renameOpen && file && (

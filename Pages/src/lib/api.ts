@@ -147,6 +147,24 @@ export interface PoolRowsResult {
 }
 export type PoolClaimResult = { password: string; poolId: string; claimed: number; rows: unknown[]; downloadId?: string; filename?: string };
 export type PoolClaimResultWithMeta = PoolClaimResult;
+export type HoldResult = { password: string; poolId: string; claimed: number; held: number; count: number; rows: unknown[]; holdId: string; downloadId: string; filename: string; status: string; mode: string; srcUids?: string[] | null; srcFileIds?: string[] | null };
+export interface HoldRecord {
+  id: string;
+  at: number;
+  ts?: number;
+  poolId: string;
+  password: string;
+  claimed: number;
+  held?: number;
+  filename: string;
+  status: string;
+  mode?: string | null;
+  srcUids?: string[] | null;
+  srcFileIds?: string[] | null;
+  selection?: unknown;
+  claimedBy?: string | null;
+  reverted?: boolean;
+}
 export interface PoolUserFile {
   userId: string;
   files: { fileId: string; available: number; claimed: number }[];
@@ -292,6 +310,26 @@ export const api = {
       throw e;
     }
   },
+  holdPool: async (password: string, poolId: string, body: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; srcUid?: string | null; srcFileId?: string | null; verifiedOnly?: boolean; unverifiedOnly?: boolean }): Promise<HoldResult> => {
+    const enc = (s: string) => encodeURIComponent(s);
+    const payload: Record<string, unknown> = { ...body };
+    if (body.srcUid) payload.srcUid = body.srcUid;
+    if (body.srcFileId) payload.srcFileId = body.srcFileId;
+    if (body.srcUids) payload.srcUids = body.srcUids;
+    if (body.srcFileIds) payload.srcFileIds = body.srcFileIds;
+    try {
+      return await request<HoldResult>(`/pools/${enc(password)}/${enc(poolId)}/hold`, { method: "POST", body: JSON.stringify(payload) });
+    } catch (e) {
+      if (password === "dgddigital" && String(e).includes("404")) {
+        return request<HoldResult>(`/pools/${enc(poolId)}/hold`, { method: "POST", body: JSON.stringify(payload) });
+      }
+      throw e;
+    }
+  },
+  getHolds: (status?: string) => request<HoldRecord[]>(`/pools/holds${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  approveHold: (id: string) => request<{ ok: boolean; status: string }>(`/pools/holds/${encodeURIComponent(id)}/approve`, { method: "POST" }),
+  rejectHold: (id: string) => request<{ ok: boolean; status: string }>(`/pools/holds/${encodeURIComponent(id)}/reject`, { method: "POST" }),
+  returnHold: (id: string) => request<{ ok: boolean; status: string }>(`/pools/holds/${encodeURIComponent(id)}/return`, { method: "POST" }),
   getPoolLedger: async (password: string, poolId: string): Promise<{ ledger: unknown[] }> => {
     const enc = (s: string) => encodeURIComponent(s);
     try {

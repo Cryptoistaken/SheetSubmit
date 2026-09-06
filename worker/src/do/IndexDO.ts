@@ -1,6 +1,6 @@
 import type { Env, SheetFile } from "../lib/shared";
 export class IndexDO {
-  constructor(private readonly state: DurableObjectState, private readonly env: Env) { state.blockConcurrencyWhile(async () => { const s = state.storage.sql; s.exec("CREATE TABLE IF NOT EXISTS users (user_id TEXT PRIMARY KEY, name TEXT, username TEXT, photo_url TEXT, phone TEXT, banned INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)"); try { s.exec("ALTER TABLE users ADD COLUMN phone TEXT"); } catch {} s.exec("CREATE TABLE IF NOT EXISTS file_index (file_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, exp INTEGER NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)"); }); }
+  constructor(private readonly state: DurableObjectState, private readonly env: Env) { state.blockConcurrencyWhile(async () => { const s = state.storage.sql; s.exec("CREATE TABLE IF NOT EXISTS users (user_id TEXT PRIMARY KEY, name TEXT, username TEXT, photo_url TEXT, phone TEXT, banned INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)"); try { s.exec("ALTER TABLE users ADD COLUMN phone TEXT"); } catch {} s.exec("CREATE TABLE IF NOT EXISTS file_index (file_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, exp INTEGER NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS wallets (user_id TEXT PRIMARY KEY, balance REAL NOT NULL DEFAULT 0)"); }); }
   async fetch(req: Request) {
     let body: any; try { body = await req.json(); } catch { return Response.json({ error: "invalid json" }, { status: 400 }); }
     const op = body?.op; const args = body?.args ?? {};
@@ -18,8 +18,23 @@ export class IndexDO {
     case "batchArchive": for (const file of args.files as SheetFile[]) s.exec("UPDATE file_index SET archived=0,data=? WHERE file_id=?", JSON.stringify(file), file.id); return Response.json({ ok: true });
     case "purge": s.exec("DELETE FROM file_index WHERE file_id=?", args.id); return Response.json({ ok: true });
     case "batchPurge": for (const id of args.ids as string[]) s.exec("DELETE FROM file_index WHERE file_id=?", id); return Response.json({ ok: true });
-    case "deleteUser": s.exec("DELETE FROM users WHERE user_id=?", args.id); s.exec("DELETE FROM file_index WHERE owner_id=?", args.id); return Response.json({ ok: true });
-    case "adminUsers": { const rows = s.exec("SELECT * FROM users ORDER BY created_at DESC").toArray() as any[]; const counts = s.exec("SELECT owner_id, SUM(CASE WHEN archived=0 THEN 1 ELSE 0 END) fc, SUM(CASE WHEN archived=1 THEN 1 ELSE 0 END) ac FROM file_index GROUP BY owner_id").toArray() as any[]; const byOwner = new Map(counts.map((r: any) => [r.owner_id, { fc: Number(r.fc), ac: Number(r.ac) }])); return Response.json(rows.map((u) => ({ ...u, fileCount: byOwner.get(u.user_id)?.fc || 0, archivedCount: byOwner.get(u.user_id)?.ac || 0 }))); }
+     case "deleteUser": s.exec("DELETE FROM users WHERE user_id=?", args.id); s.exec("DELETE FROM file_index WHERE owner_id=?", args.id); return Response.json({ ok: true });
+     case "walletCredit": {
+       const uid = String(args.uid || args.userId || "");
+       const amt = Number(args.amount ?? args.credit ?? 0);
+       if (!uid || !Number.isFinite(amt) || amt === 0) return Response.json({ error: "invalid wallet credit" }, { status: 400 });
+       // additive, keep lightweight; no withdrawal path
+       s.exec("INSERT INTO wallets(user_id,balance) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET balance = wallets.balance + excluded.balance", uid, amt);
+       const r: any = s.exec("SELECT balance FROM wallets WHERE user_id=?", uid).toArray()[0];
+       return Response.json({ ok: true, balance: r ? Number(r.balance) : amt });
+     }
+     case "walletGet": {
+       const uid = String(args.uid || args.userId || "");
+       if (!uid) return Response.json({ error: "uid required" }, { status: 400 });
+       const r: any = s.exec("SELECT balance FROM wallets WHERE user_id=?", uid).toArray()[0];
+       return Response.json({ uid, balance: r ? Number(r.balance) : 0 });
+     }
+     case "adminUsers": { const rows = s.exec("SELECT * FROM users ORDER BY created_at DESC").toArray() as any[]; const counts = s.exec("SELECT owner_id, SUM(CASE WHEN archived=0 THEN 1 ELSE 0 END) fc, SUM(CASE WHEN archived=1 THEN 1 ELSE 0 END) ac FROM file_index GROUP BY owner_id").toArray() as any[]; const byOwner = new Map(counts.map((r: any) => [r.owner_id, { fc: Number(r.fc), ac: Number(r.ac) }])); return Response.json(rows.map((u) => ({ ...u, fileCount: byOwner.get(u.user_id)?.fc || 0, archivedCount: byOwner.get(u.user_id)?.ac || 0 }))); }
     case "metaSet": s.exec("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)", args.k, JSON.stringify(args.v)); return Response.json({ ok: true });
     case "metaGet": { const r: any = s.exec("SELECT v FROM meta WHERE k=?", args.k).toArray()[0]; return Response.json(r ? JSON.parse(r.v) : null); }
     case "metaGetMany": { const keys = ((args.keys || []) as string[]).slice(0, 1000); const out: Record<string, any> = {}; if (keys.length) { const rows: any[] = s.exec(`SELECT k,v FROM meta WHERE k IN (${keys.map(() => "?").join(",")})`, ...keys).toArray(); for (const r of rows) out[r.k] = JSON.parse(r.v); } return Response.json(out); }

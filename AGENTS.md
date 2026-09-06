@@ -40,16 +40,17 @@ lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WE
 lib/telegramOidc.ts     # Telegram Login OIDC/JWKS token verification
 lib/session.ts        # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
 lib/do.ts             # rpc(namespace, name, op, args) — single fetch to DO
-do/IndexDO.ts         # singleton global: users, file_index, sessions, device tokens, meta KV (SQLite).
-                      #   ops: ensureUser/user/users/adminUsers(file+archive counts)/ban/deleteUser/register/file/files(archived filter)/archive/batchArchive/purge/batchPurge/allFiles/session/getSession/deleteSession/deviceSet/deviceGet/deviceDelete/deviceByChat/deviceSession/metaSet/metaGet/metaGetMany/metaDel/stats
+do/IndexDO.ts         # singleton global: users, file_index, sessions, device tokens, meta KV, wallets(balance) (SQLite).
+                      #   ops: ensureUser/user/users/adminUsers(file+archive counts)/ban/deleteUser/register/file/files(archived filter)/archive/batchArchive/purge/batchPurge/allFiles/session/getSession/deleteSession/deviceSet/deviceGet/deviceDelete/deviceByChat/deviceSession/metaSet/metaGet/metaGetMany/metaDel/stats/walletCredit/walletGet
 do/FileDO.ts          # per-file: init/meta/seq/rows/full/save/getLogs(200 cap)/wipe (SQLite). save increments seq counter. wipe returns rows before deletion for pool cleanup
-do/PoolDO.ts          # per-pool-password: pool_rows, ledger, downloads (SQLite).
-                      #   ops: add/counts/detail/claim(records download, returns downloadId+filename)/verifiedCounts(+pageCounts alias)/userFiles/downloads/download/downloadDetail/revertDownload/revert/removeAvailable/ledger
+do/PoolDO.ts          # per-pool-password: pool_rows(inserted_at,hold_id), ledger, downloads(status,unit_price,total,mode,src_uids/src_file_ids,selection) (SQLite). PRICES cookies_only .02 / cookies_2fa .05 / page .10.
+                      #   ops: add(counts)/detail/claim(FIFO inserted_at+row_key, unitPrice/total)/hold(FIFO, count|'all', mode fifo|pick, srcUids/srcFileIds+scalar+verified filters, HOLD→download)/holds(status filter)/holdApprove→APPROVED/holdReject→REJECTED(aliases holdRevert/holdReturn)/verifiedCounts(+pageCounts alias)/userFiles/downloads/download/downloadDetail/revertDownload/ledger/revert/removeAvailable
 routes/files.ts       # files router (GET/POST /, PUT/:id, DELETE/:id=archive, PUT/:id/persist|append (feeds pools), GET/:id/rows|full)
                       #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup)
                       #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
 routes/pools.ts       # admin: GET / (PoolSummary[]), GET /downloads, GET /downloads/:id/detail, GET /downloads/:id (xlsx blob, ?format=json), POST /downloads/:id/revert,
-                      #   GET /:pwd/:pool (PoolDetail), /rows (paginated+verifiedOnly/unverifiedOnly), /ledger, /verified-counts, /page-counts (alias), /user-files, POST /:pwd/:pool/claim (→ downloadId+filename), POST /:pwd/:pool/revert
+                      #   GET /holds (status filter), POST /holds/:id/approve, POST /holds/:id/reject (aliases return/revert),
+                      #   GET /:pwd/:pool (PoolDetail), /rows (paginated+verifiedOnly/unverifiedOnly), /ledger, /verified-counts, /page-counts (alias), /user-files, POST /:pwd/:pool/claim (→ downloadId+filename+unitPrice/total/status), POST /:pwd/:pool/hold (same + mode/pick, srcUids/srcFileIds, HOLD status, FIFO inserted_at/row_key), POST /:pwd/:pool/revert
 routes/admin.ts       # GET /stats, /users, /users/search, /user/:id (+files), /user/:id/archive, /file/:id,
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist,
                       #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id

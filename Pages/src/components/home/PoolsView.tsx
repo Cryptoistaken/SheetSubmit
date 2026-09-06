@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { api } from "@/lib/api";
-import type { PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
+import type { HoldRecord, PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { useProfileCache } from "@/stores/profileCache";
@@ -101,6 +101,16 @@ export default function PoolsView() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const dlModalRef = useModalA11y(!!dlUser, () => setDlUser(null));
 
+  // hold mode + pick selections
+  const [holdMode, setHoldMode] = useState<"fifo" | "pick">("fifo");
+  const [selectedUids, setSelectedUids] = useState<string[]>([]);
+  const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
+  const [holds, setHolds] = useState<HoldRecord[] | null>(null);
+  const [holdsLoading, setHoldsLoading] = useState(false);
+  const [holdConfirmOpen, setHoldConfirmOpen] = useState(false);
+  const holdModalRef = useModalA11y(holdConfirmOpen, () => setHoldConfirmOpen(false));
+  const [holdActing, setHoldActing] = useState<string | null>(null);
+
   useEffect(() => {
     if (!menuUser) return;
     const close = (event: MouseEvent | KeyboardEvent) => {
@@ -115,6 +125,17 @@ export default function PoolsView() {
     document.addEventListener("keydown", close);
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", close); };
   }, [menuUser]);
+
+  const loadHolds = useCallback(async () => {
+    setHoldsLoading(true);
+    try {
+      const list = await api.getHolds() as unknown as HoldRecord[];
+      const arr: HoldRecord[] = Array.isArray(list) ? list : [];
+      setHolds(arr.slice(0, 50));
+    } catch {
+      setHolds([]);
+    } finally { setHoldsLoading(false); }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -138,7 +159,12 @@ export default function PoolsView() {
     }
   }, [cur, curPwd, showToast]);
 
-  useEffect(() => { load(); }, [load]);
+  const refreshAll = useCallback(async () => {
+    await load();
+    await loadHolds();
+  }, [load, loadHolds]);
+
+  useEffect(() => { load(); loadHolds(); }, [load, loadHolds]);
 
   // verified counts only on page tab — bounded scan, safe
   useEffect(() => {
@@ -153,7 +179,7 @@ export default function PoolsView() {
 
   // reset file selector when contributor changes or pool changes
   useEffect(() => { setSrcFileId(""); }, [srcUid]);
-  useEffect(() => { setSrcUid(""); setSrcFileId(""); setVerifiedFilter("all"); }, [cur, curPwd]);
+  useEffect(() => { setSrcUid(""); setSrcFileId(""); setVerifiedFilter("all"); setSelectedUids([]); setSelectedFileIds([]); }, [cur, curPwd]);
 
   const poolCounts: Record<string, number> = {};
   if (pools) pools.filter((p) => (p as unknown as Record<string, unknown>)["password"] === curPwd || !(p as unknown as Record<string, unknown>)["password"]).forEach((p) => { poolCounts[p.id] = p.available; });
@@ -191,60 +217,113 @@ export default function PoolsView() {
     return u?.files ?? [];
   }, [srcUid, userFiles]);
 
-  const doPoolClaim = async () => {
-    const n = customQty ? Number(customQty) : poolQty === "all" ? totals.available : poolQty;
+  const toggleUid = (uid: string) => {
+    setSelectedUids((prev) => {
+      if (prev.includes(uid)) {
+        const next = prev.filter((x) => x !== uid);
+        // also remove files belonging to this user from selectedFileIds
+        const files = getUserFilesFor(uid)?.files.map((f) => f.fileId) ?? [];
+        if (files.length) setSelectedFileIds((pf) => pf.filter((fid) => !files.includes(fid)));
+        return next;
+      }
+      return [...prev, uid];
+    });
+  };
+
+  const toggleFile = (fileId: string, uid: string) => {
+    setSelectedFileIds((prev) => (prev.includes(fileId) ? prev.filter((x) => x !== fileId) : [...prev, fileId]));
+    setSelectedUids((prev) => (prev.includes(uid) ? prev : [...prev, uid]));
+  };
+
+  const selectAllPick = () => {
+    setSelectedUids(filtered.map((u) => u.userId));
+  };
+  const clearPick = () => {
+    setSelectedUids([]);
+    setSelectedFileIds([]);
+  };
+
+  const doHoldConfirm = async () => {
+    const n = customQty ? Number(customQty) : poolQty === "all" ? totals.available : (poolQty as number);
     if (!totals.available) return showToast("No rows available to claim");
     if (!Number.isInteger(n) || n < 1) return showToast("Enter at least 1 row");
+    if (holdMode === "pick" && selectedUids.length === 0 && selectedFileIds.length === 0) {
+      showToast("Pick at least 1 user");
+      return;
+    }
     setDownloading(true);
     try {
-      const res = await api.claimPool(curPwd, cur, {
-        count: n,
-        srcUid: srcUid || undefined,
-        srcFileId: srcFileId || undefined,
-        verifiedOnly: cur === "page" && verifiedFilter === "verified" ? true : undefined,
-        unverifiedOnly: cur === "page" && verifiedFilter === "unverified" ? true : undefined,
-      });
-      if (!res.claimed) return showToast("No rows available to claim");
-      const filename = (res as unknown as { filename?: string }).filename || (cur === "cookies_only" ? "cookies_pool.xlsx" : cur === "cookies_2fa" ? "2fa_pool.xlsx" : "page_pool.xlsx");
-      const downloadId = (res as unknown as { downloadId?: string }).downloadId;
-      if (downloadId) {
-        const blob = await api.getDownloadBlob(downloadId);
-        triggerBlobDownload(blob, filename);
+      const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; srcUid?: string | null; srcFileId?: string | null; verifiedOnly?: boolean; unverifiedOnly?: boolean } = {
+        count: n as number | "all",
+        mode: holdMode,
+      };
+      if (holdMode === "fifo") {
+        if (srcUid) payload.srcUid = srcUid;
+        if (srcFileId) payload.srcFileId = srcFileId;
       } else {
-        const XLSX = await import("xlsx");
-        const cols = cur === "cookies_only" ? ["cookies"] : ["cookies", "twofakey"];
-        const data = (res.rows as Record<string, unknown>[]).map((r) => cols.map((c) => String(r[c] ?? "")));
-        const ws = XLSX.utils.aoa_to_sheet(data as string[][]);
-        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, filename);
+        if (selectedUids.length) payload.srcUids = selectedUids;
+        if (selectedFileIds.length) payload.srcFileIds = selectedFileIds;
       }
-      showToast(`Claimed ${res.claimed} from ${poolMeta.label} — ${filename}`);
-      await load();
+      if (cur === "page" && verifiedFilter === "verified") payload.verifiedOnly = true;
+      if (cur === "page" && verifiedFilter === "unverified") payload.unverifiedOnly = true;
+      const res = await api.holdPool(curPwd, cur, payload);
+      const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? n;
+      if (!held) return showToast("No rows available to claim");
+      showToast(`Held ${held} from ${poolMeta.label} — ON HOLD`);
+      setHoldConfirmOpen(false);
+      await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDownloading(false); }
   };
 
-  const doUserClaim = async () => {
+  const doUserHold = async () => {
     if (!dlUser) return;
-    const n = perCustom ? Number(perCustom) : perQty === "all" ? dlUser.available : perQty;
+    const n = perCustom ? Number(perCustom) : perQty === "all" ? dlUser.available : (perQty as number);
     if (!Number.isInteger(n) || n < 1) return showToast("Enter at least 1 row");
     setDownloading(true);
     try {
-      const res = await api.claimPool(curPwd, cur, { count: n, userId: dlUser.userId });
-      if (!res.claimed) return showToast("No rows available to claim");
-      const filename = (res as unknown as { filename?: string }).filename || (cur === "cookies_only" ? "cookies_pool.xlsx" : cur === "cookies_2fa" ? "2fa_pool.xlsx" : "page_pool.xlsx");
-      const downloadId = (res as unknown as { downloadId?: string }).downloadId;
-      if (downloadId) {
-        const blob = await api.getDownloadBlob(downloadId);
-        triggerBlobDownload(blob, filename);
-      } else {
-        const XLSX = await import("xlsx");
-        const cols = cur === "cookies_only" ? ["cookies"] : ["cookies", "twofakey"];
-        const data = (res.rows as Record<string, unknown>[]).map((r) => cols.map((c) => String(r[c] ?? "")));
-        const ws = XLSX.utils.aoa_to_sheet(data as string[][]);
-        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sheet1"); XLSX.writeFile(wb, filename);
-      }
-      showToast(`Claimed ${res.claimed} from ${displayName(dlUser).line1}`);
-      setDlUser(null); await load();
+      const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = {
+        count: n as number | "all",
+        mode: "fifo",
+        srcUids: [dlUser.userId],
+      };
+      if (cur === "page" && verifiedFilter === "verified") payload.verifiedOnly = true;
+      if (cur === "page" && verifiedFilter === "unverified") payload.unverifiedOnly = true;
+      const res = await api.holdPool(curPwd, cur, payload);
+      const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? 0;
+      if (!held) return showToast("No rows available to claim");
+      showToast(`Held ${held} from ${displayName(dlUser).line1} — ON HOLD`);
+      setDlUser(null);
+      await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDownloading(false); }
+  };
+
+  const doApprove = async (id: string) => {
+    setHoldActing(id);
+    try {
+      await api.approveHold(id);
+      showToast("Approved");
+      await refreshAll();
+    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
+  };
+  const doReject = async (id: string) => {
+    const ok = await confirm("Reject this hold and return rows to pool?", "Reject");
+    if (!ok) return;
+    setHoldActing(id);
+    try {
+      await api.rejectHold(id);
+      showToast("Rejected — rows returned");
+      await refreshAll();
+    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
+  };
+  const doReturn = async (id: string) => {
+    const ok = await confirm("Return these rows to the pool?", "Return");
+    if (!ok) return;
+    setHoldActing(id);
+    try {
+      await api.returnHold(id);
+      showToast("Rows returned to pool");
+      await refreshAll();
+    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
 
   const doRedownload = async (id: string, filename: string) => {
@@ -262,7 +341,7 @@ export default function PoolsView() {
     try {
       await api.revertDownload(id);
       showToast("Rows returned to pool");
-      await load();
+      await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setReverting(null); }
   };
 
@@ -372,37 +451,58 @@ export default function PoolsView() {
         </div>
       </div>
 
+      {/* mode switch */}
+      <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div role="group" aria-label="Take mode" style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: 8, padding: 3, gap: 3, background: "var(--bg3)", alignSelf: "flex-start" }}>
+          <button type="button" aria-pressed={holdMode === "fifo"} className={holdMode === "fifo" ? "btn btn-primary" : "btn btn-ghost"} style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600, minHeight: 32 }} onClick={() => setHoldMode("fifo")}>Pool FIFO</button>
+          <button type="button" aria-pressed={holdMode === "pick"} className={holdMode === "pick" ? "btn btn-primary" : "btn btn-ghost"} style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600, minHeight: 32 }} onClick={() => setHoldMode("pick")}>Pick users</button>
+        </div>
+        {holdMode === "fifo" ? (
+          <div style={{ fontSize: 12, color: "var(--text3)" }}>Oldest rows first (FIFO) — takes the oldest available rows first across all contributors.</div>
+        ) : (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button type="button" className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={selectAllPick}>All</button>
+            <button type="button" className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={clearPick}>Clear</button>
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>{selectedUids.length} selected{selectedFileIds.length ? ` · ${selectedFileIds.length} files` : ""}</span>
+          </div>
+        )}
+      </div>
+
       {/* toolbar — source selector before main Download */}
       <div className="pools-toolbar pools-stack" style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end", marginTop: 16, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text3)", fontWeight: 600 }}>
-            Source
-            <select
-              aria-label="Source contributor"
-              value={srcUid}
-              onChange={(e) => setSrcUid(e.target.value)}
-              style={{ padding: "7px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", minHeight: 36, maxWidth: 160 }}
-            >
-              <option value="">All contributors</option>
-              {(((userFiles as unknown as { userId: string }[] | null) ?? (detail?.users as unknown as { userId: string }[] | null) ?? []) as { userId: string }[]).map((u) => {
-                const du = detail?.users.find((x) => x.userId === u.userId);
-                const label = du ? displayName(du).line1 : u.userId.slice(-6);
-                return <option key={u.userId} value={u.userId}>{label} · {u.userId.slice(-6)}</option>;
-              })}
-            </select>
-          </label>
-          {srcUid ? (
-            <select
-              aria-label="Source file"
-              value={srcFileId}
-              onChange={(e) => setSrcFileId(e.target.value)}
-              style={{ padding: "7px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", minHeight: 36, maxWidth: 160 }}
-            >
-              <option value="">All files</option>
-              {srcFileOptions.map((f) => (
-                <option key={f.fileId} value={f.fileId}>#{f.fileId.slice(-8)} · {f.available} avail</option>
-              ))}
-            </select>
+          {holdMode === "fifo" ? (
+            <>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text3)", fontWeight: 600 }}>
+                Source
+                <select
+                  aria-label="Source contributor"
+                  value={srcUid}
+                  onChange={(e) => setSrcUid(e.target.value)}
+                  style={{ padding: "7px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", minHeight: 36, maxWidth: 160 }}
+                >
+                  <option value="">All contributors</option>
+                  {(((userFiles as unknown as { userId: string }[] | null) ?? (detail?.users as unknown as { userId: string }[] | null) ?? []) as { userId: string }[]).map((u) => {
+                    const du = detail?.users.find((x) => x.userId === u.userId);
+                    const label = du ? displayName(du).line1 : u.userId.slice(-6);
+                    return <option key={u.userId} value={u.userId}>{label} · {u.userId.slice(-6)}</option>;
+                  })}
+                </select>
+              </label>
+              {srcUid ? (
+                <select
+                  aria-label="Source file"
+                  value={srcFileId}
+                  onChange={(e) => setSrcFileId(e.target.value)}
+                  style={{ padding: "7px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", minHeight: 36, maxWidth: 160 }}
+                >
+                  <option value="">All files</option>
+                  {srcFileOptions.map((f) => (
+                    <option key={f.fileId} value={f.fileId}>#{f.fileId.slice(-8)} · {f.available} avail</option>
+                  ))}
+                </select>
+              ) : null}
+            </>
           ) : null}
           {cur === "page" ? (
             <select
@@ -431,7 +531,7 @@ export default function PoolsView() {
               style={{ width: 72, border: "none", padding: "7px 8px", fontSize: 13, textAlign: "center", outline: "none", background: customQty ? "var(--bg3)" : customFocused ? "var(--bg)" : "var(--bg)", borderLeft: customFocused ? "1px solid var(--border2)" : "none", cursor: customQty || customFocused ? "text" : "pointer" }}
             />
           </div>
-          <button className="btn btn-primary pools-download" disabled={downloading || !totals.available} onClick={doPoolClaim} style={{ boxShadow: "0 1px 6px rgba(0,112,243,.18)", fontWeight: 600 }}>Download {customQty ? Number(customQty) || 0 : poolQty === "all" ? "All" : poolQty} from {poolMeta.label}</button>
+          <button className="btn btn-primary pools-download" disabled={downloading || !totals.available} onClick={() => setHoldConfirmOpen(true)} style={{ boxShadow: "0 1px 6px rgba(0,112,243,.18)", fontWeight: 600 }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? "All" : poolQty} from {poolMeta.label}</button>
         </div>
       </div>
 
@@ -449,9 +549,13 @@ export default function PoolsView() {
            const isAdmin = Boolean(u.isAdmin || cachedProfiles[u.userId]?.isAdmin);
           const expanded = expandedUser === u.userId;
           const uf = getUserFilesFor(u.userId);
+          const checked = selectedUids.includes(u.userId);
           return (
             <div key={u.userId} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
               <div className={`pool-card ${expanded ? "expanded" : ""}`} style={{ position: "relative" }} role="button" tabIndex={0} aria-expanded={expanded} aria-controls={`pool-files-${u.userId}`} onClick={() => toggleExpand(u.userId)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(u.userId); } }}>
+                {holdMode === "pick" ? (
+                  <input type="checkbox" aria-label={`Select ${d.line1}`} checked={checked} onChange={() => toggleUid(u.userId)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, flexShrink: 0 }} />
+                ) : null}
                 <span className={`expand-icon ${expanded ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6" /></svg>
                 </span>
@@ -468,11 +572,12 @@ export default function PoolsView() {
                   <span className="pool-card-stat" style={{ color: "var(--text3)" }}>{u.claimed}</span>
                 </div>
                 <div className="pool-card-actions" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} onClick={() => { setDlUser(u); setPerQty(10); setPerCustom(""); }}>Take</button>
                   <button type="button" className="btn" title="More options" aria-label={`More options for ${d.line1}`} aria-haspopup="menu" aria-expanded={menuUser === u.userId} style={{ width: 32, height: 32, padding: 0, justifyContent: "center" }} onClick={() => setMenuUser(menuUser === u.userId ? null : u.userId)}>⋯</button>
                   {menuUser === u.userId ? (
                     <div data-pool-menu={u.userId} role="menu" aria-label={`Actions for ${d.line1}`} style={{ position: "absolute", right: 8, top: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--rl)", boxShadow: "var(--shadow-lg)", zIndex: 10, minWidth: 160, padding: 4 }}>
                       <button type="button" role="menuitem" style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", borderRadius: 6, fontWeight: 500 }} onClick={() => openFile(u)}>View file</button>
-                      <button type="button" role="menuitem" style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "var(--blue)", color: "#fff", cursor: "pointer", borderRadius: 6, fontWeight: 700, marginTop: 4 }} onClick={() => { setMenuUser(null); setDlUser(u); setPerQty(10); setPerCustom(""); }}>Download</button>
+                      <button type="button" role="menuitem" style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "var(--blue)", color: "#fff", cursor: "pointer", borderRadius: 6, fontWeight: 700, marginTop: 4 }} onClick={() => { setMenuUser(null); setDlUser(u); setPerQty(10); setPerCustom(""); }}>Take</button>
                       {isAdmin ? <div style={{ fontSize: 11, color: "var(--text3)", padding: "6px 10px" }}>Admin</div> : null}
                     </div>
                   ) : null}
@@ -487,7 +592,10 @@ export default function PoolsView() {
                   ) : (
                     <div className="card-list">
                       {uf.files.map((f) => (
-                        <div key={f.fileId} className="file-card" role="button" tabIndex={0} onClick={() => navigate(`/admin/user/${u.userId}/file/${f.fileId}`)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/admin/user/${u.userId}/file/${f.fileId}`); } }}>
+                        <div key={f.fileId} className="file-card" style={{ cursor: "default" }}>
+                          {holdMode === "pick" ? (
+                            <input type="checkbox" aria-label={`Select file ${f.fileId.slice(-8)}`} checked={selectedFileIds.includes(f.fileId)} onChange={() => toggleFile(f.fileId, u.userId)} style={{ width: 16, height: 16, flexShrink: 0 }} />
+                          ) : null}
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--text3)", flexShrink: 0 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>
                           <div className="file-card-info">
                             <div className="file-card-id">#{f.fileId.slice(-8)}</div>
@@ -497,6 +605,7 @@ export default function PoolsView() {
                             <span className="file-card-stat" style={{ color: "var(--text3)" }}>/</span>
                             <span className="file-card-stat" style={{ color: "var(--red)" }}>{f.claimed} taken</span>
                           </div>
+                          <button type="button" className="btn" style={{ padding: "4px 8px", fontSize: 11, fontWeight: 600, flexShrink: 0 }} onClick={() => navigate(`/admin/user/${u.userId}/file/${f.fileId}`)}>View file</button>
                         </div>
                       ))}
                     </div>
@@ -508,6 +617,57 @@ export default function PoolsView() {
         })}
       </div>
 
+      {/* Holds & approvals */}
+       <section style={{ marginTop: 16 }} aria-labelledby="holds-title">
+         <h2 id="holds-title" style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Holds & approvals</h2>
+        {holdsLoading ? <Skeleton className="h-20 w-full" /> : !holds || holds.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>No holds yet</div>
+        ) : (
+          <div className="card-list">
+            {(holds as HoldRecord[]).map((h) => {
+              const st = String(h.status || "").toUpperCase();
+              const dt = h.at ?? (h as unknown as { ts?: number }).ts;
+              const d = dt ? new Date(dt) : null;
+              const dateStr = d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
+              const timeStr = d ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
+              const poolLabel = POOL_META[h.poolId]?.label ?? h.poolId;
+              const qty = (h as unknown as { claimed?: number; held?: number }).held ?? h.claimed ?? 0;
+              const srcUids = (h as unknown as { srcUids?: string[] | null }).srcUids ?? null;
+              const srcFileIds = (h as unknown as { srcFileIds?: string[] | null }).srcFileIds ?? null;
+              const isHold = st === "HOLD";
+              return (
+                <div key={h.id} className="pool-card" style={{ cursor: "default" }}>
+                  <span className="badge" style={{ background: isHold ? "#fef3c7" : st === "APPROVED" ? "#dcfce7" : "var(--bg3)", color: isHold ? "#92400e" : st === "APPROVED" ? "#166534" : "var(--text3)", borderColor: isHold ? "#fde68a" : st === "APPROVED" ? "#bbf7d0" : "var(--border)" }}>{st}</span>
+                  <div className="pool-card-info" style={{ gap: 4 }}>
+                    <div className="pool-card-name" title={h.filename}>{h.filename} · {poolLabel}</div>
+                    <div className="pool-card-sub">
+                      <span title={d ? d.toISOString() : ""}>{dateStr} {timeStr}</span>
+                      <span>·</span>
+                      <span>{qty} qty</span>
+                      <span>·</span>
+                      <span>{h.mode ?? "—"}</span>
+                      {srcUids && srcUids.length ? <><span>·</span><span title={srcUids.join(", ")}>src: {srcUids.map((s) => s.slice(-6)).join(", ")}</span></> : null}
+                      {srcFileIds && srcFileIds.length ? <><span>·</span><span title={srcFileIds.join(", ")}>files: {srcFileIds.map((s) => s.slice(-6)).join(", ")}</span></> : null}
+                    </div>
+                  </div>
+                  <div className="pool-card-actions">
+                    {isHold ? (
+                      <>
+                        <button className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} disabled={holdActing === h.id} onClick={() => doApprove(h.id)}>{holdActing === h.id ? "…" : "Approve"}</button>
+                        <button className="btn" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, color: "var(--red)" }} disabled={holdActing === h.id} onClick={() => doReject(h.id)}>{holdActing === h.id ? "…" : "Reject"}</button>
+                        <button className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} disabled={holdActing === h.id} onClick={() => doReturn(h.id)}>{holdActing === h.id ? "…" : "Return"}</button>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "var(--text3)", fontWeight: 600 }}>{st}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+         )}
+       </section>
+
       {/* download history */}
        <section style={{ marginTop: 16 }} aria-labelledby="recent-downloads-title">
          <h2 id="recent-downloads-title" style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Recent downloads</h2>
@@ -515,13 +675,16 @@ export default function PoolsView() {
           downloads === null ? <Skeleton className="h-20 w-full" /> : <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>No downloads yet</div>
         ) : (
           <div className="card-list">
-            {(downloads as unknown as { id: string; at: number; ts?: number; poolId: string; password: string; claimed: number; filename: string; reverted?: boolean; claimedBy?: string | null }[]).map((d) => {
-               const rawAt = d.at ?? (d as unknown as { ts?: number }).ts;
-               const dt = rawAt != null ? new Date(rawAt) : null;
-              const dateStr = dt ? dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
-              const timeStr = dt ? dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
-              const isReverted = !!(d as unknown as { reverted?: boolean }).reverted;
-              const poolLabel = d.poolId || (d.filename?.includes("page_") ? "page" : d.filename?.includes("2fa") ? "cookies_2fa" : "cookies_only");
+            {(downloads as unknown as { id: string; at: number; ts?: number; poolId: string; password: string; claimed: number; filename: string; reverted?: boolean; claimedBy?: string | null; status?: string }[]).map((d) => {
+                const rawAt = d.at ?? (d as unknown as { ts?: number }).ts;
+                const dt = rawAt != null ? new Date(rawAt) : null;
+               const dateStr = dt ? dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
+               const timeStr = dt ? dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
+               const isReverted = !!(d as unknown as { reverted?: boolean }).reverted;
+               const statusUpper = String((d as unknown as { status?: string }).status || (isReverted ? "REVERTED" : "CLAIMED")).toUpperCase();
+               const isHold = statusUpper === "HOLD";
+               const isApproved = statusUpper === "APPROVED";
+               const poolLabel = d.poolId || (d.filename?.includes("page_") ? "page" : d.filename?.includes("2fa") ? "cookies_2fa" : "cookies_only");
               const claimer = d.claimedBy ? adminMap.get(String(d.claimedBy)) : null;
               const claimerId = d.claimedBy ? String(d.claimedBy) : "";
               const claimerIsAdmin = claimerId ? Boolean(claimer?.isAdmin ?? cachedProfiles[claimerId]?.isAdmin) : false;
@@ -549,17 +712,18 @@ export default function PoolsView() {
                   <div className="pool-card-info">
                     <div className="pool-card-name" title={d.filename}>{d.filename}</div>
                     <div className="pool-card-sub">
-                       <span title={dt ? dt.toISOString() : ""}>{dateStr} {timeStr}</span>
-                      <span>·</span>
-                      <span>{d.claimed} claimed</span>
-                      {claimer?.name ? <><span>·</span><span title={String(d.claimedBy)} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>{claimer.name}</span></> : d.claimedBy ? <><span>·</span><span title={String(d.claimedBy)}>#{String(d.claimedBy).slice(-6)}</span></> : null}
-                      {isReverted ? <><span>·</span><span style={{ color: "var(--green)", fontWeight: 600 }}>REVERTED</span></> : null}
-                      </div>
-                   </div>
-                  <div className="pool-card-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                    <button className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} disabled={reDownloading === d.id || isReverted} onClick={() => doRedownload(d.id, d.filename)}>{reDownloading === d.id ? "…" : "Download"}</button>
-                     <button className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, color: isReverted ? "var(--text3)" : "var(--red)" }} disabled={reverting === d.id || isReverted} onClick={() => doRevert(d.id)}>{reverting === d.id ? "…" : isReverted ? "Returned" : "Return"}</button>
-                   </div>
+                        <span title={dt ? dt.toISOString() : ""}>{dateStr} {timeStr}</span>
+                       <span>·</span>
+                       <span>{d.claimed} claimed</span>
+                       {isHold ? <><span>·</span><span style={{ color: "#92400e", fontWeight: 600 }}>HOLD</span></> : isApproved ? <><span>·</span><span style={{ color: "#166534", fontWeight: 600 }}>APPROVED</span></> : null}
+                       {claimer?.name ? <><span>·</span><span title={String(d.claimedBy)} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>{claimer.name}</span></> : d.claimedBy ? <><span>·</span><span title={String(d.claimedBy)}>#{String(d.claimedBy).slice(-6)}</span></> : null}
+                       {isReverted && !isHold ? <><span>·</span><span style={{ color: "var(--green)", fontWeight: 600 }}>REVERTED</span></> : null}
+                       </div>
+                    </div>
+                   <div className="pool-card-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                     <button className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} disabled={reDownloading === d.id || isReverted || isHold} onClick={() => doRedownload(d.id, d.filename)}>{isHold ? "On hold" : reDownloading === d.id ? "…" : "Download"}</button>
+                      <button className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, color: isReverted || isHold ? "var(--text3)" : "var(--red)" }} disabled={reverting === d.id || isReverted || isHold} onClick={() => doRevert(d.id)}>{isHold ? "Awaiting" : reverting === d.id ? "…" : isReverted ? "Returned" : "Return"}</button>
+                    </div>
                 </div>
               );
             })}
@@ -567,10 +731,25 @@ export default function PoolsView() {
          )}
        </section>
 
+      {holdConfirmOpen ? (
+        <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) setHoldConfirmOpen(false); }}>
+          <div ref={holdModalRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="take-accounts-title" style={{ width: 360 }}>
+            <div id="take-accounts-title" className="modal-title">Take accounts</div>
+            <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6, marginBottom: 12 }}>Rows go ON HOLD. Approve to credit balance, Reject to return rows.</div>
+            <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>Taking {customQty ? Number(customQty) || 0 : poolQty === "all" ? totals.available : poolQty as number} from {poolMeta.label}{holdMode === "pick" ? ` · ${selectedUids.length} users${selectedFileIds.length ? ` · ${selectedFileIds.length} files` : ""}` : ""}</div>
+            <div className="modal-footer">
+               <button type="button" className="btn btn-ghost" onClick={() => setHoldConfirmOpen(false)}>Cancel</button>
+               <button type="button" className="btn btn-primary" aria-busy={downloading} disabled={downloading} onClick={doHoldConfirm}>Confirm hold</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {dlUser ? (
         <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) setDlUser(null); }}>
-          <div ref={dlModalRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="pool-download-title" style={{ width: 360 }}>
-            <div id="pool-download-title" className="modal-title">Download</div>
+          <div ref={dlModalRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="pool-take-title" style={{ width: 360 }}>
+            <div id="pool-take-title" className="modal-title">Take accounts</div>
+            <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6, marginBottom: 12 }}>Rows go ON HOLD. Approve to credit balance, Reject to return rows.</div>
             <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>{displayName(dlUser).line1} &middot; {dlUser.available} available</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
              {[10, 50].map((n) => <button type="button" key={n} className={`btn ${perQty === n && !perCustom ? "btn-primary" : ""}`} aria-pressed={perQty === n && !perCustom} onClick={() => { setPerQty(n); setPerCustom(""); }}>{n}</button>)}
@@ -587,10 +766,10 @@ export default function PoolsView() {
                 style={{ width: 72, padding: "6px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: "var(--r)", outline: "none", textAlign: "center", cursor: perCustom || perCustomFocused ? "text" : "pointer", background: perCustom ? "var(--bg3)" : "var(--bg)" }}
               />
             </div>
-            <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>Claiming {perCustom ? Number(perCustom) || 0 : perQty === "all" ? dlUser.available : perQty as number} of {dlUser.available} available</div>
+            <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>Taking {perCustom ? Number(perCustom) || 0 : perQty === "all" ? dlUser.available : perQty as number} of {dlUser.available} available</div>
             <div className="modal-footer">
                <button type="button" className="btn btn-ghost" onClick={() => setDlUser(null)}>Cancel</button>
-               <button type="button" className="btn btn-primary" aria-busy={downloading} disabled={downloading} onClick={doUserClaim}>Download & claim</button>
+               <button type="button" className="btn btn-primary" aria-busy={downloading} disabled={downloading} onClick={doUserHold}>Confirm hold</button>
             </div>
           </div>
         </div>

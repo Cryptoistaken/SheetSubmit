@@ -503,7 +503,6 @@ export default function PoolsView() {
               const timeStr = dt ? dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
               const isReverted = !!(d as unknown as { reverted?: boolean }).reverted;
               const poolLabel = d.poolId || (d.filename?.includes("page_") ? "page" : d.filename?.includes("2fa") ? "cookies_2fa" : "cookies_only");
-              const poolBadgeClass = poolLabel === "page" ? "badge page" : "badge";
               const claimer = d.claimedBy ? adminMap.get(String(d.claimedBy)) : null;
               const initials = claimer?.name?.charAt(0)?.toUpperCase() || (d.claimedBy ? String(d.claimedBy).charAt(0).toUpperCase() : "");
               return (
@@ -517,8 +516,8 @@ export default function PoolsView() {
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDetailId(d.id); } }}
                   style={{ cursor: "pointer" }}
                 >
-                  {(() => { const meta = POOL_META[poolLabel] ?? POOL_META.cookies_only; const PoolIcon = meta.Icon; return (
-                  <span className={poolBadgeClass} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5 }}><PoolIcon size={12} />{meta.label}</span>
+                  {(() => { const PoolIcon = (POOL_META[poolLabel] ?? POOL_META.cookies_only).Icon; return (
+                  <span title={poolLabel} style={{ flexShrink: 0, display: "inline-flex", filter: "grayscale(1)" }}><PoolIcon size={16} /></span>
                   ); })()}
                   <span title={claimer?.name ?? (d.claimedBy ? String(d.claimedBy) : "Claimer unknown — before tracking")} style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg3)", border: "1.5px solid var(--border)", flexShrink: 0, color: "var(--text2)" }}>
                      {claimer ? <ProfileAvatar photoUrl={claimer.photoUrl} fallback={initials || "?"} className="size-9 border-0" /> : <UnknownUserIcon size={16} />}

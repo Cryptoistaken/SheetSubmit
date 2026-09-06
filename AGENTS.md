@@ -70,13 +70,13 @@ vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→l
 components.json       # shadcn Nova, neutral, cssVariables, lucide
 pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/analysis,/tools (+/pools redirect, /tools/splitter, /admin/user/:userId, /bubble-design)
 pages/SheetPage.tsx   # /file/:id + /admin/user/:userId/file/:fileId
-pages/AdminPage.tsx (empty stub) / BubbleDesignPage.tsx   # AdminPage logic lives in components/home/AdminView.tsx
+pages/BubbleDesignPage.tsx   # /admin renders via HomePage + components/home/AdminView.tsx (no AdminPage file)
  components/layout/Topbar.tsx          # connection card + shadcn profile dropdown + animated theme toggle
 components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, AnalysisView.tsx, Fab.tsx, EmptyState.tsx, DownloadDetailModal.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
 components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed
- components/ui/button.tsx, avatar.tsx, dialog.tsx, dropdown-menu.tsx, theme-toggler.tsx, hold-to-delete-button.tsx, slide-to-confirm-button.tsx, ink-stamp.tsx  # shadcn and reusable pool actions
+ components/ui/button.tsx, avatar.tsx, dialog.tsx, alert-dialog.tsx, dropdown-menu.tsx, theme-toggler.tsx, hold-to-delete-button.tsx, slide-to-confirm-button.tsx, ink-stamp.tsx  # shadcn and reusable pool actions
 contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, retry 3×1.5s
 stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection
 stores/bubbleStore.ts     # {on, pickMode}

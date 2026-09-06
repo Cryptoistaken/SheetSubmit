@@ -2409,7 +2409,7 @@ function trimMemoryRows() {
 }
 
 /** Normalize a 2FA key: strip spaces/dashes, uppercase (old normalizeKey). */
-export function normalizeBubbleKey(t: string | null | undefined): string {
+function normalizeBubbleKey(t: string | null | undefined): string {
   return (t || "").replace(/[\s\-]/g, "").toUpperCase();
 }
 

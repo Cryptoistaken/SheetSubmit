@@ -13,7 +13,6 @@ const META: Record<PoolId, { label: string; badge: string; cols: string[]; filen
   cookies_2fa: { label: "2FA", badge: "2FA", cols: ["cookies", "twofakey"], filename: "2fa_pool.xlsx", rule: "cookies + 2FA key" },
   page: { label: "Page", badge: "Page", cols: ["cookies", "twofakey"], filename: "page_pool.xlsx", rule: 'cookies + 2FA + wa_status === "eligible"' },
 };
-export const PRICES: Record<PoolId, number> = { cookies_only: 0.02, cookies_2fa: 0.05, page: 0.10 };
 const summarize = (rows: any[]) => {
   const available = rows.filter((r) => r._state === "available").length;
   const claimedRows = rows.filter((r) => r._state === "claimed");

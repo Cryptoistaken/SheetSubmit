@@ -65,12 +65,6 @@ export default function PoolsView() {
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [verified, setVerified] = useState<VerifiedCounts | null>(null);
   const { profiles: cachedProfiles, fetchProfiles } = useProfileCache();
-  const _adminMap = useMemo(() => {
-    const m = new Map<string, { name: string; username?: string; photoUrl?: string | null; isAdmin?: boolean }>();
-    for (const [k, v] of Object.entries(cachedProfiles)) m.set(k, { name: v.name, username: v.username ?? undefined, photoUrl: v.photoUrl ?? null, isAdmin: v.isAdmin });
-    return m;
-  }, [cachedProfiles]);
-  void _adminMap;
   const [srcUid, setSrcUid] = useState<string>("");
   const [srcFileId, setSrcFileId] = useState<string>("");
   const [verifiedFilter, setVerifiedFilter] = useState<"all" | "verified" | "unverified">("all");

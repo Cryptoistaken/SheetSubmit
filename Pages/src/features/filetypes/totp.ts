@@ -36,10 +36,6 @@ function _generateTOTP(secret: string): Promise<string> {
     });
 }
 
-export function generateTOTP(secret: string): Promise<string> {
-  return _generateTOTP(secret);
-}
-
 export async function getCachedTOTP(secret: string): Promise<{ code: string } | null> {
   if (!secret) return null;
   const step = Math.floor(Date.now() / 30000);

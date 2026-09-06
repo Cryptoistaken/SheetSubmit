@@ -19,7 +19,6 @@ declare global {
 }
 
 const BASE = RUNTIME_BASE + "/api";
-export const API_BASE = BASE;
 
 export type ConnStatus = "connecting" | "ok" | "err";
 export const useConnStore = create<{ status: ConnStatus }>()(() => ({ status: "connecting" }));
@@ -146,7 +145,6 @@ export interface PoolRowsResult {
   rows: Record<string, unknown>[];
 }
 export type PoolClaimResult = { password: string; poolId: string; claimed: number; rows: unknown[]; downloadId?: string; filename?: string };
-export type PoolClaimResultWithMeta = PoolClaimResult;
 export type HoldResult = { password: string; poolId: string; claimed: number; held: number; count: number; rows: unknown[]; holdId: string; downloadId: string; filename: string; status: string; mode: string; srcUids?: string[] | null; srcFileIds?: string[] | null };
 export interface HoldRecord {
   id: string;
@@ -371,10 +369,6 @@ export const api = {
     const enc = (s: string) => encodeURIComponent(s);
     return request<PoolPrice>(`/pools/${enc(password)}/${enc(poolId)}/price`, { method: "PUT", body: JSON.stringify({ price }) });
   },
-  downloadHistory: () => request<{ downloads: unknown[] } | unknown[]>("/pools/downloads" as string) as Promise<{ downloads: unknown[] } | unknown[]>,
-  redownload: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
-  downloadById: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
-  downloadByIdBlob: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
 
   me: async (): Promise<{ user: User | null; expired: boolean }> => {
     let res: Response;

@@ -94,13 +94,6 @@ export const PasswordIcon = ({ password, size = 14 }: { password: string; size?:
     </svg>
   ) : null;
 
-export const UnknownUserIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-    <circle cx="12" cy="7" r="4" />
-  </svg>
-);
-
 export const Doc2xIcon = ({ size = 24, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" {...props}>
     <title>doc2x</title>
@@ -113,13 +106,6 @@ export const ReplitPoolsIcon = ({ size = 14, ...props }: { size?: number } & Rea
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 256 308" aria-hidden="true" {...props}>
     <title>replit-icon</title>
     <path fill="#f26207" d="M0 19.2C0 8.596 8.596 0 19.2 0h89.6C119.404 0 128 8.596 128 19.2v83.2H19.2C8.596 102.4 0 93.804 0 83.2zm128 83.2h108.8c10.604 0 19.2 8.596 19.2 19.2v64c0 10.604-8.596 19.2-19.2 19.2H128zM0 224c0-10.604 8.596-19.2 19.2-19.2H128V288c0 10.604-8.596 19.2-19.2 19.2H19.2C8.596 307.2 0 298.604 0 288z" />
-  </svg>
-);
-
-export const CakephpIcon = ({ size = 14, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 256 200" aria-hidden="true" {...props}>
-    <title>cakephp-icon</title>
-    <path fill="#d33c44" fill-rule="evenodd" d="M0 119.883c0 22.056 57.294 39.958 127.98 39.958v39.942C57.294 199.783 0 181.897 0 159.841Zm256 0v39.95c0 9.417-10.47 18.056-27.902 24.89l-100.126-24.89v-39.95l100.126 24.882c17.433-6.826 27.91-15.465 27.902-24.882M127.98 0C198.674 0 256 17.918 256 39.958v39.983c0 9.384-10.47 18.056-27.894 24.857L127.98 79.941v39.942C57.294 119.883 0 101.989 0 79.94V39.958C0 17.918 57.294 0 127.98 0" />
   </svg>
 );
 
@@ -190,17 +176,6 @@ export const SearchIcon = ({ size = 14, ...props }: { size?: number } & React.SV
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" {...props}>
     <circle cx="11" cy="11" r="7" />
     <path d="M20 20L16 16" />
-  </svg>
-);
-
-export const PaletteIcon = ({ size = 16, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" {...props}>
-    <path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5" />
-    <path d="M8.5 8.5v.01" />
-    <path d="M16 15.5v.01" />
-    <path d="M12 12v.01" />
-    <path d="M11 17v.01" />
-    <path d="M7 14v.01" />
   </svg>
 );
 

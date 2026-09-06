@@ -7,7 +7,6 @@ import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfileCache } from "@/stores/profileCache";
-import { VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import { fileTypeDef } from "@/lib/types";
 import type { AdminUser, ArchiveFile, SheetFile } from "@/lib/types";
 import { downloadXlsx } from "@/lib/xlsx";
@@ -242,10 +241,8 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                 photoUrl={detailUser.photoUrl}
                 fallback={userName(detailUser).charAt(0).toUpperCase()}
                 className="admin-detail-avatar admin-user-avatar-placeholder"
+                verified={detailUser.isAdmin}
               />
-              {detailUser.isAdmin ? (
-                <span title="Verified" style={{ position: "absolute", right: -4, bottom: -4, width: 18, height: 18, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))" }}><VerifiedIcon size={18} /></span>
-              ) : null}
             </div>
             <div className="admin-detail-info">
               <div className="admin-detail-name" dir="auto" style={{ unicodeBidi: "isolate" }}>{userName(detailUser)}</div>
@@ -446,10 +443,8 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                         photoUrl={u.photoUrl}
                         fallback={name.charAt(0).toUpperCase()}
                         className="admin-user-avatar admin-user-avatar-placeholder"
+                        verified={u.isAdmin}
                       />
-                      {u.isAdmin ? (
-                        <span title="Verified" style={{ position: "absolute", right: -4, bottom: -4, width: 18, height: 18, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))" }}><VerifiedIcon size={18} /></span>
-                      ) : null}
                     </div>
                     <div className="admin-user-info">
                       <div className="admin-user-name" dir="auto" style={{ unicodeBidi: "isolate" }}>

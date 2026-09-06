@@ -41,11 +41,11 @@ export const useProfileCache = create<State>((set, get) => ({
     if (isFetching) return;
     set({ isFetching: true });
     try {
-      const users = (await api.adminUsers()) as unknown as { id: string; firstName?: string; lastName?: string; username?: string; photoUrl?: string | null; phone?: string | null }[];
+      const users = (await api.adminUsers()) as unknown as { id: string; firstName?: string; lastName?: string; username?: string; photoUrl?: string | null; phone?: string | null; isAdmin?: boolean }[];
       const map: Record<string, CachedProfile> = {};
       for (const u of users) {
         const name = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || (u.username ? `@${u.username}` : u.id);
-        map[u.id] = { id: u.id, name, username: u.username ?? null, photoUrl: u.photoUrl ?? null, phone: u.phone ?? null, firstName: u.firstName ?? null, lastName: u.lastName ?? null };
+        map[u.id] = { id: u.id, name, username: u.username ?? null, photoUrl: u.photoUrl ?? null, phone: u.phone ?? null, firstName: u.firstName ?? null, lastName: u.lastName ?? null, isAdmin: u.isAdmin };
       }
       set({ profiles: map, fetchedAt: Date.now() });
     } catch {

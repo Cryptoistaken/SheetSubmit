@@ -1,5 +1,5 @@
 import { Download, MessageCircle, Palette, RefreshCw } from "lucide-react";
-import { WorkspaceIcon, FileTypeIcon } from "@/components/icons/FileTypeIcons";
+import { WorkspaceIcon, FileTypeIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -207,6 +207,7 @@ export default function Topbar() {
       </div>
       <div className="topbar-r">
         {isFilePage && <SheetToolbar />}
+        <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
         <button
           ref={btnRef}
           className={`profile-btn${photoLoaded ? " loaded" : ""}`}
@@ -233,9 +234,15 @@ export default function Topbar() {
               </Avatar>
           </span>
         </button>
+        {user.isAdmin ? (
+          <span title="Verified" style={{ position: "absolute", right: -5, top: -7, width: 14, height: 14, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))", pointerEvents: "none" }}>
+            <VerifiedIcon size={14} />
+          </span>
+        ) : null}
+        </span>
         <div ref={panelRef} id="user-settings-panel" role="dialog" aria-modal="true" aria-label="Settings" aria-hidden={!panelOpen} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
           <div className="gear-user-card">
-             {panelOpen ? <ProfileAvatar photoUrl={user.photoUrl} fallback={(displayName || "?").slice(0, 1).toUpperCase()} className="gear-user-avatar" /> : null}
+             {panelOpen ? <ProfileAvatar photoUrl={user.photoUrl} fallback={(displayName || "?").slice(0, 1).toUpperCase()} className="gear-user-avatar" verified={user.isAdmin} badgeSize={16} /> : null}
             <div className="gear-user-info">
               <div className="gear-user-name">{displayName}</div>
               <div className="gear-user-username">

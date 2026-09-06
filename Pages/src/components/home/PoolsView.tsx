@@ -90,8 +90,8 @@ export default function PoolsView() {
   const [verified, setVerified] = useState<VerifiedCounts | null>(null);
   const { profiles: cachedProfiles, fetchProfiles } = useProfileCache();
   const adminMap = useMemo(() => {
-    const m = new Map<string, { name: string; username?: string; photoUrl?: string | null }>();
-    for (const [k, v] of Object.entries(cachedProfiles)) m.set(k, { name: v.name, username: v.username ?? undefined, photoUrl: v.photoUrl ?? null });
+    const m = new Map<string, { name: string; username?: string; photoUrl?: string | null; isAdmin?: boolean }>();
+    for (const [k, v] of Object.entries(cachedProfiles)) m.set(k, { name: v.name, username: v.username ?? undefined, photoUrl: v.photoUrl ?? null, isAdmin: v.isAdmin });
     return m;
   }, [cachedProfiles]);
   const [srcUid, setSrcUid] = useState<string>("");
@@ -437,8 +437,7 @@ export default function PoolsView() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6" /></svg>
                 </span>
                 <span className="admin-wrap">
-                   <ProfileAvatar photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={d.line1.charAt(0).toUpperCase()} className="size-9 bg-[var(--bg3)] text-[var(--text2)]" />
-                  {isAdmin ? <span className="admin-dot" aria-label="Verified admin" title="Verified"><VerifiedIcon size={18} /></span> : null}
+                   <ProfileAvatar photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={d.line1.charAt(0).toUpperCase()} className="size-9 bg-[var(--bg3)] text-[var(--text2)]" verified={isAdmin} />
                 </span>
                 <div className="pool-card-info">
                   <div className="pool-card-name">{d.line1}{uf ? <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 500 }}>{uf.files.length} file{uf.files.length !== 1 ? "s" : ""}</span> : null}</div>
@@ -504,6 +503,8 @@ export default function PoolsView() {
               const isReverted = !!(d as unknown as { reverted?: boolean }).reverted;
               const poolLabel = d.poolId || (d.filename?.includes("page_") ? "page" : d.filename?.includes("2fa") ? "cookies_2fa" : "cookies_only");
               const claimer = d.claimedBy ? adminMap.get(String(d.claimedBy)) : null;
+              const claimerId = d.claimedBy ? String(d.claimedBy) : "";
+              const claimerIsAdmin = claimerId ? Boolean(claimer?.isAdmin ?? cachedProfiles[claimerId]?.isAdmin) : false;
               const initials = claimer?.name?.charAt(0)?.toUpperCase() || (d.claimedBy ? String(d.claimedBy).charAt(0).toUpperCase() : "");
               return (
                 <div
@@ -519,8 +520,11 @@ export default function PoolsView() {
                   {(() => { const PoolIcon = (POOL_META[poolLabel] ?? POOL_META.cookies_only).Icon; return (
                   <span title={poolLabel} style={{ flexShrink: 0, display: "inline-flex" }}><PoolIcon size={16} /></span>
                   ); })()}
+                  <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
                   <span title={claimer?.name ?? (d.claimedBy ? String(d.claimedBy) : "Claimer unknown — before tracking")} style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg3)", border: "1.5px solid var(--border)", flexShrink: 0, color: "var(--text2)" }}>
                      {claimer ? <ProfileAvatar photoUrl={claimer.photoUrl} fallback={initials || "?"} className="size-9 border-0" /> : <UnknownUserIcon size={16} />}
+                  </span>
+                  {claimerIsAdmin ? <span title="Verified" style={{ position: "absolute", right: -4, bottom: -4, width: 14, height: 14, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))" }}><VerifiedIcon size={14} /></span> : null}
                   </span>
                   <div className="pool-card-info">
                     <div className="pool-card-name" title={d.filename}>{d.filename}</div>

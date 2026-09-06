@@ -43,6 +43,9 @@ jobs:
           echo "KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "Release keystore decoded"
 
+      - name: Print release certificate fingerprint
+        run: keytool -list -v -keystore android/android-release.keystore -storepass "$KEYSTORE_PASSWORD" -alias sheetsubmit | grep 'SHA256:'
+
       - name: Build release APK
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon

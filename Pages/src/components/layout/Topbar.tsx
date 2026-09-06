@@ -199,7 +199,7 @@ export default function Topbar() {
       </div>
       <div className="topbar-r">
         {isFilePage && <SheetToolbar />}
-        <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+        <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, ...hideHome }}>
         <button
           ref={btnRef}
           className={`profile-btn${photoLoaded ? " loaded" : ""}`}
@@ -208,7 +208,6 @@ export default function Topbar() {
           aria-expanded={panelOpen}
           aria-haspopup="dialog"
           aria-controls="user-settings-panel"
-          style={hideHome}
           onClick={(e) => {
             e.stopPropagation();
             setPanelOpen((o) => !o);
@@ -227,7 +226,7 @@ export default function Topbar() {
           </span>
         </button>
         {user.isAdmin ? (
-          <span title="Verified" style={{ position: "absolute", right: -5, top: -7, width: 14, height: 14, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))", pointerEvents: "none" }}>
+          <span title="Verified" style={{ position: "absolute", right: -4, bottom: -4, width: 14, height: 14, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))", pointerEvents: "none" }}>
             <VerifiedIcon size={14} />
           </span>
         ) : null}

@@ -137,6 +137,32 @@ export default function FileCard({
   const sq = (bg: string, title: string) => (
     <span title={title} style={{ width: 10, height: 10, borderRadius: 2.5, background: bg, border: "1px solid var(--border)", flexShrink: 0 }} />
   );
+  const indStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 4 };
+  const metaStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 8 };
+  const badges = (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span className="file-type-badge" title={badge} aria-label={badge} style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={12} /></span>
+      <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center" }} title={pwTitle}>{isCustom ? pwLabel : <PasswordIcon password={pw} size={14} />}</span>
+    </span>
+  );
+  const inds = [
+    <span key="rows" style={indStyle}>{sq("var(--grad-rows)", "rows")}{count}</span>,
+    ...(((file.liveCount ?? 0) + (file.deadCount ?? 0) > 0
+      ? [<span key="live" style={indStyle}>{sq("var(--grad-live)", "live")}{file.liveCount}</span>]
+      : [])),
+    ...((isPage && (file.pageCount ?? 0) > 0
+      ? [<span key="page" style={indStyle}>{sq("var(--grad-page)", "page eligible")}{file.pageCount}</span>]
+      : [])),
+    ...(((file.liveCount ?? 0) + (file.deadCount ?? 0) > 0
+      ? [<span key="dead" style={indStyle}>{sq("var(--grad-dead)", "dead")}{file.deadCount}</span>]
+      : [])),
+    ...(((file.dupCount ?? 0) > 0
+      ? [<span key="dup" style={indStyle}>{sq("var(--grad-dup)", "duplicates in file")}{file.dupCount}</span>]
+      : [])),
+    ...((crossDupCount
+      ? [<span key="cross" style={indStyle}>{sq("var(--grad-cross)", "cross-file duplicates")}{crossDupCount}</span>]
+      : [])),
+  ];
 
   const actionLabel = ({ created: "Newly Created", renamed: "Renamed", modified: "Last Modified", restored: "Last Restored", archived: "Last Archived" } as Record<string, string>)[file.lastAction ?? (file.deletedAt ? "archived" : "modified")] ?? "Last Modified";
 
@@ -164,30 +190,22 @@ export default function FileCard({
         <FileTypeIcon file={file} size={16} />
       </div>
       <div className="file-card-name" dir="auto" style={{ unicodeBidi: "isolate" }}>{file.name}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: list ? 0 : "auto", flexWrap: list ? "nowrap" : undefined, overflow: list ? "hidden" : undefined, flex: list ? 1 : undefined, minWidth: 0 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <span className="file-type-badge" title={badge} aria-label={badge} style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={12} /></span>
-          <span className="file-type-badge" style={{ ...pwStyle, fontSize: 10, padding: "2px 6px", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center" }} title={pwTitle}>{isCustom ? pwLabel : <PasswordIcon password={pw} size={14} />}</span>
-        </span>
-        <span className="file-card-meta" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-rows)", "rows")}{count}</span>
-          {(file.liveCount ?? 0) + (file.deadCount ?? 0) > 0 ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-live)", "live")}{file.liveCount}</span>
-          ) : null}
-          {isPage && (file.pageCount ?? 0) > 0 ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-page)", "page eligible")}{file.pageCount}</span>
-          ) : null}
-          {(file.liveCount ?? 0) + (file.deadCount ?? 0) > 0 ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-dead)", "dead")}{file.deadCount}</span>
-          ) : null}
-          {(file.dupCount ?? 0) > 0 ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-dup)", "duplicates in file")}{file.dupCount}</span>
-          ) : null}
-          {crossDupCount ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{sq("var(--grad-cross)", "cross-file duplicates")}{crossDupCount}</span>
-          ) : null}
-        </span>
+      {list ? (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 0, flexWrap: "nowrap", overflow: "hidden", flex: 1, minWidth: 0 }}>
+        {badges}
+        <span className="file-card-meta" style={metaStyle}>{inds}</span>
       </div>
+      ) : (
+      <div style={{ display: "flex", flexDirection: "column", gap: inds.length > 3 ? 5 : 0, marginTop: "auto", minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          {badges}
+          <span className="file-card-meta" style={metaStyle}>{inds.slice(0, 3)}</span>
+        </div>
+        {inds.length > 3 ? (
+          <span className="file-card-meta" style={metaStyle}>{inds.slice(3)}</span>
+        ) : null}
+      </div>
+      )}
       <div className="file-card-actions">
         {recent ? (
           <span title={"Last action: " + (file.lastAction ?? "modified")} style={{ fontSize: 9, fontWeight: 600, color: "var(--text2)", background: "var(--bg3)", padding: "3px 7px", borderRadius: 6, letterSpacing: "-0.01em", whiteSpace: "nowrap", marginRight: 2 }}>

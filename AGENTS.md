@@ -67,11 +67,11 @@ App.tsx               # createBrowserRouter: RequireAuth gate (unauth → /login
 index.css / app.css   # tailwind v4 + shadcn + geist + legacy styles
 vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000, vendor-react chunk
 components.json       # shadcn Nova, neutral, cssVariables, lucide
-pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/tools (+/pools redirect, /tools/splitter, /admin/user/:userId, /bubble-design)
+pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/analysis,/tools (+/pools redirect, /tools/splitter, /admin/user/:userId, /bubble-design)
 pages/SheetPage.tsx   # /file/:id + /admin/user/:userId/file/:fileId
 pages/AdminPage.tsx (empty stub) / BubbleDesignPage.tsx   # AdminPage logic lives in components/home/AdminView.tsx
 components/layout/Topbar.tsx          # connection card (useConnStore — HTTP reachability, ring pulse loops ~4s)
-components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, Fab.tsx, EmptyState.tsx, DownloadDetailModal.tsx
+components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, AnalysisView.tsx, Fab.tsx, EmptyState.tsx, DownloadDetailModal.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
 components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed

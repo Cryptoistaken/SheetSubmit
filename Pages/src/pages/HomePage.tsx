@@ -48,6 +48,7 @@ function ViewSwitch({ view, setViewMode }: { view: "grid" | "list"; setViewMode:
 }
 
 const AdminView = lazyRetry(() => import("@/components/home/AdminView"));
+const AnalysisView = lazyRetry(() => import("@/components/home/AnalysisView"));
 const ArchiveView = lazyRetry(() => import("@/components/home/ArchiveView"));
 const SplitterTool = lazyRetry(() => import("@/components/tools/SplitterTool"));
 const PoolsView = lazyRetry(() => import("@/components/home/PoolsView"));
@@ -63,9 +64,9 @@ import { COLUMN_PRESETS, fileTypeDef, FILE_PRESET_NAMES } from "@/lib/types";
 import type { FilePreset, FileType, SheetFile } from "@/lib/types";
 import { downloadXlsx, genId, hydrateWaCache, importXlsx } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
-import { CakephpIcon, CookieIcon, ObsidianIcon, PageIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, TwoFaIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
+import { CakephpIcon, AnalysisIcon, CookieIcon, ObsidianIcon, PageIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, TwoFaIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
 
-type Tab = "files" | "archive" | "wallet" | "pools" | "admin" | "tools";
+type Tab = "files" | "archive" | "wallet" | "pools" | "admin" | "analysis" | "tools";
 
 interface AndroidBridge {
   getBubbleFile?: () => string;
@@ -116,13 +117,15 @@ export default function HomePage() {
   const confirm = useConfirm();
 
   // Each home section has its own URL path (mobile + desktop): / = files,
-  // /files, /archive, /admin, /admin/user/:id (admin user detail). The active
+  // /files, /archive, /admin, /analysis, /admin/user/:id (admin user detail). The active
   // tab is derived from the pathname so every section is deep-linkable.
   const path = location.pathname;
   const tab: Tab = path.startsWith("/pools")
     ? "pools"
     : path.startsWith("/tools")
       ? "tools"
+      : path.startsWith("/analysis")
+        ? "analysis"
       : path.startsWith("/admin")
         ? "admin"
         : path === "/archive"
@@ -165,7 +168,7 @@ export default function HomePage() {
   }, [showToast]);
 
   useEffect(() => {
-    if ((tab === "admin" || tab === "tools" || tab === "pools") && !user?.isAdmin) {
+    if ((tab === "admin" || tab === "analysis" || tab === "tools" || tab === "pools") && !user?.isAdmin) {
       navigate("/", { replace: true });
     }
   }, [tab, user, navigate]);
@@ -454,6 +457,17 @@ export default function HomePage() {
         ) : null}
         {user?.isAdmin ? (
           <button
+            className={`home-tab${tab === "analysis" ? " active" : ""}`}
+            role="tab"
+            aria-selected={tab === "analysis"}
+            onClick={() => goTab("/analysis")}
+          >
+            <AnalysisIcon size={14} aria-hidden="true" />
+            Analysis
+          </button>
+        ) : null}
+        {user?.isAdmin ? (
+          <button
             className={`home-tab${tab === "tools" ? " active" : ""}`}
             role="tab"
             aria-selected={tab === "tools"}
@@ -527,6 +541,14 @@ export default function HomePage() {
         <div className="home-pane" id="homePaneAdmin">
           <Suspense fallback={<PageSkeleton variant={userId ? "admin-detail" : "admin"} />}>
             <AdminView initialUserId={userId} view={view} />
+          </Suspense>
+        </div>
+      ) : null}
+
+      {tab === "analysis" && user?.isAdmin ? (
+        <div className="home-pane" id="homePaneAnalysis">
+          <Suspense fallback={<PageSkeleton variant="admin" />}>
+            <AnalysisView />
           </Suspense>
         </div>
       ) : null}

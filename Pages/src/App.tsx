@@ -41,6 +41,7 @@ function skeletonForPath(pathname: string): DetailedSkeletonVariant {
   if (pathname.startsWith("/pools")) return "pools";
   if (pathname.startsWith("/admin/user/")) return "admin-detail";
   if (pathname.startsWith("/admin")) return "admin";
+  if (pathname.startsWith("/analysis")) return "admin";
   if (pathname === "/tools" || pathname === "/tools/") return "tools";
   if (pathname === "/tools/splitter" || pathname === "/tools/splitter/") return "splitter";
   if (pathname.startsWith("/bubble-design")) return "splitter";
@@ -139,6 +140,7 @@ const router = createBrowserRouter([
           { path: "pools", element: <Navigate to="/pools/dgddigital/cookies_only" replace /> },
           { path: "pools/:password/:poolId", element: <HomePage /> },
           { path: "admin", element: <HomePage /> },
+          { path: "analysis", element: <HomePage /> },
           { path: "tools", element: <HomePage /> },
           { path: "tools/splitter", element: <HomePage /> },
           { path: "admin/user", element: <Navigate to="/admin" replace /> },

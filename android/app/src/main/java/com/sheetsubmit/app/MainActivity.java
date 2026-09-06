@@ -106,7 +106,6 @@ public class MainActivity extends Activity {
         did = getDeviceToken();
         // Init Telegram Login SDK (native app-link flow)
         try { TelegramLoginBridge.init(); } catch (Exception e) { Log.e(TAG, "Telegram init: " + e.getMessage()); }
-        handleTelegramIntent(getIntent());
 
         webView = new WebView(this);
         setContentView(webView);
@@ -450,7 +449,8 @@ public class MainActivity extends Activity {
             }
         }, "Android");
 
-    webView.loadUrl(Config.HOME_URL);
+        handleTelegramIntent(getIntent());
+        webView.loadUrl(Config.HOME_URL);
         pollHandler.post(pollRunnable);
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {

@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     // No cookie has ever been issued to this browser → skip the /me call.
-    if (localStorage.getItem(HAD_SESSION) !== "1") {
+    if (localStorage.getItem(HAD_SESSION) !== "1" && !window.Android?.startTelegramLogin) {
       setLoading(false);
       return () => {
         active = false;

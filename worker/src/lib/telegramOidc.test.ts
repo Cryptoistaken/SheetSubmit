@@ -32,6 +32,8 @@ describe("telegramOidc", () => {
     expect(r.uid).toBe("1234123412341234123");
     expect(r.name).toBe("John Doe");
     expect(r.username).toBe("johndoe");
+    expect(r.picture).toBe("https://cdn4.telesco.pe/file_x");
+    expect(r.phone).toBe("971577777777");
   });
   it("rejects wrong iss", async () => {
     const now = Math.floor(Date.now() / 1000);

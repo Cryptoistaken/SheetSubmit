@@ -7,7 +7,6 @@ import SheetToolbar from "@/components/sheet/SheetToolbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModalA11y } from "@/hooks/useModalA11y";
 import { api } from "@/lib/api";
-import { useAvatarUrl } from "@/lib/avatarCache";
 import { useTheme } from "@/lib/theme";
 import { useToast } from "@/lib/toast";
 import { useWsStore } from "@/lib/ws";
@@ -50,13 +49,11 @@ export default function Topbar() {
   const btnRef = useRef<HTMLButtonElement>(null);
   useModalA11y(panelOpen, () => setPanelOpen(false), panelRef);
   const [renameOpen, setRenameOpen] = useState(false);
-  const [avatarReady, setAvatarReady] = useState(false);
   const [photoBusted, setPhotoBusted] = useState(false);
   const [renameName, setRenameName] = useState("");
   const renameRef = useModalA11y(renameOpen && !!file, () => setRenameOpen(false));
   const [isAndroid, setIsAndroid] = useState(() => !!getAndroid());
   const bubbleOn = useBubbleStore((s) => s.on);
-  const avatarSrc = useAvatarUrl(user?.id, user?.photoUrl);
   const showToast = useToast();
 
   // The Android bridge can register after first paint (old bubble.js re-checked
@@ -96,12 +93,10 @@ export default function Topbar() {
     return () => clearTimeout(t);
   }, [wsStatus]);
 
-  // Reset avatar readiness when the photo changes so the ring stays
-  // hidden until the new image has actually loaded.
+  // Reset the broken-photo flag when the photo changes.
   useEffect(() => {
-    setAvatarReady(false);
     setPhotoBusted(false);
-  }, [user?.photoUrl, avatarSrc]);
+  }, [user?.photoUrl]);
 
   // Close gear panel on outside click.
   useEffect(() => {
@@ -229,21 +224,26 @@ export default function Topbar() {
             <WorkspaceIcon size={14} />
           </span>
           <span className="profile-pill-divider"></span>
-          <span className={`avatar-ring${!user.photoUrl || photoBusted || (avatarReady && avatarSrc) ? " show" : ""}${ringPulse ? " pulse" : ""}`} style={{ background: ringColor, color: ringColor }}>
+          <span className={`avatar-ring show${ringPulse ? " pulse" : ""}`} style={{ background: ringColor, color: ringColor }}>
              <Avatar className="size-full border-0 after:hidden">
-               {!photoBusted && avatarSrc ? <AvatarImage key={avatarSrc} src={avatarSrc} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setAvatarReady(true)} onError={() => setPhotoBusted(true)} /> : null}
+               {!photoBusted && user.photoUrl ? <AvatarImage key={user.photoUrl} src={user.photoUrl} alt="" fetchPriority="high" loading="eager" decoding="async" onError={() => setPhotoBusted(true)} /> : null}
                <AvatarFallback className="bg-transparent text-inherit">{(displayName || "?").slice(0, 1).toUpperCase()}</AvatarFallback>
              </Avatar>
           </span>
         </button>
         <div ref={panelRef} id="user-settings-panel" role="dialog" aria-modal="true" aria-label="Settings" aria-hidden={!panelOpen} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
           <div className="gear-user-card">
-             <ProfileAvatar userId={user.id} photoUrl={user.photoUrl} fallback={(displayName || "?").slice(0, 1).toUpperCase()} className="gear-user-avatar" />
+             <ProfileAvatar photoUrl={user.photoUrl} fallback={(displayName || "?").slice(0, 1).toUpperCase()} className="gear-user-avatar" />
             <div className="gear-user-info">
               <div className="gear-user-name">{displayName}</div>
               <div className="gear-user-username">
                 {user.username ? "@" + user.username : ""}
               </div>
+              {user.phone ? (
+                <div className="gear-user-username">
+                  {user.phone}
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="gear-divider"></div>

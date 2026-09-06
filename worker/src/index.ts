@@ -11,14 +11,13 @@ import { scheduled } from "./scheduled";
 import { IndexDO } from "./do/IndexDO";
 import { FileDO } from "./do/FileDO";
 import { PoolDO } from "./do/PoolDO";
-import { fetchPhotoBytes, photoBytes, sniffImage } from "./lib/photo";
 import { checkRate, ipKey } from "./lib/rateLimit";
 import { verifyTelegramIdToken } from "./lib/telegramOidc";
 import { signSession as signSessionFn } from "./lib/session";
 
 const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any worker route change — lets TestApi/health confirm a redeploy landed
-export const API_VERSION = "1.2.6";
+export const API_VERSION = "1.2.7";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
@@ -60,8 +59,7 @@ app.route("/api/pools", pools);
 app.route("/api/admin", admin);
 app.route("/api", wa);
 app.route("/", bot);
-app.get("/api/auth/me", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (!token) return c.json({ error: "not_authenticated" }, 401); if (!c.env.SESSION_SECRET) return c.json({ error: "Server configuration error" }, 500); const session = await verifySession(token, c.env.SESSION_SECRET); if (!session) return c.json({ error: "session_expired" }, 401); const user = await rpc(c.env.INDEX, "global", "user", { id: session.uid }); if (!user) return c.json(null); return c.json({ ...user, photoUrl: `/api/auth/photo/${session.uid}`, isAdmin: isAdmin(c.env, session.uid) }); });
-app.get("/api/auth/photo/:userId", async (c) => { const uid = c.req.param("userId") || ""; if (!/^\d{3,20}$/.test(uid) || !c.env.TG_BOT_TOKEN) return c.text("not found", 404); let img: any = await rpc(c.env.INDEX, "global", "metaGet", { k: `photoimg:${uid}` }).catch(() => null); if (!img?.data) { const fresh = await fetchPhotoBytes(c.env.TG_BOT_TOKEN, uid); if (!fresh) return c.text("not found", 404); img = { ...fresh, ts: Date.now() }; await rpc(c.env.INDEX, "global", "metaSet", { k: `photoimg:${uid}`, v: img }).catch(() => {}); }   return new Response(photoBytes(img), { headers: { "Content-Type": sniffImage(photoBytes(img)) || img.type || "image/jpeg", "Cache-Control": "public, max-age=86400", ETag: `"${img.ts || 0}"` } }); });
+app.get("/api/auth/me", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (!token) return c.json({ error: "not_authenticated" }, 401); if (!c.env.SESSION_SECRET) return c.json({ error: "Server configuration error" }, 500); const session = await verifySession(token, c.env.SESSION_SECRET); if (!session) return c.json({ error: "session_expired" }, 401); const user: any = await rpc(c.env.INDEX, "global", "user", { id: session.uid }); if (!user) return c.json(null); return c.json({ id: String(user.user_id), name: user.name || "", username: user.username || "", photoUrl: user.photo_url || null, phone: user.phone || null, isAdmin: isAdmin(c.env, session.uid) }); });
 app.post("/api/auth/logout", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (token) await rpc(c.env.INDEX, "global", "deleteSession", { token }); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": "ss_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0" } }); });
 app.post("/api/auth/device/claim", async (c) => {
   if (!checkRate(ipKey(c, "device.claim"), 10, 60000)) return c.json({ ok: false, error: "rate limited" }, 429);
@@ -76,9 +74,9 @@ app.post("/api/auth/telegram/verify", async (c) => {
   const clientId = c.env.TELEGRAM_LOGIN_CLIENT_ID;
   if (!clientId) return c.json({ ok: false, error: "telegram login not configured" }, 503);
   if (!c.env.SESSION_SECRET) return c.json({ error: "Server configuration error" }, 500);
-  let claims: { uid: string; name: string; username: string };
+  let claims: { uid: string; name: string; username: string; picture: string; phone: string };
   try { claims = await verifyTelegramIdToken(idToken, clientId); } catch (e: any) { return c.json({ ok: false, error: String(e?.message || "invalid token") }, 401); }
-  await rpc(c.env.INDEX, "global", "ensureUser", { id: claims.uid, name: claims.name, username: claims.username });
+  await rpc(c.env.INDEX, "global", "ensureUser", { id: claims.uid, name: claims.name, username: claims.username, photoUrl: claims.picture || null, phone: claims.phone || null });
   const token = await signSessionFn(claims.uid, c.env.SESSION_SECRET);
   await rpc(c.env.INDEX, "global", "session", { token, uid: claims.uid, exp: Date.now() + 2592000000 });
   return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": cookie(token) } });

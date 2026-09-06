@@ -125,6 +125,7 @@ export interface User {
   lastName?: string;
   username?: string;
   photoUrl?: string | null;
+  phone?: string | null;
   isAdmin?: boolean;
   fileId?: string | null;
   fileCount?: number;

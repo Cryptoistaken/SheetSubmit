@@ -239,7 +239,6 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
           <div className="admin-detail-header">
             <div style={{ position: "relative", flexShrink: 0 }}>
               <ProfileAvatar
-                userId={detailUser.id}
                 photoUrl={detailUser.photoUrl}
                 fallback={userName(detailUser).charAt(0).toUpperCase()}
                 className="admin-detail-avatar admin-user-avatar-placeholder"
@@ -439,7 +438,6 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                   >
                     <div className="admin-user-avatar-wrap" style={{ position: "relative" }}>
                       <ProfileAvatar
-                        userId={u.id}
                         photoUrl={u.photoUrl}
                         fallback={name.charAt(0).toUpperCase()}
                         className="admin-user-avatar admin-user-avatar-placeholder"

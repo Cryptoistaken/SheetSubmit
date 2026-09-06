@@ -486,14 +486,18 @@ const run = async () => {
       : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json).slice(0, 200)}` };
   });
 
-  await test("GET /api/auth/photo/:userId → image bytes or 404 (never 500, never token leak)", async () => {
+  await test("GET /api/auth/me → CDN photoUrl + phone shape", async () => {
+    const r = await api("/auth/me", { headers: { Cookie: cookie } });
+    const u = r.json as any;
+    const ok = r.status === 200 && u && "photoUrl" in u && "phone" in u && (u.photoUrl === null || /^https:\/\//.test(u.photoUrl));
+    return ok
+      ? { ok: true, detail: `photoUrl=${String(u.photoUrl).slice(0, 60)} phone=${u.phone ?? "none"}` }
+      : { ok: false, detail: `status=${r.status} body=${JSON.stringify(u).slice(0, 200)}` };
+  });
+
+  await test("GET /api/auth/photo/:userId → removed (404)", async () => {
     const r = await api(`/auth/photo/${TEST_UID}`, { headers: { Cookie: cookie } });
-    if (r.status === 404) return { ok: true, detail: "user has no TG profile photo" };
-    const ct = r.headers.get("content-type") || "";
-    const leaks = /\/bot\d+:/.test(r.text.slice(0, 500));
-    return r.status === 200 && ct.startsWith("image/") && !leaks
-      ? { ok: true, detail: `status=200 ${ct}` }
-      : { ok: false, detail: `status=${r.status} ct=${ct} body=${r.text.slice(0, 100)}` };
+    return r.status === 404 ? { ok: true } : { ok: false, detail: `status=${r.status} expected 404` };
   });
 
   await test("GET /api/admin/users/search?q=", async () => {

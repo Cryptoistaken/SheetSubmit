@@ -63,7 +63,7 @@ async function verifyRs256(token: string, jwks: Jwk[]): Promise<{ header: any; p
   return { header, payload };
 }
 
-export async function verifyTelegramIdToken(idToken: string, clientId: string): Promise<{ uid: string; name: string; username: string }> {
+export async function verifyTelegramIdToken(idToken: string, clientId: string): Promise<{ uid: string; name: string; username: string; picture: string; phone: string }> {
   if (!idToken || typeof idToken !== "string" || idToken.length > 8192) throw new Error("invalid token");
   const jwks = await fetchJwks();
   const { payload } = await verifyRs256(idToken, jwks);
@@ -82,7 +82,10 @@ export async function verifyTelegramIdToken(idToken: string, clientId: string): 
   if (!/^\d{3,20}$/.test(sub)) throw new Error("invalid sub");
   const username = String(payload.preferred_username || payload.username || payload.tg_username || "");
   const name = String(payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(" ") || payload.nickname || username || sub);
-  return { uid: sub, name: name.slice(0, 128), username: username.slice(0, 64) };
+  const pictureRaw = typeof payload.picture === "string" ? payload.picture : "";
+  const picture = /^https:\/\/\S{1,500}$/.test(pictureRaw) ? pictureRaw : "";
+  const phone = typeof payload.phone_number === "string" ? payload.phone_number.trim().slice(0, 32) : "";
+  return { uid: sub, name: name.slice(0, 128), username: username.slice(0, 64), picture, phone };
 }
 
 export function clearJwksCache() { jwksCache = null; }

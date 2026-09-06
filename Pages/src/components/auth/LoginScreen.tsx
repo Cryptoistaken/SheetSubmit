@@ -99,7 +99,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
         setWaiting(true);
         window.location.href = safeNext(next);
       };
-      const options = { client_id: Number(tgClientId), scope: ["openid", "profile"], redirect_uri: `${window.location.origin}/login` };
+      const options = { client_id: Number(tgClientId), scope: ["openid", "profile", "phone"], redirect_uri: `${window.location.origin}/login` };
       if (!Number.isSafeInteger(options.client_id) || options.client_id <= 0) throw new Error("Invalid Telegram client ID");
       await new Promise<void>((resolve, reject) => {
         const timer = window.setTimeout(() => reject(new Error("Telegram login timed out")), 120000);

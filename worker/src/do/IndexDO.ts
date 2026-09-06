@@ -66,10 +66,9 @@ const summarize = (rows: any[]) => {
 };
 const DL_PASSWORDS = ["dgddigital", "L0VE@12345"];
 const dlMeta = (m: any) => ({ id: m.id, at: m.ts, claimedBy: m.claimedBy, password: m.password, poolId: m.poolId || m.pool_id, claimed: m.claimed, filename: m.filename, reverted: !!m.reverted });
-const photoUrl = (env: Env, uid: string) => `https://${env.WORKER_URL || ""}/api/auth/photo/${uid}`;
-const shapeUser = (env: Env, u: any) => ({ id: String(u.user_id), name: u.name || "", username: u.username || "", photoUrl: photoUrl(env, String(u.user_id)), banned: !!u.banned, createdAt: u.created_at, fileCount: u.fileCount ?? 0, archivedCount: u.archivedCount ?? 0, isAdmin: isAdmin(env, String(u.user_id)) });
+const shapeUser = (env: Env, u: any) => ({ id: String(u.user_id), name: u.name || "", username: u.username || "", photoUrl: u.photo_url || null, phone: u.phone || null, banned: !!u.banned, createdAt: u.created_at, fileCount: u.fileCount ?? 0, archivedCount: u.archivedCount ?? 0, isAdmin: isAdmin(env, String(u.user_id)) });
 export class IndexDO {
-  constructor(private readonly state: DurableObjectState, private readonly env: Env) { state.blockConcurrencyWhile(async () => { const s = state.storage.sql; s.exec("CREATE TABLE IF NOT EXISTS users (user_id TEXT PRIMARY KEY, name TEXT, username TEXT, photo_url TEXT, banned INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS file_index (file_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, exp INTEGER NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)"); }); }
+  constructor(private readonly state: DurableObjectState, private readonly env: Env) { state.blockConcurrencyWhile(async () => { const s = state.storage.sql; s.exec("CREATE TABLE IF NOT EXISTS users (user_id TEXT PRIMARY KEY, name TEXT, username TEXT, photo_url TEXT, phone TEXT, banned INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)"); try { s.exec("ALTER TABLE users ADD COLUMN phone TEXT"); } catch {} s.exec("CREATE TABLE IF NOT EXISTS file_index (file_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, exp INTEGER NOT NULL)"); s.exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)"); }); }
   async fetch(req: Request) {
     if ((req.headers.get("Upgrade") || "").toLowerCase() === "websocket") return this.wsUpgrade(req);
     let body: any; try { body = await req.json(); } catch { return Response.json({ error: "invalid json" }, { status: 400 }); }
@@ -77,7 +76,7 @@ export class IndexDO {
     if (typeof op !== "string" || !op || op.length > 64) return Response.json({ error: "invalid op" }, { status: 400 });
     if (typeof args !== "object" || args === null || Array.isArray(args)) return Response.json({ error: "invalid args" }, { status: 400 });
     const s = this.state.storage.sql; switch (op) {
-    case "ensureUser": s.exec("INSERT INTO users(user_id,name,username,photo_url,created_at) VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,username=excluded.username,photo_url=excluded.photo_url", args.id, args.name || "", args.username || "", args.photoUrl || null, Date.now()); return Response.json({ ok: true });
+    case "ensureUser": s.exec("INSERT INTO users(user_id,name,username,photo_url,phone,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET name=excluded.name,username=excluded.username,photo_url=COALESCE(excluded.photo_url,users.photo_url),phone=COALESCE(excluded.phone,users.phone)", args.id, args.name || "", args.username || "", args.photoUrl || null, args.phone || null, Date.now()); return Response.json({ ok: true });
     case "user": return Response.json(s.exec("SELECT * FROM users WHERE user_id=?", args.id).toArray()[0] || null);
     case "users": return Response.json(s.exec("SELECT * FROM users ORDER BY created_at DESC").toArray());
     case "ban": s.exec("UPDATE users SET banned=? WHERE user_id=?", args.banned ? 1 : 0, args.id); return Response.json({ ok: true });

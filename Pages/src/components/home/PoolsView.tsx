@@ -437,7 +437,7 @@ export default function PoolsView() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6" /></svg>
                 </span>
                 <span className="admin-wrap">
-                   <ProfileAvatar userId={u.userId} photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={d.line1.charAt(0).toUpperCase()} className="size-9 bg-[var(--bg3)] text-[var(--text2)]" />
+                   <ProfileAvatar photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={d.line1.charAt(0).toUpperCase()} className="size-9 bg-[var(--bg3)] text-[var(--text2)]" />
                   {isAdmin ? <span className="admin-dot" aria-label="Verified admin" title="Verified"><VerifiedIcon size={18} /></span> : null}
                 </span>
                 <div className="pool-card-info">
@@ -521,7 +521,7 @@ export default function PoolsView() {
                   <span className={poolBadgeClass} style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5 }}><PoolIcon size={12} />{meta.label}</span>
                   ); })()}
                   <span title={claimer?.name ?? (d.claimedBy ? String(d.claimedBy) : "Claimer unknown — before tracking")} style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg3)", border: "1.5px solid var(--border)", flexShrink: 0, color: "var(--text2)" }}>
-                     {claimer ? <ProfileAvatar userId={String(d.claimedBy)} photoUrl={claimer.photoUrl} fallback={initials || "?"} className="size-9 border-0" /> : <UnknownUserIcon size={16} />}
+                     {claimer ? <ProfileAvatar photoUrl={claimer.photoUrl} fallback={initials || "?"} className="size-9 border-0" /> : <UnknownUserIcon size={16} />}
                   </span>
                   <div className="pool-card-info">
                     <div className="pool-card-name" title={d.filename}>{d.filename}</div>

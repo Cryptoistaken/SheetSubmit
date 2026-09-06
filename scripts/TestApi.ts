@@ -127,6 +127,24 @@ const run = async () => {
       : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
   });
 
+  await test("GET /api/auth/telegram/config", async () => {
+    const r = await api("/auth/telegram/config");
+    return r.status === 200 && typeof r.json?.clientId === "string"
+      ? { ok: true }
+      : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+  });
+
+  await test("POST /api/auth/telegram/verify (invalid token)", async () => {
+    const r = await api("/auth/telegram/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_token: "not-a-jwt" }),
+    });
+    return [401, 403, 503].includes(r.status)
+      ? { ok: true }
+      : { ok: false, detail: `status=${r.status} body=${JSON.stringify(r.json)}` };
+  });
+
   await test("GET /api/auth/me (no cookie) → 401", async () => {
     const r = await api("/auth/me");
     return r.status === 401 && r.json?.error === "not_authenticated"

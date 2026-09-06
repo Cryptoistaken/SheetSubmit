@@ -8,6 +8,8 @@ const TURNSTILE_SITE_KEY = "0x4AAAAAAEmGwKWEZqnHmgYU";
 declare global {
   interface Window {
     turnstile?: { render: (el: HTMLElement, opts: Record<string, unknown>) => string; reset: (id: string) => void };
+    Telegram?: { Login?: { init?: (opts: Record<string, unknown>, cb: (data: unknown) => void) => void; open?: (cb?: (data: unknown) => void) => void; auth?: (opts: Record<string, unknown>, cb: (data: unknown) => void) => void } };
+    Android?: { isTelegramLoginAvailable?: () => boolean; startTelegramLogin?: () => void };
   }
 }
 
@@ -45,7 +47,11 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
   const turnstileBoxRef = useRef<HTMLDivElement>(null);
   const claimedDoneRef = useRef(false);
 
-  // Load Turnstile script and render widget
+  const [tgClientId, setTgClientId] = useState<string | null>(null);
+  const [tgReady, setTgReady] = useState(false);
+  const [tgLoading, setTgLoading] = useState(false);
+  const [tgError, setTgError] = useState<string | null>(null);
+
   useEffect(() => {
     if (window.turnstile) { setTurnstileReady(true); return; }
     const script = document.createElement("script");
@@ -65,7 +71,63 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
     });
   }, [turnstileReady]);
 
-  // Fetch bot info
+  useEffect(() => {
+    let stop = false;
+    api.telegramConfig().then((r) => { if (!stop && r.clientId) setTgClientId(r.clientId); }).catch(() => {});
+    return () => { stop = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!tgClientId) return;
+    if (window.Telegram?.Login) { setTgReady(true); return; }
+    const s = document.createElement("script");
+    s.src = "https://oauth.telegram.org/js/telegram-login.js";
+    s.async = true;
+    s.onload = () => setTgReady(true);
+    s.onerror = () => setTgReady(false);
+    document.head.appendChild(s);
+    return () => { s.remove(); };
+  }, [tgClientId]);
+
+  async function handleTelegramLogin() {
+    if (!tgClientId || claimedDoneRef.current) return;
+    if (!turnstileTokenRef.current) { setTgError("Complete human verification first"); return; }
+    setTgError(null);
+    setTgLoading(true);
+    if (window.Android?.isTelegramLoginAvailable?.()) {
+      window.Android.startTelegramLogin?.();
+      return;
+    }
+    try {
+      const TG = window.Telegram?.Login;
+      if (!TG) throw new Error("Telegram Login not ready");
+      const finish = async (data: any) => {
+        if (data?.error) throw new Error(String(data.error));
+        const idToken = data?.id_token;
+        if (typeof idToken !== "string" || !idToken) throw new Error("No id_token returned");
+        const res = await api.verifyTelegramLogin(idToken, turnstileTokenRef.current);
+        if (!res.ok) throw new Error("verification failed");
+        claimedDoneRef.current = true;
+        localStorage.setItem(HAD_SESSION, "1");
+        setWaiting(true);
+        window.location.href = safeNext(next);
+      };
+      const options = { client_id: Number(tgClientId), scope: ["openid", "profile"] };
+      if (!Number.isSafeInteger(options.client_id) || options.client_id <= 0) throw new Error("Invalid Telegram client ID");
+      await new Promise<void>((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new Error("Telegram login timed out")), 120000);
+        const callback = (data: unknown) => { clearTimeout(timer); finish(data).then(resolve).catch(reject); };
+        try {
+          if (TG.auth) TG.auth(options, callback);
+          else { TG.init?.(options, callback); TG.open?.(callback); }
+        } catch (error) { clearTimeout(timer); reject(error); }
+      });
+    } catch (e: unknown) {
+      setTgError(e instanceof Error ? e.message : String(e));
+      setTgLoading(false);
+    }
+  }
+
   useEffect(() => {
     let stop = false;
     api
@@ -83,7 +145,6 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
     return () => { stop = true; };
   }, []);
 
-  // WS fast-path — anonymous ticket, watch for claimed push
   useEffect(() => {
     if (!href) return;
     void wsConnect();
@@ -109,7 +170,6 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
     return () => { offClaimed(); offHealth(); clearTimeout(t); };
   }, [href, next]);
 
-  // Claim polling
   useEffect(() => {
     if (!href || !turnstileToken) return;
     let stop = false;
@@ -146,6 +206,26 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
           ) : (
             <>
               <div ref={turnstileBoxRef} role="group" aria-label="Human verification" style={{ marginBottom: 12, display: turnstileToken ? "none" : undefined }} />
+              {tgClientId && (
+                <>
+                  <button
+                    className={`tg-auth-button${tgReady && turnstileToken && !tgLoading ? "" : " is-loading"}`}
+                    onClick={handleTelegramLogin}
+                    disabled={!tgReady || !turnstileToken || tgLoading}
+                    aria-busy={tgLoading ? "true" : undefined}
+                    type="button"
+                  >
+                    <span className="tg-auth-icon" aria-hidden="true" />
+                    <span>{tgLoading ? "Verifying…" : "Continue with Telegram"}</span>
+                  </button>
+                  {tgError && <p role="alert" className="login-hint" style={{ color: "var(--red)", marginTop: 8 }}>{tgError}</p>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "12px 0", opacity: 0.6 }}>
+                    <span style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                    <span style={{ fontSize: 12 }}>or</span>
+                    <span style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                  </div>
+                </>
+              )}
               <a
                 className={`tg-auth-button${href && turnstileToken ? "" : " is-loading"}`}
                 href={href && turnstileToken ? href : undefined}
@@ -159,7 +239,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
                 }}
               >
                 <span className="tg-auth-icon" aria-hidden="true" />
-                <span>Sign In with Telegram</span>
+                <span>Sign In with Telegram (Bot)</span>
               </a>
             </>
           )}

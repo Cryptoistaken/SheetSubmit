@@ -19,4 +19,5 @@ export interface Env {
   WORKER_URL?: string;
   FRONTEND_URL?: string;
   HITOOLS_CHECK_URL?: string;
+  TELEGRAM_LOGIN_CLIENT_ID?: string;
 }

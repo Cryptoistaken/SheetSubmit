@@ -63,6 +63,10 @@ public class MainActivity extends Activity {
 
     private static final String PREFS_NAME = "sheetsubmit";
     private static final String TAG = "SheetSubmit";
+    // Telegram Login — keep in sync with worker wrangler.jsonc TELEGRAM_LOGIN_CLIENT_ID + BotFather app-link
+    private static final String TG_HOST = TelegramLoginBridge.HOST;
+    private static final String TG_CLIENT_ID = TelegramLoginBridge.CLIENT_ID;
+    private static final String TG_REDIRECT_URI = TelegramLoginBridge.REDIRECT_URI;
     private static final int REQ_OVERLAY_PERMISSION = 2001;
     private static final int REQ_NOTIFICATION_PERMISSION = 2002;
     private static final int REQ_FILE_CHOOSER = 2003;
@@ -100,6 +104,9 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         did = getDeviceToken();
+        // Init Telegram Login SDK (native app-link flow)
+        try { TelegramLoginBridge.init(); } catch (Exception e) { Log.e(TAG, "Telegram init: " + e.getMessage()); }
+        handleTelegramIntent(getIntent());
 
         webView = new WebView(this);
         setContentView(webView);
@@ -370,6 +377,21 @@ public class MainActivity extends Activity {
                         }
                     }
                 });
+            }
+
+            @JavascriptInterface
+            public void startTelegramLogin() {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try { TelegramLoginBridge.startLogin(MainActivity.this); } catch (Exception e) { Log.e(TAG, "startTelegramLogin: " + e.getMessage()); }
+                    }
+                });
+            }
+
+            @JavascriptInterface
+            public boolean isTelegramLoginAvailable() {
+                return true;
             }
 
             @JavascriptInterface
@@ -1079,6 +1101,28 @@ public class MainActivity extends Activity {
                 filePathCallback = null;
             }
         }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleTelegramIntent(intent);
+    }
+
+    private void handleTelegramIntent(Intent intent) {
+        if (intent == null || intent.getData() == null) return;
+        Uri uri = intent.getData();
+        if (!TelegramLoginBridge.isTelegramRedirect(uri)) return;
+        // Validate host before handing to SDK (prevents processing unrelated intents)
+        if (!TG_HOST.equals(uri.getHost())) return;
+        TelegramLoginBridge.handleResponseJava(uri, idToken -> {
+            // SDK gave us JWT — POST to Worker and apply ss_session cookie
+            TelegramLoginBridge.verifyAndApply(MainActivity.this, idToken, Config.HOME_URL, webView);
+        }, err -> {
+            Log.e(TAG, "Telegram login error: " + err);
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, "Telegram login failed: " + err, Toast.LENGTH_LONG).show());
+        });
     }
 
     @Override

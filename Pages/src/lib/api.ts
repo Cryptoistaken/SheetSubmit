@@ -365,6 +365,9 @@ export const api = {
   },
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   botInfo: () => request<{ username: string }>("/bot/info"),
+  telegramConfig: () => request<{ clientId: string }>("/auth/telegram/config"),
+  verifyTelegramLogin: (id_token: string, turnstile?: string | null) =>
+    request<{ ok: boolean }>("/auth/telegram/verify", { method: "POST", body: JSON.stringify({ id_token, turnstile: turnstile || undefined }) }),
   claimDeviceSession: (token: string, turnstileToken?: string | null) =>
     request<{ ok: boolean }>("/auth/device/claim", { method: "POST", body: JSON.stringify({ token, turnstile: turnstileToken || undefined }) }),
 };

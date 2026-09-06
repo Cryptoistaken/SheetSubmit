@@ -22,7 +22,7 @@
     generate-keystore.yml # one-time Android keystore generator
   worker/                 # Cloudflare Worker (Hono + DO)
   Pages/                  # React SPA (Vite)
-  android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev
+  android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev; native Telegram Login SDK uses BotFather client 8667114953 and CI GitHub Maven credentials
   scripts/TestApi.ts      # live API test suite (mirrors every worker route, all must pass) — run: bun scripts/TestApi.ts (secret auto-loads from scripts/.env)
                         #   subset: TEST_FILTER env or argv — number (59), range (55-70), or name substring (claim), comma/space-combined — e.g. `bun scripts/TestApi.ts 90-97`, `bun scripts/TestApi.ts claim pools`, `--filter=`/`--only=`/`--grep=` prefixes stripped, `h`/`--help` for usage
   scripts/nuke.ts         # DB nuke via admin API — drains pools + deletes files/users — run: bun scripts/nuke.ts [--dry|--yes|--full|--keep id1,id2] (secret auto-loads from scripts/.env)
@@ -30,13 +30,15 @@
 
 ### Worker — `worker/src/` (Hono, entry `src/index.ts`)
 ```
-index.ts              # app setup, routes, API_VERSION (bump on any route change, surfaced by /api/health),
+  index.ts              # app setup, routes, API_VERSION (bump on any route change, surfaced by /api/health),
                       #   GET /api/health, GET /api/ws/ticket + GET /ws (WS gateway via IndexDO wsTicket, x-ws-version; health op),
                       #   /api/auth/me (verifySession, adds photoUrl+isAdmin), POST /api/auth/logout,
                       #   POST /api/auth/device/claim {token, turnstile} (Turnstile enforced if TURNSTILE_SECRET set),
+                      #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS),
                       #   /api/auth/photo/:userId (Telegram getUserProfilePhotos→getFile, 24h meta cache),
                       #   POST /api/auth/turnstile-verify, GET /api/bot/info, ensureWebhook on first request
-lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, WORKER_URL, FRONTEND_URL, HITOOLS_CHECK_URL, TURNSTILE_SECRET, TURNSTILE_SITE_KEY, DO bindings INDEX/FILES/POOLS)
+lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, WORKER_URL, FRONTEND_URL, HITOOLS_CHECK_URL, TURNSTILE_*, TELEGRAM_LOGIN_CLIENT_ID, DO bindings INDEX/FILES/POOLS)
+lib/telegramOidc.ts   # Telegram Login OIDC RS256/JWKS token verification
 lib/session.ts        # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
 lib/do.ts             # rpc(namespace, name, op, args) — single fetch to DO
 lib/photo.ts          # fetchPhotoBytes, sniffImage, refreshPhoto, photoBytes (IDs inline via crypto.randomUUID)
@@ -57,7 +59,7 @@ routes/wa.ts          # POST /fb/check (check.fb.tools proxy), /fb/page-check + 
                       #   GET /wa/cache?uids= (meta-backed, eligible-only, 24h TTL)
 routes/bot.ts         # ensureWebhook, POST /webhook/tg (handleBotUpdate) — GET /bot/info lives in index.ts
 scheduled.ts          # cron: ensureWebhook
-wrangler.jsonc         # DO bindings INDEX/FILES/POOLS, cron 0 */6 * * *, vars (FRONTEND_URL/HITOOLS_CHECK_URL/WORKER_URL)
+  wrangler.jsonc         # DO bindings INDEX/FILES/POOLS, cron 0 */6 * * *, vars (FRONTEND_URL/HITOOLS_CHECK_URL/WORKER_URL); add TELEGRAM_LOGIN_CLIENT_ID after BotFather setup
 ```
 
 ### Pages — `Pages/src/` (Vite 8, entry `main.tsx`)
@@ -74,14 +76,14 @@ components/layout/Topbar.tsx
 components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, Fab.tsx, EmptyState.tsx, DownloadDetailModal.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
-components/auth/LoginScreen.tsx    # Telegram bot login + Turnstile widget, WS claimed fast-path, lazy did, 10s+60s claim poll, focus-only
+components/auth/LoginScreen.tsx    # official Telegram Login OIDC + bot login fallback + Turnstile, WS claimed fast-path, lazy did, 10s+60s claim poll
 components/ui/button.tsx, avatar.tsx  # shadcn cva variants
 contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, WS connect, retry 3×1.5s
 stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection
 stores/bubbleStore.ts     # {on, pickMode}
 stores/profileCache.ts    # profile cache (WS-fed)
 hooks/useUndoRedo.ts, usePersist.ts (beforeunload→flushPersist), useModalA11y.ts
-lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, files/persist/append/WA/admin/pools, me/logout/botInfo/claimDeviceSession
+ lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, files/persist/append/WA/admin/pools, me/logout/botInfo/Telegram Login/claimDeviceSession
 lib/ws.ts                 # wsConnect/wsCall/wsOn (WS gateway client)
 lib/types.ts              # FileType, ColumnDef, SheetFile, Row
 lib/xlsx.ts               # importXlsx/buildXlsx/downloadXlsx/parseSheetRows
@@ -100,7 +102,7 @@ functions/webhook/[[path]].ts
    - No cookie → 401 `not_authenticated` → clear flag, bounce to `/login`.
    - Invalid/expired cookie → 401 `session_expired` → clear flag, `/login` with notice.
    - Valid → 200 user JSON → set user.
-4. LoginScreen: fetch bot info → generate `did` → show "Open Telegram" link.
+4. LoginScreen: fetch bot info → generate `did` → show "Open Telegram" link; when `TELEGRAM_LOGIN_CLIENT_ID` is configured, offer official Telegram Login OIDC, or invoke the Android native SDK bridge inside the app.
 5. User opens Telegram bot → `/start login_<did>` → bot stores `device:<did>` → webhook sets session.
 6. LoginScreen: WS `claim.watch` fast-path (`claimed` push → `POST /api/auth/device/claim {token, turnstile}`) + fallback poll: waits 10s, then 1/s for 60s, **only while tab focused** (Turnstile token required in body).
 7. On success → set `ss_had_session` flag, reload to saved destination (default `/`) → AuthContext picks up cookie.

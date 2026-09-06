@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  packages: read
 
 jobs:
   build:
@@ -47,6 +48,8 @@ jobs:
         run: ./gradlew assembleRelease --no-daemon
         env:
           VERSION_CODE: ${{ github.run_number }}
+          GITHUB_USERNAME: ${{ secrets.TELEGRAM_LOGIN_GITHUB_USERNAME }}
+          GITHUB_TOKEN: ${{ secrets.TELEGRAM_LOGIN_GITHUB_TOKEN }}
 
       - name: Rename APK with version name
         run: |

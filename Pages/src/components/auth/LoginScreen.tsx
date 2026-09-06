@@ -51,6 +51,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
   const [tgReady, setTgReady] = useState(false);
   const [tgLoading, setTgLoading] = useState(false);
   const [tgError, setTgError] = useState<string | null>(null);
+  const [showLegacy, setShowLegacy] = useState(false);
 
   useEffect(() => {
     if (window.turnstile) { setTurnstileReady(true); return; }
@@ -192,55 +193,61 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
 
   const recheck = () => { localStorage.removeItem("ss_login_did"); window.location.reload(); };
 
+  const showOfficial = !!tgClientId && !showLegacy;
+
   return (
     <main id="loginScreen" aria-labelledby="login-title">
       <div className="login-wrap">
         <div className="login-card">
           <h1 id="login-title" className="sr-only">Login to Sheet Submit</h1>
           {notice && <p role="alert" aria-live="assertive" className="login-hint" style={{ color: "var(--red)", marginBottom: 12 }}>{notice}</p>}
-          {showRecheck ? (
-            <button className="tg-auth-button" onClick={recheck} type="button">
-              <span className="tg-auth-icon" aria-hidden="true" />
-              <span>Recheck login</span>
-            </button>
-          ) : (
+          <div ref={turnstileBoxRef} role="group" aria-label="Human verification" style={{ marginBottom: 12, display: turnstileToken ? "none" : undefined }} />
+          {showOfficial ? (
             <>
-              <div ref={turnstileBoxRef} role="group" aria-label="Human verification" style={{ marginBottom: 12, display: turnstileToken ? "none" : undefined }} />
-              {tgClientId && (
-                <>
-                  <button
-                    className={`tg-auth-button${tgReady && turnstileToken && !tgLoading ? "" : " is-loading"}`}
-                    onClick={handleTelegramLogin}
-                    disabled={!tgReady || !turnstileToken || tgLoading}
-                    aria-busy={tgLoading ? "true" : undefined}
-                    type="button"
-                  >
-                    <span className="tg-auth-icon" aria-hidden="true" />
-                    <span>{tgLoading ? "Verifying…" : "Continue with Telegram"}</span>
-                  </button>
-                  {tgError && <p role="alert" className="login-hint" style={{ color: "var(--red)", marginTop: 8 }}>{tgError}</p>}
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "12px 0", opacity: 0.6 }}>
-                    <span style={{ flex: 1, height: 1, background: "var(--border)" }} />
-                    <span style={{ fontSize: 12 }}>or</span>
-                    <span style={{ flex: 1, height: 1, background: "var(--border)" }} />
-                  </div>
-                </>
-              )}
-              <a
-                className={`tg-auth-button${href && turnstileToken ? "" : " is-loading"}`}
-                href={href && turnstileToken ? href : undefined}
-                aria-disabled={!href || !turnstileToken ? "true" : undefined}
-                aria-busy={checking ? "true" : undefined}
-                aria-label={label}
-                tabIndex={!href || !turnstileToken ? 0 : undefined}
-                onClick={(e) => {
-                  if (!href || !turnstileToken) { e.preventDefault(); return; }
-                  setShowFallback(true);
-                }}
+              <button
+                className={`tg-auth-button${tgReady && turnstileToken && !tgLoading ? "" : " is-loading"}`}
+                onClick={handleTelegramLogin}
+                disabled={!tgReady || !turnstileToken || tgLoading}
+                aria-busy={tgLoading ? "true" : undefined}
+                type="button"
               >
                 <span className="tg-auth-icon" aria-hidden="true" />
-                <span>Sign In with Telegram (Bot)</span>
-              </a>
+                <span>{tgLoading ? "Verifying…" : "Continue with Telegram"}</span>
+              </button>
+              {tgError && <p role="alert" className="login-hint" style={{ color: "var(--red)", marginTop: 8 }}>{tgError}</p>}
+              <button className="login-legacy-link" onClick={() => setShowLegacy(true)} type="button">
+                Try legacy
+              </button>
+            </>
+          ) : (
+            <>
+              {showRecheck ? (
+                <button className="tg-auth-button" onClick={recheck} type="button">
+                  <span className="tg-auth-icon" aria-hidden="true" />
+                  <span>Recheck login</span>
+                </button>
+              ) : (
+                <a
+                  className={`tg-auth-button${href && turnstileToken ? "" : " is-loading"}`}
+                  href={href && turnstileToken ? href : undefined}
+                  aria-disabled={!href || !turnstileToken ? "true" : undefined}
+                  aria-busy={checking ? "true" : undefined}
+                  aria-label={label}
+                  tabIndex={!href || !turnstileToken ? 0 : undefined}
+                  onClick={(e) => {
+                    if (!href || !turnstileToken) { e.preventDefault(); return; }
+                    setShowFallback(true);
+                  }}
+                >
+                  <span className="tg-auth-icon" aria-hidden="true" />
+                  <span>Sign In with Telegram (Bot)</span>
+                </a>
+              )}
+              {tgClientId && (
+                <button className="login-legacy-link" onClick={() => setShowLegacy(false)} type="button">
+                  Back
+                </button>
+              )}
             </>
           )}
           {showFallback && href && fallbackHref && !waiting && !showRecheck && (

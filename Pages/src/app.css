@@ -253,6 +253,17 @@ button, input, select, textarea {
     color: var(--text2);
     text-decoration: underline;
 }
+.login-legacy-link {
+    display: inline-block;
+    margin: 10px 0 0;
+    padding: 2px 4px;
+    font-size: 12px;
+    color: var(--text2);
+    text-decoration: underline;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
 
 /* ── Accessibility ── */
 @media (prefers-reduced-motion: reduce) {

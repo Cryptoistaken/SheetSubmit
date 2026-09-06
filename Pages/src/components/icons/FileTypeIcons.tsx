@@ -205,9 +205,19 @@ export const PaletteIcon = ({ size = 16, ...props }: { size?: number } & React.S
 );
 
 export const WalletIcon = ({ size = 14, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" {...props}>
-    <title>2fas</title>
-    <path fill="#ec1c24" d="M12 0c-.918 0-1.833.12-2.72.355L4.07 1.748a2.64 2.64 0 0 0-1.96 2.547v9.115a7.91 7.91 0 0 0 3.552 6.606l5.697 3.765a1.32 1.32 0 0 0 1.467-.008l5.572-3.752a7.93 7.93 0 0 0 3.493-6.57V4.295a2.64 2.64 0 0 0-1.961-2.547L14.72.355A10.6 10.6 0 0 0 12 0M7.383 5.4h9.228c.726 0 1.32.594 1.32 1.32c0 .734-.587 1.32-1.32 1.32H7.383c-.727 0-1.32-.593-1.32-1.32c0-.726.593-1.32 1.32-1.32M7.38 9.357h3.299c.727 0 1.32.595 1.32 1.32a1.32 1.32 0 0 1-1.318 1.32H7.38c-.726 0-1.32-.592-1.32-1.32c0-.725.594-1.32 1.32-1.32m0 3.96c.727 0 1.32.593 1.32 1.32s-.586 1.318-1.32 1.318c-.726 0-1.32-.592-1.32-1.318s.594-1.32 1.32-1.32" />
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 512 512" aria-hidden="true" {...props}>
+    <title>invoiceplane</title>
+    <path fill="#a41e11" fill-rule="evenodd" d="m200.1 316.8l44.5 21.3l34.6 12.4l-84.7 105.6z" />
+    <path fill="#d82c20" fill-rule="evenodd" d="M117 266.8L512 55.9L200.7 317.2l-6.2 138.9l-45.7-92.8z" />
+    <path fill="#d82c20" fill-rule="evenodd" d="m0 228.2l18.4-11.1l51-37.8L512 55.9l-395.2 211l-68.1-17.6zm200.6 89.1l42.1 23.4l58.3 21.9l94.9-26.1L512 55.9z" />
+  </svg>
+);
+
+export const ArchiveIcon = ({ size = 14, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 512 512" aria-hidden="true" {...props}>
+    <title>proton-drive</title>
+    <path fill="#a41e11" d="m361.7 151.2l-200.5 1.1c-8.6.1-17.1-2.6-24.1-7.5l-44.7-31.5c-7-4.9-15.3-7.5-23.9-7.5H0v307.9c0 29 23.7 52.5 52.9 52.5h350.2V192c0-22.6-18.5-41-41.4-40.8" />
+    <path fill="#d82c20" fill-rule="evenodd" d="M241.3 88.2h217.8c29.2 0 52.9 23.5 52.9 52.5v272.9c0 29-23.7 52.5-52.9 52.5h-55.9V192c0-22.6-18.6-41-41.4-40.8l-200.5 1.1c-8.6.1-17.1-2.6-24.1-7.5l-44.7-31.5c-7-4.9-15.3-7.5-23.9-7.5H0v-7.3C0 69.5 23.7 46 52.9 46h99.4c10 0 19.8 3.2 27.8 9l33.2 24.2c8.2 5.8 18 9 28 9" />
   </svg>
 );
 

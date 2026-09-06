@@ -64,7 +64,7 @@ import { COLUMN_PRESETS, fileTypeDef, FILE_PRESET_NAMES } from "@/lib/types";
 import type { FilePreset, FileType, SheetFile } from "@/lib/types";
 import { downloadXlsx, genId, hydrateWaCache, importXlsx } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
-import { CakephpIcon, AnalysisIcon, CookieIcon, ObsidianIcon, PageIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, TwoFaIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
+import { AnalysisIcon, ArchiveIcon, CookieIcon, ObsidianIcon, PageIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, TwoFaIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
 
 type Tab = "files" | "archive" | "wallet" | "pools" | "admin" | "analysis" | "tools";
 
@@ -421,7 +421,7 @@ export default function HomePage() {
           aria-selected={tab === "archive"}
           onClick={() => goTab("/archive")}
         >
-          <CakephpIcon size={14} aria-hidden="true" />
+          <ArchiveIcon size={14} aria-hidden="true" />
           Archive
         </button>
         <button

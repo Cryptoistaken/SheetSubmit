@@ -6,10 +6,9 @@ import { useLocation, useNavigate } from "react-router";
 import SheetToolbar from "@/components/sheet/SheetToolbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModalA11y } from "@/hooks/useModalA11y";
-import { api } from "@/lib/api";
+import { api, useConnStore } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
 import { useToast } from "@/lib/toast";
-import { useWsStore } from "@/lib/ws";
 import { useBubbleStore } from "@/stores/bubbleStore";
 import { useSheetStore } from "@/stores/sheetStore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -43,7 +42,6 @@ export default function Topbar() {
   const file = useSheetStore((s) => s.file);
 
   const [conn, setConn] = useState<ConnState>({ cls: "", text: "Connecting..." });
-  const [ringPulse, setRingPulse] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -81,18 +79,12 @@ export default function Topbar() {
     if (isFilePage) setPanelOpen(false);
   }, [isFilePage]);
 
-  const wsStatus = useWsStore((s) => s.status);
+  const connStatus = useConnStore((s) => s.status);
   useEffect(() => {
-    if (wsStatus === "open") setConn({ cls: "ok", text: "Connected" });
-    else if (wsStatus === "closed") setConn({ cls: "err", text: "Disconnected" });
+    if (connStatus === "ok") setConn({ cls: "ok", text: "Connected" });
+    else if (connStatus === "err") setConn({ cls: "err", text: "Disconnected" });
     else setConn({ cls: "", text: "Connecting..." });
-  }, [wsStatus]);
-  useEffect(() => {
-    if (wsStatus !== "open") return;
-    setRingPulse(true);
-    const t = setTimeout(() => setRingPulse(false), 1200);
-    return () => clearTimeout(t);
-  }, [wsStatus]);
+  }, [connStatus]);
 
   // Reset the broken-photo flag when the photo changes.
   useEffect(() => {
@@ -227,7 +219,7 @@ export default function Topbar() {
             <WorkspaceIcon size={14} />
           </span>
           <span className="profile-pill-divider"></span>
-          <span className={`avatar-ring${photoLoaded ? " show" : ""}${ringPulse && photoLoaded ? " pulse" : ""}`} style={{ background: ringColor, color: ringColor }}>
+          <span className={`avatar-ring${photoLoaded ? " show" : ""}${conn.cls === "ok" && photoLoaded ? " pulse" : ""}`} style={{ background: ringColor, color: ringColor }}>
              <Avatar className="size-full border-0 after:hidden">
                 {!photoBusted && user.photoUrl ? <AvatarImage src={user.photoUrl} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setPhotoLoaded(true)} onError={() => setPhotoBusted(true)} /> : null}
                 <AvatarFallback className="bg-transparent text-inherit">{(displayName || "?").slice(0, 1).toUpperCase()}</AvatarFallback>

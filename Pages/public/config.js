@@ -1,1 +1,1 @@
-window.APP_CONFIG = { apiBase: "", wsBase: "https://sheetsubmit.traderspopy.workers.dev" };
+window.APP_CONFIG = { apiBase: "" };

@@ -24,14 +24,14 @@
   Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev; native Telegram Login SDK uses BotFather client 8667114953 and CI GitHub Maven credentials
   scripts/TestApi.ts      # live API test suite (mirrors every worker route, all must pass) — run: bun scripts/TestApi.ts (secret auto-loads from scripts/.env)
-                        #   subset: TEST_FILTER env or argv — number (59), range (55-70), or name substring (claim), comma/space-combined — e.g. `bun scripts/TestApi.ts 90-97`, `bun scripts/TestApi.ts claim pools`, `--filter=`/`--only=`/`--grep=` prefixes stripped, `h`/`--help` for usage
+                        #   subset: TEST_FILTER env or argv — number (55), range (55-70), or name substring (claim), comma/space-combined — e.g. `bun scripts/TestApi.ts 90-97`, `bun scripts/TestApi.ts claim pools`, `--filter=`/`--only=`/`--grep=` prefixes stripped, `h`/`--help` for usage
   scripts/nuke.ts         # DB nuke via admin API — drains pools + deletes files/users — run: bun scripts/nuke.ts [--dry|--yes|--full|--keep id1,id2] (secret auto-loads from scripts/.env)
 ```
 
 ### Worker — `worker/src/` (Hono, entry `src/index.ts`)
 ```
   index.ts              # app setup, routes, API_VERSION (bump on any route change, surfaced by /api/health),
-                      #   GET /api/health, GET /api/ws/ticket + GET /ws (WS gateway via IndexDO wsTicket, x-ws-version; health op),
+                      #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   /api/auth/me (verifySession, returns CDN photoUrl+phone+isAdmin), POST /api/auth/logout,
                       #   POST /api/auth/device/claim {token, turnstile} (Turnstile enforced if TURNSTILE_SECRET set),
                       #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS, stores picture+phone),
@@ -40,8 +40,8 @@ lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WE
 lib/telegramOidc.ts     # Telegram Login OIDC/JWKS token verification
 lib/session.ts        # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
 lib/do.ts             # rpc(namespace, name, op, args) — single fetch to DO
-do/IndexDO.ts         # singleton global: users, file_index, sessions, device tokens, meta KV, WS gateway (SQLite).
-                      #   ops: ensureUser/user/users/adminUsers(file+archive counts)/ban/deleteUser/register/file/files(archived filter)/archive/batchArchive/purge/batchPurge/allFiles/session/getSession/deleteSession/deviceSet/deviceGet/deviceDelete/deviceByChat/wsTicket/deviceSession/metaSet/metaGet/metaGetMany/metaDel/stats + wsUpgrade/webSocketMessage/handleClientOp (pools.list, pool.claim, admin.*, wa.cache…)
+do/IndexDO.ts         # singleton global: users, file_index, sessions, device tokens, meta KV (SQLite).
+                      #   ops: ensureUser/user/users/adminUsers(file+archive counts)/ban/deleteUser/register/file/files(archived filter)/archive/batchArchive/purge/batchPurge/allFiles/session/getSession/deleteSession/deviceSet/deviceGet/deviceDelete/deviceByChat/deviceSession/metaSet/metaGet/metaGetMany/metaDel/stats
 do/FileDO.ts          # per-file: init/meta/seq/rows/full/save/getLogs(200 cap)/wipe (SQLite). save increments seq counter. wipe returns rows before deletion for pool cleanup
 do/PoolDO.ts          # per-pool-password: pool_rows, ledger, downloads (SQLite).
                       #   ops: add/counts/detail/claim(records download, returns downloadId+filename)/verifiedCounts(+pageCounts alias)/userFiles/downloads/download/downloadDetail/revertDownload/revert/removeAvailable/ledger
@@ -65,30 +65,29 @@ scheduled.ts          # cron: ensureWebhook
 main.tsx              # StrictMode, Toast>Confirm>Auth>App
 App.tsx               # createBrowserRouter: RequireAuth gate (unauth → /login with redirect-back state) → Layout (Topbar+Outlet); public /login route (LoginRoute, bounces authed users back); bubble mode
 index.css / app.css   # tailwind v4 + shadcn + geist + legacy styles
-vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000 + /ws (ws:true), vendor-react chunk
+vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000, vendor-react chunk
 components.json       # shadcn Nova, neutral, cssVariables, lucide
 pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/tools (+/pools redirect, /tools/splitter, /admin/user/:userId, /bubble-design)
 pages/SheetPage.tsx   # /file/:id + /admin/user/:userId/file/:fileId
 pages/AdminPage.tsx (empty stub) / BubbleDesignPage.tsx   # AdminPage logic lives in components/home/AdminView.tsx
-components/layout/Topbar.tsx
+components/layout/Topbar.tsx          # connection card (useConnStore — HTTP reachability, ring pulse loops ~4s)
 components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, Fab.tsx, EmptyState.tsx, DownloadDetailModal.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
 components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed
 components/ui/button.tsx, avatar.tsx  # shadcn cva variants
-contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, WS connect, retry 3×1.5s
+contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, retry 3×1.5s
 stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection
 stores/bubbleStore.ts     # {on, pickMode}
-stores/profileCache.ts    # profile cache (WS-fed)
+stores/profileCache.ts    # profile cache (fed from /me + admin users)
 hooks/useUndoRedo.ts, usePersist.ts (beforeunload→flushPersist), useModalA11y.ts
- lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, files/persist/append/WA/admin/pools, me/logout/botInfo/Telegram Login/claimDeviceSession
-lib/ws.ts                 # wsConnect/wsCall/wsOn (WS gateway client)
+ lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, useConnStore (connection status fed by request outcomes), files/persist/append/WA/admin/pools, me/logout/botInfo/Telegram Login/claimDeviceSession
 lib/types.ts              # FileType, ColumnDef, SheetFile, Row
 lib/xlsx.ts               # importXlsx/buildXlsx/downloadXlsx/parseSheetRows
 lib/downloadOpts.ts       # buildDownloadOpts counts
 lib/utils.ts (cn), theme.ts, device.ts, toast.tsx, confirm.tsx
 features/filetypes/index.ts, fbcookie.ts, validation.ts, totp.ts
-public/config.js          # injected at runtime: window.APP_CONFIG={apiBase:"", wsBase:"https://…workers.dev"}
+public/config.js          # injected at runtime: window.APP_CONFIG={apiBase:""}
 functions/api/[[path]].ts # Pages Functions proxy → BACKEND_URL
 functions/webhook/[[path]].ts
 ```

@@ -2,7 +2,6 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { api, normalizeUser } from "@/lib/api";
-import { wsConnect, wsDisconnect, wsOn } from "@/lib/ws";
 import type { User } from "@/lib/types";
 
 interface AuthContextValue {
@@ -84,21 +83,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active = false;
       if (timer) clearTimeout(timer);
     };
-  }, []);
-
-  useEffect(() => {
-    if (user) void wsConnect();
-    else wsDisconnect();
-  }, [user]);
-
-  useEffect(() => {
-    const off = wsOn("authError", () => {
-      if (localStorage.getItem(HAD_SESSION) === "1") {
-        localStorage.removeItem(HAD_SESSION);
-        window.location.href = "/login";
-      }
-    });
-    return off;
   }, []);
 
   return (

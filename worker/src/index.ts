@@ -17,7 +17,7 @@ import { signSession as signSessionFn } from "./lib/session";
 
 const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any worker route change — lets TestApi/health confirm a redeploy landed
-export const API_VERSION = "1.2.9";
+export const API_VERSION = "1.3.0";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
@@ -33,24 +33,6 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 app.use("/api/*", async (c, next) => { if (Number(c.req.header("Content-Length")) > 4_000_000) return c.json({ error: "payload too large" }, 413); if (c.req.raw.body) { try { const reader = c.req.raw.clone().body!.getReader(); let size = 0; while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > 4_000_000) { await reader.cancel(); return c.json({ error: "payload too large" }, 413); } } } catch { return c.json({ error: "invalid request body" }, 400); } } return next(); });
-app.get("/api/ws/ticket", async (c) => {
-  let uid: string | null = null;
-  const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1];
-  if (token && c.env.SESSION_SECRET) { try { const s = await verifySession(token, c.env.SESSION_SECRET); if (s) uid = s.uid; } catch {} }
-  const r: any = await rpc(c.env.INDEX, "global", "wsTicket", { uid });
-  return c.json({ ticket: r.ticket });
-});
-app.get("/ws", async (c) => {
-  if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") return c.text("expected websocket", 426);
-  const origin = c.req.header("Origin") || "";
-  const allowed = [c.env.FRONTEND_URL, "http://localhost:5173", "http://127.0.0.1:5173"].filter(Boolean) as string[];
-  if (origin && !allowed.includes(origin)) return c.text("forbidden", 403);
-  if (!c.req.query("t")) return c.text("missing ticket", 401);
-  const stub = c.env.INDEX.get(c.env.INDEX.idFromName("global"));
-  const hdrs = new Headers(c.req.raw.headers);
-  hdrs.set("x-ws-version", API_VERSION);
-  return await stub.fetch(c.req.raw, { headers: hdrs });
-});
 app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now(), version: API_VERSION }));
 app.route("/api/files", files);
 app.route("/api/archive", archive);

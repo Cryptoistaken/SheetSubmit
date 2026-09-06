@@ -461,7 +461,7 @@ button, input, select, textarea {
     opacity: 0;
 }
 .avatar-ring.pulse::before {
-    animation: ringOrbit 1.2s linear 1;
+    animation: ringOrbit 4s linear infinite;
 }
 @keyframes ringOrbit {
     0% { transform: rotate(0); opacity: 0; }

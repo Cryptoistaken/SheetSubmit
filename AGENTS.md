@@ -21,7 +21,7 @@
     build-android.yml     # APK CI (assembleRelease + keystore-decode, release publish/changelog)
     generate-keystore.yml # one-time Android keystore generator
   worker/                 # Cloudflare Worker (Hono + DO), unchanged rollback implementation
-  backend/                # Railway Hono/Bun service backed by Postgres; src/server.ts is the HTTP entrypoint
+  backend/                # Railway Hono/Bun service backed by Postgres; src/server.ts is the HTTP entrypoint; railway.toml deploy config; .env local-only template
   Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev; native Telegram Login SDK uses BotFather client 8667114953 and CI GitHub Maven credentials
   scripts/TestApi.ts      # live API test suite (mirrors every worker route, all must pass) — run: bun scripts/TestApi.ts (secret auto-loads from scripts/.env)

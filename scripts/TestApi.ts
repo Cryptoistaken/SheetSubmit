@@ -70,12 +70,19 @@ async function test(name: string, fn: () => Promise<{ ok: boolean; detail?: stri
   }
 }
 
+// ponytail: single 61s retry on 429 — the suite fires >10 claim POSTs and pool.claim caps at 10/min/IP
 async function api(path: string, init?: RequestInit) {
-  const res = await fetch(BASE + path, { ...init, redirect: "manual" });
-  const text = await res.text();
-  let json: any;
-  try { json = JSON.parse(text); } catch { json = text; }
-  return { status: res.status, headers: res.headers, json, text };
+  const once = async () => {
+    const res = await fetch(BASE + path, { ...init, redirect: "manual" });
+    const text = await res.text();
+    let json: any;
+    try { json = JSON.parse(text); } catch { json = text; }
+    return { status: res.status, headers: res.headers, json, text };
+  };
+  const first = await once();
+  if (first.status !== 429) return first;
+  await new Promise((r) => setTimeout(r, 61000));
+  return once();
 }
 
 // polling helper: wait until rows endpoint reports expected total (handles waitUntil feedPools/archive)

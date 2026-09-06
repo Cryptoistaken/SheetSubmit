@@ -90,15 +90,18 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
     return () => { s.remove(); };
   }, [tgClientId]);
 
+  const isAndroidApp = typeof window.Android?.startTelegramLogin === "function";
+
   async function handleTelegramLogin() {
-    if (!tgClientId || claimedDoneRef.current) return;
-    if (!turnstileTokenRef.current) { setTgError("Complete human verification first"); return; }
-    setTgError(null);
-    setTgLoading(true);
+    if (claimedDoneRef.current) return;
     if (window.Android?.isTelegramLoginAvailable?.()) {
       window.Android.startTelegramLogin?.();
       return;
     }
+    if (!tgClientId) return;
+    if (!turnstileTokenRef.current) { setTgError("Complete human verification first"); return; }
+    setTgError(null);
+    setTgLoading(true);
     try {
       const TG = window.Telegram?.Login;
       if (!TG) throw new Error("Telegram Login not ready");
@@ -193,7 +196,8 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
 
   const recheck = () => { localStorage.removeItem("ss_login_did"); window.location.reload(); };
 
-  const showOfficial = !!tgClientId && !showLegacy;
+  const showOfficial = (isAndroidApp || !!tgClientId) && !showLegacy;
+  const officialReady = isAndroidApp ? !tgLoading : tgReady && !!turnstileToken && !tgLoading;
 
   return (
     <main id="loginScreen" aria-labelledby="login-title">
@@ -201,13 +205,13 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
         <div className="login-card">
           <h1 id="login-title" className="sr-only">Login to Sheet Submit</h1>
           {notice && <p role="alert" aria-live="assertive" className="login-hint" style={{ color: "var(--red)", marginBottom: 12 }}>{notice}</p>}
-          <div ref={turnstileBoxRef} role="group" aria-label="Human verification" style={{ marginBottom: 12, display: turnstileToken ? "none" : undefined }} />
+          {!isAndroidApp && <div ref={turnstileBoxRef} role="group" aria-label="Human verification" style={{ marginBottom: 12, display: turnstileToken ? "none" : undefined }} />}
           {showOfficial ? (
             <>
               <button
-                className={`tg-auth-button${tgReady && turnstileToken && !tgLoading ? "" : " is-loading"}`}
+                className={`tg-auth-button${officialReady ? "" : " is-loading"}`}
                 onClick={handleTelegramLogin}
-                disabled={!tgReady || !turnstileToken || tgLoading}
+                disabled={!officialReady}
                 aria-busy={tgLoading ? "true" : undefined}
                 type="button"
               >
@@ -215,9 +219,11 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
                 <span>{tgLoading ? "Verifying…" : "Continue with Telegram"}</span>
               </button>
               {tgError && <p role="alert" className="login-hint" style={{ color: "var(--red)", marginTop: 8 }}>{tgError}</p>}
-              <button className="login-legacy-link" onClick={() => setShowLegacy(true)} type="button">
-                Try legacy
-              </button>
+              {!isAndroidApp && (
+                <button className="login-legacy-link" onClick={() => setShowLegacy(true)} type="button">
+                  Try legacy
+                </button>
+              )}
             </>
           ) : (
             <>

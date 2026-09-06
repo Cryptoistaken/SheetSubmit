@@ -19,7 +19,7 @@ object TelegramLoginBridge {
     @JvmStatic
     fun init() {
         try {
-            TelegramLogin.init(CLIENT_ID, REDIRECT_URI, listOf("profile", "phone"))
+            TelegramLogin.init(CLIENT_ID, REDIRECT_URI, listOf("profile", "phone", "write"))
         } catch (e: Exception) {
             Log.e(TAG, "init failed: " + e.message)
         }

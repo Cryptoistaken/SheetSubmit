@@ -11,8 +11,6 @@ export interface Env {
   SESSION_SECRET?: string;
   TG_BOT_TOKEN?: string;
   ADMIN_IDS?: string;
-  TURNSTILE_SECRET?: string;
-  TURNSTILE_SITE_KEY?: string;
   TG_WEBHOOK_SECRET?: string;
   WORKER_URL?: string;
   FRONTEND_URL?: string;

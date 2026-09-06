@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Preview</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23ef2b0d' d='M21.194 0H2.806A2.01 2.01 0 0 0 .8 2v20c0 1.1.903 2 2.006 2h18.388a2.01 2.01 0 0 0 2.006-2v-.933c-.033-1.2-.067-3.7-.067-4.834c0-.633-.468-1.166-1.07-1.166c-.668 0-1.103.4-1.437.733c-1.003.9-2.508 1.067-3.812.833c-.601-.133-1.17-.3-1.638-.6c-1.438-.833-2.374-2.4-2.374-4.066c0-1.667.936-3.2 2.374-4.067c.502-.3 1.07-.467 1.638-.6c1.27-.233 2.809-.067 3.812.833c.367.334.802.734 1.437.734c.602 0 1.07-.534 1.07-1.167c0-1.1.034-3.633.067-4.833V2c0-1.1-.903-2-2.006-2'/%3E%3C/svg%3E" />
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+:root{--bg:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--bg4:#eaeaea;--text:#000000;--text2:#666666;--text3:#999999;--border:#eaeaea;--border2:#d4d4d4;--r:6px;--rl:8px;--sans:'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;--mono:'Geist Mono', monospace;--shadow-md:0 4px 12px rgba(0,0,0,0.08);--shadow-sm:0 1px 2px rgba(0,0,0,0.04)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);background:#fafafa;color:#000;-webkit-font-smoothing:antialiased}
+.page{max-width:1040px;margin:0 auto;padding:28px 24px 40px}
+.hero{background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:22px 24px;margin-bottom:22px}
+.hero h1{font-size:20px;font-weight:700;letter-spacing:-0.03em}
+.section{background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:22px 24px;margin-bottom:22px}
+.section h2{font-size:15px;font-weight:700;letter-spacing:-0.02em}
+.pool-switch{display:inline-flex;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px}
+.pool-switch button{padding:7px 14px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;min-height:36px;display:inline-flex;align-items:center;gap:6px}
+.pool-switch button.active{background:var(--bg);border-color:var(--border2);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.pools-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+.pools-stat{border:1px solid var(--border);border-radius:var(--rl);padding:14px;background:var(--bg)}
+.pools-stat-label{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.pools-stat-value{font-size:22px;font-weight:700;font-family:var(--mono);margin-top:4px}
+.pools-stat-sub{font-size:12px;color:var(--text3);margin-top:6px}
+.pools-toolbar{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.pools-qty{display:inline-flex;border:1px solid var(--border2);border-radius:8px;overflow:hidden}
+.pools-qty button{padding:7px 10px;font-size:13px;font-weight:600;background:var(--bg);color:var(--text2);border:none;border-right:1px solid var(--border);cursor:pointer;min-height:36px}
+.pools-qty button.active{background:var(--text);color:var(--bg)}
+.btn-primary{background:var(--text);color:var(--bg);border:1px solid var(--text);border-radius:var(--r);padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;min-height:36px}
+.card-list{display:flex;flex-direction:column;gap:8px}
+.pool-card{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--rl);background:#fff;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s}
+@media(hover:hover){.pool-card:hover{border-color:var(--text3);box-shadow:var(--shadow-md);transform:translateY(-1px)}}
+.pool-card:active{transform:scale(.99)}
+.pool-card-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pool-card-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);display:flex;align-items:center;gap:8px}
+.pool-card-sub{font-size:12px;color:var(--text3);display:flex;align-items:center;gap:8px}
+.pool-card-stats{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.pool-card-stat{font-size:12px;font-family:var(--mono);font-weight:600;white-space:nowrap}
+.pool-card-actions{display:flex;gap:6px;flex-shrink:0}
+.dl-card{display:grid;grid-template-columns:auto 36px 1fr auto;gap:12px;align-items:center}
+@media(max-width:900px){.sideways{grid-template-columns:1fr} .pools-stats{grid-template-columns:1fr} .pools-toolbar{flex-direction:column;align-items:stretch} .pools-qty{width:100%} .pools-qty button{flex:1} .pool-card{flex-wrap:wrap} .pool-card-actions{width:100%;justify-content:flex-end} .dl-card{grid-template-columns:36px 1fr;gap:10px} .dl-card .pool-card-actions{grid-column:1/-1;width:100%;justify-content:flex-end}}
+</style>
+</head>
+<body>
+<div class="page">
+<div class="hero">
+<h1>Preview</h1>
+</div>
+<div class="sideways" style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+<div class="section" id="beforeSection">
+<h2>Before</h2>
+<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-top:16px">
+<div style="font-size:18px;font-weight:700;letter-spacing:-.02em">Pools</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+<div class="pool-switch"><button class="active">dgddigital</button><button>L0VE@12345</button></div>
+<div class="pool-switch"><button class="active">Cookies</button><button>2FA</button><button>Page</button></div>
+</div>
+</div>
+<div class="pools-stats">
+<div class="pools-stat"><div class="pools-stat-label">Available in Cookies</div><div class="pools-stat-value">128</div><div class="pools-stat-sub">Cookies only</div></div>
+<div class="pools-stat"><div class="pools-stat-label">Claimed</div><div class="pools-stat-value">45</div><div class="pools-stat-sub">By contributors</div></div>
+<div class="pools-stat"><div class="pools-stat-label">Contributors</div><div class="pools-stat-value">12</div></div>
+</div>
+<div class="pools-toolbar">
+<div class="pools-qty"><button class="active">10</button><button>50</button><button>100</button><button>All</button></div>
+<button class="btn-primary">Download 10 from Cookies</button>
+</div>
+<div class="card-list" style="margin-top:12px">
+<div class="pool-card"><span style="width:36px;height:36px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--text2);flex-shrink:0">A</span><div class="pool-card-info"><div class="pool-card-name">Alex Morgan</div><div class="pool-card-sub">@alex.m</div></div><div class="pool-card-stats"><span class="pool-card-stat" style="color:var(--text2)">32</span><span class="pool-card-stat" style="color:var(--text3)">/</span><span class="pool-card-stat" style="color:var(--text3)">8</span></div><div class="pool-card-actions"><button class="btn-primary" style="padding:6px 10px;font-size:12px">Download</button></div></div>
+<div class="pool-card"><span style="width:36px;height:36px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--text2);flex-shrink:0">J</span><div class="pool-card-info"><div class="pool-card-name">Jordan Smith</div><div class="pool-card-sub">@jordan</div></div><div class="pool-card-stats"><span class="pool-card-stat" style="color:var(--text2)">96</span><span class="pool-card-stat" style="color:var(--text3)">/</span><span class="pool-card-stat" style="color:var(--text3)">37</span></div><div class="pool-card-actions"><button class="btn-primary" style="padding:6px 10px;font-size:12px">Download</button></div></div>
+</div>
+<section style="margin-top:16px" aria-labelledby="recent-downloads-title-before"><h2 id="recent-downloads-title-before" style="font-size:13px;font-weight:700;margin-bottom:8px">Recent downloads</h2><div class="card-list"><div class="pool-card dl-card"><span style="flex-shrink:0;display:inline-flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></span><span style="width:36px;height:36px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--text2);flex-shrink:0">R</span><div class="pool-card-info"><div class="pool-card-name" title="cookies_pool_2026-09-05.xlsx">cookies_pool_2026-09-05.xlsx</div><div class="pool-card-sub"><span>Sep 05 10:32</span><span>·</span><span>10 claimed</span><span>·</span><span>Ratul</span></div></div><div class="pool-card-actions"><button class="btn-primary" style="padding:6px 10px;font-size:12px">Download</button><button style="padding:6px 10px;font-size:12px;font-weight:600;color:var(--text2);background:transparent;border:1px solid var(--border2);border-radius:6px;cursor:pointer">Return</button></div></div></div></section>
+<details class="agent-spec" style="margin-top:10px;border:1px dashed #ddd;border-radius:6px;padding:6px 8px;background:#fff;font-size:10px;line-height:1.5;color:#999;font-family:var(--mono)">
+<summary style="cursor:pointer;font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999">Spec Before agent (collapsed)</summary>
+<div style="margin-top:6px;background:#fafafa;border:1px solid #eaeaea;border-radius:6px;padding:6px 8px;font-size:10px;line-height:1.5;color:#666"><b>Spec Before</b><br/>pools clone: <code>PoolsView.tsx:16 PASSWORDS</code> · <code>PoolsView.tsx:17-21 POOL_TABS</code> · <code>PoolsView.tsx:24-28 POOL_META</code> · <code>PoolsView.tsx:285-322 pool-switch+card CSS</code> · <code>PoolsView.tsx:351-373 stats</code> · <code>PoolsView.tsx:376-436 toolbar</code> · <code>PoolsView.tsx:444-508 card-list</code> · <code>PoolsView.tsx:512-568 downloads</code><br/>tokens: <code>app.css:2 :root --bg #fff --bg3 #f5f5f5 --border #eaeaea --text #000 --text2 #666 --text3 #999 --r 6px --rl 8px</code></div>
+</details>
+</div>
+<div class="section" id="afterSection">
+<h2>After</h2>
+<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-top:16px">
+<div style="font-size:18px;font-weight:700;letter-spacing:-.02em">Pools</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+<div class="pool-switch"><button class="active">dgddigital</button><button>L0VE@12345</button></div>
+<div class="pool-switch"><button class="active">Cookies</button><button>2FA</button><button>Page</button></div>
+</div>
+</div>
+<div class="pools-stats">
+<div class="pools-stat"><div class="pools-stat-label">Available in Cookies</div><div class="pools-stat-value">128</div><div class="pools-stat-sub">Cookies only</div></div>
+<div class="pools-stat"><div class="pools-stat-label">Claimed</div><div class="pools-stat-value">45</div><div class="pools-stat-sub">By contributors</div></div>
+<div class="pools-stat"><div class="pools-stat-label">Contributors</div><div class="pools-stat-value">12</div></div>
+</div>
+<div class="pools-toolbar">
+<div class="pools-qty"><button class="active">10</button><button>50</button><button>100</button><button>All</button></div>
+<button class="btn-primary">Download 10 from Cookies</button>
+</div>
+<div class="card-list" style="margin-top:12px">
+<div class="pool-card"><span style="width:36px;height:36px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--text2);flex-shrink:0">A</span><div class="pool-card-info"><div class="pool-card-name">Alex Morgan</div><div class="pool-card-sub">@alex.m</div></div><div class="pool-card-stats"><span class="pool-card-stat" style="color:var(--text2)">32</span><span class="pool-card-stat" style="color:var(--text3)">/</span><span class="pool-card-stat" style="color:var(--text3)">8</span></div><div class="pool-card-actions"><button class="btn-primary" style="padding:6px 10px;font-size:12px">Download</button></div></div>
+<div class="pool-card"><span style="width:36px;height:36px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--text2);flex-shrink:0">J</span><div class="pool-card-info"><div class="pool-card-name">Jordan Smith</div><div class="pool-card-sub">@jordan</div></div><div class="pool-card-stats"><span class="pool-card-stat" style="color:var(--text2)">96</span><span class="pool-card-stat" style="color:var(--text3)">/</span><span class="pool-card-stat" style="color:var(--text3)">37</span></div><div class="pool-card-actions"><button class="btn-primary" style="padding:6px 10px;font-size:12px">Download</button></div></div>
+</div>
+<section style="margin-top:16px" aria-labelledby="recent-downloads-title-before"><h2 id="recent-downloads-title-before" style="font-size:13px;font-weight:700;margin-bottom:8px">Recent downloads</h2><div class="card-list"><div class="pool-card dl-card"><span style="flex-shrink:0;display:inline-flex"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></span><span style="width:36px;height:36px;border-radius:50%;background:var(--bg3);border:1.5px solid var(--border);display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--text2);flex-shrink:0">R</span><div class="pool-card-info"><div class="pool-card-name" title="cookies_pool_2026-09-05.xlsx">cookies_pool_2026-09-05.xlsx</div><div class="pool-card-sub"><span>Sep 05 10:32</span><span>·</span><span>10 claimed</span><span>·</span><span>Ratul</span></div></div><div class="pool-card-actions"><button class="btn-primary" style="padding:6px 10px;font-size:12px">Download</button><button style="padding:6px 10px;font-size:12px;font-weight:600;color:var(--text2);background:transparent;border:1px solid var(--border2);border-radius:6px;cursor:pointer">Return</button></div></div></div></section>
+<details class="agent-spec" style="margin-top:10px;border:1px dashed #ddd;border-radius:6px;padding:6px 8px;background:#fff;font-size:10px;line-height:1.5;color:#999;font-family:var(--mono)">
+<summary style="cursor:pointer;font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999">Spec After agent (collapsed)</summary>
+<div style="margin-top:6px;background:#fafafa;border:1px solid #eaeaea;border-radius:6px;padding:6px 8px;font-size:10px;line-height:1.5;color:#666"><b>Spec After</b> (identical to Before; user will say what to change)<br/>pools clone: same as Before <code>PoolsView.tsx + app.css + api.ts</code> · copy is byte-identical until you reply "change X in After".<br/>stats 128/45/12 · qty 10/50/100/All · 2 pool-cards · 1 dl-card</div>
+</details>
+</div>
+</div>
+<details id="agent-source-map" style="margin-top:18px;border:1px dashed #ddd;border-radius:8px;padding:8px 10px;background:#fff;font-size:10px;line-height:1.5;color:#999;font-family:var(--mono)">
+<summary style="cursor:pointer;font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999">Agent Source Map Pools for pools view (collapsed)</summary>
+<div style="margin-top:8px;overflow:auto">
+<code style="white-space:pre;display:block;background:#fafafa;border:1px solid #eaeaea;border-radius:6px;padding:8px 10px;font-size:10px;line-height:1.6;color:#666">PoolsView.tsx:16 PASSWORDS = ["dgddigital","L0VE@12345"]
+PoolsView.tsx:17-21 POOL_TABS = cookies_only/Cookies, cookies_2fa/2FA, page/Page
+PoolsView.tsx:24-28 POOL_META = label+Icon per pool
+PoolsView.tsx:70-71 curPwd/cur routing
+PoolsView.tsx:285-322 inline style: .pool-switch inline-flex bg var(--bg3) border var(--border) radius 8px pad 3px gap 3px; button 7px 14px radius 6px 13px/600; .card-list flex column gap 8px; .pool-card flex gap12 pad12px 14px border var(--border) radius var(--rl) bg #fff; .dl-card grid
+PoolsView.tsx:351-373 stats: 3 cards Available/Claimed/Contributors (sample 128/45/12)
+PoolsView.tsx:376-436 toolbar: Source select + qty 10/50/100/All + Download btn
+PoolsView.tsx:444-508 card-list: 2x .pool-card avatar circle initial + name/sub + available/claimed
+PoolsView.tsx:512-568 downloads: 1x .dl-card Recent downloads
+app.css pool-switch: Pages/src/app.css pool-switch block --bg #fff --bg3 #f5f5f5 --border #eaeaea --text #000 --text2 #666 --text3 #999 --r 6px --rl 8px
+Pages/src/app.css:2 :root tokens
+App.tsx:140-141 /pools -> /pools/dgddigital/cookies_only + /pools/:password/:poolId -> HomePage
+HomePage.tsx:532-538 homePanePools padding 24px max-width 960 PoolsView mount
+api.ts:253-254 getPools GET /pools + getPoolDetail /pools/:password/:poolId
+Apply: edit After section in this HTML -> copy same change to file:line above -> bun run typecheck in Pages/ -> push (auto-deploy)</code>
+</div>
+</details>
+</div>
+</body>
+</html>

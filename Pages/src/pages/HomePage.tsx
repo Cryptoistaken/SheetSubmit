@@ -61,7 +61,7 @@ import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { COLUMN_PRESETS, fileTypeDef, FILE_PRESET_NAMES } from "@/lib/types";
 import type { FilePreset, FileType, SheetFile } from "@/lib/types";
-import { downloadXlsx, genId, hydrateWaCache, importXlsx, todayStr } from "@/lib/xlsx";
+import { downloadXlsx, genId, hydrateWaCache, importXlsx } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
 import { CakephpIcon, CookieIcon, ObsidianIcon, PageIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, TwoFaIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
 
@@ -315,19 +315,19 @@ export default function HomePage() {
     const poolEnabled = password === "dgddigital";
     setPwModal(null);
     const base = FILE_PRESET_NAMES[pwModal.preset];
-    const date = todayStr();
     const current = files ?? (await api.getFiles());
     const sameCount = current.filter((f) => {
       const p = (f.preset ?? f.poolKind) as string | undefined;
       if (p) return p === pwModal.preset;
       return f.name.toLowerCase().startsWith(base.toLowerCase());
     }).length;
-    let finalName = sameCount === 0 ? base + " " + date : base + " " + (sameCount + 1) + " " + date;
+    let finalName = sameCount === 0 ? base : base + " " + (sameCount + 1);
     if (current.some((f) => f.name === finalName)) {
-      let n = sameCount + 1;
+      let n = Math.max(sameCount + 1, 2);
+      finalName = base + " " + n;
       while (current.some((f) => f.name === finalName)) {
         n++;
-        finalName = base + " " + n + " " + date;
+        finalName = base + " " + n;
       }
     }
     const id = genId();

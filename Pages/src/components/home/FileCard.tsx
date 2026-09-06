@@ -165,6 +165,10 @@ export default function FileCard({
   ];
 
   const actionLabel = ({ created: "Newly Created", renamed: "Renamed", modified: "Last Modified", restored: "Last Restored", archived: "Last Archived" } as Record<string, string>)[file.lastAction ?? (file.deletedAt ? "archived" : "modified")] ?? "Last Modified";
+  const dt = file.updatedAt ?? file.createdAt ? new Date((file.updatedAt ?? file.createdAt) as number) : null;
+  const tsStr = dt ? dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " + dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
+  // List rows adapt to count: ≤3 single line, else balanced 2 rows (4→2+2, 5→3+2, 6→3+3)
+  const split = inds.length > 3 ? Math.ceil(inds.length / 2) : inds.length;
 
   return (
     <div
@@ -189,11 +193,19 @@ export default function FileCard({
       <div className="file-card-icon">
         <FileTypeIcon file={file} size={16} />
       </div>
-      <div className="file-card-name" dir="auto" style={{ unicodeBidi: "isolate" }}>{file.name}</div>
+      <div style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
+        <div className="file-card-name" dir="auto" style={{ unicodeBidi: "isolate" }}>{file.name}</div>
+        {tsStr ? <div style={{ fontSize: 10, color: "var(--text3)", whiteSpace: "nowrap" }}>{tsStr}</div> : null}
+      </div>
       {list ? (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 0, flexWrap: "nowrap", overflow: "hidden", flex: 1, minWidth: 0 }}>
-        {badges}
-        <span className="file-card-meta" style={metaStyle}>{inds}</span>
+      <div style={{ display: "flex", flexDirection: "column", gap: inds.length > 3 ? 5 : 0, marginTop: 0, flex: 1, minWidth: 0, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          {badges}
+          <span className="file-card-meta" style={metaStyle}>{inds.slice(0, split)}</span>
+        </div>
+        {inds.length > 3 ? (
+          <span className="file-card-meta" style={metaStyle}>{inds.slice(split)}</span>
+        ) : null}
       </div>
       ) : (
       <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: "auto", minWidth: 0 }}>

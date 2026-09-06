@@ -7,7 +7,8 @@ export const bot = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 const tg = async (env: Env, method: string, body: unknown) => fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 export async function ensureWebhook(env: Env): Promise<void> {
   if (!env.TG_BOT_TOKEN || !env.TG_WEBHOOK_SECRET || !env.WORKER_URL) return;
-  const url = `https://${env.WORKER_URL}/webhook/tg`;
+  const base = /^https?:\/\//i.test(env.WORKER_URL) ? env.WORKER_URL : `https://${env.WORKER_URL}`;
+  const url = `${base.replace(/\/+$/, "")}/webhook/tg`;
   try {
     const info = await (await tg(env, "getWebhookInfo", {})).json() as { result?: { url?: string } };
     if (info.result?.url !== url) {

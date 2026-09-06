@@ -28,6 +28,7 @@ android/.gradle/
 android/app/build/
 android/local.properties
 android/android-release.keystore
+release-fingerprint.txt
 
 # Playwright MCP artifacts (screenshots/snapshots — local only)
 .playwright-mcp/

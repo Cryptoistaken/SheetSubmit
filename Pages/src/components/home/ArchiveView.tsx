@@ -161,18 +161,22 @@ export default function ArchiveView({
           })}
         </div>
       )}
-      {selectionMode &&
-        createPortal(
-          <div className="home-tabs">
+      {selectionMode && (() => {
+        const bar = document.getElementById("homeTabBar");
+        if (!bar) return null;
+        return createPortal(
+          <div className="home-tabs" role="toolbar" aria-label={`${selected.size} selected`}>
+            <span className="home-tab" role="status" aria-live="polite">{selected.size} selected</span>
             {selected.size > 2 ? (
-              <button className="home-tab" onClick={unselectAll}>Unselect all</button>
+              <button type="button" className="home-tab" aria-label="Unselect all files" onClick={unselectAll}>Unselect all</button>
             ) : null}
-            <button className="home-tab sel-primary" onClick={() => void restoreSelected()}>Restore</button>
-            <button className="home-tab sel-danger" onClick={() => void deleteSelected()}>Delete forever</button>
-            <button className="home-tab sel-primary" onClick={selectAll}>Select all</button>
+            <button type="button" className="home-tab sel-primary" aria-label={`Restore ${selected.size} files`} onClick={() => void restoreSelected()}>Restore</button>
+            <button type="button" className="home-tab sel-danger" aria-label={`Delete ${selected.size} files forever`} onClick={() => void deleteSelected()}>Delete forever</button>
+            <button type="button" className="home-tab sel-primary" aria-label="Select all archived files" onClick={selectAll}>Select all</button>
           </div>,
-          document.getElementById("homeTabBar")!,
-        )}
+          bar,
+        );
+      })()}
     </>
   );
 }

@@ -14,6 +14,7 @@ export default function SelectionBar() {
       <span className="sel-bar-count" role="status" aria-live="polite" aria-atomic="true">{size} selected</span>
       <div className="sel-bar-actions">
         <button
+          type="button"
           className="sel-btn"
           aria-label="Copy selected cells"
           onClick={() => void useSheetStore.getState().copySelected()}
@@ -21,6 +22,7 @@ export default function SelectionBar() {
           Copy
         </button>
         <button
+          type="button"
           className="sel-btn danger"
           aria-label="Clear selected cells"
           onClick={async () => {
@@ -32,6 +34,7 @@ export default function SelectionBar() {
           Clear
         </button>
         <button
+          type="button"
           className="sel-btn"
           aria-label="Select all cells"
           onClick={() => useSheetStore.getState().selectAllCells()}
@@ -39,6 +42,7 @@ export default function SelectionBar() {
           Select all
         </button>
         <button
+          type="button"
           className="sel-btn"
           aria-label="Unselect all cells"
           onClick={() => useSheetStore.getState().unselectAll()}

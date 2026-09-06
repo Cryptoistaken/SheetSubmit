@@ -368,6 +368,7 @@ export default function SheetGrid() {
                 data-col={col.key}
                 role="columnheader"
                 aria-colindex={i + 1}
+                aria-selected={selectionMode && selCols.has(col.key)}
               >
                 {col.label}
               </th>
@@ -627,6 +628,7 @@ const GridRow = memo(function GridRow({
         className={"rh" + (isRowSel ? " row-sel" : "")}
         data-row={rowIdx}
         role="rowheader"
+        aria-selected={isRowSel}
       >
         {rowIdx + 1}
       </th>
@@ -703,6 +705,7 @@ const GridCell = memo(function GridCell({
       data-col={colKey}
       role="gridcell"
       aria-colindex={colIndex + 1}
+      aria-selected={sel}
       tabIndex={taken ? -1 : active ? 0 : -1}
       aria-label={value + (dup ? " (duplicate)" : "")}
       style={{

@@ -3739,3 +3739,12 @@ table.grid { min-width: 0; }
 .admin-user-name,
 .admin-detail-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: isolate; }
 .admin-stat-value, .admin-user-stat-val, .file-card-meta { font-variant-numeric: tabular-nums; }
+
+/* 12) SelectionBar focus ring + responsive basics (minimal additive) */
+.sel-bar:focus-within { outline: none; }
+.sel-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+@media (max-width: 380px) {
+  .sel-bar { padding: 6px 8px; gap: 6px; }
+  .sel-bar-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .sel-btn { flex: 1 1 auto; min-width: 0; justify-content: center; }
+}

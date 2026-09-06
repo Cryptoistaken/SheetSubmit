@@ -393,12 +393,13 @@ export default function HomePage() {
     <>
       <div id="homeTabBar">
         {tab === "files" && selectionMode ? (
-          <div className="home-tabs">
+          <div className="home-tabs" role="toolbar" aria-label={`${selected.size} selected`}>
+            <span className="home-tab" role="status" aria-live="polite">{selected.size} selected</span>
             {selected.size > 2 ? (
-              <button className="home-tab" onClick={unselectAll}>Unselect all</button>
+              <button type="button" className="home-tab" aria-label="Unselect all files" onClick={unselectAll}>Unselect all</button>
             ) : null}
-              <button className="home-tab sel-danger" onClick={() => void deleteSelected()}>Move to archive</button>
-            <button className="home-tab sel-primary" onClick={selectAll}>Select all</button>
+              <button type="button" className="home-tab sel-danger" aria-label={`Move ${selected.size} files to archive`} onClick={() => void deleteSelected()}>Move to archive</button>
+            <button type="button" className="home-tab sel-primary" aria-label="Select all files" onClick={selectAll}>Select all</button>
           </div>
         ) : tab === "archive" && archSel.size > 0 ? null : (
           <div className="home-tabs" role="tablist" aria-label="Home sections">

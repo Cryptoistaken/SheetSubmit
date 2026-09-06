@@ -130,8 +130,12 @@ export default function SheetToolbar() {
       if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
       close();
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); close(); btnRef.current?.focus(); }
+    };
     document.addEventListener("click", onDoc);
-    return () => document.removeEventListener("click", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("click", onDoc); document.removeEventListener("keydown", onKey); };
   }, [open]);
 
   const toggleCheck = () => {
@@ -156,8 +160,12 @@ export default function SheetToolbar() {
       }
       setCheckOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); setCheckOpen(false); checkArrowRef.current?.focus(); }
+    };
     document.addEventListener("click", onDoc);
-    return () => document.removeEventListener("click", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("click", onDoc); document.removeEventListener("keydown", onKey); };
   }, [checkOpen]);
 
   const copyAll = () => {
@@ -261,8 +269,9 @@ export default function SheetToolbar() {
           className={"check-split-arrow" + (checkOpen ? " open" : "")}
           title="More check options"
           aria-label="More check options"
-          aria-expanded={checkOpen}
-          aria-haspopup="menu"
+           aria-expanded={checkOpen}
+           aria-haspopup="menu"
+           aria-controls="check-dropdown"
           onClick={toggleCheck}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
@@ -273,11 +282,12 @@ export default function SheetToolbar() {
       </div>
       <div
         ref={checkMenuRef}
+        id="check-dropdown"
         className={"check-dropdown" + (checkOpen ? " open" : "")}
         style={{ top: checkPos.top, right: checkPos.right }}
         role="menu"
         aria-label="Check options"
-        aria-hidden={!checkOpen}
+        hidden={!checkOpen}
       >
         <div className="check-dropdown-label" id="check-uid-label">UID check</div>
         <button
@@ -346,19 +356,21 @@ export default function SheetToolbar() {
         className="sheet-more-btn"
         title="More actions"
         aria-label="More actions"
-        aria-expanded={open}
-        aria-haspopup="menu"
+         aria-expanded={open}
+         aria-haspopup="menu"
+         aria-controls="sheet-more-menu"
         onClick={toggle}
       >
         ⋮
       </button>
       <div
         ref={menuRef}
+        id="sheet-more-menu"
         className={"sheet-more-menu" + (open ? " open" : "")}
         style={{ top: pos.top, right: pos.right }}
         role="menu"
         aria-label="Sheet actions"
-        aria-hidden={!open}
+        hidden={!open}
       >
         <button role="menuitem" className="sheet-more-item" onClick={copyAll}>
           <svg

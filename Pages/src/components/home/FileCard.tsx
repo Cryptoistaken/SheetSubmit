@@ -44,7 +44,6 @@ export default function FileCard({
 }: FileCardProps) {
   const movedRef = useRef(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
-  const suppressClickRef = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
@@ -83,7 +82,6 @@ export default function FileCard({
   const onPointerDown = (e: React.PointerEvent) => {
     movedRef.current = false;
     startRef.current = { x: e.clientX, y: e.clientY };
-    suppressClickRef.current = false;
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -103,18 +101,7 @@ export default function FileCard({
     else onToggleSelect();
   };
 
-  const onPointerUp = () => {
-    if (movedRef.current) return;
-    if (selectionMode) onToggleSelect();
-    else doOpen();
-    suppressClickRef.current = true;
-    setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 300);
-  };
-
   const onClick = () => {
-    if (suppressClickRef.current) return;
     if (movedRef.current) return;
     if (selectionMode) onToggleSelect();
     else doOpen();
@@ -179,7 +166,6 @@ export default function FileCard({
       style={{ touchAction: "manipulation", userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === "Escape" && menuOpen) { e.stopPropagation(); setMenuOpen(false); dotsRef.current?.focus(); return; }
@@ -229,7 +215,6 @@ export default function FileCard({
           aria-expanded={menuOpen}
           onClick={toggleMenu}
           onPointerDown={(e) => e.stopPropagation()}
-          onPointerUp={(e) => e.stopPropagation()}
         >
           <MoreHorizontal size={14} aria-hidden="true" />
         </button>
@@ -246,30 +231,30 @@ export default function FileCard({
           onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setMenuOpen(false); dotsRef.current?.focus(); } }}
         >
           {selectable ? (
-            <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onToggleSelect(); }}>
+              <button type="button" role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onToggleSelect(); }}>
               <span className="home-fab-ic" aria-hidden="true" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Square size={13} aria-hidden="true" /></span>
               {selected ? "Deselect" : "Select"}
             </button>
           ) : null}
           {onRestore ? (
-            <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onRestore(); }}>
+              <button type="button" role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onRestore(); }}>
               <span className="home-fab-ic" aria-hidden="true" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><RotateCcw size={13} aria-hidden="true" /></span>
               Restore
             </button>
           ) : null}
           {onDownload ? (
-            <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDownload(); }}>
+              <button type="button" role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDownload(); }}>
               <span className="home-fab-ic" aria-hidden="true" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Download size={13} aria-hidden="true" /></span>
               Download
             </button>
           ) : null}
           {onRename ? (
-            <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onRename(); }}>
+              <button type="button" role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500 }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onRename(); }}>
               <span className="home-fab-ic" aria-hidden="true" style={{ width: 24, height: 24, background: "var(--bg3)", color: "var(--text2)" }}><Pencil size={13} aria-hidden="true" /></span>
               Rename
             </button>
           ) : null}
-          <button role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500, color: "var(--red)" }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(); }}>
+          <button type="button" role="menuitem" className="home-fab-item" style={{ fontSize: 12, fontWeight: 500, color: "var(--red)" }} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(); }}>
             <span className="home-fab-ic" aria-hidden="true" style={{ width: 24, height: 24, background: "var(--red-bg)", color: "var(--red)" }}><Trash2 size={13} aria-hidden="true" /></span>
             {onRestore ? "Delete forever" : "Move to archive"}
           </button>

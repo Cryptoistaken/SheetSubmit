@@ -26,7 +26,11 @@ export default function SplitterTool() {
   const [loading, setLoading] = useState(false);
   const [n, setN] = useState(2);
   const [custom, setCustom] = useState("");
-  const effectiveN = custom.trim() ? parseInt(custom, 10) : n;
+  const customTrim = custom.trim();
+  const customNum = customTrim ? Number.parseInt(customTrim, 10) : NaN;
+  const customInvalid = customTrim !== "" && (!/^\d+$/.test(customTrim) || !Number.isFinite(customNum) || customNum < 2 || customNum > 100);
+  const effectiveN = customInvalid ? NaN : customTrim ? customNum : n;
+  const splitDisabled = !rows || !cols || !name || !Number.isFinite(effectiveN) || effectiveN < 2 || effectiveN > 100;
 
   const loadFiles = useCallback(async () => {
     try { setFiles(await api.getFiles()); } catch { setFiles([]); }
@@ -96,22 +100,22 @@ export default function SplitterTool() {
 
   return (
     <div>
-      <button className="btn btn-ghost" style={{ marginBottom: 16 }} onClick={() => navigate("/tools")}>← Tools</button>
+      <button type="button" className="btn btn-ghost" style={{ marginBottom: 16 }} onClick={() => navigate("/tools")} aria-label="Back to Tools">← Tools</button>
       <h2 style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em" }}>Splitter</h2>
       <p style={{ fontSize: 13, color: "var(--text3)", marginTop: 2, marginBottom: 16 }}>Split an xlsx into N equal parts</p>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <button className={`btn ${source === "upload" ? "btn-primary" : ""}`} onClick={() => setSource("upload")}>Upload xlsx</button>
-        <button className={`btn ${source === "existing" ? "btn-primary" : ""}`} onClick={() => setSource("existing")}>Existing file</button>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }} role="group" aria-label="Source selection">
+        <button type="button" className={`btn ${source === "upload" ? "btn-primary" : ""}`} aria-pressed={source === "upload"} aria-label="Upload xlsx" onClick={() => setSource("upload")}>Upload xlsx</button>
+        <button type="button" className={`btn ${source === "existing" ? "btn-primary" : ""}`} aria-pressed={source === "existing"} aria-label="Existing file" onClick={() => setSource("existing")}>Existing file</button>
       </div>
 
       {source === "upload" ? (
         <label className="btn" style={{ marginBottom: 12, cursor: "pointer" }}>
           Choose file
-          <input type="file" accept=".xlsx,.xls" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.currentTarget.value = ""; }} />
+          <input type="file" accept=".xlsx,.xls" hidden aria-label="Choose xlsx file" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f); e.currentTarget.value = ""; }} />
         </label>
       ) : (
-        <select className="modal-input" style={{ maxWidth: 360, marginBottom: 12 }} value={selId} onChange={(e) => handleExisting(e.target.value)}>
+        <select className="modal-input" style={{ maxWidth: 360, marginBottom: 12 }} value={selId} aria-label="Select existing file" onChange={(e) => void handleExisting(e.target.value)}>
           <option value="">Select file…</option>
           {(files ?? []).map((f) => <option key={f.id} value={f.id}>{f.name} ({f.dataCount ?? f.rowCount ?? "?"})</option>)}
         </select>
@@ -123,14 +127,15 @@ export default function SplitterTool() {
       {rows && cols ? (
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 16, background: "var(--bg)" }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Split into</div>
-          <div style={{ display: "flex", gap: 8, alignItems: "stretch", flexWrap: "wrap", marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "stretch", flexWrap: "wrap", marginBottom: 12 }} role="group" aria-label="Split parts">
             {[2, 3, 4].map((v) => {
-              const sel = !custom.trim() && n === v;
+              const sel = !customTrim && n === v;
               return (
                 <button
                   key={v}
+                  type="button"
                   className="btn"
-                  aria-label={`Split into ${v}`}
+                  aria-label={`Split into ${v} parts`}
                   aria-pressed={sel}
                   onClick={() => { setN(v); setCustom(""); }}
                   style={{
@@ -151,17 +156,22 @@ export default function SplitterTool() {
             })}
             <input
               className="modal-input"
-              type="number"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               min={2}
               max={100}
               placeholder="Custom"
-              aria-label="Custom parts"
+              aria-label="Custom parts (2–100)"
+              aria-invalid={customInvalid}
+              aria-describedby={customInvalid ? "custom-error" : undefined}
               value={custom}
-              onChange={(e) => setCustom(e.target.value)}
-              style={{ flex: "1 1 96px", minWidth: 96, width: 96, textAlign: "center", fontWeight: 600, height: 38, alignSelf: "stretch", borderColor: custom.trim() ? "var(--blue)" : undefined, background: custom.trim() ? "var(--blue-light)" : undefined, color: custom.trim() ? "var(--blue)" : undefined }}
+              onChange={(e) => setCustom(e.target.value.replace(/[^\d]/g, ""))}
+              style={{ flex: "1 1 96px", minWidth: 96, width: 96, textAlign: "center", fontWeight: 600, height: 38, alignSelf: "stretch", borderColor: customInvalid ? "var(--red)" : customTrim ? "var(--blue)" : undefined, background: customInvalid ? "var(--red-bg)" : customTrim ? "var(--blue-light)" : undefined, color: customInvalid ? "var(--red)" : customTrim ? "var(--blue)" : undefined }}
             />
           </div>
-          {rows.length > 0 && effectiveN >= 2 ? (
+          {customInvalid ? <div id="custom-error" role="alert" style={{ fontSize: 12, color: "var(--red)", marginBottom: 8 }}>Enter a number between 2 and 100</div> : null}
+          {rows.length > 0 && Number.isFinite(effectiveN) && effectiveN >= 2 ? (
             <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "nowrap", overflow: "hidden" }}>
               {Array.from({ length: Math.min(effectiveN, Math.min(rows.length, 6)) }).map((_, i, arr) => {
                 const total = Math.min(effectiveN, rows.length);
@@ -175,7 +185,7 @@ export default function SplitterTool() {
               })}
             </div>
           ) : null}
-          <button className="btn btn-primary" onClick={doSplit} style={{ width: "100%", justifyContent: "center", padding: "10px 14px", fontSize: 14, fontWeight: 600 }}>Split &amp; download</button>
+          <button type="button" className="btn btn-primary" onClick={() => void doSplit()} disabled={splitDisabled} aria-label="Split and download" style={{ width: "100%", justifyContent: "center", padding: "10px 14px", fontSize: 14, fontWeight: 600 }}>Split &amp; download</button>
           <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Files: “{name.replace(/\.xlsx?$/i, "")} - Part 1 [{rows.length ? Math.ceil(rows.length / (effectiveN || 2)) : 0}].xlsx” …</div>
         </div>
       ) : null}

@@ -5,6 +5,7 @@ import type { PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/li
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { useProfileCache } from "@/stores/profileCache";
+import { useModalA11y } from "@/hooks/useModalA11y";
 import { CookieIcon, PageIcon, PasswordIcon, TwoFaIcon, UnknownUserIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import EmptyState from "./EmptyState";
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
@@ -98,6 +99,22 @@ export default function PoolsView() {
   const [srcFileId, setSrcFileId] = useState<string>("");
   const [verifiedFilter, setVerifiedFilter] = useState<"all" | "verified" | "unverified">("all");
   const [detailId, setDetailId] = useState<string | null>(null);
+  const dlModalRef = useModalA11y(!!dlUser, () => setDlUser(null));
+
+  useEffect(() => {
+    if (!menuUser) return;
+    const close = (event: MouseEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent && event.key === "Escape") {
+        setMenuUser(null);
+        return;
+      }
+      const target = event.target as Node;
+      if (!(target instanceof Element) || (!target.closest(`[data-pool-menu="${menuUser}"]`) && !target.closest('button[aria-haspopup="menu"]'))) setMenuUser(null);
+    };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", close);
+    return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", close); };
+  }, [menuUser]);
 
   const load = useCallback(async () => {
     try {
@@ -111,11 +128,11 @@ export default function PoolsView() {
         const dls = await api.getDownloads() as unknown;
         const arr: unknown[] = Array.isArray(dls) ? dls : ((dls as { downloads?: unknown[] })?.downloads ?? []);
         setDownloads((arr as unknown[]).slice(0, 10));
-      } catch { /* ignore history */ }
+       } catch { setDownloads([]); }
       try {
         const uf = await api.getUserFiles(curPwd, cur);
         setUserFiles(uf.users);
-      } catch { setUserFiles(null); }
+       } catch { setUserFiles([]); }
     } catch {
       showToast("Could not load pools. Check your connection.");
     }
@@ -175,8 +192,9 @@ export default function PoolsView() {
   }, [srcUid, userFiles]);
 
   const doPoolClaim = async () => {
-    const n = customQty ? Number(customQty) : poolQty;
+    const n = customQty ? Number(customQty) : poolQty === "all" ? totals.available : poolQty;
     if (!totals.available) return showToast("No rows available to claim");
+    if (!Number.isInteger(n) || n < 1) return showToast("Enter at least 1 row");
     setDownloading(true);
     try {
       const res = await api.claimPool(curPwd, cur, {
@@ -206,7 +224,8 @@ export default function PoolsView() {
 
   const doUserClaim = async () => {
     if (!dlUser) return;
-    const n = perCustom ? Number(perCustom) : perQty;
+    const n = perCustom ? Number(perCustom) : perQty === "all" ? dlUser.available : perQty;
+    if (!Number.isInteger(n) || n < 1) return showToast("Enter at least 1 row");
     setDownloading(true);
     try {
       const res = await api.claimPool(curPwd, cur, { count: n, userId: dlUser.userId });
@@ -432,7 +451,7 @@ export default function PoolsView() {
           const uf = getUserFilesFor(u.userId);
           return (
             <div key={u.userId} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              <div className={`pool-card ${expanded ? "expanded" : ""}`} role="button" tabIndex={0} aria-expanded={expanded} onClick={() => toggleExpand(u.userId)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(u.userId); } }}>
+              <div className={`pool-card ${expanded ? "expanded" : ""}`} style={{ position: "relative" }} role="button" tabIndex={0} aria-expanded={expanded} aria-controls={`pool-files-${u.userId}`} onClick={() => toggleExpand(u.userId)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(u.userId); } }}>
                 <span className={`expand-icon ${expanded ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6" /></svg>
                 </span>
@@ -449,18 +468,18 @@ export default function PoolsView() {
                   <span className="pool-card-stat" style={{ color: "var(--text3)" }}>{u.claimed}</span>
                 </div>
                 <div className="pool-card-actions" onClick={(e) => e.stopPropagation()}>
-                  <button className="btn" aria-label="More options" style={{ width: 32, height: 32, padding: 0, justifyContent: "center" }} onClick={() => setMenuUser(menuUser === u.userId ? null : u.userId)}>⋯</button>
+                  <button type="button" className="btn" aria-label={`More options for ${d.line1}`} aria-haspopup="menu" aria-expanded={menuUser === u.userId} style={{ width: 32, height: 32, padding: 0, justifyContent: "center" }} onClick={() => setMenuUser(menuUser === u.userId ? null : u.userId)}>⋯</button>
                   {menuUser === u.userId ? (
-                    <div style={{ position: "absolute", right: 8, top: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--rl)", boxShadow: "var(--shadow-lg)", zIndex: 10, minWidth: 160, padding: 4 }}>
-                      <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", borderRadius: 6, fontWeight: 500 }} onClick={() => openFile(u)}>View file</button>
-                      <button style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "var(--blue)", color: "#fff", cursor: "pointer", borderRadius: 6, fontWeight: 700, marginTop: 4 }} onClick={() => { setMenuUser(null); setDlUser(u); setPerQty(10); setPerCustom(""); }}>Download</button>
+                    <div data-pool-menu={u.userId} role="menu" aria-label={`Actions for ${d.line1}`} style={{ position: "absolute", right: 8, top: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--rl)", boxShadow: "var(--shadow-lg)", zIndex: 10, minWidth: 160, padding: 4 }}>
+                      <button type="button" role="menuitem" style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", borderRadius: 6, fontWeight: 500 }} onClick={() => openFile(u)}>View file</button>
+                      <button type="button" role="menuitem" style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "var(--blue)", color: "#fff", cursor: "pointer", borderRadius: 6, fontWeight: 700, marginTop: 4 }} onClick={() => { setMenuUser(null); setDlUser(u); setPerQty(10); setPerCustom(""); }}>Download</button>
                       {isAdmin ? <div style={{ fontSize: 11, color: "var(--text3)", padding: "6px 10px" }}>Admin</div> : null}
                     </div>
                   ) : null}
                 </div>
               </div>
               {expanded && (
-                <div className="file-row" style={{ padding: "4px 0 8px 42px" }}>
+                <div id={`pool-files-${u.userId}`} className="file-row" style={{ padding: "4px 0 8px 42px" }}>
                   {loadingFiles && !uf ? (
                     <Skeleton className="h-4 w-20" />
                   ) : !uf || uf.files.length === 0 ? (
@@ -490,14 +509,15 @@ export default function PoolsView() {
       </div>
 
       {/* download history */}
-      <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Recent downloads</div>
+       <section style={{ marginTop: 16 }} aria-labelledby="recent-downloads-title">
+         <h2 id="recent-downloads-title" style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Recent downloads</h2>
         {!downloads || downloads.length === 0 ? (
           downloads === null ? <Skeleton className="h-20 w-full" /> : <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>No downloads yet</div>
         ) : (
           <div className="card-list">
             {(downloads as unknown as { id: string; at: number; ts?: number; poolId: string; password: string; claimed: number; filename: string; reverted?: boolean; claimedBy?: string | null }[]).map((d) => {
-              const dt = d.at || (d as unknown as { ts?: number }).ts ? new Date((d.at ?? (d as unknown as { ts: number }).ts)) : null;
+               const rawAt = d.at ?? (d as unknown as { ts?: number }).ts;
+               const dt = rawAt != null ? new Date(rawAt) : null;
               const dateStr = dt ? dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
               const timeStr = dt ? dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
               const isReverted = !!(d as unknown as { reverted?: boolean }).reverted;
@@ -529,35 +549,37 @@ export default function PoolsView() {
                   <div className="pool-card-info">
                     <div className="pool-card-name" title={d.filename}>{d.filename}</div>
                     <div className="pool-card-sub">
-                      <span title={d.at ? new Date(d.at).toISOString() : ""}>{dateStr} {timeStr}</span>
+                       <span title={dt ? dt.toISOString() : ""}>{dateStr} {timeStr}</span>
                       <span>·</span>
                       <span>{d.claimed} claimed</span>
                       {claimer?.name ? <><span>·</span><span title={String(d.claimedBy)} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>{claimer.name}</span></> : d.claimedBy ? <><span>·</span><span title={String(d.claimedBy)}>#{String(d.claimedBy).slice(-6)}</span></> : null}
                       {isReverted ? <><span>·</span><span style={{ color: "var(--green)", fontWeight: 600 }}>REVERTED</span></> : null}
-                    </div>
-                  </div>
+                      </div>
+                   </div>
                   <div className="pool-card-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                     <button className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} disabled={reDownloading === d.id || isReverted} onClick={() => doRedownload(d.id, d.filename)}>{reDownloading === d.id ? "…" : "Download"}</button>
-                    <button className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, color: isReverted ? "var(--text3)" : "var(--red)" }} disabled={reverting === d.id || isReverted} onClick={() => doRevert(d.id)}>{reverting === d.id ? "…" : isReverted ? "Returned" : "Return"}</button>
-                  </div>
+                     <button className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, color: isReverted ? "var(--text3)" : "var(--red)" }} disabled={reverting === d.id || isReverted} onClick={() => doRevert(d.id)}>{reverting === d.id ? "…" : isReverted ? "Returned" : "Return"}</button>
+                   </div>
                 </div>
               );
             })}
           </div>
-        )}
-      </div>
+         )}
+       </section>
 
       {dlUser ? (
         <div className="modal-overlay open" onClick={(e) => { if (e.target === e.currentTarget) setDlUser(null); }}>
-          <div className="modal-box" role="dialog" aria-modal="true" style={{ width: 360 }}>
-            <div className="modal-title">Download</div>
+          <div ref={dlModalRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="pool-download-title" style={{ width: 360 }}>
+            <div id="pool-download-title" className="modal-title">Download</div>
             <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>{displayName(dlUser).line1} &middot; {dlUser.available} available</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-              {[10, 50].map((n) => <button key={n} className={`btn ${perQty === n && !perCustom ? "btn-primary" : ""}`} onClick={() => { setPerQty(n); setPerCustom(""); }}>{n}</button>)}
-              <button className={`btn ${perQty === "all" && !perCustom ? "btn-primary" : ""}`} onClick={() => { setPerQty("all"); setPerCustom(""); }}>All</button>
+             {[10, 50].map((n) => <button type="button" key={n} className={`btn ${perQty === n && !perCustom ? "btn-primary" : ""}`} aria-pressed={perQty === n && !perCustom} onClick={() => { setPerQty(n); setPerCustom(""); }}>{n}</button>)}
+               <button type="button" className={`btn ${perQty === "all" && !perCustom ? "btn-primary" : ""}`} aria-pressed={perQty === "all" && !perCustom} onClick={() => { setPerQty("all"); setPerCustom(""); }}>All</button>
               <input
                 placeholder={perCustomFocused ? "" : "Custom"}
-                aria-label="Custom quantity"
+                 aria-label="Custom quantity"
+                 inputMode="numeric"
+                 pattern="[0-9]*"
                 value={perCustom}
                 onChange={(e) => setPerCustom(e.target.value.replace(/\D/g, ""))}
                 onFocus={(e) => { setPerCustomFocused(true); e.currentTarget.select(); }}
@@ -567,8 +589,8 @@ export default function PoolsView() {
             </div>
             <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>Claiming {perCustom ? Number(perCustom) || 0 : perQty === "all" ? dlUser.available : perQty as number} of {dlUser.available} available</div>
             <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setDlUser(null)}>Cancel</button>
-              <button className="btn btn-primary" disabled={downloading} onClick={doUserClaim}>Download & claim</button>
+               <button type="button" className="btn btn-ghost" onClick={() => setDlUser(null)}>Cancel</button>
+               <button type="button" className="btn btn-primary" aria-busy={downloading} disabled={downloading} onClick={doUserClaim}>Download & claim</button>
             </div>
           </div>
         </div>

@@ -231,7 +231,7 @@ export default function Topbar() {
           </span>
         ) : null}
         </span>
-        <div ref={panelRef} id="user-settings-panel" role="dialog" aria-modal="true" aria-label="Settings" aria-hidden={!panelOpen} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
+        <div ref={panelRef} id="user-settings-panel" role="dialog" aria-modal="true" aria-labelledby="profile-settings-title" hidden={!panelOpen} className={`gear-settings-panel${panelOpen ? " open" : ""}`}>
           <div className="gear-user-card">
              {panelOpen ? <ProfileAvatar photoUrl={user.photoUrl} fallback={(displayName || "?").slice(0, 1).toUpperCase()} className="gear-user-avatar" verified={user.isAdmin} badgeSize={16} /> : null}
             <div className="gear-user-info">
@@ -247,7 +247,7 @@ export default function Topbar() {
             </div>
           </div>
           <div className="gear-divider"></div>
-          <div className="gear-settings-title">Settings</div>
+           <div id="profile-settings-title" className="gear-settings-title">Profile &amp; settings</div>
           <div className="gear-toggle-row">
             <div>
               <div className="gear-toggle-label">Night mode</div>
@@ -398,7 +398,7 @@ export default function Topbar() {
             </>
           )}
           <div className="gear-divider"></div>
-          <button
+          <button type="button"
             className="btn btn-ghost"
             style={{ width: "100%", justifyContent: "center" }}
             onClick={logout}

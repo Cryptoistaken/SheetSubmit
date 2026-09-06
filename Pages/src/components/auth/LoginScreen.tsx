@@ -99,7 +99,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
         setWaiting(true);
         window.location.href = safeNext(next);
       };
-      const options = { client_id: Number(tgClientId), scope: ["openid", "profile"] };
+      const options = { client_id: Number(tgClientId), scope: ["openid", "profile"], redirect_uri: `${window.location.origin}/login` };
       if (!Number.isSafeInteger(options.client_id) || options.client_id <= 0) throw new Error("Invalid Telegram client ID");
       await new Promise<void>((resolve, reject) => {
         const timer = window.setTimeout(() => reject(new Error("Telegram login timed out")), 120000);
@@ -135,7 +135,6 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
           >
             <span className="tg-auth-icon" aria-hidden="true" />
             <span>{tgLoading ? "Verifying…" : "Continue with Telegram"}</span>
-            {!tgLoading && <span className="tg-new-badge">New</span>}
           </button>
           {tgError && <p role="alert" className="login-hint" style={{ color: "var(--red)", marginTop: 8 }}>{tgError}</p>}
           {waiting && <p role="status" aria-live="polite" className="login-hint">Logged in — opening your workspace…</p>}

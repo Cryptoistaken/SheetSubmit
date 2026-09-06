@@ -7,21 +7,21 @@ const env: Env = {
   INDEX: "index",
   FILES: "files",
   POOLS: "pools",
-  DATABASE_URL: process.env.DATABASE_URL || "",
-  SESSION_SECRET: process.env.SESSION_SECRET,
-  TG_BOT_TOKEN: process.env.TG_BOT_TOKEN,
-  ADMIN_IDS: process.env.ADMIN_IDS,
-  TURNSTILE_SECRET: process.env.TURNSTILE_SECRET,
-  TURNSTILE_SITE_KEY: process.env.TURNSTILE_SITE_KEY,
-  TG_WEBHOOK_SECRET: process.env.TG_WEBHOOK_SECRET,
-  WORKER_URL: process.env.WORKER_URL || process.env.RAILWAY_PUBLIC_DOMAIN,
-  FRONTEND_URL: process.env.FRONTEND_URL,
-  HITOOLS_CHECK_URL: process.env.HITOOLS_CHECK_URL,
-  TELEGRAM_LOGIN_CLIENT_ID: process.env.TELEGRAM_LOGIN_CLIENT_ID,
+  DATABASE_URL: Bun.env.DATABASE_URL || "",
+  SESSION_SECRET: Bun.env.SESSION_SECRET,
+  TG_BOT_TOKEN: Bun.env.TG_BOT_TOKEN,
+  ADMIN_IDS: Bun.env.ADMIN_IDS,
+  TURNSTILE_SECRET: Bun.env.TURNSTILE_SECRET,
+  TURNSTILE_SITE_KEY: Bun.env.TURNSTILE_SITE_KEY,
+  TG_WEBHOOK_SECRET: Bun.env.TG_WEBHOOK_SECRET,
+  WORKER_URL: Bun.env.WORKER_URL || Bun.env.RAILWAY_PUBLIC_DOMAIN,
+  FRONTEND_URL: Bun.env.FRONTEND_URL,
+  HITOOLS_CHECK_URL: Bun.env.HITOOLS_CHECK_URL,
+  TELEGRAM_LOGIN_CLIENT_ID: Bun.env.TELEGRAM_LOGIN_CLIENT_ID,
 };
 
 if (!env.DATABASE_URL) throw new Error("DATABASE_URL is required");
-const port = Number(process.env.PORT || 3000);
+const port = Number(Bun.env.PORT || 3000);
 startBackgroundTasks(env);
 const server = serve({ port, hostname: "0.0.0.0", fetch: (request) => { startBackgroundTasks(env); return app.fetch(request, env); } });
 console.log(`SheetSubmit backend listening on 0.0.0.0:${port}`);

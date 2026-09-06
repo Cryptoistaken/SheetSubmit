@@ -25,6 +25,14 @@ describe("telegramOidc", () => {
     expect(r.uid).toBe("123456789");
     expect(r.name).toBe("Test User");
   });
+  it("maps Telegram-shaped claims (numeric aud/id, picture, phone)", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const tok = await makeToken({ iss: "https://oauth.telegram.org", aud: 8667114953, sub: "1234123412341234123", id: 987654321, name: "John Doe", given_name: "John", family_name: "Doe", preferred_username: "johndoe", picture: "https://cdn4.telesco.pe/file_x", phone_number: "971577777777", exp: now + 3600, iat: now });
+    const r = await verifyTelegramIdToken(tok, "8667114953");
+    expect(r.uid).toBe("1234123412341234123");
+    expect(r.name).toBe("John Doe");
+    expect(r.username).toBe("johndoe");
+  });
   it("rejects wrong iss", async () => {
     const now = Math.floor(Date.now() / 1000);
     const tok = await makeToken({ iss: "https://evil.com", aud: "cid123", sub: "123", exp: now + 3600, iat: now });

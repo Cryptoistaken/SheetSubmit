@@ -76,7 +76,7 @@ components/layout/Topbar.tsx
 components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, Fab.tsx, EmptyState.tsx, DownloadDetailModal.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
-components/auth/LoginScreen.tsx    # official Telegram Login OIDC + bot login fallback + Turnstile, WS claimed fast-path, lazy did, 10s+60s claim poll
+components/auth/LoginScreen.tsx    # official Telegram Login OIDC (web widget + Turnstile) or Android native SDK bridge; legacy bot login removed
 components/ui/button.tsx, avatar.tsx  # shadcn cva variants
 contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, WS connect, retry 3×1.5s
 stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection
@@ -102,11 +102,8 @@ functions/webhook/[[path]].ts
    - No cookie → 401 `not_authenticated` → clear flag, bounce to `/login`.
    - Invalid/expired cookie → 401 `session_expired` → clear flag, `/login` with notice.
    - Valid → 200 user JSON → set user.
-4. LoginScreen: fetch bot info → generate `did` → show "Open Telegram" link; when `TELEGRAM_LOGIN_CLIENT_ID` is configured, offer official Telegram Login OIDC, or invoke the Android native SDK bridge inside the app.
-5. User opens Telegram bot → `/start login_<did>` → bot stores `device:<did>` → webhook sets session.
-6. LoginScreen: WS `claim.watch` fast-path (`claimed` push → `POST /api/auth/device/claim {token, turnstile}`) + fallback poll: waits 10s, then 1/s for 60s, **only while tab focused** (Turnstile token required in body).
-7. On success → set `ss_had_session` flag, reload to saved destination (default `/`) → AuthContext picks up cookie.
-8. On timeout → show "Recheck login" button → regenerates did, restarts flow.
+4. LoginScreen: web shows official Telegram Login widget (Turnstile-gated) → `POST /api/auth/telegram/verify {id_token}`; inside the app it invokes the Android native SDK bridge instead (no Turnstile, no legacy bot flow).
+5. On success → set `ss_had_session` flag, reload to saved destination (default `/`) → AuthContext picks up cookie.
 
 ## Rules
 1. **Production isolation** — test bot token only, own Cloudflare project. Never touch prod.

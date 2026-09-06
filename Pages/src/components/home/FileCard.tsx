@@ -196,14 +196,9 @@ export default function FileCard({
         <span className="file-card-meta" style={metaStyle}>{inds}</span>
       </div>
       ) : (
-      <div style={{ display: "flex", flexDirection: "column", gap: inds.length > 3 ? 5 : 0, marginTop: "auto", minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          {badges}
-          <span className="file-card-meta" style={metaStyle}>{inds.slice(0, 3)}</span>
-        </div>
-        {inds.length > 3 ? (
-          <span className="file-card-meta" style={metaStyle}>{inds.slice(3)}</span>
-        ) : null}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: "auto", minWidth: 0 }}>
+        {badges}
+        <span className="file-card-meta" style={{ display: "grid", gridTemplateColumns: "repeat(3, auto)", gap: "5px 8px", marginLeft: "auto" }}>{inds}</span>
       </div>
       )}
       <div className="file-card-actions">

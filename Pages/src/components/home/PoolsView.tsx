@@ -417,8 +417,8 @@ export default function PoolsView() {
       </div>
 
       {/* search */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16, marginBottom: 8 }}>
-        <SearchInput placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search users" containerStyle={{ width: 240, maxWidth: "48vw" }} />
+      <div style={{ display: "flex", marginTop: 16, marginBottom: 8 }}>
+        <SearchInput placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search users" containerStyle={{ width: "100%" }} />
       </div>
 
       {/* user list */}

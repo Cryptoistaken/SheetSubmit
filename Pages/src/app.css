@@ -1165,10 +1165,6 @@ button, input, select, textarea {
     color: var(--text3);
     background: var(--bg3);
     border-radius: 16px;
-    transition: box-shadow 0.15s;
-}
-.search-input-shell:focus-within {
-    box-shadow: 0 0 0 1.5px var(--ring);
 }
 .search-input-group {
     display: flex;
@@ -1183,8 +1179,8 @@ button, input, select, textarea {
     transition: box-shadow 0.15s, border-color 0.15s;
 }
 .search-input-group:focus-within {
-    border-color: var(--ring);
-    box-shadow: 0 0 0 1.5px var(--ring), var(--shadow-md);
+    border-color: var(--text);
+    box-shadow: 0 0 0 1px var(--text), var(--shadow-md);
 }
 .search-input-icon {
     display: inline-flex;

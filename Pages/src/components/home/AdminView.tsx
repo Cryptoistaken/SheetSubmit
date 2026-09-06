@@ -252,6 +252,11 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
               <div className="admin-detail-meta">
                 {detailUser.username ? "@" + detailUser.username : "ID: " + detailUser.id}
               </div>
+              {detailUser.phone ? (
+                <div className="admin-detail-meta" dir="ltr" style={{ unicodeBidi: "isolate" }}>
+                  +{detailUser.phone.replace(/^\+/, "")}
+                </div>
+              ) : null}
               <div className="admin-detail-meta">
                 Joined{" "}
                 {detailUser.createdAt

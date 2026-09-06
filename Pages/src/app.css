@@ -110,11 +110,11 @@
 }
 
 /* ── Reset ── */
-*, *::before, *::after {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
+/* NOTE: no global margin/padding reset here — Tailwind preflight (layered)
+   already resets them. An unlayered star-selector reset beats
+   layered utilities in Tailwind v4 and silently kills every padding
+   and margin utility (dialogs, dropdowns, buttons render with text
+   touching edges). */
 
 /* ── Base ── */
 html, body {

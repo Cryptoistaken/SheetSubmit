@@ -74,6 +74,55 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
     return () => { s.remove(); };
   }, [isAndroidApp, tgClientId]);
 
+  // Shared landing for both legs (popup message + redirect hash):
+  // verify id_token server-side, ping any opener, then land.
+  async function completeLogin(idToken: string) {
+    const res = await api.verifyTelegramLogin(idToken, turnstileTokenRef.current);
+    if (!res.ok) throw new Error("verification failed");
+    claimedDoneRef.current = true;
+    localStorage.setItem(HAD_SESSION, "1");
+    try { localStorage.setItem("ss_tg_done", String(Date.now())); } catch {}
+    if (window.opener) { try { window.close(); } catch {} }
+    setWaiting(true);
+    window.location.href = safeNext(next);
+  }
+
+  // Redirect leg: approval finished in the Telegram app and bounced back to
+  // /login#tgAuthResult=<base64url JSON {result: id_token}>. The library never
+  // reads this hash — without this, mobile logins die as "popup_closed".
+  useEffect(() => {
+    if (isAndroidApp || claimedDoneRef.current) return;
+    const m = window.location.hash.match(/tgAuthResult=([^&]+)/);
+    if (!m) return;
+    let idToken = "";
+    try {
+      const b64 = m[1].replace(/-/g, "+").replace(/_/g, "/");
+      const payload = JSON.parse(atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4)));
+      idToken = typeof payload === "string" ? payload : String(payload?.result || "");
+    } catch { return; }
+    if (!idToken) return;
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    setTgLoading(true);
+    completeLogin(idToken).catch((e: unknown) => {
+      setTgError(e instanceof Error ? e.message : String(e));
+      setTgLoading(false);
+    });
+  }, [isAndroidApp, next]);
+
+  // If the popup window completes the login, it pings us — follow it home.
+  useEffect(() => {
+    if (isAndroidApp) return;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "ss_tg_done" && !claimedDoneRef.current) {
+        claimedDoneRef.current = true;
+        setWaiting(true);
+        window.location.href = safeNext(next);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [isAndroidApp, next]);
+
   async function handleTelegramLogin() {
     if (claimedDoneRef.current || waiting) return;
     // Native app: hand off to the Android Telegram SDK bridge
@@ -92,12 +141,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
         if (data?.error) throw new Error(String(data.error));
         const idToken = data?.id_token;
         if (typeof idToken !== "string" || !idToken) throw new Error("No id_token returned");
-        const res = await api.verifyTelegramLogin(idToken, turnstileTokenRef.current);
-        if (!res.ok) throw new Error("verification failed");
-        claimedDoneRef.current = true;
-        localStorage.setItem(HAD_SESSION, "1");
-        setWaiting(true);
-        window.location.href = safeNext(next);
+        await completeLogin(idToken);
       };
       // NOTE: the library ignores redirect_uri here — it always uses the
       // current page URL (our /login, registered in BotFather). scope is the

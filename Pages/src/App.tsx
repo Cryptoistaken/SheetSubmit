@@ -14,8 +14,10 @@ import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 import Topbar from "@/components/layout/Topbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/lib/theme";
-import HomePage from "@/pages/HomePage";
-import SheetPage from "@/pages/SheetPage";
+import { lazyRetry } from "@/lib/lazyRetry";
+
+const HomePage = lazyRetry(() => import("@/pages/HomePage"));
+const SheetPage = lazyRetry(() => import("@/pages/SheetPage"));
 
 const BubbleMode = lazy(() => import("@/components/bubble/BubbleMode"));
 const BubbleDesignPage = lazy(() => import("@/pages/BubbleDesignPage"));

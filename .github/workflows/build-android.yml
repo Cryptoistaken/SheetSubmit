@@ -43,16 +43,6 @@ jobs:
           echo "KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "Release keystore decoded"
 
-      - name: Save release certificate fingerprint
-        run: keytool -list -v -keystore android/android-release.keystore -storepass "$KEYSTORE_PASSWORD" -alias sheetsubmit | grep 'SHA256:' > release-fingerprint.txt
-
-      - name: Upload fingerprint
-        uses: actions/upload-artifact@v7
-        with:
-          name: sheetsubmit-release-fingerprint
-          path: release-fingerprint.txt
-          if-no-files-found: error
-
       - name: Build release APK
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon

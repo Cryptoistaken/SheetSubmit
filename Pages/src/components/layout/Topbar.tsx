@@ -223,7 +223,6 @@ export default function Topbar() {
 
       {isFilePage && renameOpen && file && (
         <div
-          ref={renameRef}
           className="modal-overlay open"
           role="dialog"
           aria-modal="true"
@@ -232,7 +231,7 @@ export default function Topbar() {
             if (e.target === e.currentTarget) closeRename();
           }}
         >
-          <div className="modal-box">
+          <div ref={renameRef} className="modal-box">
             <div className="modal-title">Rename file</div>
             <input
               className="modal-input"

@@ -70,7 +70,8 @@ export async function verifyTelegramIdToken(idToken: string, clientId: string): 
   const iat = Number(payload.iat);
   if (!Number.isFinite(exp) || exp <= now) throw new Error("token expired");
   if (!Number.isFinite(iat) || iat > now + 60) throw new Error("invalid iat");
-  const sub = String(payload.sub || payload.id || payload.user_id || payload.telegram_id || "");
+  const tid = String(payload.id ?? payload.user_id ?? payload.telegram_id ?? "");
+  const sub = /^\d{3,20}$/.test(tid) ? tid : String(payload.sub || "");
   if (!/^\d{3,20}$/.test(sub)) throw new Error("invalid sub");
   const username = String(payload.preferred_username || payload.username || payload.tg_username || "");
   const name = String(payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(" ") || payload.nickname || username || sub);

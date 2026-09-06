@@ -29,7 +29,7 @@ describe("telegramOidc", () => {
     const now = Math.floor(Date.now() / 1000);
     const tok = await makeToken({ iss: "https://oauth.telegram.org", aud: 8667114953, sub: "1234123412341234123", id: 987654321, name: "John Doe", given_name: "John", family_name: "Doe", preferred_username: "johndoe", picture: "https://cdn4.telesco.pe/file_x", phone_number: "971577777777", exp: now + 3600, iat: now });
     const r = await verifyTelegramIdToken(tok, "8667114953");
-    expect(r.uid).toBe("1234123412341234123");
+    expect(r.uid).toBe("987654321");
     expect(r.name).toBe("John Doe");
     expect(r.username).toBe("johndoe");
     expect(r.picture).toBe("https://cdn4.telesco.pe/file_x");

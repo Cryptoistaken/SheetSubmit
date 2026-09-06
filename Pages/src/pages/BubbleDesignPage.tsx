@@ -288,7 +288,7 @@ export default function BubbleDesignPage(){
       <div style={{maxWidth:960,margin:"0 auto",padding:"24px 24px 96px",width:"100%"}}>
         {/* Header — matches sheet header */}
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
-          <button className="btn btn-ghost" aria-label="Back" onClick={()=>{ if(window.history.length>1) navigate(-1); else navigate("/"); }} style={{width:32,height:32,padding:0,justifyContent:"center"}}>
+          <button className="btn btn-ghost" title="Back" aria-label="Back" onClick={()=>{ if(window.history.length>1) navigate(-1); else navigate("/"); }} style={{width:32,height:32,padding:0,justifyContent:"center"}}>
             <span style={{fontSize:18,lineHeight:1}}>‹</span>
           </button>
           <h1 style={{fontSize:16,fontWeight:700,letterSpacing:"-0.02em",color:"var(--text)"}}>Bubble design</h1>

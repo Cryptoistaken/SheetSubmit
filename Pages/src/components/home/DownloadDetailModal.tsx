@@ -47,7 +47,7 @@ export default function DownloadDetailModal({ downloadId, onClose }: { downloadI
             {detail ? <div style={{ fontSize: 12, color: "var(--text3)" }}>{dateStr} · {detail.claimed} claimed · {detail.poolId}{detail.reverted ? " · reverted" : ""}</div> : null}
             {err ? <div style={{ fontSize: 12, color: "var(--red)", marginTop: 6 }}>{err}</div> : null}
           </div>
-          <button className="btn btn-ghost btn-sm" aria-label="Close" onClick={onClose} style={{ flexShrink: 0 }}>✕</button>
+          <button className="btn btn-ghost btn-sm" title="Close" aria-label="Close" onClick={onClose} style={{ flexShrink: 0 }}>✕</button>
         </div>
 
         {loading ? <div style={{ fontSize: 13, color: "var(--text3)", padding: "12px 0" }}>Loading…</div> : null}

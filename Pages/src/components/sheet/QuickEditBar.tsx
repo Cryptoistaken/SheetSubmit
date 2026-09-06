@@ -99,7 +99,7 @@ export default function QuickEditBar() {
         <div ref={textPickerRef} className="qeb-picker open" role="dialog" aria-modal="false" aria-label="Text color picker" onClick={e => e.stopPropagation()}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
             <div className="qeb-picker-title" style={{ margin: 0 }} id="qeb-text-title">Text color</div>
-            <button className="qeb-picker-close" onClick={() => setPicker(null)} aria-label="Close text color picker"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg></button>
+            <button className="qeb-picker-close" title="Close" onClick={() => setPicker(null)} aria-label="Close text color picker"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg></button>
           </div>
           <div className="qeb-swatch-grid" role="group" aria-labelledby="qeb-text-title">{PALETTE.map(c => <button key={c} className={`qeb-swatch${textColor === c ? " selected" : ""}`} style={{ background: c }} onClick={() => setStyle({ color: c })} aria-label={c} aria-pressed={textColor === c} />)}</div>
         </div>
@@ -108,7 +108,7 @@ export default function QuickEditBar() {
         <div ref={cellPickerRef} className="qeb-picker open" role="dialog" aria-modal="false" aria-label="Cell fill picker" onClick={e => e.stopPropagation()} style={{ transformOrigin: "38% 100%" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
             <div className="qeb-picker-title" style={{ margin: 0 }} id="qeb-cell-title">Cell fill</div>
-            <button className="qeb-picker-close" onClick={() => setPicker(null)} aria-label="Close cell fill picker"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg></button>
+            <button className="qeb-picker-close" title="Close" onClick={() => setPicker(null)} aria-label="Close cell fill picker"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg></button>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button className={`qeb-swatch none${cellBg === "transparent" ? " selected" : ""}`} onClick={() => setStyle({ bg: null })} title="No fill" aria-label="No fill" aria-pressed={cellBg === "transparent"} style={{ flex: "none" }}>

@@ -62,6 +62,7 @@ export default function Fab({ onCreate, onUpload }: FabProps) {
       <button
         ref={fabRef}
         className="home-fab"
+        title="Create file"
         aria-label="Create file"
         aria-haspopup="menu"
         aria-controls={menuId}

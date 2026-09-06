@@ -176,6 +176,8 @@ export default function Topbar() {
           Sheet Submit
         </span>
         <button
+          title="Back"
+          aria-label="Back"
           className={`back-btn${isFilePage ? " visible" : ""}`}
           onClick={() => {
             const st = useSheetStore.getState();

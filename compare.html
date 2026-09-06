@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Preview</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23ef2b0d' d='M21.194 0H2.806A2.01 2.01 0 0 0 .8 2v20c0 1.1.903 2 2.006 2h18.388a2.01 2.01 0 0 0 2.006-2v-.933c-.033-1.2-.067-3.7-.067-4.834c0-.633-.468-1.166-1.07-1.166c-.668 0-1.103.4-1.437.733c-1.003.9-2.508 1.067-3.812.833c-.601-.133-1.17-.3-1.638-.6c-1.438-.833-2.374-2.4-2.374-4.066c0-1.667.936-3.2 2.374-4.067c.502-.3 1.07-.467 1.638-.6c1.27-.233 2.809-.067 3.812.833c.367.334.802.734 1.437.734c.602 0 1.07-.534 1.07-1.167c0-1.1.034-3.633.067-4.833V2c0-1.1-.903-2-2.006-2'/%3E%3C/svg%3E" />
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+:root{--bg:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--bg4:#eaeaea;--text:#000000;--text2:#666666;--text3:#999999;--border:#eaeaea;--border2:#d4d4d4;--blue:#0070f3;--blue-dark:#0060df;--blue-light:rgba(0,112,243,0.08);--grad-page:linear-gradient(oklch(0.640619 0.197547 260) 0%,oklch(0.5772 0.2324 260) 100%);--r:6px;--rl:8px;--sans:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;--mono:'Geist Mono',monospace;--shadow-md:0 4px 12px rgba(0,0,0,0.08);--focus-ring:0 0 0 2px #0070f3;--ease-out:cubic-bezier(0.16,1,0.3,1)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);background:#fafafa;color:#000;-webkit-font-smoothing:antialiased}
+.page{max-width:1040px;margin:0 auto;padding:28px 24px 40px}
+.hero{background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:22px 24px;margin-bottom:22px}
+.hero h1{font-size:20px;font-weight:700;letter-spacing:-0.03em}
+.section{background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:22px 24px;margin-bottom:22px}
+.section h2{font-size:15px;font-weight:700;letter-spacing:-0.02em}
+.stage{margin-top:16px;background:#fff;border:1px solid #eaeaea;border-radius:8px;min-height:170px;display:flex;align-items:flex-start;justify-content:center;padding:28px 16px 64px}
+.anchor{position:relative;display:inline-flex}
+.check-split-wrap{display:inline-flex;align-items:stretch;border-radius:var(--r);overflow:hidden;border:1px solid var(--blue);transition:opacity 0.15s var(--ease-out)}
+.check-split-wrap[data-check="checking"]{opacity:0.55;pointer-events:none}
+.check-split-main{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:none;background:var(--blue);color:#fff;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;line-height:1;font-family:var(--sans);transition:background 0.1s}
+.check-split-main:hover{background:var(--blue-dark,#2563eb)}
+.check-split-main:active{transform:scale(0.97)}
+.check-split-main:disabled{opacity:0.5;cursor:not-allowed}
+.check-split-arrow{display:inline-flex;align-items:center;justify-content:center;padding:0 7px;background:var(--blue);color:#fff;border:none;border-left:1px solid rgba(255,255,255,0.25);cursor:pointer;transition:background 0.1s,transform 0.12s var(--ease-out)}
+.check-split-arrow:hover{background:var(--blue-dark,#2563eb)}
+.check-split-arrow:active{transform:scale(0.93)}
+.check-split-arrow svg{transition:transform 0.15s var(--ease-out)}
+.check-split-arrow.open svg{transform:rotate(180deg)}
+.check-dropdown{position:absolute;top:calc(100% + 6px);right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);box-shadow:var(--shadow-md);z-index:650;padding:8px 12px;display:none;min-width:150px;text-align:left}
+.check-dropdown.open{display:block;animation:smIn 0.15s var(--ease-out)}
+.check-dropdown-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px}
+.autocheck-toggle{display:flex;align-items:center;gap:8px;padding:4px 0;background:none;border:none;cursor:pointer;font-size:12px;font-weight:500;color:var(--text2);font-family:var(--sans);transition:color 0.1s;width:100%}
+.autocheck-toggle:hover{color:var(--text)}
+.autocheck-toggle .autocheck-track{position:relative;width:36px;height:20px;flex-shrink:0;background:var(--bg4);border-radius:999px;border:2px solid var(--border2);transition:background 0.2s var(--ease-out),border-color 0.2s var(--ease-out)}
+.autocheck-toggle .autocheck-track::after{content:'';position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,0.18);transition:transform 0.2s var(--ease-out)}
+.autocheck-toggle.on .autocheck-track{background:var(--grad-page);border-color:transparent}
+.autocheck-toggle.on .autocheck-track::after{transform:translateX(16px)}
+.check-split-main:focus-visible,.check-split-arrow:focus-visible,.autocheck-toggle:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+@keyframes smIn{from{opacity:0;transform:translateY(-6px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}
+#afterSection .check-split-wrap{background:var(--blue)}
+#afterSection .check-split-arrow{border-left:none}
+#afterSection .check-split-arrow svg{transition-duration:.2s}
+#afterSection .check-split-main{interpolate-size:allow-keywords;transition:width .22s var(--ease-out),background .1s,transform .12s var(--ease-out);overflow:hidden;white-space:nowrap}
+#afterSection .check-split-main svg{flex-shrink:0}
+#afterSection .autocheck-toggle{transition:color .1s,transform .12s var(--ease-out)}
+#afterSection .autocheck-toggle:active{transform:scale(.97)}
+#afterSection .check-dropdown{transform-origin:top right}
+#afterSection .check-dropdown.open{animation-duration:.18s}
+@media(max-width:900px){.sideways{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hero">
+    <h1>Preview</h1>
+  </div>
+  <div class="sideways" style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+    <div class="section" id="beforeSection">
+      <h2>Before</h2>
+      <div class="stage">
+        <div class="anchor" data-demo="before">
+          <div class="check-split-wrap" data-check="">
+            <button class="check-split-main">Check</button>
+            <button class="check-split-arrow" title="More check options" aria-label="More check options" aria-expanded="false" aria-haspopup="menu"><svg width="9" height="9" viewBox="0 0 10 6" fill="currentColor" aria-hidden="true"><path d="M0 0l5 6 5-6z" /></svg></button>
+          </div>
+          <div class="check-dropdown" role="menu" aria-label="Check options" aria-hidden="true">
+            <div class="check-dropdown-label">UID check</div>
+            <button role="switch" aria-checked="true" class="autocheck-toggle on"><span class="autocheck-track" aria-hidden="true"></span>UID check</button>
+          </div>
+        </div>
+      </div>
+      <details class="agent-spec" style="margin-top:10px;border:1px dashed #ddd;border-radius:6px;padding:6px 8px;background:#fff;font-size:10px;line-height:1.5;color:#999;font-family:var(--mono)">
+        <summary style="cursor:pointer;font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999">Spec Before agent (collapsed)</summary>
+        <div style="margin-top:6px;background:#fafafa;border:1px solid #eaeaea;border-radius:6px;padding:6px 8px;font-size:10px;line-height:1.5;color:#666">source <code>SheetToolbar.tsx:232-253</code> wrap <code>data-check checking while runCheck</code> main <code>Check to Checking… disabled when hasDups</code> arrow <code>9x9 M0 0l5 6 5-6z rotate 180 on open</code> dropdown <code>UID check switch on ss_autoCheck</code> css <code>app.css:2153 wrap inline-flex border var(--blue) radius var(--r)</code> <code>app.css:2163 main pad 5x10 12px 500 #fff bg var(--blue)</code> <code>app.css:2179 hover var(--blue-dark) #0060df</code> <code>app.css:2180 active scale .97</code> <code>app.css:2184 arrow pad 0 7 divider rgba(255,255,255,.25)</code> <code>app.css:2199 open rotate 180</code> <code>app.css:2200 dropdown bg var(--bg2) min-w 150 pad 8x12 smIn .15s</code> <code>app.css:2236 track 36x20 knob 12 grad-page on</code> preview note <code>dropdown absolute in .anchor for feel, live is fixed with JS top right</code></div>
+      </details>
+    </div>
+    <div class="section" id="afterSection">
+      <h2>After</h2>
+      <div class="stage">
+        <div class="anchor" data-demo="after">
+          <div class="check-split-wrap" data-check="">
+            <button class="check-split-main">Check</button>
+            <button class="check-split-arrow" title="More check options" aria-label="More check options" aria-expanded="false" aria-haspopup="menu"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          </div>
+          <div class="check-dropdown" role="menu" aria-label="Check options" aria-hidden="true">
+            <div class="check-dropdown-label">UID check</div>
+            <button role="switch" aria-checked="true" class="autocheck-toggle on"><span class="autocheck-track" aria-hidden="true"></span>UID check</button>
+          </div>
+        </div>
+      </div>
+      <details class="agent-spec" style="margin-top:10px;border:1px dashed #ddd;border-radius:6px;padding:6px 8px;background:#fff;font-size:10px;line-height:1.5;color:#999;font-family:var(--mono)">
+        <summary style="cursor:pointer;font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999">Spec After agent (collapsed)</summary>
+        <div style="margin-top:6px;background:#fafafa;border:1px solid #eaeaea;border-radius:6px;padding:6px 8px;font-size:10px;line-height:1.5;color:#666">change <code>checking label Checking… to Checking + spinner (spinner replaces …)</code> smooth resize <code>#afterSection .check-split-main interpolate-size allow-keywords + width .22s</code> dropdown <code>transform-origin top right</code> arrow <code>triangle 9px to lucide chevron-down 14px stroke 2, rotate .2s</code> press <code>main transform .12s so scale springs back</code> toggle <code>tap scale .97</code> wrap <code>background var(--blue) so resize seam never flashes white</code> live target <code>SheetToolbar.tsx:239</code> css <code>app.css:2163 add interpolate-size + width transition</code> then <code>bun run typecheck</code> in <code>Pages/</code> and push</div>
+      </details>
+    </div>
+  </div>
+  <details id="agent-source-map" style="margin-top:6px;border:1px dashed #ddd;border-radius:6px;padding:6px 8px;background:#fff;font-size:10px;line-height:1.5;color:#999;font-family:var(--mono)">
+    <summary style="cursor:pointer;font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#999">Agent source map (collapsed)</summary>
+    <div style="margin-top:6px;background:#fafafa;border:1px solid #eaeaea;border-radius:6px;padding:6px 8px;font-size:10px;line-height:1.5;color:#666"><pre>SheetToolbar.tsx:232 wrap | :233 main | :239 label | :241 arrow | :250 caret svg | :255 dropdown | :263 label | :264 toggle
+app.css:2153 wrap | :2162 checking | :2163 main | :2179 hover | :2180 active disabled | :2184 arrow | :2199 open | :2200 dropdown | :2212 label | :2220 toggle | :2236 track | :2258 on
+tokens index.css:64 ring #0070f3 bg #fff muted #f5f5f5 | app.css:2 blue ring blue-dark #0060df grad-page oklch | app.css:53 focus-ring | app.css:56 r 6px | app.css:151 smIn | app.css:3532 focus-visible
+Apply: edit After then copy to file:line then bun run typecheck in Pages/ then push</pre></div>
+  </details>
+</div>
+<script>
+document.querySelectorAll('[data-demo]').forEach(function(root){
+  var wrap=root.querySelector('.check-split-wrap');
+  var main=root.querySelector('.check-split-main');
+  var arrow=root.querySelector('.check-split-arrow');
+  var menu=root.querySelector('.check-dropdown');
+  var busy=false;
+  var isAfter=root.getAttribute('data-demo')==='after';
+  var SPIN='<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true"><title>loading-twotone-loop</title><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="18" d="M12 3c4.97 0 9 4.03 9 9"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.3s" values="18;0"/><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path><path stroke-dasharray="60" d="M12 3c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9c0 -4.97 4.03 -9 9 -9Z" opacity=".3"><animate fill="freeze" attributeName="stroke-dashoffset" dur="1.2s" values="60;0"/></path></g></svg>';
+  main.addEventListener('click',function(){
+    if(busy)return;busy=true;
+    wrap.setAttribute('data-check','checking');
+    if(isAfter){main.innerHTML='Checking '+SPIN;}else{main.textContent='Checking\u2026';}
+    setTimeout(function(){wrap.setAttribute('data-check','');main.textContent='Check';busy=false;},1200);
+  });
+  arrow.addEventListener('click',function(){
+    var open=menu.classList.toggle('open');
+    arrow.classList.toggle('open',open);
+    arrow.setAttribute('aria-expanded',String(open));
+    menu.setAttribute('aria-hidden',String(!open));
+  });
+  menu.querySelectorAll('.autocheck-toggle').forEach(function(t){
+    t.addEventListener('click',function(){
+      var on=t.classList.toggle('on');
+      t.setAttribute('aria-checked',String(on));
+    });
+  });
+});
+</script>
+</body>
+</html>

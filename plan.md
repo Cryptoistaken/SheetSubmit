@@ -38,11 +38,11 @@ Implement the Railway HTTP entrypoint over the existing Hono `fetch` handler. Co
 
 **Acceptance:** Railway app deploy reaches `SUCCESS`; `/api/health` returns 200; startup logs contain no secret values; SIGTERM closes database/Redis resources cleanly.
 
-### Workstream 2: Postgres schema and migration foundation
+### Workstream 2: Fresh Postgres schema foundation
 
-Research every SQLite schema and operation in `IndexDO.ts`, `FileDO.ts`, and `PoolDO.ts`. Produce a versioned Postgres migration set, preserving data types and semantics while adding constraints, foreign keys where safe, composite indexes for real query predicates, and timestamps in UTC. Include an idempotent migration runner and a dry-run/verification command. Do not load production data until row counts and key constraints are verified.
+There is no production data in the Cloudflare Durable Objects, so do not build an export/import or historical data migration. Research every SQLite schema and operation in `IndexDO.ts`, `FileDO.ts`, and `PoolDO.ts`. Produce a versioned fresh-install Postgres schema, preserving data types and semantics while adding constraints, foreign keys where safe, composite indexes for real query predicates, and timestamps in UTC. Include an idempotent bootstrap and a schema verification command. The database must start empty and ready for new users/files after deployment.
 
-**Acceptance:** Fresh Railway Postgres migration succeeds twice; schema verification reports expected tables/indexes/constraints; rollback or forward-fix procedure is documented; no destructive migration runs automatically.
+**Acceptance:** Fresh Railway Postgres bootstrap succeeds twice; schema verification reports expected tables/indexes/constraints; the application can create its first user/file/pool; no data-copy or destructive migration runs.
 
 ### Workstream 3: IndexDO repository port
 
@@ -74,11 +74,11 @@ Inventory every route in `index.ts` and route modules. Build a compact benchmark
 
 **Acceptance:** Before/after benchmark is committed as a report artifact outside secrets; every claimed optimization has a measured result; no endpoint regresses correctness or p95 latency. A 10x result is accepted only where measurement demonstrates it, otherwise report the actual improvement.
 
-### Workstream 8: Test and data migration harness
+### Workstream 8: Test harness
 
-Add repository contract tests that run against disposable Postgres/Redis-compatible services, expand `scripts/TestApi.ts` for changed route/error cases, and create a non-destructive export/import verifier for Cloudflare DO data. Validate counts, ownership, hashes/UIDs, pool availability, ledger totals, wallets, sessions, and timestamps before and after migration. Keep test credentials and production secrets out of fixtures.
+Add repository contract tests that run against disposable Postgres/Redis-compatible services and expand `scripts/TestApi.ts` for changed route/error cases. Test first-user/file/pool creation, ownership, pool availability, ledger totals, wallets, sessions, and timestamps from an empty database. Keep test credentials and production secrets out of fixtures.
 
-**Acceptance:** Typecheck, unit/contract tests, route tests, concurrency tests, and migration verification pass; a failed import leaves the target unchanged or clearly isolated for cleanup.
+**Acceptance:** Typecheck, unit/contract tests, route tests, concurrency tests, and empty-database bootstrap verification pass.
 
 ### Workstream 9: Pages proxy, observability, and rollback
 
@@ -88,9 +88,9 @@ Verify the existing Pages Functions proxy preserves methods, query strings, requ
 
 ### Workstream 10: Cutover and decommission gate
 
-Run the migration on a staging/isolated Railway environment first, then deploy the app with production variables and migrated data. Confirm Railway direct health, Pages-proxied health, auth, files, pools, downloads, admin, Telegram webhook, and scheduled webhook maintenance. Change only Pages production `BACKEND_URL` for cutover. Monitor for at least 48 hours with rollback ready before disabling the Worker.
+Bootstrap the empty Railway Postgres schema on a staging/isolated Railway environment first, then deploy the app with production variables. Confirm Railway direct health, Pages-proxied health, first-user registration/login, files, pools, downloads, admin, Telegram webhook, and scheduled webhook maintenance. Change only Pages production `BACKEND_URL` for cutover. Monitor for at least 48 hours with rollback ready before disabling the Worker.
 
-**Acceptance:** Railway deployment is healthy, Pages remains the public origin, all route tests pass against the new backend, no critical error/latency regression occurs during the observation window, and the Worker is not deleted until the rollback window closes.
+**Acceptance:** Railway deployment is healthy, Pages remains the public origin, an empty database supports first-use flows, all route tests pass against the new backend, no critical error/latency regression occurs during the observation window, and the Worker is not deleted until the rollback window closes.
 
 ## Execution Order and Gates
 

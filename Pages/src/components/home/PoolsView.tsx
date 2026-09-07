@@ -327,7 +327,7 @@ export default function PoolsView() {
               <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>
             ))}
           </div>
-          <Button variant="outline" size="sm" onClick={() => { const v = prices[cur] ?? prices[Object.keys(prices)[0]] ?? null; setPriceInput(v != null ? String(v) : ""); setPriceOpen(true); }}>Price{prices[cur] != null ? ` · $${prices[cur]}` : ""}</Button>
+          <Button variant="outline" size="sm" onClick={() => { const v = prices[cur] ?? prices[Object.keys(prices)[0]] ?? null; setPriceInput(v != null ? String(v) : ""); setPriceOpen(true); }}>{prices[cur] != null ? `$${prices[cur]}` : "Price"}</Button>
           <div className="pool-switch">
             {POOL_TABS.map((t) => {
               const meta = POOL_META[t.id];

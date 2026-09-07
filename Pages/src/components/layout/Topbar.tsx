@@ -162,7 +162,7 @@ export default function Topbar() {
       </div>
       <div className="topbar-r">
         {isFilePage && <SheetToolbar />}
-        <ThemeTogglerButton theme={theme} onToggle={toggle} />
+        {!isFilePage && <ThemeTogglerButton theme={theme} onToggle={toggle} />}
         <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, ...hideHome }}>
         <DropdownMenu>
         <DropdownMenuTrigger asChild>

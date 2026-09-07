@@ -42,5 +42,6 @@ test/*
 !test/test.ts
 !test/benchmark.ts
 !test/stress.ts
+!test/lib.ts
 !test/accounts.example.json
 !test/.env.example

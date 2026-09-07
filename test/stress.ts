@@ -1,46 +1,20 @@
-const envFile = `${import.meta.dir}/.env`;
-if (await Bun.file(envFile).exists()) {
-  for (const line of (await Bun.file(envFile).text()).split(/\r?\n/)) {
-    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-    if (match && !Bun.env[match[1]]) Bun.env[match[1]] = match[2].replace(/^['"]|['"]$/g, "");
-  }
-}
+import { base, percentile, report, request, session } from "./lib";
 
-const base = (Bun.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "") + "/api";
-const session = Bun.env.SESSION_TOKEN;
 const endpoint = Bun.env.STRESS_ENDPOINT || "/files";
 const requests = Math.max(1, Number(Bun.env.STRESS_REQUESTS || 100));
 const concurrency = Math.max(1, Math.min(requests, Number(Bun.env.STRESS_CONCURRENCY || 10)));
-const timeoutMs = Math.max(1000, Number(Bun.env.STRESS_TIMEOUT_MS || 30000));
-const cookie = session ? (session.includes("ss_session=") ? session : `ss_session=${session}`) : "";
+const expected = (Bun.env.STRESS_EXPECTED_STATUS || "200").split(",").map(Number);
 
-const run = async () => {
-  const samples: { ms: number; status: number }[] = [];
+async function run() {
+  if (!session) throw new Error("Set SESSION_TOKEN in test/.env");
   let next = 0;
-  const worker = async () => {
-    while (true) {
-      const index = next++;
-      if (index >= requests) return;
-      const started = performance.now();
-      try {
-        const response = await fetch(`${base}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`, {
-          headers: cookie ? { Cookie: cookie } : {},
-          signal: AbortSignal.timeout(timeoutMs),
-        });
-        await response.arrayBuffer();
-        samples.push({ ms: performance.now() - started, status: response.status });
-      } catch {
-        samples.push({ ms: performance.now() - started, status: 0 });
-      }
-    }
-  };
+  const samples: Awaited<ReturnType<typeof request>>[] = [];
+  const worker = async () => { while (true) { const index = next++; if (index >= requests) return; samples.push(await request(endpoint)); } };
   await Promise.all(Array.from({ length: concurrency }, worker));
-  const times = samples.map(({ ms }) => ms).sort((a, b) => a - b);
-  const percentile = (p: number) => times[Math.min(times.length - 1, Math.ceil(times.length * p) - 1)] || 0;
-  const successful = samples.filter(({ status }) => status >= 200 && status < 300).length;
-  const statuses = [...new Set(samples.map(({ status }) => status))].sort((a, b) => a - b).join(",");
-  console.log(`API ${base}${endpoint} | requests=${requests} concurrency=${concurrency}`);
-  console.log(`ok=${successful}/${requests} status=${statuses} p50=${percentile(.5).toFixed(0)}ms p95=${percentile(.95).toFixed(0)}ms p99=${percentile(.99).toFixed(0)}ms max=${times.at(-1)?.toFixed(0)}ms`);
-};
+  const unexpected = samples.filter((sample) => !expected.includes(sample.status));
+  console.log(`API ${base}${endpoint} | requests=${requests} concurrency=${concurrency} expected=${expected.join(",")}`);
+  report("stress", samples);
+  if (unexpected.length) { for (const sample of unexpected.slice(0, 5)) console.log(`unexpected ${sample.status}: ${typeof sample.body === "string" ? sample.body.slice(0, 200) : JSON.stringify(sample.body).slice(0, 200)}`); throw new Error(`${unexpected.length}/${requests} unexpected responses`); }
+}
 
 if (import.meta.main) await run();

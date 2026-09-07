@@ -1,68 +1,41 @@
-type Account = { name?: string; session: string };
-type Sample = { ms: number; status: number; ok: boolean };
+import { assert, assertStatus, base, json, loadRows, percentile, put, report, request, session } from "./lib";
 
-const envFile = `${import.meta.dir}/.env`;
-if (await Bun.file(envFile).exists()) {
-  for (const line of await Bun.file(envFile).text().then((text) => text.split(/\r?\n/))) {
-    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-    if (match && !Bun.env[match[1]]) Bun.env[match[1]] = match[2].replace(/^['"]|['"]$/g, "");
+const iterations = Math.max(1, Number(Bun.env.BENCH_ITERATIONS || 20));
+const concurrency = Math.max(1, Number(Bun.env.BENCH_CONCURRENCY || 5));
+const created: string[] = [];
+const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+async function concurrent<T>(count: number, fn: () => Promise<T>) { return Promise.all(Array.from({ length: count }, fn)); }
+async function cleanup() { for (const id of created) { await request(`/files/${id}`, { method: "DELETE" }); await request(`/archive/${id}`, { method: "DELETE" }); } }
+
+async function run() {
+  if (!session) throw new Error("Set SESSION_TOKEN in test/.env");
+  const rows = await loadRows("Page.xlsx");
+  const made = await request<any>("/files", json({ name: `benchmark-${suffix}`, type: "fb_cookie", preset: "page", poolKind: "page", password: "dgddigital", poolEnabled: false, rows, dataCount: rows.length })); assertStatus(made, 200, "benchmark setup"); created.push(made.body.id);
+  const id = made.body.id;
+  const full = await request<any>(`/files/${id}/full`); assertStatus(full, 200, "benchmark setup full");
+  const scenarios: [string, () => Promise<any>][] = [
+    ["GET /files", () => request("/files")],
+    ["GET /files/:id/full", () => request(`/files/${id}/full`)],
+    ["GET /files/:id/rows", () => request(`/files/${id}/rows`)],
+    ["GET /pools", () => request("/pools")],
+  ];
+  let failures = 0;
+  console.log(`API ${base} | iterations=${iterations} concurrency=${concurrency}`);
+  for (const [label, call] of scenarios) {
+    for (let i = 0; i < 3; i++) await call();
+    failures += report(label, await concurrent(iterations, call));
   }
+  let seq = full.body.seq;
+  const appendSamples: any[] = [];
+  for (let i = 0; i < iterations; i++) {
+    const sample = await request<any>(`/files/${id}/append`, { ...json({ base: seq, ops: [{ rowIdx: i % rows.length, cols: { status: `bench-${i}` } }] }), method: "PUT" });
+    appendSamples.push(sample); if (sample.status === 200) seq = sample.body.seq;
+  }
+  failures += report("PUT /files/:id/append", appendSamples);
+  const persistSamples = await concurrent(Math.max(1, Math.min(iterations, 10)), () => request(`/files/${id}/persist`, { ...put({ rows, dataCount: rows.length, action: "benchmark" }) }));
+  failures += report("PUT /files/:id/persist", persistSamples);
+  assert(failures === 0, `${failures} benchmark samples failed`);
 }
 
-const base = (Bun.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "") + "/api";
-const iterations = Math.max(1, Number(Bun.env.BENCH_ITERATIONS || 5));
-const timeoutMs = Math.max(1000, Number(Bun.env.BENCH_TIMEOUT_MS || 30000));
-const endpoints = (Bun.env.BENCH_ENDPOINTS || "/health,/auth/me,/wallet,/files")
-  .split(",").map((path) => path.trim()).filter(Boolean);
-
-const readAccounts = async (): Promise<Account[]> => {
-  const path = Bun.env.ACCOUNTS_FILE || `${import.meta.dir}/accounts.json`;
-  if (!(await Bun.file(path).exists())) {
-    if (Bun.env.SESSION_TOKEN) return [{ name: Bun.env.ACCOUNT_NAME || "admin", session: Bun.env.SESSION_TOKEN }];
-    throw new Error(`Missing ${path}; set SESSION_TOKEN in ${envFile}`);
-  }
-  const value = await Bun.file(path).json();
-  const accounts = Array.isArray(value) ? value : value.accounts;
-  if (!Array.isArray(accounts) || accounts.some((account) => typeof account?.session !== "string" || !account.session)) {
-    throw new Error(`${path} must contain [{"name":"account","session":"..."}] or {"accounts":[...]}`);
-  }
-  return accounts;
-};
-
-const cookie = (session: string) => session.includes("ss_session=") ? session : `ss_session=${session}`;
-
-const request = async (path: string, session?: string): Promise<Sample> => {
-  const started = performance.now();
-  try {
-    const response = await fetch(`${base}${path.startsWith("/") ? path : `/${path}`}`, {
-      headers: session ? { Cookie: cookie(session) } : {},
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    return { ms: performance.now() - started, status: response.status, ok: response.ok };
-  } catch {
-    return { ms: performance.now() - started, status: 0, ok: false };
-  }
-};
-
-const percentile = (values: number[], p: number) => values[Math.min(values.length - 1, Math.ceil(values.length * p) - 1)] || 0;
-
-const report = (label: string, samples: Sample[]) => {
-  const times = samples.map(({ ms }) => ms).sort((a, b) => a - b);
-  const statuses = [...new Set(samples.map(({ status }) => status))].join(",");
-  console.log(`${label.padEnd(24)} n=${samples.length} ok=${samples.filter(({ ok }) => ok).length}/${samples.length} status=${statuses} min=${times[0]?.toFixed(0)}ms p50=${percentile(times, .5).toFixed(0)}ms p95=${percentile(times, .95).toFixed(0)}ms max=${times.at(-1)?.toFixed(0)}ms`);
-};
-
-if (import.meta.main) {
-  const accounts = await readAccounts();
-  console.log(`API ${base} | ${accounts.length} account(s) | ${iterations} iteration(s) | timeout ${timeoutMs}ms`);
-  for (const path of endpoints) {
-    const samples: Sample[] = [];
-    for (let i = 0; i < iterations; i++) samples.push(await request(path));
-    report(`anonymous ${path}`, samples);
-    for (const account of accounts) {
-      const accountSamples: Sample[] = [];
-      for (let i = 0; i < iterations; i++) accountSamples.push(await request(path, account.session));
-      report(`${account.name || "account"} ${path}`, accountSamples);
-    }
-  }
-}
+try { await run(); } finally { await cleanup(); }

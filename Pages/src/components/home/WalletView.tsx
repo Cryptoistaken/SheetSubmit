@@ -10,6 +10,15 @@ const date = (value: number) => new Date(Number(value)).toLocaleString();
 
 const METHODS = [{ id: "bKash", label: "bKash", icon: "/bKash.svg", placeholder: "BD mobile number" }, { id: "Nagad", label: "Nagad", icon: "/nagad.svg", placeholder: "BD mobile number" }, { id: "USDT", label: "USDT", icon: "/usdt.svg", placeholder: "BEP20 address" }, { id: "Binance", label: "Binance", icon: "/Binance.svg", placeholder: "Binance UID" }] as const;
 
+const BDT_RATE = 125;
+const ACCOUNT_RE: Record<string, RegExp> = {
+  bKash: /^(?:\+?880|0)?1[3-9]\d{8}$/,
+  Nagad: /^(?:\+?880|0)?1[3-9]\d{8}$/,
+  USDT: /^0x[a-fA-F0-9]{40}$/,
+  Binance: /^\d{9,10}$/,
+};
+const validAccount = (method: string, account: string) => Boolean(ACCOUNT_RE[method]?.test(account.trim()));
+
 function WalletBalance({ balance }: { balance: number }) {
   return <div className="rounded-xl border bg-card p-6 shadow-sm"><div className="text-sm text-muted-foreground">Available balance</div><div className="mt-2 text-4xl font-semibold tracking-tight">${balance.toFixed(2)}</div><div className="mt-2 text-sm text-muted-foreground">Earned from approved pool activity</div></div>;
 }
@@ -34,7 +43,7 @@ function UserWallet() {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const value = Number(amount);
-    if (!Number.isFinite(value) || value <= 0 || !account.trim()) { showToast("Enter a valid amount and payout account."); return; }
+    if (!Number.isFinite(value) || value <= 0 || value > (wallet?.balance ?? 0) || !validAccount(method, account)) { showToast(value > (wallet?.balance ?? 0) ? "Amount exceeds your available balance." : "Enter a valid amount and payout account."); return; }
     setSending(true);
     try {
       await api.withdraw({ amount: value, method, account: account.trim() });
@@ -47,7 +56,11 @@ function UserWallet() {
     } catch (error) { showToast(String(error).includes("insufficient") ? "Insufficient balance." : "Could not send withdrawal request."); } finally { setSending(false); setSlideKey((k) => k + 1); }
   };
   if (!wallet) return <div className="p-6 text-sm text-muted-foreground">Loading wallet…</div>;
-  return <div className="flex flex-col gap-6"><WalletBalance balance={wallet.balance}/><form onSubmit={submit} className="rounded-xl border bg-card p-6"><h2 className="text-sm font-semibold">Request a withdrawal</h2><p className="mt-1 text-sm text-muted-foreground">Requests are reviewed before payment is sent.</p><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="flex flex-col gap-2 text-sm font-medium">Amount<input className="h-10 rounded-md border bg-background px-3 font-normal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" /></label><label className="flex flex-col gap-2 text-sm font-medium">Payout account<input className="h-10 rounded-md border bg-background px-3 font-normal" value={account} onChange={(e) => setAccount(e.target.value)} placeholder={METHODS.find((m) => m.id === method)?.placeholder ?? "Account"} /></label></div><div className="mt-4 flex flex-col gap-2 text-sm font-medium">Method<div className="flex gap-3">{METHODS.map((m) => <button key={m.id} type="button" onClick={() => setMethod(m.id)} className={`flex items-center justify-center rounded-lg border px-3 py-2.5 transition-colors ${method === m.id ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"}`}><img src={m.icon} alt={m.label} className="h-8 w-8" /></button>)}</div></div><label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none"><input type="checkbox" checked={saveAccount} onChange={(e) => setSaveAccount(e.target.checked)} className="h-3.5 w-3.5 rounded border-input" />Save account for {METHODS.find((m) => m.id === method)?.label ?? method}</label><div className="mt-4"><SlideToConfirmButton key={slideKey} label="Slide to withdraw" disabled={sending || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || !account.trim()} onConfirm={() => void submit(new Event("submit") as any)} /></div></form><WithdrawalHistory items={wallet.withdrawals}/></div>;
+  const value = Number(amount);
+  const amountOk = Number.isFinite(value) && value > 0 && value <= wallet.balance;
+  const accountOk = validAccount(method, account);
+  const isBD = method === "bKash" || method === "Nagad";
+  return <div className="flex flex-col gap-6"><WalletBalance balance={wallet.balance}/><form onSubmit={submit} className="rounded-xl border bg-card p-6"><h2 className="text-sm font-semibold">Request a withdrawal</h2><p className="mt-1 text-sm text-muted-foreground">Requests are reviewed before payment is sent.</p><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="flex flex-col gap-2 text-sm font-medium"><span className="flex items-center justify-between">Amount<button type="button" className="text-xs font-semibold text-primary" onClick={() => setAmount(wallet.balance.toFixed(2))}>Max</button></span><input className="h-10 rounded-md border bg-background px-3 font-normal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />{isBD && value > 0 && <span className="text-xs font-normal text-muted-foreground">≈ ৳{Math.round(value * BDT_RATE).toLocaleString()} <span className="opacity-70">(৳{BDT_RATE}/$)</span></span>}</label><label className="flex flex-col gap-2 text-sm font-medium">Payout account<input className="h-10 rounded-md border bg-background px-3 font-normal" value={account} onChange={(e) => setAccount(e.target.value)} placeholder={METHODS.find((m) => m.id === method)?.placeholder ?? "Account"} /></label></div><div className="mt-4 flex flex-col gap-2 text-sm font-medium">Method<div className="flex gap-3">{METHODS.map((m) => <button key={m.id} type="button" onClick={() => setMethod(m.id)} className={`flex items-center justify-center rounded-lg border px-3 py-2.5 transition-colors ${method === m.id ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"}`}><img src={m.icon} alt={m.label} className="h-8 w-8" /></button>)}</div></div><label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none"><input type="checkbox" checked={saveAccount} onChange={(e) => setSaveAccount(e.target.checked)} className="h-3.5 w-3.5 rounded border-input" />Save account for {METHODS.find((m) => m.id === method)?.label ?? method}</label><div className="mt-4"><SlideToConfirmButton key={slideKey} label="Slide to withdraw" disabled={sending || !amountOk || !accountOk} onConfirm={() => void submit(new Event("submit") as any)} /></div></form><WithdrawalHistory items={wallet.withdrawals}/></div>;
 }
 
 function RequestDialog({ request, onClose, onDone }: { request: Withdrawal | null; onClose: () => void; onDone: () => void }) {

@@ -152,7 +152,7 @@ export default function FileCard({
   const dt = file.updatedAt ?? file.createdAt ? new Date((file.updatedAt ?? file.createdAt) as number) : null;
   const tsStr = dt ? dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " + dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
   // List rows adapt to count: ≤3 single line, else balanced 2 rows (4→2+2, 5→3+2, 6→3+3)
-  const split = inds.length > 3 ? Math.ceil(inds.length / 2) : inds.length;
+  const split = inds.length > 2 ? Math.ceil(inds.length / 2) : inds.length;
 
   return (
     <div
@@ -181,19 +181,19 @@ export default function FileCard({
         {tsStr ? <div style={{ fontSize: 10, color: "var(--text3)", whiteSpace: "nowrap" }}>{tsStr}</div> : null}
       </div>
       {list ? (
-      <div style={{ display: "flex", flexDirection: "column", gap: inds.length > 3 ? 5 : 0, marginTop: 0, flex: 1, minWidth: 0, overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: inds.length > 2 ? 3 : 0, marginTop: 0, flex: 1, minWidth: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           {badges}
           <span className="file-card-meta" style={metaStyle}>{inds.slice(0, split)}</span>
         </div>
-        {inds.length > 3 ? (
+        {inds.length > 2 ? (
           <span className="file-card-meta" style={metaStyle}>{inds.slice(split)}</span>
         ) : null}
       </div>
       ) : (
       <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: "auto", minWidth: 0 }}>
         {badges}
-        <span className="file-card-meta" style={{ display: "grid", gridTemplateColumns: "repeat(3, auto)", gap: "5px 8px", marginLeft: "auto" }}>{inds}</span>
+        <span className="file-card-meta" style={{ display: "grid", gridTemplateColumns: "repeat(2, auto)", gap: "4px 8px", marginLeft: "auto" }}>{inds}</span>
       </div>
       )}
       <div className="file-card-actions">

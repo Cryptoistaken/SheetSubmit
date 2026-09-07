@@ -175,22 +175,36 @@ export default function FileCard({
         <FileTypeIcon file={file} size={14} />
       </div>
 
-      {/* B: Name + Date + Badges */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 6, minWidth: 0, flex: 1, overflow: "hidden" }}>
+      {/* B: Name + Date */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 6, minWidth: 0, flex: list ? undefined : 1, overflow: "hidden" }}>
         <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
           <div className="file-card-name" dir="auto" style={{ unicodeBidi: "isolate" }}>{file.name}</div>
           {tsStr ? <div style={{ fontSize: 10, color: "var(--text3)", whiteSpace: "nowrap", marginTop: 1 }}>{tsStr}</div> : null}
         </div>
-        <div style={{ display: "flex", gap: 4, flexShrink: 0, marginTop: 1 }}>
-          {fbBadge}
-          {pwBadge}
-        </div>
+        {!list ? (
+          <div style={{ display: "flex", gap: 4, flexShrink: 0, marginTop: 1 }}>
+            {fbBadge}
+            {pwBadge}
+          </div>
+        ) : null}
       </div>
 
-      {/* C: Indicators */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: list ? "0 10px" : "4px 8px", alignItems: "center" }}>
-        {inds}
-      </div>
+      {/* C: Indicators + Badges (list) */}
+      {list ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0, overflow: "hidden" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0, overflow: "hidden" }}>
+            {inds}
+          </div>
+          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            {fbBadge}
+            {pwBadge}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 8px", alignItems: "center" }}>
+          {inds}
+        </div>
+      )}
 
       {/* E: More */}
       <div className="file-card-actions">

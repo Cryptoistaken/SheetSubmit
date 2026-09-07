@@ -13,7 +13,7 @@ import { signSession as signSessionFn } from "./lib/session";
 
 export const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any backend route change — lets health checks confirm a deploy landed
-export const API_VERSION = "1.9.1";
+export const API_VERSION = "1.9.2";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
@@ -78,6 +78,9 @@ app.post("/api/auth/telegram/verify", async (c) => {
 });
 
 let webhookChecked = false;
+let settleTimer: ReturnType<typeof setInterval> | null = null;
 export function startBackgroundTasks(env: Env) {
   if (!webhookChecked) { webhookChecked = true; void ensureWebhook(env).catch((error) => console.error("webhook check failed", error)); }
+  // pay out holds whose 5-minute revert window closed (see settleHolds in pg.ts)
+  if (!settleTimer) settleTimer = setInterval(() => { void rpc(env.INDEX, "global", "settleHolds", {}).catch((error) => console.error("hold settle failed", error)); }, 30_000);
 }

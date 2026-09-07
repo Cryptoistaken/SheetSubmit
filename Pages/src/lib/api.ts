@@ -162,6 +162,9 @@ export interface HoldRecord {
   selection?: unknown;
   claimedBy?: string | null;
   reverted?: boolean;
+  firstActionAt?: number | null;
+  actionCount?: number;
+  settled?: boolean;
 }
 export interface PoolUserFile {
   userId: string;
@@ -359,9 +362,9 @@ export const api = {
     }
   },
   getHolds: (status?: string) => request<HoldRecord[]>(`/pools/holds${status ? `?status=${encodeURIComponent(status)}` : ""}`),
-  approveHold: (id: string) => request<{ ok: boolean; status: string; approved?: number; dead?: number; paid?: number }>(`/pools/holds/${encodeURIComponent(id)}/approve`, { method: "POST" }),
-  rejectHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; debited?: boolean }>(`/pools/holds/${encodeURIComponent(id)}/reject`, { method: "POST" }),
-  returnHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; debited?: boolean }>(`/pools/holds/${encodeURIComponent(id)}/return`, { method: "POST" }),
+  approveHold: (id: string) => request<{ ok: boolean; status: string; approved?: number; dead?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/approve`, { method: "POST" }),
+  rejectHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/reject`, { method: "POST" }),
+  returnHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/return`, { method: "POST" }),
   getPoolLedger: async (password: string, poolId: string): Promise<{ ledger: unknown[] }> => {
     const enc = (s: string) => encodeURIComponent(s);
     try {

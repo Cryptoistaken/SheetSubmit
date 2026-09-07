@@ -175,3 +175,18 @@ ALTER TABLE pool_rows ADD CONSTRAINT pool_rows_state_check
 
 CREATE INDEX IF NOT EXISTS pool_rows_held_idx
   ON pool_rows (row_key) WHERE state = 'held';
+
+-- 003: approval revert window - the first approve/reject starts a 5-minute window in which the
+-- decision may be flipped exactly once (max 2 actions). Wallets are paid once at settlement
+-- (first_action_at + 5min) by the backend sweeper, based on the final status: APPROVED credits
+-- owners for rows still claimed by the hold; REJECTED pays nothing. Rows finished under the old
+-- immediate-payout rules are frozen as fully actioned + settled.
+ALTER TABLE downloads ADD COLUMN IF NOT EXISTS first_action_at BIGINT;
+ALTER TABLE downloads ADD COLUMN IF NOT EXISTS action_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE downloads ADD COLUMN IF NOT EXISTS settled BOOLEAN NOT NULL DEFAULT false;
+
+UPDATE downloads SET settled = true, action_count = 2
+WHERE settled = false AND status IN ('APPROVED', 'REJECTED', 'REVERTED');
+
+CREATE INDEX IF NOT EXISTS downloads_settle_idx
+  ON downloads (first_action_at) WHERE settled = false;

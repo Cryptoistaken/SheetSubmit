@@ -18,6 +18,7 @@ const txType = (t: string) => t === "CREDIT" || t === "DEBIT";
 const pools = ["cookies_only", "cookies_2fa", "page"] as const;
 type Pool = typeof pools[number];
 const prices: Record<Pool, number> = { cookies_only: .02, cookies_2fa: .05, page: .1 };
+const REVERT_WINDOW = 300_000; // first approve/reject opens a 5-minute window for exactly one flip; wallets pay at settlement
 const json = (v: any) => v == null ? null : typeof v === "string" ? JSON.parse(v) : v;
 const key = (r: Row) => String(r.uid || (String(r.cookies || "").match(/c_user=(\d+)/)?.[1] || ""));
 const eligible = (r: any) => String(r?.wa_status ?? r?.waStatus ?? "").toLowerCase() === "eligible";
@@ -46,6 +47,34 @@ async function indexOp(op: string, a: any) {
     case "purge": await db`DELETE FROM file_index WHERE file_id=${a.id}`; return { ok: true };
     case "batchPurge": await db`DELETE FROM file_index WHERE file_id=ANY(${db.array((a.ids || []).map(String))})`; return { ok: true };
     case "deleteUser": await db`DELETE FROM users WHERE user_id=${a.id}`; return { ok: true };
+    case "settleHolds": {
+      // run every 30s by the backend: pay out holds whose 5-minute revert window closed
+      const due: any[] = await db`SELECT id,password,pool_id,claimed_by,unit_price,status FROM downloads WHERE settled=false AND status IN ('APPROVED','REJECTED') AND first_action_at IS NOT NULL AND first_action_at <= ${Date.now() - REVERT_WINDOW} ORDER BY first_action_at LIMIT 20`;
+      let settled = 0;
+      for (const d of due) {
+        await db.transaction(async (tx: any) => {
+          const cur: any = (await tx`SELECT status,settled FROM downloads WHERE id=${d.id} FOR UPDATE`)[0];
+          if (!cur || cur.settled) return;
+          if (String(cur.status) === "APPROVED") {
+            const creditRows: any[] = await tx`SELECT src_uid,COUNT(*) n FROM pool_rows WHERE password=${d.password} AND pool_id=${d.pool_id} AND hold_id=${d.id} AND state='claimed' AND src_uid IS NOT NULL GROUP BY src_uid`;
+            const deadRows: any[] = await tx`SELECT COUNT(*) n FROM pool_rows WHERE password=${d.password} AND pool_id=${d.pool_id} AND hold_id=${d.id} AND state='dead'`;
+            const dead = Number(deadRows[0]?.n || 0);
+            const unit = d.unit_price == null ? price(d.pool_id) : Number(d.unit_price);
+            const total = creditRows.reduce((s: number, x: any) => s + Number(x.n), 0);
+            for (const cr of creditRows) {
+              const uid = String(cr.src_uid), amount = +(Number(cr.n) * unit).toFixed(2);
+              await tx`INSERT INTO wallets(user_id,balance) VALUES(${uid},${amount}) ON CONFLICT(user_id) DO UPDATE SET balance=wallets.balance+EXCLUDED.balance`;
+              const r: any = (await tx`SELECT balance FROM wallets WHERE user_id=${uid}`)[0];
+              await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'CREDIT',${amount},${Number(r.balance)},${`Approved hold · ${total} rows${dead ? ` · ${dead} dead` : ""} · ${d.pool_id} pool`},${j({ pool_id: d.pool_id, download_id: d.id, rows: Number(cr.n), dead, unit_price: unit, settled: true })},${Date.now()})`;
+            }
+          }
+          await tx`UPDATE downloads SET settled=true WHERE id=${d.id}`;
+          settled++;
+        }).catch(() => {});
+      }
+      if (settled) console.log(`[settle] settled ${settled} hold(s)`);
+      return { ok: true, settled };
+    }
     case "walletCredit": { const uid = String(a.uid || a.userId || ""), amount = Number(a.amount ?? a.credit ?? 0); if (!uid || !Number.isFinite(amount) || amount === 0) throw new Error("invalid wallet credit"); const r: any = (await db`INSERT INTO wallets(user_id,balance) VALUES(${uid},${amount}) ON CONFLICT(user_id) DO UPDATE SET balance=wallets.balance+EXCLUDED.balance RETURNING balance`)[0]; return { ok: true, balance: Number(r.balance) }; }
     case "walletGet": { const uid = String(a.uid || a.userId || ""); if (!uid) throw new Error("uid required"); const r: any = (await db`SELECT balance FROM wallets WHERE user_id=${uid}`)[0]; return { uid, balance: r ? Number(r.balance) : 0 }; }
     case "walletWithdrawals": { const uid = String(a.uid || ""); if (!uid) throw new Error("uid required"); return db`SELECT id,user_id,amount::float8 AS amount,method,account,status,created_at::float8 AS created_at,updated_at::float8 AS updated_at FROM withdrawals WHERE user_id=${uid} ORDER BY created_at DESC`; }
@@ -109,7 +138,7 @@ async function fileOp(id: string, op: string, a: any) {
 }
 
 function poolFilters(a: any) { const u = Array.isArray(a.srcUids) ? a.srcUids.map(String).filter(Boolean) : a.srcUid ? [String(a.srcUid)] : []; const f = Array.isArray(a.srcFileIds) ? a.srcFileIds.map(String).filter(Boolean) : a.srcFileId ? [String(a.srcFileId)] : []; return { u, f }; }
-function downloadShape(r: any) { const unit = r.unit_price == null ? price(r.pool_id) : Number(r.unit_price); const total = r.total == null ? +(unit * Number(r.claimed)).toFixed(2) : Number(r.total); return { id: r.id, poolId: r.pool_id, pool_id: r.pool_id, claimedBy: r.claimed_by, claimed_by: r.claimed_by, claimed: Number(r.claimed), filename: r.filename, rows: json(r.rows), keys: json(r.keys), reverted: !!r.reverted, ts: Number(r.ts), status: r.status || (r.reverted ? "REVERTED" : "CLAIMED"), unitPrice: unit, unit_price: r.unit_price == null ? null : Number(r.unit_price), total, mode: r.mode || null, srcUids: json(r.src_uids), srcFileIds: json(r.src_file_ids), selection: json(r.selection) }; }
+function downloadShape(r: any) { const unit = r.unit_price == null ? price(r.pool_id) : Number(r.unit_price); const total = r.total == null ? +(unit * Number(r.claimed)).toFixed(2) : Number(r.total); return { id: r.id, poolId: r.pool_id, pool_id: r.pool_id, claimedBy: r.claimed_by, claimed_by: r.claimed_by, claimed: Number(r.claimed), filename: r.filename, rows: json(r.rows), keys: json(r.keys), reverted: !!r.reverted, ts: Number(r.ts), status: r.status || (r.reverted ? "REVERTED" : "CLAIMED"), unitPrice: unit, unit_price: r.unit_price == null ? null : Number(r.unit_price), total, mode: r.mode || null, srcUids: json(r.src_uids), srcFileIds: json(r.src_file_ids), selection: json(r.selection), firstActionAt: r.first_action_at == null ? null : Number(r.first_action_at), actionCount: Number(r.action_count || 0), settled: !!r.settled }; }
 
 async function poolOp(password: string, op: string, a: any) {
   const p = String(a.pool || ""); if (["priceGet", "priceSet", "summary", "detail", "counts", "claim", "hold", "verifiedCounts", "pageCounts", "pageVerifiedCounts", "userFiles", "ledger"].includes(op) && !pools.includes(p as Pool)) throw new Error("invalid pool");
@@ -184,47 +213,38 @@ async function transition(password: string, op: string, a: any) {
       return { ok: true, reverted, id: d.id, status: "REVERTED" };
     }
     if (op === "holdApprove") {
+      const actions = Number(d.action_count || 0), firstAt = Number(d.first_action_at || 0);
+      if (d.settled || actions >= 2 || (actions === 1 && now >= firstAt + REVERT_WINDOW)) throw new Error("decision is final — revert window closed");
       if (d.status === "APPROVED") throw new Error("already approved");
       if (d.status !== "HOLD" && d.status !== "REJECTED") throw new Error("not a hold");
       let approved = 0;
-      const credit = new Map<string, number>();
       for (const k of keys) {
         // re-approving a REJECTED hold re-claims rows still free; rows taken meanwhile are skipped
         const rows: any[] = await tx`UPDATE pool_rows SET state='claimed',hold_id=${d.id},claimed_by=${d.claimed_by || a.uid},claimed_at=${now} WHERE password=${password} AND pool_id=${d.pool_id} AND row_key=${k} AND ((state='held' AND hold_id=${d.id}) OR state='available') RETURNING src_uid`;
         if (!rows.length) continue;
         approved++;
         await tx`INSERT INTO pool_ledger(password,pool_id,row_key,user_id,action,ts) VALUES(${password},${d.pool_id},${k},${a.uid || d.claimed_by},'approve',${now})`;
-        if (rows[0].src_uid) credit.set(String(rows[0].src_uid), (credit.get(String(rows[0].src_uid)) || 0) + unit);
       }
       // dead rows (worker-marked) stay 'dead' — consumed unpaid
       const deadRows: any[] = await tx`SELECT COUNT(*) n FROM pool_rows WHERE password=${password} AND pool_id=${d.pool_id} AND state='dead' AND hold_id=${d.id}`;
       const dead = Number(deadRows[0]?.n || 0);
-      for (const [uid, amount] of credit) {
-        await tx`INSERT INTO wallets(user_id,balance) VALUES(${uid},${amount}) ON CONFLICT(user_id) DO UPDATE SET balance=wallets.balance+EXCLUDED.balance`;
-        const r: any = (await tx`SELECT balance FROM wallets WHERE user_id=${uid}`)[0];
-        await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'CREDIT',${amount},${Number(r.balance)},${`Approved hold · ${approved} rows${dead ? ` · ${dead} dead` : ""} · ${d.pool_id} pool`},${j({ pool_id: d.pool_id, download_id: d.id, rows: approved, dead, unit_price: unit })},${now})`;
-      }
-      await tx`UPDATE downloads SET status='APPROVED',reverted=false WHERE password=${password} AND id=${d.id}`;
-      return { ok: true, approved, dead, paid: +(unit * approved).toFixed(2), id: d.id, status: "APPROVED" };
+      // wallets are credited once at settlement (first_action_at + 5min), not here
+      await tx`UPDATE downloads SET status='APPROVED',reverted=false,first_action_at=${firstAt || now},action_count=${actions + 1} WHERE password=${password} AND id=${d.id}`;
+      return { ok: true, approved, dead, id: d.id, status: "APPROVED", actionCount: actions + 1, settleAt: (firstAt || now) + REVERT_WINDOW };
     }
-    // holdReject / holdRevert / holdReturn — allowed from HOLD and APPROVED; approving an approved hold's reject debits wallets back in full
+    // holdReject / holdRevert / holdReturn — one flip within the 5-minute window; wallets settle after the window closes
+    if (d.settled || Number(d.action_count || 0) >= 2 || (Number(d.action_count || 0) === 1 && now >= Number(d.first_action_at || 0) + REVERT_WINDOW)) throw new Error("decision is final — revert window closed");
     if (d.status !== "HOLD" && d.status !== "APPROVED") throw new Error(d.status === "REJECTED" ? "already rejected" : "not a hold");
     let rejected = 0;
-    const debit = new Map<string, number>();
     for (const k of keys) {
       const rows: any[] = await tx`UPDATE pool_rows SET state='available',hold_id=NULL,claimed_by=NULL,claimed_at=NULL WHERE password=${password} AND pool_id=${d.pool_id} AND row_key=${k} AND hold_id=${d.id} AND state IN ('held','claimed') RETURNING src_uid`;
       if (!rows.length) continue;
       rejected++;
       await tx`INSERT INTO pool_ledger(password,pool_id,row_key,user_id,action,ts) VALUES(${password},${d.pool_id},${k},${a.uid || d.claimed_by},'reject',${now})`;
-      if (d.status === "APPROVED" && rows[0].src_uid) debit.set(String(rows[0].src_uid), (debit.get(String(rows[0].src_uid)) || 0) + unit);
     }
-    for (const [uid, amount] of debit) {
-      await tx`UPDATE wallets SET balance=balance-${amount} WHERE user_id=${uid}`;
-      const r: any = (await tx`SELECT balance FROM wallets WHERE user_id=${uid}`)[0];
-      await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'DEBIT',${amount},${Number(r.balance)},${`Hold rejected · ${d.pool_id} pool`},${j({ pool_id: d.pool_id, download_id: d.id })},${now})`;
-    }
-    await tx`UPDATE downloads SET reverted=true,status='REJECTED' WHERE password=${password} AND id=${d.id}`;
-    return { ok: true, rejected, reverted: rejected, debited: d.status === "APPROVED", id: d.id, status: "REJECTED" };
+    const firstAt = Number(d.first_action_at || 0);
+    await tx`UPDATE downloads SET reverted=true,status='REJECTED',first_action_at=${firstAt || now},action_count=${Number(d.action_count || 0) + 1} WHERE password=${password} AND id=${d.id}`;
+    return { ok: true, rejected, reverted: rejected, id: d.id, status: "REJECTED", actionCount: Number(d.action_count || 0) + 1, settleAt: (firstAt || now) + REVERT_WINDOW };
   });
 }
 

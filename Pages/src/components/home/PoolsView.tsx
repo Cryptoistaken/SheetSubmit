@@ -47,9 +47,14 @@ function displayName(u: PoolDetail["users"][number]) {
   const un = String(raw["username"] ?? "").trim();
   if (n && un) return { line1: n, line2: "@" + un };
   if (un) return { line1: "@" + un, line2: "" };
-  if (n) return { line1: n, line2: "#" + u.userId.slice(-6) };
+  if (n) return { line1: "#" + u.userId.slice(-6), line2: "" };
   return { line1: "#" + u.userId, line2: "" };
 }
+
+const REVERT_MS = 300_000; // must match REVERT_WINDOW in backend pg.ts
+const mmss = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
+// window state: null = not yet actioned, >0 = ms left to flip once, 0 = locked
+const revertLeft = (h: HoldRecord, now: number) => { const acts = h.actionCount ?? 0; if (acts === 0) return null; const left = h.firstActionAt ? h.firstActionAt + REVERT_MS - now : 0; return left > 0 ? left : 0; };
 
 export default function PoolsView() {
   const params = useParams<{ password: string; poolId: string }>();
@@ -105,6 +110,12 @@ export default function PoolsView() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [holdsError, setHoldsError] = useState(false);
+  const [nowTick, setNowTick] = useState(Date.now());
+  useEffect(() => {
+    if (view !== "approvals") return;
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [view]);
 
   // price
   const [prices, setPrices] = useState<Record<string, number | null>>({});
@@ -299,16 +310,16 @@ export default function PoolsView() {
       vibrate(20);
       const dead = Number((res as unknown as { dead?: number }).dead || 0);
       const n = Number((res as unknown as { approved?: number }).approved || 0);
-      showToast(dead ? `Approved ${n} — ${dead} dead, not paid` : "Approved");
+      showToast(dead ? `Approved ${n} — ${dead} dead, not paid` : "Approved — owners paid when the 5-minute window closes");
       await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
   const doReturn = async (id: string) => {
     setHoldActing(id);
     try {
-      const res = await api.returnHold(id);
+      await api.returnHold(id);
       vibrate(20);
-      showToast((res as unknown as { debited?: boolean }).debited ? "Rejected — credited balance debited back" : "Rejected — rows returned to pool");
+      showToast("Rejected — rows returned; owners paid nothing if it stays rejected");
       await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
@@ -545,7 +556,7 @@ export default function PoolsView() {
           <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${effectiveN} × $${unitPrice.toFixed(2)} = $${(effectiveN * unitPrice).toFixed(2)}` : "—"}</div>
         </div>
         <button type="button" className="btn btn-primary" disabled={downloading || !totals.available} onClick={() => void doHoldConfirm()} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,112,243,.22)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? "All" : poolQty} from {poolMeta.label}</button>
-        <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>Take creates a hold. Approval credits the owners. Reject returns the rows.</div>
+        <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles.</div>
       </div>
 
       <div style={{ display: "flex", marginTop: 16, marginBottom: 8 }}>
@@ -652,6 +663,8 @@ export default function PoolsView() {
               const fileIds = [...new Set(((h.srcFileIds ?? []) as (string | null)[]).filter(Boolean) as string[])];
               const ownerUids = det ? [...new Set(det.groups.map((g) => g.srcUid).filter(Boolean) as string[])] : ((h.srcUids ?? []).filter(Boolean) as string[]);
               const baseName = (h.filename || "approval").replace(/\.xlsx$/i, "");
+              const left = revertLeft(h, nowTick);
+              const locked = !!h.settled || (h.actionCount ?? 0) >= 2 || left === 0;
               return (
                 <div key={h.id} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                   <div className={`pool-card ${open ? "expanded" : ""}`} onClick={() => toggleApproval(h)} aria-expanded={open}>
@@ -685,10 +698,11 @@ export default function PoolsView() {
                   </div>
                   {open && (
                     <div className="file-row" style={{ padding: "6px 0 10px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                        <span style={{ fontSize: 12, color: "var(--text3)", marginRight: "auto" }}>{qty} rows{price != null ? ` · $${(qty * price).toFixed(2)}` : ""}</span>
-                        <button type="button" className="btn btn-primary" disabled={st === "APPROVED" || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doApprove(h.id); }} style={{ minHeight: 36, fontWeight: 700 }}>{st === "APPROVED" ? "Approved" : "Approve"}</button>
-                        <button type="button" className="btn" disabled={st === "REJECTED" || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doReturn(h.id); }} style={{ minHeight: 36 }}>{st === "REJECTED" ? "Rejected" : "Reject"}</button>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <span style={{ fontSize: 12, color: "var(--text3)", marginRight: "auto" }}>{qty} rows{price != null ? ` · $${(qty * price).toFixed(2)}` : ""}</span>
+                      {left != null ? <span style={{ fontSize: 12, fontWeight: 600, color: locked ? "var(--text3)" : "var(--text2)" }}>{locked ? "Decision final" : `Revertable ${mmss(left)}`}</span> : null}
+                      <button type="button" className="btn btn-primary" disabled={st === "APPROVED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doApprove(h.id); }} style={{ minHeight: 36, fontWeight: 700 }}>{st === "APPROVED" ? "Approved" : "Approve"}</button>
+                      <button type="button" className="btn" disabled={st === "REJECTED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doReturn(h.id); }} style={{ minHeight: 36 }}>{st === "REJECTED" ? "Rejected" : "Reject"}</button>
                         <button type="button" className="btn" disabled={dlBusyId === h.id} onClick={(e) => { e.stopPropagation(); void doDownloadHold(h); }} style={{ minHeight: 36 }}><Download size={14} aria-hidden /> All</button>
                         {st !== "PENDING" ? <HoldToDeleteButton onConfirm={() => void doDeleteHold(h.id)} disabled={holdActing === h.id} label="Delete" /> : null}
                       </div>

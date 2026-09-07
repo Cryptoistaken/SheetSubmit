@@ -125,22 +125,11 @@ const JOBS = [
   { name: "wa-check", every: interval("WA_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepWa(n) },
 ];
 
-async function bootstrap() { await db.unsafe(await Bun.file(new URL("../backend/sql/001_initial.sql", import.meta.url)).text()); }
-
-await bootstrap().catch((e) => console.error("[worker] bootstrap failed", (e as Error)?.message ?? e));
+// backend owns schema bootstrap (worker's build context has no /backend) — if tables are missing,
+// jobs fail harmlessly and retry each tick until the backend has bootstrapped the database
 console.log(`[worker] started — jobs: ${JOBS.map((j) => `${j.name}@${j.every / 1000}s`).join(", ")}`);
 const last = new Map<string, number>();
 const lastError = new Map<string, string>();
-for (;;) {
-  for (const job of JOBS) {
-    const due = (last.get(job.name) ?? 0) + job.every <= Date.now();
-    if (!due) continue;
-    last.set(job.name, Date.now());
-    try { await job.run(job.limit); lastError.delete(job.name); } catch (e) { lastError.set(job.name, String((e as Error)?.message ?? e)); console.error(`[worker:${job.name}]`, (e as Error)?.message ?? e); }
-  }
-  await new Promise((r) => setTimeout(r, 30_000));
-}
-
 // tiny HTTP API so the backend (WORKER_URL) and Railway health checks can confirm the worker is alive
 const startedAt = Date.now();
 Bun.serve({
@@ -152,7 +141,16 @@ Bun.serve({
       ok: true,
       startedAt,
       uptimeMs: Date.now() - startedAt,
-      jobs: JOBS.map((j) => ({ name: j.name, everyMs: j.every, lastRunAt: last.get(j.name) ?? null, lastRunAgoMs: last.has(j.name) ? Date.now() - (last.get(j.name) as number) : null, lastError: lastError.get(j.name) ?? null })),
+      jobs: JOBS.map((jn) => ({ name: jn.name, everyMs: jn.every, lastRunAt: last.get(jn.name) ?? null, lastRunAgoMs: last.has(jn.name) ? Date.now() - (last.get(jn.name) as number) : null, lastError: lastError.get(jn.name) ?? null })),
     });
   },
 });
+for (;;) {
+  for (const job of JOBS) {
+    const due = (last.get(job.name) ?? 0) + job.every <= Date.now();
+    if (!due) continue;
+    last.set(job.name, Date.now());
+    try { await job.run(job.limit); lastError.delete(job.name); } catch (e) { lastError.set(job.name, String((e as Error)?.message ?? e)); console.error(`[worker:${job.name}]`, (e as Error)?.message ?? e); }
+  }
+  await new Promise((r) => setTimeout(r, 30_000));
+}

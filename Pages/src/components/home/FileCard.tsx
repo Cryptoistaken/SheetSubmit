@@ -122,7 +122,7 @@ export default function FileCard({
   const sq = (bg: string, title: string) => (
     <span title={title} style={{ width: 10, height: 10, borderRadius: 2.5, background: bg, border: "1px solid var(--border)", flexShrink: 0 }} />
   );
-  const indStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 4 };
+  const indStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 3 };
   const metaStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 8 };
   const badges = (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -193,7 +193,7 @@ export default function FileCard({
       ) : (
       <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: "auto", minWidth: 0 }}>
         {badges}
-        <span className="file-card-meta" style={{ display: "grid", gridTemplateColumns: "repeat(2, auto)", gap: "4px 8px", marginLeft: "auto" }}>{inds}</span>
+        <span className="file-card-meta" style={{ display: "flex", flexWrap: "wrap", gap: "2px 8px", marginLeft: "auto", maxWidth: 140 }}>{inds}</span>
       </div>
       )}
       <div className="file-card-actions">

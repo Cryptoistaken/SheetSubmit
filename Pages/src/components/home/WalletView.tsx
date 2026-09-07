@@ -25,17 +25,28 @@ function UserWallet() {
   const [method, setMethod] = useState("bKash");
   const [account, setAccount] = useState("");
   const [sending, setSending] = useState(false);
+  const [savedMethods, setSavedMethods] = useState<Record<string, string>>({});
+  const [saveAccount, setSaveAccount] = useState(true);
   const load = () => api.getWallet().then(setWallet).catch(() => showToast("Could not load wallet. Check your connection."));
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); api.getPaymentMethods().then(setSavedMethods).catch(() => {}); }, []);
+  useEffect(() => { setAccount(savedMethods[method] ?? ""); }, [method, savedMethods]);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const value = Number(amount);
     if (!Number.isFinite(value) || value <= 0 || !account.trim()) { showToast("Enter a valid amount and payout account."); return; }
     setSending(true);
-    try { await api.withdraw({ amount: value, method, account: account.trim() }); setAmount(""); setAccount(""); showToast("Withdrawal request sent"); await load(); } catch (error) { showToast(String(error).includes("insufficient") ? "Insufficient balance." : "Could not send withdrawal request."); } finally { setSending(false); }
+    try {
+      await api.withdraw({ amount: value, method, account: account.trim() });
+      if (saveAccount && account.trim() !== (savedMethods[method] ?? "")) {
+        const updated = { ...savedMethods, [method]: account.trim() };
+        await api.setPaymentMethods(updated);
+        setSavedMethods(updated);
+      }
+      setAmount(""); setAccount(""); showToast("Withdrawal request sent"); await load();
+    } catch (error) { showToast(String(error).includes("insufficient") ? "Insufficient balance." : "Could not send withdrawal request."); } finally { setSending(false); }
   };
   if (!wallet) return <div className="p-6 text-sm text-muted-foreground">Loading wallet…</div>;
-  return <div className="flex flex-col gap-6"><WalletBalance balance={wallet.balance}/><form onSubmit={submit} className="rounded-xl border bg-card p-6"><h2 className="text-sm font-semibold">Request a withdrawal</h2><p className="mt-1 text-sm text-muted-foreground">Requests are reviewed before payment is sent.</p><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="flex flex-col gap-2 text-sm font-medium">Amount<input className="h-10 rounded-md border bg-background px-3 font-normal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" /></label><label className="flex flex-col gap-2 text-sm font-medium">Payout account<input className="h-10 rounded-md border bg-background px-3 font-normal" value={account} onChange={(e) => setAccount(e.target.value)} placeholder={METHODS.find((m) => m.id === method)?.placeholder ?? "Account"} /></label></div><div className="mt-4 flex flex-col gap-2 text-sm font-medium">Method<div className="flex gap-3">{METHODS.map((m) => <button key={m.id} type="button" onClick={() => setMethod(m.id)} className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors ${method === m.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}><img src={m.icon} alt={m.label} className="h-5 w-auto" />{m.text ? m.label : null}</button>)}</div></div><button className="mt-4 h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50" disabled={sending} type="submit">{sending ? "Sending…" : "Request withdrawal"}</button></form><WithdrawalHistory items={wallet.withdrawals}/></div>;
+  return <div className="flex flex-col gap-6"><WalletBalance balance={wallet.balance}/><form onSubmit={submit} className="rounded-xl border bg-card p-6"><h2 className="text-sm font-semibold">Request a withdrawal</h2><p className="mt-1 text-sm text-muted-foreground">Requests are reviewed before payment is sent.</p><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="flex flex-col gap-2 text-sm font-medium">Amount<input className="h-10 rounded-md border bg-background px-3 font-normal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" /></label><label className="flex flex-col gap-2 text-sm font-medium">Payout account<input className="h-10 rounded-md border bg-background px-3 font-normal" value={account} onChange={(e) => setAccount(e.target.value)} placeholder={METHODS.find((m) => m.id === method)?.placeholder ?? "Account"} /></label></div><div className="mt-4 flex flex-col gap-2 text-sm font-medium">Method<div className="flex gap-3">{METHODS.map((m) => <button key={m.id} type="button" onClick={() => setMethod(m.id)} className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors ${method === m.id ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}><img src={m.icon} alt={m.label} className="h-5 w-auto" />{m.text ? m.label : null}</button>)}</div></div><label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none"><input type="checkbox" checked={saveAccount} onChange={(e) => setSaveAccount(e.target.checked)} className="h-3.5 w-3.5 rounded border-input" />Save account for {METHODS.find((m) => m.id === method)?.label ?? method}</label><button className="mt-4 h-10 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50" disabled={sending} type="submit">{sending ? "Sending…" : "Request withdrawal"}</button></form><WithdrawalHistory items={wallet.withdrawals}/></div>;
 }
 
 function RequestDialog({ request, onClose, onDone }: { request: Withdrawal | null; onClose: () => void; onDone: () => void }) {

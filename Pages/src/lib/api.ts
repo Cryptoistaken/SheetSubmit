@@ -234,6 +234,8 @@ export const api = {
   withdraw: (data: { amount: number; method: string; account: string }) => request<Withdrawal>("/wallet/withdraw", { method: "POST", body: JSON.stringify(data) }),
   getWithdrawalRequests: (status = "PENDING") => request<Withdrawal[]>(`/wallet/requests?status=${encodeURIComponent(status)}`),
   decideWithdrawal: (id: string, action: "approve" | "reject") => request<{ id: string; status: Withdrawal["status"] }>(`/wallet/requests/${encodeURIComponent(id)}/${action}`, { method: "POST" }),
+  getPaymentMethods: () => request<Record<string, string>>("/wallet/methods"),
+  setPaymentMethods: (methods: Record<string, string>) => request<{ ok: boolean }>("/wallet/methods", { method: "PUT", body: JSON.stringify({ methods }) }),
   getArchive: () => request<ArchiveFile[]>("/archive"),
   restoreFile: (id: string) => request<{ ok: boolean }>(`/archive/${id}/restore`, { method: "POST" }),
   permanentDelete: (id: string) => request<{ ok: boolean }>(`/archive/${id}`, { method: "DELETE" }),

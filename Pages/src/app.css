@@ -1129,10 +1129,9 @@ button, input, select, textarea {
 .admin-detail-actions {
     flex-shrink: 0;
 }
-.pool-switch{display:inline-flex;flex-wrap:wrap;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px}
-.pool-switch button{padding:7px 14px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;min-height:36px;transition:.12s;white-space:nowrap}
+.pool-switch{display:inline-flex;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px}
+.pool-switch button{padding:7px 14px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;min-height:36px;transition:.12s}
 .pool-switch button.active{background:var(--bg);border-color:var(--border2);color:var(--text);box-shadow:var(--shadow-sm)}
-
 /* ── Buttons ── */
 .btn {
     display: inline-flex;

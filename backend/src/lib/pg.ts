@@ -38,8 +38,8 @@ async function indexOp(op: string, a: any) {
     case "users": return db`SELECT * FROM users ORDER BY created_at DESC`;
     case "ban": await db`UPDATE users SET banned=${!!a.banned} WHERE user_id=${a.id}`; return { ok: true };
     case "register": await db`INSERT INTO file_index(file_id,owner_id,archived,data) VALUES(${a.file.id},${a.uid},false,${j(a.file)}) ON CONFLICT(file_id) DO UPDATE SET owner_id=EXCLUDED.owner_id,archived=false,data=EXCLUDED.data,updated_at=now()`; return { ok: true };
-    case "file": { const r: any = (await db`SELECT data,owner_id,archived FROM file_index WHERE file_id=${a.id}`)[0]; return r ? { ...r, data: JSON.stringify(r.data) } : null; }
-    case "files": { const rows = a.archived === "all" ? await db`SELECT data FROM file_index WHERE owner_id=${a.uid}` : a.archived === 1 ? await db`SELECT data FROM file_index WHERE owner_id=${a.uid} AND archived=true` : await db`SELECT data FROM file_index WHERE owner_id=${a.uid} AND archived=false`; return rows.map((r: any) => r.data); }
+    case "file": { const r: any = (await db`SELECT data,owner_id,archived FROM file_index WHERE file_id=${a.id}`)[0]; return r ? { ...r, data: typeof r.data === "string" ? r.data : JSON.stringify(r.data) } : null; }
+    case "files": { const rows = a.archived === "all" ? await db`SELECT data FROM file_index WHERE owner_id=${a.uid}` : a.archived === 1 ? await db`SELECT data FROM file_index WHERE owner_id=${a.uid} AND archived=true` : await db`SELECT data FROM file_index WHERE owner_id=${a.uid} AND archived=false`; return rows.map((r: any) => json(r.data)); }
     case "archive": await db`UPDATE file_index SET archived=${!!a.archived},data=${j(a.file)},updated_at=now() WHERE file_id=${a.id}`; return { ok: true };
     case "batchArchive": await db.transaction(async (tx: any) => { for (const f of a.files as SheetFile[]) await tx`UPDATE file_index SET archived=false,data=${j(f)},updated_at=now() WHERE file_id=${f.id}`; }); return { ok: true };
     case "purge": await db`DELETE FROM file_index WHERE file_id=${a.id}`; return { ok: true };
@@ -87,17 +87,17 @@ async function fileOp(id: string, op: string, a: any) {
   if (op === "init") return db.transaction(async (tx: any) => { await tx`INSERT INTO file_meta(file_id,data,seq) VALUES(${id},${j(a.file)},0) ON CONFLICT(file_id) DO UPDATE SET data=EXCLUDED.data,seq=0`; await tx`DELETE FROM file_rows WHERE file_id=${id}`; await tx`DELETE FROM file_logs WHERE file_id=${id}`; for (const [i, r] of (a.rows || []).entries()) await tx`INSERT INTO file_rows(file_id,idx,data) VALUES(${id},${i},${j(r)})`; return { ok: true }; });
   if (op === "meta") { const r: any = (await db`SELECT data FROM file_meta WHERE file_id=${id}`)[0]; return r?.data ?? null; }
   if (op === "seq") { const r: any = (await db`SELECT seq FROM file_meta WHERE file_id=${id}`)[0]; return { seq: Number(r?.seq || 0) }; }
-  const readRows = async (q: any = db) => (await q`SELECT data FROM file_rows WHERE file_id=${id} ORDER BY idx`).map((r: any) => r.data as Row[]);
+  const readRows = async (q: any = db) => (await q`SELECT data FROM file_rows WHERE file_id=${id} ORDER BY idx`).map((r: any) => json(r.data) as Row);
   if (op === "rows") return readRows();
   if (op === "full") { const r: any = (await db`SELECT seq FROM file_meta WHERE file_id=${id}`)[0]; return { rows: await readRows(), seq: Number(r?.seq || 0) }; }
   if (op === "counts") return counts(await readRows());
   if (["keys", "dupKeys", "projection"].includes(op)) { const rows = await readRows(); const limit = Math.min(10000, Math.max(1, Number(a.limit) || 10000)); return rows.flatMap((r: Row, i: number) => { const k = key(r); return k ? [{ k, i }] : []; }).slice(0, limit); }
-  if (op === "wipe") return db.transaction(async (tx: any) => { const rows = (await tx`SELECT data FROM file_rows WHERE file_id=${id}`).map((r: any) => r.data); await tx`DELETE FROM file_meta WHERE file_id=${id}`; return { ok: true, rows }; });
+  if (op === "wipe") return db.transaction(async (tx: any) => { const rows = (await tx`SELECT data FROM file_rows WHERE file_id=${id}`).map((r: any) => json(r.data)); await tx`DELETE FROM file_meta WHERE file_id=${id}`; return { ok: true, rows }; });
   if (op === "getLogs") return db`SELECT id,ts,action,seq FROM file_logs WHERE file_id=${id} ORDER BY id DESC LIMIT 200`;
   if (op !== "save" && op !== "append") throw new Error(`unknown operation: ${op}`);
   return db.transaction(async (tx: any) => {
     const meta: any = (await tx`SELECT data,seq FROM file_meta WHERE file_id=${id} FOR UPDATE`)[0]; if (!meta) throw new Error("file not found"); const current = Number(meta.seq);
-    let rows: Row[] = (await tx`SELECT data FROM file_rows WHERE file_id=${id} ORDER BY idx`).map((r: any) => r.data);
+    let rows: Row[] = (await tx`SELECT data FROM file_rows WHERE file_id=${id} ORDER BY idx`).map((r: any) => json(r.data));
     if (op === "append") { if (!Number.isInteger(a.base) || a.base !== current) throw new Error("version conflict"); if (!Array.isArray(a.ops) || a.ops.length > 10000) throw new Error("invalid append payload"); for (const x of a.ops) { if (!x || !Number.isInteger(x.rowIdx) || x.rowIdx < 0 || x.rowIdx > 100000 || !x.cols || Array.isArray(x.cols)) throw new Error("invalid op"); while (rows.length <= x.rowIdx) rows.push({}); rows[x.rowIdx] = { ...rows[x.rowIdx], ...x.cols }; } }
     else if (Array.isArray(a.rows)) rows = a.rows;
     const file = a.file || meta.data; if (file) { Object.assign(file, counts(rows)); file.rowCount = rows.length; file.updatedAt = Date.now(); file.lastAction = String(a.action || (op === "append" ? "append" : "edit")); if (a.dataCount !== undefined) file.dataCount = a.dataCount; }

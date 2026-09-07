@@ -13,7 +13,7 @@ import { signSession as signSessionFn } from "./lib/session";
 
 export const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any backend route change — lets health checks confirm a deploy landed
-export const API_VERSION = "1.5.9";
+export const API_VERSION = "1.6.0";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
@@ -30,7 +30,7 @@ app.use("/api/*", async (c, next) => {
 });
 app.use("/api/*", async (c, next) => { if (Number(c.req.header("Content-Length")) > 4_000_000) return c.json({ error: "payload too large" }, 413); if (c.req.raw.body) { try { const reader = c.req.raw.clone().body!.getReader(); let size = 0; while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > 4_000_000) { await reader.cancel(); return c.json({ error: "payload too large" }, 413); } } } catch { return c.json({ error: "invalid request body" }, 400); } } return next(); });
 app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now(), version: API_VERSION }));
-app.get("/api/wallet", requireAuth, async (c) => { const uid = c.get("uid"); const [wallet, withdrawals] = await Promise.all([rpc(c.env.INDEX, "global", "walletGet", { uid }), rpc(c.env.INDEX, "global", "walletWithdrawals", { uid })]); return c.json({ ...(wallet as object), withdrawals }); });
+app.get("/api/wallet", requireAuth, async (c) => { const uid = c.get("uid"); const [wallet, withdrawals, transactions] = await Promise.all([rpc(c.env.INDEX, "global", "walletGet", { uid }), rpc(c.env.INDEX, "global", "walletWithdrawals", { uid }), rpc(c.env.INDEX, "global", "walletTxList", { uid })]); return c.json({ ...(wallet as object), withdrawals, transactions }); });
 app.post("/api/wallet/withdraw", requireAuth, async (c) => { let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "invalid body" }, 400); } const amount = Number(body?.amount); const method = String(body?.method || "").trim(); const account = String(body?.account || "").trim(); if (!Number.isFinite(amount) || amount <= 0 || !method || account.length < 3 || account.length > 256) return c.json({ error: "invalid withdrawal" }, 400); try { return c.json(await rpc(c.env.INDEX, "global", "walletWithdraw", { uid: c.get("uid"), id: crypto.randomUUID(), amount, method, account })); } catch (error) { const message = String((error as Error)?.message || ""); if (message.includes("insufficient")) return c.json({ error: "insufficient balance" }, 400); throw error; } });
 app.get("/api/wallet/requests", requireAuth, async (c) => { if (!isAdmin(c.env, c.get("uid"))) return c.json({ error: "admin access required" }, 403); return c.json(await rpc(c.env.INDEX, "global", "walletRequests", { status: c.req.query("status") || "" })); });
 app.post("/api/wallet/requests/:id/:action", requireAuth, async (c) => { if (!isAdmin(c.env, c.get("uid"))) return c.json({ error: "admin access required" }, 403); const action = c.req.param("action"); if (action !== "approve" && action !== "reject") return c.json({ error: "unsupported action" }, 400); try { return c.json(await rpc(c.env.INDEX, "global", "walletDecision", { id: c.req.param("id"), status: action === "approve" ? "APPROVED" : "REJECTED" })); } catch (error) { if (String((error as Error)?.message || "").includes("withdrawal not found")) return c.json({ error: "withdrawal not found" }, 404); throw error; } });

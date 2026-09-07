@@ -148,6 +148,18 @@ CREATE TABLE IF NOT EXISTS downloads (
 CREATE INDEX IF NOT EXISTS downloads_status_recent_idx
   ON downloads (password, status, ts DESC);
 
+CREATE TABLE IF NOT EXISTS wallet_transactions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('CREDIT', 'DEBIT')),
+  amount NUMERIC NOT NULL CHECK (amount > 0),
+  balance_after NUMERIC NOT NULL,
+  description TEXT NOT NULL,
+  meta JSONB,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS wallet_tx_user_idx ON wallet_transactions (user_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id);
 CREATE INDEX IF NOT EXISTS meta_key_prefix_idx ON meta (k text_pattern_ops);
 

@@ -215,6 +215,17 @@ export interface Withdrawal {
   username?: string | null;
 }
 
+export interface WalletTransaction {
+  id: string;
+  user_id: string;
+  type: "CREDIT" | "DEBIT";
+  amount: number;
+  balance_after: number;
+  description: string;
+  meta?: Record<string, unknown> | null;
+  created_at: number;
+}
+
 export const api = {
   getFiles: () => request<SheetFile[]>("/files"),
   getFileFull: (id: string) =>
@@ -230,7 +241,7 @@ export const api = {
   append: (id: string, data: AppendPayload, opts?: { keepalive?: boolean }) =>
     request<{ ok: boolean; seq: number; file?: SheetFile }>(`/files/${id}/append`, { method: "PUT", body: JSON.stringify(data) }, opts),
   health: () => request<{ ok: boolean; ts: number; version: string }>("/health"),
-  getWallet: () => request<{ uid: string; balance: number; withdrawals: Withdrawal[] }>("/wallet"),
+  getWallet: () => request<{ uid: string; balance: number; withdrawals: Withdrawal[]; transactions: WalletTransaction[] }>("/wallet"),
   withdraw: (data: { amount: number; method: string; account: string }) => request<Withdrawal>("/wallet/withdraw", { method: "POST", body: JSON.stringify(data) }),
   getWithdrawalRequests: (status = "PENDING") => request<Withdrawal[]>(`/wallet/requests?status=${encodeURIComponent(status)}`),
   decideWithdrawal: (id: string, action: "approve" | "reject") => request<{ id: string; status: Withdrawal["status"] }>(`/wallet/requests/${encodeURIComponent(id)}/${action}`, { method: "POST" }),

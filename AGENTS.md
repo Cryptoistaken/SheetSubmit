@@ -31,7 +31,7 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 1.5.4; bump on any route change, surfaced by /api/health),
+  index.ts              # app setup, routes, API_VERSION (currently 1.6.0; bump on any route change, surfaced by /api/health),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   /api/auth/me (verifySession, returns CDN photoUrl+phone+isAdmin), POST /api/auth/logout,
                       #   POST /api/auth/device/claim {token} (rateLimit 10/60s, deviceGet/Delete),
@@ -42,7 +42,7 @@
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
  src/lib/session.ts      # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
- src/lib/pg.ts            # Postgres repository for users, files, pools, wallets and withdrawals (bun:sql, max 10 connections)
+  src/lib/pg.ts            # Postgres repository for users, files, pools, wallets, withdrawals and wallet_transactions (bun:sql, max 10 connections)
  src/lib/rateLimit.ts     # sliding window rate limiter, ipKey helper
  src/routes/files.ts      # files, archive and duplicate routes
                       #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup)

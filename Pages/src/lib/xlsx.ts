@@ -145,6 +145,21 @@ function arrBufToDataUrl(buf: ArrayBuffer, mime: string): string {
   return "data:" + mime + ";base64," + btoa(binary);
 }
 
+/** Trigger a browser/Android download of a server blob (pool downloads). */
+export function triggerBlobDownload(blob: Blob, filename: string): void {
+  const w = window as unknown as { Android?: { download?: (name: string, data: string) => void } };
+  if (typeof w.Android?.download === "function") {
+    const reader = new FileReader();
+    reader.onload = () => w.Android!.download!(filename, String(reader.result));
+    reader.readAsDataURL(blob);
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export async function downloadXlsx(
   rows: Row[],
   columns: ColumnDef[],

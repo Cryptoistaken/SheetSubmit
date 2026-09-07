@@ -71,7 +71,7 @@ components.json       # shadcn Nova, neutral, cssVariables, lucide
 pages/SheetPage.tsx   # /file/:id + /admin/user/:userId/file/:fileId
 pages/BubbleDesignPage.tsx   # /admin renders via HomePage + components/home/AdminView.tsx (no AdminPage file)
  components/layout/Topbar.tsx          # connection card + shadcn profile dropdown + animated theme toggle
-components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, AnalysisView.tsx, WalletView.tsx, ApprovalDetailDialog.tsx, Fab.tsx, EmptyState.tsx, DownloadDetailModal.tsx
+components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx (top tabs Pool|Approvals via ?view=, taker card, users list, no recent downloads), ArchiveView.tsx, AdminView.tsx, AnalysisView.tsx, WalletView.tsx, ApprovalDetailDialog.tsx (Download for all statuses), Fab.tsx, EmptyState.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
 components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed

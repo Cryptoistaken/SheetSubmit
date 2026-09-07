@@ -3,7 +3,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { SlideToConfirmButton } from "@/components/ui/slide-to-confirm-button"
 import { HoldToDeleteButton } from "@/components/ui/hold-to-delete-button"
 import { InkStamp } from "@/components/ui/ink-stamp"
+import { Button } from "@/components/ui/button"
 import { api, type DownloadDetail, type HoldRecord } from "@/lib/api"
+import { triggerBlobDownload } from "@/lib/xlsx"
+import { useToast } from "@/lib/toast"
 
 export function ApprovalDetailDialog({ hold, open, onClose, onApprove, onReturn, onDelete, acting }: {
   hold: HoldRecord | null
@@ -16,6 +19,18 @@ export function ApprovalDetailDialog({ hold, open, onClose, onApprove, onReturn,
 }) {
   const [detail, setDetail] = useState<DownloadDetail | null>(null)
   const [loading, setLoading] = useState(false)
+  const [dlBusy, setDlBusy] = useState(false)
+  const showToast = useToast()
+
+  const doDownload = async () => {
+    if (!hold) return
+    setDlBusy(true)
+    try {
+      const blob = await api.getDownloadBlob(hold.id)
+      triggerBlobDownload(blob, hold.filename || "download.xlsx")
+      showToast(`Downloaded ${hold.filename}`)
+    } catch (e) { showToast(String(e instanceof Error ? e.message : e)) } finally { setDlBusy(false) }
+  }
 
   useEffect(() => {
     if (!open || !hold?.id) return
@@ -58,6 +73,7 @@ export function ApprovalDetailDialog({ hold, open, onClose, onApprove, onReturn,
           <div><span className="font-semibold">Quantity:</span> {qty}</div>
         </div>
         <div className="flex flex-col gap-3 pt-4">
+          <Button className="w-full" style={{ padding: "12px 20px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)" }} disabled={dlBusy} onClick={doDownload}>{dlBusy ? "Preparing…" : "Download"}</Button>
           {isHold ? <SlideToConfirmButton onConfirm={() => onApprove(hold.id)} disabled={acting === hold.id} label="Slide to approve" /> : null}
           {isHold ? (
             <div className="flex gap-2">

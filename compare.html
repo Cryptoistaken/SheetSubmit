@@ -96,7 +96,7 @@
     .rdx footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
     .section-h{font-size:13px;font-weight:700;margin:16px 0 8px}
     .hold-badge{font-size:11px;font-weight:600;letter-spacing:.02em;padding:2px 7px;border-radius:999px;border:1px solid;flex-shrink:0}
-    .hold-badge.hold{background:#fef3c7;color:#92400e;border-color:#fde68a}
+    .hold-badge.hold,.hold-badge.pending{background:#fef3c7;color:#92400e;border-color:#fde68a}
     .hold-badge.approved{background:#dcfce7;color:#166534;border-color:#bbf7d0}
     .hold-badge.rejected{background:var(--bg3);color:var(--text3);border-color:var(--border)}
     .menu{position:absolute;right:8px;top:44px;background:var(--bg);border:1px solid var(--border);border-radius:var(--rl);box-shadow:var(--shadow-lg);z-index:10;min-width:160px;padding:4px}
@@ -145,6 +145,16 @@
     details summary { cursor:pointer; border:1px dashed #ddd; display:inline-block; padding:3px 8px; border-radius:4px; }
     details pre { white-space:pre-wrap; }
     .hidden{display:none!important}
+    @media(max-width:640px){
+      main{padding:20px 12px 40px}
+      .pane{padding:14px 12px}
+      .pool-switch{flex-wrap:wrap;justify-content:center}
+      .pool-card{flex-wrap:wrap;row-gap:6px}
+      .pool-card-actions{margin-left:auto}
+      .taker-row{flex-direction:column}
+      .taker-cell{min-width:0}
+      .rdx{padding:16px}
+    }
   </style>
 </head>
 <body>
@@ -271,7 +281,7 @@
             <button class="qbtn" data-q="50">50</button>
             <button class="qbtn" data-q="100">100</button>
             <button class="qbtn" data-q="all">All</button>
-            <input placeholder="Custom" aria-label="Custom quantity" style="width:72px;border:none;padding:7px 8px;font-size:13px;text-align:center;outline:none;background:var(--bg);font-family:var(--sans)">
+            <input placeholder="Custom" aria-label="Custom quantity" name="custom-qty" style="width:72px;border:none;padding:7px 8px;font-size:13px;text-align:center;outline:none;background:var(--bg);font-family:var(--sans)">
           </div>
           <button class="btn btn-primary" id="bTake" style="box-shadow:0 1px 6px rgba(0,112,243,.18);font-weight:600">Take 10 from Cookies</button>
         </div>
@@ -307,29 +317,31 @@ Data: getPools getPoolDetail getDownloads getUserFiles getHolds getPoolPrice</pr
     <section>
       <h2>After</h2>
       <div class="pane after" id="pv-after">
-        <div style="display:flex;flex-direction:column;gap:12px;align-items:center">
-          <div style="font-size:18px;font-weight:700;letter-spacing:-.02em">Pools</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center">
-            <div class="pool-switch" style="background:#eef2ff;border-color:#ddd6fe">
-              <button class="active"><svg class="icon" width="14" height="14"><use href="#sym-pwd-dgd"/></svg>dgddigital</button>
-              <button><svg class="icon" width="14" height="14"><use href="#sym-pwd-love"/></svg>L0VE@12345</button>
-            </div>
-            <button class="btn btn-sm">price $0.02</button>
-            <div class="pool-switch">
-              <button class="active"><svg class="icon" width="14" height="14"><use href="#sym-cookie"/></svg>Cookies <span class="badge" style="margin-left:2px">1240</span></button>
-              <button><svg class="icon" width="14" height="14"><use href="#sym-2fa"/></svg>2FA <span class="badge" style="margin-left:2px">580</span></button>
-              <button><svg class="icon" width="14" height="14"><use href="#sym-page"/></svg>Page <span class="badge" style="margin-left:2px">312</span></button>
-            </div>
-          </div>
-          <div class="pool-switch" role="tablist" aria-label="Pool views" style="margin-top:2px">
+        <!-- VIEW TABS -->
+        <div style="display:flex;justify-content:center;margin-bottom:16px">
+          <div class="pool-switch" role="tablist" aria-label="Pools page sections">
             <button role="tab" aria-selected="true" class="active" data-aview="pool">Pool</button>
-            <button role="tab" aria-selected="false" data-aview="uf">Users / Files</button>
             <button role="tab" aria-selected="false" data-aview="appr">Approvals</button>
           </div>
         </div>
 
         <!-- POOL VIEW -->
         <div data-apanel="pool">
+          <div style="display:flex;flex-direction:column;gap:12px;align-items:center">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center">
+              <div class="pool-switch" style="background:#eef2ff;border-color:#ddd6fe">
+                <button class="active"><svg class="icon" width="14" height="14"><use href="#sym-pwd-dgd"/></svg>dgddigital</button>
+                <button><svg class="icon" width="14" height="14"><use href="#sym-pwd-love"/></svg>L0VE@12345</button>
+              </div>
+              <button class="btn btn-sm">price $0.02</button>
+              <div class="pool-switch">
+                <button class="active"><svg class="icon" width="14" height="14"><use href="#sym-cookie"/></svg>Cookies <span class="badge" style="margin-left:2px">1240</span></button>
+                <button><svg class="icon" width="14" height="14"><use href="#sym-2fa"/></svg>2FA <span class="badge" style="margin-left:2px">580</span></button>
+                <button><svg class="icon" width="14" height="14"><use href="#sym-page"/></svg>Page <span class="badge" style="margin-left:2px">312</span></button>
+              </div>
+            </div>
+          </div>
+
           <div class="pools-stats">
             <div class="stat-card"><div class="stat-label">Ready to take</div><div class="stat-num">1,240</div><div class="stat-sub">available accounts</div></div>
             <div class="stat-card"><div class="stat-label">Taken</div><div class="stat-num">320</div><div class="stat-sub">held or claimed</div></div>
@@ -352,32 +364,19 @@ Data: getPools getPoolDetail getDownloads getUserFiles getHolds getPoolPrice</pr
               <div class="taker-cell"><small>Pool</small>Cookies</div>
               <div class="taker-cell" id="aQtyCell"><small>Quantity</small><span style="display:inline-flex;border:1px solid var(--border2);border-radius:6px;overflow:hidden;background:var(--bg);margin-top:2px"><button class="qbtn active" data-aq="10" style="min-height:28px;padding:4px 8px;font-size:12px">10</button><button class="qbtn" data-aq="50" style="min-height:28px;padding:4px 8px;font-size:12px">50</button><button class="qbtn" data-aq="100" style="min-height:28px;padding:4px 8px;font-size:12px">100</button><button class="qbtn" data-aq="all" style="min-height:28px;padding:4px 8px;font-size:12px">All</button></span></div>
               <div class="taker-cell"><small>Amount</small><span id="aAmount">10 × $0.02 = $0.20</span></div>
-              <button class="btn btn-primary" id="aTake" style="align-self:center">Take</button>
+              <button class="btn btn-primary" id="aTake" style="align-self:stretch;padding:12px 24px;font-size:15px;font-weight:700;border-radius:var(--rl);box-shadow:0 2px 10px rgba(0,112,243,.22)">Take</button>
             </div>
             <div style="font-size:12px;color:var(--text3);margin-top:8px">Take creates a hold. Approval credits the owners. Reject returns the rows.</div>
           </div>
-        </div>
 
-        <!-- USERS / FILES VIEW -->
-        <div data-apanel="uf" class="hidden">
-          <div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap">
-            <label class="search-input-shell" style="flex:1;min-width:200px">
-              <span class="search-input-group">
-                <span class="search-input-icon"><svg width="16" height="16"><use href="#sym-search"/></svg></span>
-                <input type="search" class="search-input" placeholder="Search users or files" aria-label="Search users or files" id="aUfSearch">
-              </span>
-            </label>
-            <div class="pool-switch">
-              <button class="active" data-ufview="list">List</button>
-              <button data-ufview="grid">Grid</button>
-            </div>
-          </div>
-
-          <h2 class="section-h">Users</h2>
+          <h2 class="section-h" style="margin-top:20px">Users</h2>
+          <label class="search-input-shell" style="margin-bottom:10px">
+            <span class="search-input-group">
+              <span class="search-input-icon"><svg width="16" height="16"><use href="#sym-search"/></svg></span>
+              <input type="search" class="search-input" placeholder="Search users" aria-label="Search users" id="aUfSearch">
+            </span>
+          </label>
           <div class="card-list" id="aUfUsers"></div>
-
-          <h2 class="section-h">Files</h2>
-          <div id="aAllFiles"></div>
         </div>
 
         <!-- APPROVALS VIEW -->
@@ -391,13 +390,16 @@ Data: getPools getPoolDetail getDownloads getUserFiles getHolds getPoolPrice</pr
         </div>
       </div>
       <details><summary>Spec After agent</summary><pre>Shared shell: password switch, price, pool switch (identical to Before)
-Views: Pool | Users Files | Approvals (URL state ?view= in implementation)
+Views: Pool (default) | Approvals — no Users/Files card; users list lives
+  at the bottom of the pool view; bottom tab bar (Pool | Approvals)
+  sits at page bottom, approvals is its own view out of pool but
+  inside the pools page (URL state ?view= in implementation)
 Pool: stats renamed Ready to take / Taken / Owners, Taker card holds
-  mode pills, pick via searchable user+file picker, qty, amount = n x stored price, Take
-Users Files: users first (avatar, name, files count, accounts, taken),
-  click expands inline files; all files below honor ss_fileView list/grid
+  mode pills, pick via searchable user+file picker, qty, amount = n x stored price, Take,
+  users list (searchable, click expands inline files) at page bottom
 Approvals: Pending default + Approved + Rejected, rows show avatar group,
-  file icon, title, created time, amount, Download on approved only
+  file icon, title, created time, amount, Download inside detail dialog
+  for every status (pending, approved, rejected)
 Detail dialog: accounts, users, total, per user accounts / pct / payment,
   User file download (server filtered), Slide approve / Slide reject
 Money: take = hold, approve credits stored unit price, reject frees rows
@@ -408,7 +410,7 @@ Recent downloads: removed entirely</pre></details>
   <details id="agent-source-map"><summary>Source map</summary><pre>Before replica of: Pages/src/components/home/PoolsView.tsx:347-555 (header, stats, mode, toolbar, users, holds, recent downloads)
 Styles copied from: PoolsView.tsx:320-343 inline block, app.css:1136-1202 (.btn), app.css:958-1011 (search-input), app.css:1-77 tokens, index.css:64-81 shadcn light
 Icons copied from: FileTypeIcons.tsx:3-8 CookieIcon, 20-28 TwoFaIcon, 33-72 PageIcon, 82-95 PasswordIcon (dgddigital + L0VE mask/filters verbatim)
-After contract: plan.md + plan.html (three views, taker card, hold flow, per-user share export)
+After contract: plan.md + plan.html (pool view + bottom-tab approvals, taker card, hold flow, per-user share export)
 Reusable live: ProfileAvatar, FileCard, Dialog, AlertDialog, SlideToConfirmButton, HoldToDeleteButton, InkStamp
 Apply: implement plan.md tasks against PoolsView.tsx + ApprovalDetailDialog.tsx + api.ts + pools.ts, then bun run typecheck + test</pre></details>
 
@@ -424,7 +426,7 @@ Apply: implement plan.md tasks against PoolsView.tsx + ApprovalDetailDialog.tsx 
     <p class="desc">Rows go ON HOLD. Approve to credit balance, Reject to return rows.</p>
     <p class="desc" id="bUserLine" style="margin-top:10px;color:var(--text3)"></p>
     <div style="display:inline-flex;border:1px solid var(--border2);border-radius:8px;overflow:hidden;margin-top:10px">
-      <button class="qbtn active" data-uq="10">10</button><button class="qbtn" data-uq="50">50</button><button class="qbtn" data-uq="all">All</button><input placeholder="Custom" style="width:72px;border:none;padding:7px 8px;font-size:13px;text-align:center;outline:none;font-family:var(--sans)">
+      <button class="qbtn active" data-uq="10">10</button><button class="qbtn" data-uq="50">50</button><button class="qbtn" data-uq="all">All</button><input placeholder="Custom" name="custom-qty-user" style="width:72px;border:none;padding:7px 8px;font-size:13px;text-align:center;outline:none;font-family:var(--sans)">
     </div>
     <footer><button class="btn" data-close>Cancel</button><button class="btn btn-primary" data-close>Confirm hold</button></footer>
   </dialog>
@@ -488,7 +490,7 @@ Apply: implement plan.md tasks against PoolsView.tsx + ApprovalDetailDialog.tsx 
     </div>
     <div class="card-list" id="aApprUserRows"></div>
     <div id="aApprActions" style="display:flex;gap:10px;margin-top:18px"></div>
-    <footer><button class="btn" data-close>Close</button></footer>
+    <footer><button class="btn btn-primary" id="aApprDl">Download</button><button class="btn" data-close>Close</button></footer>
   </dialog>
 <script>
   const USERS = [
@@ -667,7 +669,7 @@ Apply: implement plan.md tasks against PoolsView.tsx + ApprovalDetailDialog.tsx 
   });
 
   /* ── AFTER ── */
-  let aMode = "fifo", aQty = 10, ufView = "list";
+  let aMode = "fifo", aQty = 10;
   const selUids = new Set(), selFiles = new Set();
 
   $$("[data-aview]").forEach(t => t.addEventListener("click", () => {
@@ -776,19 +778,8 @@ Apply: implement plan.md tasks against PoolsView.tsx + ApprovalDetailDialog.tsx 
   }
   function renderUF(q = "") {
     $("#aUfUsers").innerHTML = USERS.filter(u => (u.name + u.user).toLowerCase().includes(q.toLowerCase())).map(ufUserCard).join("");
-    const files = allFiles().filter(f => f.name.toLowerCase().includes(q.toLowerCase()));
-    $("#aAllFiles").innerHTML = ufView === "grid"
-      ? '<div class="files-grid">' + files.map(f => `
-          <div class="vcard" data-openfile="${esc(f.name)}">
-            <span class="fc-icon"><svg width="18" height="18"><use href="#sym-file"/></svg></span>
-            <div class="fc-name">${esc(f.name)}</div>
-            <span class="file-type-badge">${esc(f.kind)}</span>
-            <div style="font-size:11px;color:var(--text3)">${esc(f.date)} · ${f.accounts} accounts</div>
-          </div>`).join("") + "</div>"
-      : '<div class="card-list">' + files.map(fileRow).join("") + "</div>";
   }
   $("#aUfSearch").addEventListener("input", e => renderUF(e.target.value));
-  $$("[data-ufview]").forEach(b => b.addEventListener("click", () => { $$("[data-ufview]").forEach(x => x.classList.toggle("active", x === b)); ufView = b.dataset.ufview; renderUF($("#aUfSearch").value); }));
   $("#aUfUsers").addEventListener("click", e => {
     const d = e.target.closest("[data-udetail]");
     if (d) { openUserDetail(byId(d.dataset.udetail)); return; }
@@ -820,7 +811,7 @@ Apply: implement plan.md tasks against PoolsView.tsx + ApprovalDetailDialog.tsx 
   });
 
   /* approvals view */
-  const APPROVALS = [...HOLDS, ...REJECTS.map(r => ({ ...r, status:"REJECTED", users:[{i:2, share:50}] }))];
+  const APPROVALS = [...HOLDS.map(h => ({ ...h, status: h.status === "HOLD" ? "PENDING" : h.status })), ...REJECTS.map(r => ({ ...r, status:"REJECTED", users:[{i:2, share:50}] }))];
   function renderAppr(status) {
     const list = APPROVALS.filter(a => a.status === status);
     $("#aApprList").innerHTML = list.length ? list.map(a => `
@@ -832,7 +823,6 @@ Apply: implement plan.md tasks against PoolsView.tsx + ApprovalDetailDialog.tsx 
           <div class="pool-card-sub"><span>${esc(a.at)}</span><span>·</span><span>${a.qty} accounts</span><span>·</span><span>$${a.total.toFixed(2)}</span></div>
         </div>
         <span class="hold-badge ${a.status.toLowerCase()}">${a.status}</span>
-        ${a.status === "APPROVED" ? '<button type="button" class="btn btn-xs">Download</button>' : ""}
       </div>`).join("") : '<div style="padding:24px;text-align:center;border:1px solid var(--border);border-radius:var(--rl);color:var(--text3);font-size:13px">No ' + status.toLowerCase() + " approvals</div>";
   }
   $$("[data-appr]").forEach(b => b.addEventListener("click", () => { $$("[data-appr]").forEach(x => x.classList.toggle("active", x === b)); renderAppr(b.dataset.appr); }));
@@ -857,7 +847,7 @@ Apply: implement plan.md tasks against PoolsView.tsx + ApprovalDetailDialog.tsx 
       </div>`;
     }).join("");
     const act = $("#aApprActions");
-    if (a.status === "HOLD") {
+    if (a.status === "PENDING") {
       act.innerHTML = '<div class="slide" id="slA"><div class="fill"></div><span class="lbl">Slide to approve</span><span class="knob">→</span></div><div class="slide reject" id="slR"><div class="fill"></div><span class="lbl">Slide to reject</span><span class="knob">→</span></div>';
       initSlide($("#slA"), "Approved"); initSlide($("#slR"), "Rejected");
     } else if (a.status === "APPROVED") {

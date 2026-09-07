@@ -193,7 +193,7 @@ export default function FileCard({
       ) : (
       <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: "auto", minWidth: 0 }}>
         {badges}
-        <span className="file-card-meta" style={{ display: "flex", flexWrap: "wrap", gap: "2px 8px", marginLeft: "auto", maxWidth: 140 }}>{inds}</span>
+        <span className="file-card-meta" style={{ display: "grid", gridTemplateColumns: "repeat(2, auto)", gap: "2px 8px", marginLeft: "auto" }}>{inds}</span>
       </div>
       )}
       <div className="file-card-actions">

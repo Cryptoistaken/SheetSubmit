@@ -13,7 +13,7 @@ import { signSession as signSessionFn } from "./lib/session";
 
 export const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any worker route change — lets TestApi/health confirm a redeploy landed
-export const API_VERSION = "1.5.1";
+export const API_VERSION = "1.5.2";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
@@ -37,11 +37,11 @@ app.route("/api/pools", pools);
 app.route("/api/admin", admin);
 app.route("/api", wa);
 app.route("/", bot);
-app.get("/api/auth/me", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (!token) return c.json({ error: "not_authenticated" }, 401); if (!c.env.SESSION_SECRET) return c.json({ error: "Server configuration error" }, 500); const session = await verifySession(token, c.env.SESSION_SECRET); if (!session) return c.json({ error: "session_expired" }, 401); const user: any = await rpc(c.env.INDEX, "global", "user", { id: session.uid }); if (!user) return c.json(null); return c.json({ id: String(user.user_id), name: user.name || "", username: user.username || "", photoUrl: user.photo_url || null, phone: user.phone || null, isAdmin: isAdmin(c.env, session.uid) }); });
-app.post("/api/auth/logout", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (token) await rpc(c.env.INDEX, "global", "deleteSession", { token }); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": "ss_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0" } }); });
+app.get("/api/auth/me", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (!token) return c.json({ error: "not_authenticated" }, 401); if (!c.env.SESSION_SECRET) return c.json({ error: "Server configuration error" }, 500); const session = await verifySession(token, c.env.SESSION_SECRET); if (!session) return c.json({ error: "session_expired" }, 401); const user: any = await rpc(c.env.INDEX, "global", "user", { id: session.uid }); if (!user) return c.json({ error: "session_expired" }, 401); return c.json({ id: String(user.user_id), name: user.name || "", username: user.username || "", photoUrl: user.photo_url || null, phone: user.phone || null, isAdmin: isAdmin(c.env, session.uid) }); });
+app.post("/api/auth/logout", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (token) await rpc(c.env.INDEX, "global", "deleteSession", { token }); const secure = c.req.header("x-forwarded-proto") !== "http" ? " Secure;" : ""; return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": `ss_session=; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=0` } }); });
 app.post("/api/auth/device/claim", async (c) => {
   if (!checkRate(ipKey(c, "device.claim"), 10, 60000)) return c.json({ ok: false, error: "rate limited" }, 429);
-  let body: { token?: string }; try { body = await c.req.json(); } catch { return c.json({ ok: false }, 400); } const did = body.token || ""; if (!/^[A-Za-z0-9-]{8,64}$/.test(did)) return c.json({ ok: false }); const info: any = await rpc(c.env.INDEX, "global", "deviceGet", { did }); if (!info?.chatId || !info.chatId.includes(".")) return c.json({ ok: false }); await rpc(c.env.INDEX, "global", "deviceDelete", { did }); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": cookie(info.chatId) } }); });
+  let body: { token?: string }; try { body = await c.req.json(); } catch { return c.json({ ok: false }, 400); } const did = body.token || ""; if (!/^[A-Za-z0-9-]{8,64}$/.test(did)) return c.json({ ok: false }); const info: any = await rpc(c.env.INDEX, "global", "deviceGet", { did }); if (!info?.chatId || !info.chatId.includes(".")) return c.json({ ok: false }); await rpc(c.env.INDEX, "global", "deviceDelete", { did }); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": cookie(info.chatId, 2592000, c.req.header("x-forwarded-proto") !== "http") } }); });
 app.get("/api/bot/info", async (c) => { if (!c.env.TG_BOT_TOKEN) return c.json({ username: "" }); try { const r = await fetch(`https://api.telegram.org/bot${c.env.TG_BOT_TOKEN}/getMe`); if (!r.ok) return c.json({ username: "" }); const j = await r.json() as any; return c.json({ username: j.result?.username || "" }); } catch { return c.json({ username: "" }); } });
 app.get("/api/auth/telegram/config", (c) => c.json({ clientId: c.env.TELEGRAM_LOGIN_CLIENT_ID || "" }));
 app.post("/api/auth/telegram/verify", async (c) => {
@@ -57,7 +57,7 @@ app.post("/api/auth/telegram/verify", async (c) => {
   await rpc(c.env.INDEX, "global", "ensureUser", { id: claims.uid, name: claims.name, username: claims.username, photoUrl: claims.picture || null, phone: claims.phone || null });
   const token = await signSessionFn(claims.uid, c.env.SESSION_SECRET);
   await rpc(c.env.INDEX, "global", "session", { token, uid: claims.uid, exp: Date.now() + 2592000000 });
-  return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": cookie(token) } });
+  return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": cookie(token, 2592000, c.req.header("x-forwarded-proto") !== "http") } });
 });
 
 let webhookChecked = false;

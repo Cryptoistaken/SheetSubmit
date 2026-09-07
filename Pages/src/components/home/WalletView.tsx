@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { api, type Withdrawal } from "@/lib/api";
 import { useToast } from "@/lib/toast";
 
-const date = (value: number) => new Date(value).toLocaleString();
+const date = (value: number) => new Date(Number(value)).toLocaleString();
 
 const METHODS = [{ id: "bKash", label: "bKash", icon: "/bKash.svg", placeholder: "BD mobile number" }, { id: "Nagad", label: "Nagad", icon: "/nagad.svg", placeholder: "BD mobile number" }, { id: "USDT", label: "USDT", icon: "/usdt.svg", placeholder: "BEP20 address" }, { id: "Binance", label: "Binance", icon: "/Binance.svg", placeholder: "Binance UID" }] as const;
 

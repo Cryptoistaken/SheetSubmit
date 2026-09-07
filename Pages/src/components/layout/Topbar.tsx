@@ -1,5 +1,5 @@
 import { Download, LogOutIcon, MessageCircle, Palette, RefreshCw } from "lucide-react";
-import { WorkspaceIcon, FileTypeIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
+import { FileTypeIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -47,6 +47,7 @@ export default function Topbar() {
   const [photoBusted, setPhotoBusted] = useState(false);
   const [photoLoaded, setPhotoLoaded] = useState(false);
   const [renameName, setRenameName] = useState("");
+  const [balance, setBalance] = useState<number | null>(null);
   const renameRef = useModalA11y(renameOpen && !!file, () => setRenameOpen(false));
   const [isAndroid, setIsAndroid] = useState(() => !!getAndroid());
   const bubbleOn = useBubbleStore((s) => s.on);
@@ -84,9 +85,14 @@ export default function Topbar() {
     setPhotoLoaded(false);
   }, [user?.photoUrl]);
 
+  useEffect(() => {
+    api.getWallet().then((w) => setBalance(w.balance)).catch(() => {});
+  }, [location.pathname]);
+
   if (!user) return null;
 
   const ringColor = conn.cls === "ok" ? "var(--green)" : conn.cls === "err" ? "var(--red)" : "var(--text3)";
+  const balanceText = (balance ?? 0).toFixed(2);
   const displayName = ((user.firstName ?? "") + " " + (user.lastName ?? "")).trim();
   const fileName = file
     ? file.name.length > 10
@@ -167,9 +173,9 @@ export default function Topbar() {
         <DropdownMenu>
         <DropdownMenuTrigger asChild>
         <button className={`profile-btn${photoLoaded ? " loaded" : ""}`} title="User menu" aria-label={displayName ? `User menu for ${displayName}` : "User menu"}>
-          <span className="profile-currency" aria-label="Balance 0">
-            <span>0</span>
-            <WorkspaceIcon size={14} />
+          <span className="profile-currency" aria-label={`Balance ${balanceText}`}>
+            <span>{balanceText}</span>
+            <img src="/usdc.svg" alt="" width={14} height={14} />
           </span>
           <span className="profile-pill-divider"></span>
           <span className={`avatar-ring${photoLoaded ? " show" : ""}${conn.cls === "ok" && photoLoaded ? " pulse" : ""}`} style={{ background: ringColor, color: ringColor }}>

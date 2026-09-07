@@ -553,16 +553,16 @@ button, input, select, textarea {
     border: 1px solid var(--border);
     border-radius: var(--rl);
     background: var(--bg);
-    padding: 16px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
     gap: 8px;
     cursor: pointer;
     transition: border-color 0.15s, transform 0.1s;
     position: relative;
-    min-height: 110px;
+    min-height: 100px;
     content-visibility: auto;
-    contain-intrinsic-size: 110px;
+    contain-intrinsic-size: 100px;
     will-change: transform;
     opacity: 0;
     animation: fadeIn 0.2s var(--ease-out) forwards;
@@ -591,10 +591,11 @@ button, input, select, textarea {
     height: 32px;
     background: var(--bg3);
     color: var(--text);
-    border-radius: var(--r);
+    border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 .file-card-name {
     font-size: 13px;
@@ -620,7 +621,7 @@ button, input, select, textarea {
 }
 
 @media (hover: none) {
-    .file-card { min-height: 90px; }
+    .file-card { min-height: 80px; }
 }
 
 /* ── File card actions & selection ── */
@@ -721,17 +722,17 @@ button, input, select, textarea {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
+    gap: 12px;
+    padding: 12px 14px;
     min-height: 0;
 }
 .file-card.list-row .file-card-icon {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     flex-shrink: 0;
 }
 .file-card.list-row .file-card-name {
-    min-width: 40px;
+    min-width: 80px;
     font-size: 13px;
 }
 .file-card.list-row .file-card-actions {
@@ -747,9 +748,9 @@ button, input, select, textarea {
     background: var(--bg3);
     padding: 2px 6px;
     border-radius: 4px;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     letter-spacing: -0.01em;
-    margin-top: 2px;
 }
 
 /* ── Empty state ── */

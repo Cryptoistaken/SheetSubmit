@@ -1,7 +1,7 @@
 import { serve } from "bun";
 import { app, startBackgroundTasks } from "./index";
 import type { Env } from "./lib/shared";
-import { closeDatabase } from "./lib/pg";
+import { bootstrapDatabase, closeDatabase } from "./lib/pg";
 
 const env: Env = {
   INDEX: "index",
@@ -20,6 +20,7 @@ const env: Env = {
 
 if (!env.DATABASE_URL) throw new Error("DATABASE_URL is required");
 const port = Number(Bun.env.PORT || 3000);
+await bootstrapDatabase();
 startBackgroundTasks(env);
 const server = serve({ port, hostname: "0.0.0.0", fetch: (request) => { startBackgroundTasks(env); return app.fetch(request, env); } });
 console.log(`SheetSubmit backend listening on 0.0.0.0:${port}`);

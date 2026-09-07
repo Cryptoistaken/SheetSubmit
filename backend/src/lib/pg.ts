@@ -11,6 +11,7 @@ const db = new SQL({
 
 export async function closeDatabase() { await db.close(); }
 export async function pingDatabase() { await db`SELECT 1`; }
+export async function bootstrapDatabase() { await db.unsafe(await Bun.file(new URL("../../sql/001_initial.sql", import.meta.url)).text()); }
 const j = (v: any) => (db as any).json(v);
 
 const pools = ["cookies_only", "cookies_2fa", "page"] as const;

@@ -1,20 +1,20 @@
-import postgres from "postgres";
+import { SQL } from "bun";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required");
 
-const sql = postgres(url, {
+const sql = new SQL({
+  url,
   max: 1,
-  idle_timeout: 10,
-  connect_timeout: 10,
-  onnotice: () => {},
+  idleTimeout: 10,
+  connectionTimeout: 10,
 });
 
 try {
   await sql`SET statement_timeout = '30s'`;
   const command = process.argv[2] || "bootstrap";
   if (command === "bootstrap") {
-    await sql.file("sql/001_initial.sql");
+   await sql.unsafe(await Bun.file("sql/001_initial.sql").text());
     console.log("schema bootstrap complete");
   } else if (command === "verify") {
     const tables = await sql<{ table_name: string }[]>`
@@ -36,5 +36,5 @@ try {
     throw new Error(`unknown schema command: ${command}`);
   }
 } finally {
-  await sql.end({ timeout: 5 });
+   await sql.close();
 }

@@ -192,7 +192,7 @@ export default function FileCard({
       {/* C: Indicators + Badges (list) OR Indicators only (grid) */}
       {list ? (
         <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0, overflow: "hidden" }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0, overflow: "hidden" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", flex: 1, minWidth: 0, overflow: "hidden" }}>
             {inds}
           </div>
           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>

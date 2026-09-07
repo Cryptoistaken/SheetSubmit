@@ -19,6 +19,7 @@ export const SlideToConfirmButton = forwardRef<HTMLDivElement, SlideToConfirmBut
   ({ className, label = "Slide to confirm", confirmedLabel = "Confirmed", disabled, onConfirm, ...props }, ref) => {
     const trackRef = useRef<HTMLDivElement>(null)
     const draggingRef = useRef(false)
+    const downXRef = useRef(0)
     const [x, setX] = useState(0)
     const [confirmed, setConfirmed] = useState(false)
 
@@ -28,13 +29,14 @@ export const SlideToConfirmButton = forwardRef<HTMLDivElement, SlideToConfirmBut
       return track.offsetWidth - KNOB - PAD * 2
     }
 
-    const handleDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const handleDown = (event: ReactPointerEvent<HTMLDivElement>) => {
       if (confirmed) return
       draggingRef.current = true
+      downXRef.current = event.clientX
       event.currentTarget.setPointerCapture(event.pointerId)
     }
 
-    const handleMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const handleMove = (event: ReactPointerEvent<HTMLDivElement>) => {
       if (!draggingRef.current || confirmed) return
       const track = trackRef.current
       if (!track) return
@@ -43,10 +45,11 @@ export const SlideToConfirmButton = forwardRef<HTMLDivElement, SlideToConfirmBut
       setX(next)
     }
 
-    const handleUp = () => {
+    const handleUp = (event: ReactPointerEvent<HTMLDivElement>) => {
       if (!draggingRef.current) return
       draggingRef.current = false
-      if (x >= maxX() - 4) {
+      const dragged = Math.abs(event.clientX - downXRef.current) > 8
+      if (dragged && x >= maxX() - 4) {
         setX(maxX())
         setConfirmed(true)
         onConfirm?.()
@@ -66,8 +69,12 @@ export const SlideToConfirmButton = forwardRef<HTMLDivElement, SlideToConfirmBut
       >
         <div
           ref={trackRef}
+          onPointerDown={handleDown}
+          onPointerMove={handleMove}
+          onPointerUp={handleUp}
+          onPointerCancel={handleUp}
           className={cn(
-            "relative h-12 w-full transform-gpu isolate overflow-hidden rounded-full p-1 transition-[box-shadow] duration-300",
+            "relative h-12 w-full touch-none cursor-grab transform-gpu isolate overflow-hidden rounded-full p-1 transition-[box-shadow] duration-300 active:cursor-grabbing",
             "shadow-[inset_0_1px_2px_rgba(0,0,0,0.08),inset_0_2px_4px_rgba(0,0,0,0.05),inset_0_-2px_3px_rgba(0,0,0,0.06),0_1px_0_rgba(255,255,255,0.9)]",
             confirmed
               ? "bg-muted shadow-[inset_0_1px_3px_rgba(0,0,0,0.2),inset_0_-2px_3px_rgba(0,0,0,0.12),0_1px_0_rgba(255,255,255,0.9)]"
@@ -110,11 +117,14 @@ export const SlideToConfirmButton = forwardRef<HTMLDivElement, SlideToConfirmBut
           <button
             type="button"
             aria-label={label}
-            disabled={confirmed}
-            onPointerDown={handleDown}
-            onPointerMove={handleMove}
-            onPointerUp={handleUp}
-            onPointerCancel={handleUp}
+            disabled={confirmed || disabled}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
+              setX(maxX())
+              setConfirmed(true)
+              onConfirm?.()
+            }}
             className={cn(
               "absolute top-1 left-1 flex size-10 touch-none items-center justify-center rounded-full will-change-transform",
               "shadow-[0_1px_1px_rgba(0,0,0,0.12),0_2px_3px_rgba(0,0,0,0.12),inset_0_1.5px_0_rgba(255,255,255,1),inset_0_-2px_3px_rgba(0,0,0,0.1)]",

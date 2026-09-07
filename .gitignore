@@ -38,3 +38,4 @@ compare-*.html
 # Re-include project .bat files hidden by global gitignore (*.bat)
 !redeploy.bat
 !android/gradlew.bat
+test

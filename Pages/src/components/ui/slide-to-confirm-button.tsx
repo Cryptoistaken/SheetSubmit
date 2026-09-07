@@ -1,68 +1,122 @@
-import * as React from "react"
+import { forwardRef, useRef, useState, type ComponentPropsWithoutRef, type PointerEvent as ReactPointerEvent } from "react"
 import { cn } from "@/lib/utils"
+import { ArrowRight, Check } from "lucide-react"
 
-export function SlideToConfirmButton({ onConfirm, disabled, label = "Slide to approve" }: { onConfirm: () => void; disabled?: boolean; label?: string }) {
-  const [drag, setDrag] = React.useState(0)
-  const [confirmed, setConfirmed] = React.useState(false)
-  const trackRef = React.useRef<HTMLDivElement>(null)
-  const dragging = React.useRef(false)
+const PAD = 4
+const KNOB = 48
 
-  const finish = React.useCallback(() => {
-    if (confirmed || disabled) return
-    setConfirmed(true)
-    onConfirm()
-    setTimeout(() => { setConfirmed(false); setDrag(0) }, 800)
-  }, [confirmed, disabled, onConfirm])
+export type SlideToConfirmButtonProps = Readonly<
+  {
+    label?: string
+    confirmedLabel?: string
+    disabled?: boolean
+    onConfirm?: () => void
+  } & Omit<ComponentPropsWithoutRef<"div">, "onConfirm"> &
+    Pick<ComponentPropsWithoutRef<"div">, "className">
+>
 
-  const onPointerMove = React.useCallback((e: PointerEvent) => {
-    if (!dragging.current || !trackRef.current) return
-    const rect = trackRef.current.getBoundingClientRect()
-    const x = e.clientX - rect.left - 24
-    const max = rect.width - 48
-    const p = Math.max(0, Math.min(x / max, 1))
-    setDrag(p)
-    if (p >= 0.92) { dragging.current = false; finish() }
-  }, [finish])
+export const SlideToConfirmButton = forwardRef<HTMLDivElement, SlideToConfirmButtonProps>(
+  ({ className, label = "Slide to confirm", confirmedLabel = "Confirmed", disabled, onConfirm, ...props }, ref) => {
+    const trackRef = useRef<HTMLDivElement>(null)
+    const draggingRef = useRef(false)
+    const [x, setX] = useState(0)
+    const [confirmed, setConfirmed] = useState(false)
 
-  const onPointerUp = React.useCallback(() => {
-    dragging.current = false
-    window.removeEventListener("pointermove", onPointerMove)
-    window.removeEventListener("pointerup", onPointerUp)
-    if (drag < 0.92) setDrag(0)
-  }, [drag, onPointerMove])
+    const maxX = () => {
+      const track = trackRef.current
+      if (!track) return 0
+      return track.offsetWidth - KNOB - PAD * 2
+    }
 
-  const start = (e: React.PointerEvent) => {
-    if (disabled || confirmed) return
-    dragging.current = true
-    ;(e.target as Element).setPointerCapture(e.pointerId)
-    window.addEventListener("pointermove", onPointerMove)
-    window.addEventListener("pointerup", onPointerUp)
-  }
+    const handleDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (confirmed) return
+      draggingRef.current = true
+      event.currentTarget.setPointerCapture(event.pointerId)
+    }
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); finish() }
-  }
+    const handleMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (!draggingRef.current || confirmed) return
+      const track = trackRef.current
+      if (!track) return
+      const rect = track.getBoundingClientRect()
+      const next = Math.min(Math.max(event.clientX - rect.left - PAD - KNOB / 2, 0), maxX())
+      setX(next)
+    }
 
-  return (
-    <div
-      ref={trackRef}
-      role="group"
-      aria-label={label}
-      className={cn("relative flex h-10 w-full select-none items-center rounded-full border bg-muted p-1", disabled && "opacity-50 pointer-events-none", confirmed && "bg-green-500/20 border-green-500/30")}
-    >
-      <div className="absolute inset-1 rounded-full bg-gradient-to-r from-primary/10 to-primary/5 pointer-events-none" style={{ clipPath: `inset(0 ${100 - drag * 100}% 0 0)` }} aria-hidden />
-      <button
-        type="button"
-        aria-label={label}
-        disabled={disabled || confirmed}
-        onPointerDown={start}
-        onKeyDown={onKeyDown}
-        className="relative z-10 flex h-8 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        style={{ transform: `translateX(${drag * (trackRef.current ? trackRef.current.clientWidth - 56 : 0)}px)`, transition: dragging.current ? "none" : "transform 0.2s" }}
+    const handleUp = () => {
+      if (!draggingRef.current) return
+      draggingRef.current = false
+      if (x >= maxX() - 4) {
+        setX(maxX())
+        setConfirmed(true)
+        onConfirm?.()
+      } else {
+        setX(0)
+      }
+    }
+
+    const progress = maxX() > 0 ? x / maxX() : 0
+
+    return (
+      <div
+        ref={ref}
+        data-slot="slide-to-confirm-button"
+        className={cn("font-sans select-none w-full", className)}
+        {...props}
       >
-        {confirmed ? "✓" : "→"}
-      </button>
-      <span className="flex-1 text-center text-sm font-semibold text-muted-foreground pointer-events-none">{confirmed ? "Approved" : label}</span>
-    </div>
-  )
-}
+        <div
+          ref={trackRef}
+          className={cn(
+            "relative h-12 w-full transform-gpu isolate overflow-hidden rounded-full p-1 transition-[background-color,box-shadow] duration-300",
+            "shadow-[inset_0_1px_2px_rgba(0,0,0,0.08),inset_0_2px_4px_rgba(0,0,0,0.05),inset_0_-2px_3px_rgba(0,0,0,0.06),0_1px_0_rgba(255,255,255,0.9)]",
+            confirmed
+              ? "bg-emerald-600 shadow-[inset_0_1px_3px_rgba(0,0,0,0.2),inset_0_-2px_3px_rgba(0,0,0,0.12),0_1px_0_rgba(255,255,255,0.9)]"
+              : "bg-muted",
+            disabled && "opacity-50 pointer-events-none"
+          )}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              "absolute inset-0 flex items-center justify-center text-sm font-medium transition-colors duration-200",
+              confirmed
+                ? "text-white [text-shadow:0_1px_1px_rgba(0,0,0,0.25)]"
+                : "text-muted-foreground [text-shadow:0_1px_0_rgba(255,255,255,0.8)]"
+            )}
+            style={{ opacity: confirmed ? 1 : 1 - progress * 1.4 }}
+          >
+            {confirmed ? confirmedLabel : label}
+          </span>
+          <button
+            type="button"
+            aria-label={label}
+            disabled={confirmed}
+            onPointerDown={handleDown}
+            onPointerMove={handleMove}
+            onPointerUp={handleUp}
+            onPointerCancel={handleUp}
+            className={cn(
+              "absolute top-1 left-1 flex size-10 touch-none items-center justify-center rounded-full bg-background text-foreground will-change-transform",
+              "shadow-[0_1px_1px_rgba(0,0,0,0.12),0_2px_3px_rgba(0,0,0,0.12),inset_0_1.5px_0_rgba(255,255,255,1),inset_0_-2px_3px_rgba(0,0,0,0.1)]",
+              confirmed
+                ? "cursor-default"
+                : "cursor-grab active:cursor-grabbing active:bg-accent active:shadow-[0_1px_1px_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(0,0,0,0.06),inset_0_2px_3px_rgba(0,0,0,0.03),inset_0_-2px_3px_rgba(0,0,0,0.05)]",
+              draggingRef.current
+                ? "transition-[box-shadow,background-color] duration-200 ease-out"
+                : "transition-[transform,box-shadow,background-color] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+            )}
+            style={{ transform: `translate3d(${x}px, 0, 0)` }}
+          >
+            {confirmed ? (
+              <Check size={18} strokeWidth={2.5} aria-hidden className="text-emerald-600 filter-[drop-shadow(0_1px_0_rgba(255,255,255,0.9))_drop-shadow(0_-1px_0.5px_rgba(0,0,0,0.12))]" />
+            ) : (
+              <ArrowRight size={18} strokeWidth={2.5} aria-hidden className="filter-[drop-shadow(0_1px_0_rgba(255,255,255,0.9))_drop-shadow(0_-1px_0.5px_rgba(0,0,0,0.12))]" />
+            )}
+          </button>
+        </div>
+      </div>
+    )
+  }
+)
+
+SlideToConfirmButton.displayName = "SlideToConfirmButton"

@@ -2366,7 +2366,8 @@ body.bubble-mode tr.add-row .add-col { font-size: 11px; }
 .home-pane,
 #homePaneFiles,
 #homePaneArchive,
-#homePaneAdmin { min-width: 0; max-width: 100%; }
+#homePaneAdmin,
+#homePanePools { min-width: 0; max-width: 100%; overflow-x: hidden; }
 table.grid { min-width: 0; }
 
 /* 5) Safe-area bottom padding for fixed bars / FABs */

@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils"
 import { ArrowRight, Check } from "lucide-react"
 
 const PAD = 4
-const KNOB = 48
+const KNOB = 40
 
 export type SlideToConfirmButtonProps = Readonly<
   {

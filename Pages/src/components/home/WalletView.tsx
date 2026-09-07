@@ -20,7 +20,7 @@ function UserWallet() {
   const showToast = useToast();
   const [wallet, setWallet] = useState<{ balance: number; withdrawals: Withdrawal[] } | null>(null);
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("Bkash");
+  const [method, setMethod] = useState("bKash");
   const [account, setAccount] = useState("");
   const [sending, setSending] = useState(false);
   const load = () => api.getWallet().then(setWallet).catch(() => showToast("Could not load wallet. Check your connection."));

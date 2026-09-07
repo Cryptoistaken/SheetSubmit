@@ -179,6 +179,7 @@ export default function FileCard({
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
         <div className="file-card-name" dir="auto" style={{ unicodeBidi: "isolate" }}>{file.name}</div>
         {tsStr ? <div style={{ fontSize: 10, color: "var(--text3)", whiteSpace: "nowrap" }}>{tsStr}</div> : null}
+        <span className="file-card-meta" style={{ display: "grid", gridTemplateColumns: "repeat(2, auto)", gap: "2px 6px", marginTop: 2 }}>{inds}</span>
       </div>
       {list ? (
       <div style={{ display: "flex", flexDirection: "column", gap: inds.length > 2 ? 3 : 0, marginTop: 0, flex: 1, minWidth: 0, overflow: "hidden" }}>
@@ -193,7 +194,6 @@ export default function FileCard({
       ) : (
       <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: "auto", minWidth: 0 }}>
         {badges}
-        <span className="file-card-meta" style={{ display: "grid", gridTemplateColumns: "repeat(2, auto)", gap: "2px 8px", marginLeft: "auto" }}>{inds}</span>
       </div>
       )}
       <div className="file-card-actions">

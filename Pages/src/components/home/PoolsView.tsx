@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
+import { MoreHorizontal, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import type { HoldRecord, PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
 import { useToast } from "@/lib/toast";
 import { useProfileCache } from "@/stores/profileCache";
+import { useAuth } from "@/contexts/AuthContext";
+import { vibrate } from "@/lib/utils";
 
 import { CookieIcon, PageIcon, PasswordIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
 import EmptyState from "./EmptyState";
@@ -47,8 +50,21 @@ export default function PoolsView() {
   const showToast = useToast();
   const curPwd = PASSWORDS.includes(params.password as never) ? params.password! : "dgddigital";
   const cur = (POOL_TABS.find((t) => t.id === params.poolId)?.id as PoolId) || "cookies_only";
+  const { user: me } = useAuth();
+  const meIsAdmin = Boolean(me?.isAdmin);
+
   const view = searchParams.get("view") === "approvals" ? "approvals" : "pool";
-  const setView = (v: "pool" | "approvals") => setSearchParams(v === "approvals" ? { view: "approvals" } : {});
+  const apprFilter = (["PENDING", "APPROVED", "REJECTED"].includes((searchParams.get("status") ?? "").toUpperCase())
+    ? (searchParams.get("status")!.toUpperCase() as "PENDING" | "APPROVED" | "REJECTED")
+    : "PENDING");
+  const holdParam = searchParams.get("hold");
+  const updateParams = (patch: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(patch).forEach(([k, v]) => { if (v == null) next.delete(k); else next.set(k, v); });
+    setSearchParams(next);
+  };
+  const setView = (v: "pool" | "approvals") => updateParams({ view: v === "approvals" ? "approvals" : null });
+  const setApprFilter = (s: "PENDING" | "APPROVED" | "REJECTED") => { setApprSel([]); updateParams({ status: s === "PENDING" ? null : s.toLowerCase(), hold: null }); };
 
   const [pools, setPools] = useState<PoolSummary[] | null>(null);
   const [detail, setDetail] = useState<PoolDetail | null>(null);
@@ -68,7 +84,6 @@ export default function PoolsView() {
   const [verified, setVerified] = useState<VerifiedCounts | null>(null);
   const { profiles: cachedProfiles, fetchProfiles } = useProfileCache();
   const [verifiedFilter, setVerifiedFilter] = useState<"all" | "verified" | "unverified">("all");
-  const [apprFilter, setApprFilter] = useState<"PENDING" | "APPROVED" | "REJECTED">("PENDING");
 
 
   const [holdMode, setHoldMode] = useState<"fifo" | "pick">("fifo");
@@ -79,6 +94,10 @@ export default function PoolsView() {
   const [holdConfirmOpen, setHoldConfirmOpen] = useState(false);
   const [holdActing, setHoldActing] = useState<string | null>(null);
   const [selectedHold, setSelectedHold] = useState<HoldRecord | null>(null);
+  const [apprSel, setApprSel] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [holdsError, setHoldsError] = useState(false);
 
   // price
   const [prices, setPrices] = useState<Record<string, number | null>>({});
@@ -103,37 +122,49 @@ export default function PoolsView() {
     setHoldsLoading(true);
     try {
       const list = await api.getHolds() as unknown as HoldRecord[];
-      const arr: HoldRecord[] = Array.isArray(list) ? list : [];
-      setHolds(arr.slice(0, 50));
-    } catch { setHolds([]); } finally { setHoldsLoading(false); }
+      setHolds(Array.isArray(list) ? list : []);
+      setHoldsError(false);
+    } catch { setHoldsError(true); } finally { setHoldsLoading(false); }
   }, []);
 
+  const loadPrices = useCallback(async () => {
+    const allPrices: Record<string, number | null> = {};
+    await Promise.all(POOL_TABS.map(async (t) => {
+      try { const pr = await api.getPoolPrice(curPwd, t.id); allPrices[t.id] = pr.price; } catch { allPrices[t.id] = null; }
+    }));
+    setPrices(allPrices);
+  }, [curPwd]);
+
   const load = useCallback(async () => {
+    setLoadFailed(false);
     try {
-      const ps = await api.getPools();
+      const [ps, d] = await Promise.all([api.getPools(), api.getPoolDetail(curPwd, cur)]);
       const list = (ps as { pools: PoolSummary[] }).pools ?? (ps as unknown as PoolSummary[]);
       setPools(list);
-      const d = await api.getPoolDetail(curPwd, cur);
       setDetail(d);
       try { useProfileCache.getState().setProfiles(d.users as unknown[]); } catch {}
       try {
         const uf = await api.getUserFiles(curPwd, cur);
         setUserFiles(uf.users);
        } catch { setUserFiles([]); }
-      // prices for all pools
-      try {
-        const allPrices: Record<string, number | null> = {};
-        await Promise.all(POOL_TABS.map(async (t) => {
-          try { const pr = await api.getPoolPrice(curPwd, t.id); allPrices[t.id] = pr.price; } catch { allPrices[t.id] = null; }
-        }));
-        setPrices(allPrices);
-      } catch { setPrices({}); }
-    } catch { showToast("Could not load pools. Check your connection."); }
+    } catch { setLoadFailed(true); showToast("Could not load pools. Check your connection."); }
   }, [cur, curPwd, showToast]);
 
-  const refreshAll = useCallback(async () => { await load(); await loadHolds(); }, [load, loadHolds]);
+  const refreshAll = useCallback(async () => { await Promise.all([load(), loadHolds(), loadPrices()]); }, [load, loadHolds, loadPrices]);
 
-  useEffect(() => { load(); loadHolds(); }, [load, loadHolds]);
+  useEffect(() => { load(); loadHolds(); loadPrices(); }, [load, loadHolds, loadPrices]);
+
+  useEffect(() => {
+    const onFocus = () => { loadHolds(); loadPrices(); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [loadHolds, loadPrices]);
+
+  useEffect(() => {
+    if (!holdParam || !holds) return;
+    const h = holds.find((x) => x.id === holdParam);
+    if (h) setSelectedHold(h);
+  }, [holdParam, holds]);
 
   useEffect(() => {
     if (cur !== "page") { setVerified(null); return; }
@@ -143,7 +174,7 @@ export default function PoolsView() {
   }, [cur, curPwd]);
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
-  useEffect(() => { setVerifiedFilter("all"); setSelectedUids([]); setSelectedFileIds([]); }, [cur, curPwd]);
+  useEffect(() => { setVerifiedFilter("all"); setSelectedUids([]); setSelectedFileIds([]); setApprSel([]); }, [cur, curPwd]);
 
   const poolCounts: Record<string, number> = {};
   if (pools) pools.filter((p) => (p as unknown as Record<string, unknown>)["password"] === curPwd || !(p as unknown as Record<string, unknown>)["password"]).forEach((p) => { poolCounts[p.id] = p.available; });
@@ -155,6 +186,13 @@ export default function PoolsView() {
   (holds ?? []).forEach((h) => { const s = holdStatus(h); if (s === "PENDING" || s === "APPROVED" || s === "REJECTED") apprCounts[s]++; });
   const apprShown = (holds ?? []).filter((h) => holdStatus(h) === apprFilter);
   const takeN = customQty ? Number(customQty) || 0 : poolQty === "all" ? totals.available : poolQty as number;
+  const pickAvail = useMemo(() => {
+    if (selectedFileIds.length) {
+      return userFiles?.reduce((sum, u) => sum + u.files.filter((f) => selectedFileIds.includes(f.fileId)).reduce((s, f) => s + f.available, 0), 0) ?? 0;
+    }
+    return detail?.users.filter((u) => selectedUids.includes(u.userId)).reduce((s, u) => s + u.available, 0) ?? 0;
+  }, [selectedFileIds, selectedUids, userFiles, detail]);
+  const effectiveN = holdMode === "pick" && (selectedUids.length || selectedFileIds.length) ? Math.min(takeN, pickAvail) : takeN;
   const unitPrice = prices[cur];
 
   const filtered = detail ? detail.users.filter((u) => {
@@ -164,7 +202,11 @@ export default function PoolsView() {
     return [d.line1, d.line2, u.userId].some((s) => s.toLowerCase().includes(q));
   }) : [];
 
-  const go = (pwd: string, pid: string) => navigate(`/pools/${pwd}/${pid}`);
+  const go = (pwd: string, pid: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("hold");
+    navigate({ pathname: `/pools/${pwd}/${pid}`, search: next.toString() });
+  };
 
   const toggleExpand = async (userId: string) => {
     if (expandedUser === userId) { setExpandedUser(null); return; }
@@ -207,6 +249,7 @@ export default function PoolsView() {
     if (!totals.available) return showToast("No rows available to claim");
     if (!Number.isInteger(n) || n < 1) return showToast("Enter at least 1 row");
     if (holdMode === "pick" && selectedUids.length === 0 && selectedFileIds.length === 0) { showToast("Pick at least 1 user"); return; }
+    if (holdMode === "pick" && pickAvail === 0) { showToast("Selected owners have no available rows"); return; }
     setDownloading(true);
     try {
       const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: holdMode };
@@ -216,9 +259,12 @@ export default function PoolsView() {
       const res = await api.holdPool(curPwd, cur, payload);
       const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? n;
       if (!held) return showToast("No rows available to claim");
+      vibrate(20);
       showToast(`Held ${held} from ${poolMeta.label} — ON HOLD`);
       setHoldConfirmOpen(false);
+      const holdId = (res as unknown as { holdId?: string; downloadId?: string }).holdId ?? (res as unknown as { downloadId?: string }).downloadId;
       await refreshAll();
+      if (holdId) updateParams({ view: "approvals", status: null, hold: holdId });
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDownloading(false); }
   };
 
@@ -234,19 +280,32 @@ export default function PoolsView() {
       const res = await api.holdPool(curPwd, cur, payload);
       const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? 0;
       if (!held) return showToast("No rows available to claim");
+      vibrate(20);
       showToast(`Held ${held} from ${displayName(dlUser).line1} — ON HOLD`);
       setDlUser(null);
       await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDownloading(false); }
   };
 
+  const doBulk = async (action: "approve" | "return") => {
+    if (!apprSel.length) return;
+    setBulkBusy(true);
+    try {
+      await Promise.all(apprSel.map((id) => (action === "approve" ? api.approveHold(id) : api.returnHold(id))));
+      vibrate(20);
+      showToast(`${action === "approve" ? "Approved" : "Returned"} ${apprSel.length} hold${apprSel.length > 1 ? "s" : ""}`);
+      setApprSel([]);
+      await refreshAll();
+    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); await loadHolds(); } finally { setBulkBusy(false); }
+  };
+
   const doApprove = async (id: string) => {
     setHoldActing(id);
-    try { await api.approveHold(id); showToast("Approved"); await refreshAll(); setSelectedHold(null); } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
+    try { await api.approveHold(id); vibrate(20); showToast("Approved"); await refreshAll(); setSelectedHold(null); } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
   const doReturn = async (id: string) => {
     setHoldActing(id);
-    try { await api.returnHold(id); showToast("Rows returned to pool"); await refreshAll(); setSelectedHold(null); } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
+    try { await api.returnHold(id); vibrate(20); showToast("Rows returned to pool"); await refreshAll(); setSelectedHold(null); } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
   const doDeleteHold = async (id: string) => {
     setHoldActing(id);
@@ -314,7 +373,13 @@ export default function PoolsView() {
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)) } finally { setPriceSaving(false) }
   };
 
-  if (detail === null) return <PageSkeleton variant="pools" />;
+  if (detail === null) {
+    return loadFailed ? (
+      <div style={{ padding: 24 }}>
+        <EmptyState title="Could not load pools" sub="Check your connection and try again" action={{ label: "Retry", onClick: () => { void load(); } }} />
+      </div>
+    ) : <PageSkeleton variant="pools" />;
+  }
 
   return (
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -345,6 +410,9 @@ export default function PoolsView() {
         .taker-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:stretch}
         .taker-cell{flex:1;min-width:120px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg3);padding:8px 10px;font-size:13px;font-family:var(--mono);font-weight:600}
         .taker-cell small{display:block;font-family:var(--sans);font-weight:500;color:var(--text3);font-size:10px;margin-bottom:2px}
+        .pool-card{content-visibility:auto;contain-intrinsic-size:auto 60px}
+        .spin{animation:spin .8s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
         @media(max-width:640px){
           .pools-stats{grid-template-columns:1fr!important}
           .pool-switch{flex-wrap:wrap;justify-content:center}
@@ -357,14 +425,29 @@ export default function PoolsView() {
       `}</style>
 
       {/* top-level view tabs */}
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-        <div className="pool-switch" role="tablist" aria-label="Pools page sections">
-          <button role="tab" aria-selected={view === "pool"} className={view === "pool" ? "active" : ""} onClick={() => setView("pool")}>Pool</button>
-          <button role="tab" aria-selected={view === "approvals"} className={view === "approvals" ? "active" : ""} onClick={() => setView("approvals")}>Approvals{apprCounts.PENDING ? <span className="badge" style={{ marginLeft: 6 }}>{apprCounts.PENDING}</span> : null}</button>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: 16, position: "relative" }}>
+        <div
+          className="pool-switch"
+          role="tablist"
+          aria-label="Pools page sections"
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+            e.preventDefault();
+            const next = view === "pool" ? "approvals" : "pool";
+            setView(next);
+            e.currentTarget.querySelector<HTMLButtonElement>(`button[data-view="${next}"]`)?.focus();
+          }}
+        >
+          <button role="tab" data-view="pool" id="tab-pool" aria-selected={view === "pool"} aria-controls="pools-panel-pool" className={view === "pool" ? "active" : ""} onClick={() => setView("pool")}>Pool</button>
+          <button role="tab" data-view="approvals" id="tab-approvals" aria-selected={view === "approvals"} aria-controls="pools-panel-approvals" className={view === "approvals" ? "active" : ""} onClick={() => setView("approvals")}>Approvals{apprCounts.PENDING ? <span className="badge" style={{ marginLeft: 6 }}>{apprCounts.PENDING}</span> : null}</button>
         </div>
+        <button type="button" aria-label="Refresh" title="Refresh" onClick={() => { void refreshAll(); }} style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", width: 36, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--border)", borderRadius: "var(--r)", background: "var(--bg)", color: "var(--text2)", cursor: "pointer" }}>
+          <RefreshCw size={16} className={holdsLoading ? "spin" : ""} aria-hidden />
+        </button>
       </div>
 
-      {view === "pool" ? (<>
+      {view === "pool" ? (
+      <div id="pools-panel-pool" role="tabpanel" aria-labelledby="tab-pool">
       {/* switches */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
           <div className="pool-switch" style={{ background: "#eef2ff", borderColor: "#ddd6fe" }}>
@@ -372,7 +455,7 @@ export default function PoolsView() {
               <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>
             ))}
           </div>
-          <Button variant="outline" size="sm" onClick={() => { const init: Record<string, string> = {}; POOL_TABS.forEach((t) => { const v = prices[t.id] ?? prices[Object.keys(prices)[0]] ?? null; init[t.id] = v != null ? String(v) : ""; }); setPriceInputs(init); setPriceOpen(true); }}>{prices[cur] != null ? `price $${prices[cur]}` : "Unit price"}</Button>
+          {meIsAdmin ? <Button variant="outline" size="sm" onClick={() => { const init: Record<string, string> = {}; POOL_TABS.forEach((t) => { const v = prices[t.id] ?? prices[Object.keys(prices)[0]] ?? null; init[t.id] = v != null ? String(v) : ""; }); setPriceInputs(init); setPriceOpen(true); }}>{prices[cur] != null ? `price $${prices[cur]}` : "Unit price"}</Button> : null}
           <div className="pool-switch">
             {POOL_TABS.map((t) => {
               const meta = POOL_META[t.id];
@@ -420,7 +503,7 @@ export default function PoolsView() {
           <button type="button" aria-pressed={holdMode === "pick"} className={holdMode === "pick" ? "btn btn-primary" : "btn btn-ghost"} style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600, minHeight: 36 }} onClick={() => setHoldMode("pick")}>Pick users</button>
         </div>
         {holdMode === "fifo" ? (
-          <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>Oldest rows first across all delegators.</div>
+          <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>Oldest rows first across all owners.</div>
         ) : (
           <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button type="button" className="btn" style={{ padding: "6px 10px", fontSize: 12, minHeight: 36 }} onClick={selectAllPick}>All</button>
@@ -444,26 +527,26 @@ export default function PoolsView() {
             <small>Quantity</small>
             <span style={{ display: "inline-flex", border: "1px solid var(--border2)", borderRadius: 6, overflow: "hidden", background: "var(--bg)", maxWidth: "100%" }}>
               {[10, 50, 100].map((n) => (
-                <button key={n} onClick={() => { setPoolQty(n); setCustomQty(""); }} style={{ padding: "6px 10px", fontSize: 13, fontWeight: 600, background: poolQty === n && !customQty ? "var(--text)" : "var(--bg)", color: poolQty === n && !customQty ? "var(--bg)" : "var(--text2)", border: "none", borderRight: "1px solid var(--border)", cursor: "pointer", minHeight: 32 }}>{n}</button>
+                <button key={n} onClick={() => { setPoolQty(n); setCustomQty(""); }} style={{ padding: "7px 10px", fontSize: 13, fontWeight: 600, background: poolQty === n && !customQty ? "var(--text)" : "var(--bg)", color: poolQty === n && !customQty ? "var(--bg)" : "var(--text2)", border: "none", borderRight: "1px solid var(--border)", cursor: "pointer", minHeight: 36 }}>{n}</button>
               ))}
-              <button onClick={() => { setPoolQty("all"); setCustomQty(""); }} style={{ padding: "6px 10px", fontSize: 13, fontWeight: 600, background: poolQty === "all" && !customQty ? "var(--text)" : "var(--bg)", color: poolQty === "all" && !customQty ? "var(--bg)" : "var(--text2)", border: "none", borderRight: "1px solid var(--border)", cursor: "pointer", minHeight: 32 }}>All</button>
+              <button onClick={() => { setPoolQty("all"); setCustomQty(""); }} style={{ padding: "7px 10px", fontSize: 13, fontWeight: 600, background: poolQty === "all" && !customQty ? "var(--text)" : "var(--bg)", color: poolQty === "all" && !customQty ? "var(--bg)" : "var(--text2)", border: "none", borderRight: "1px solid var(--border)", cursor: "pointer", minHeight: 36 }}>All</button>
               <input name="custom-qty" placeholder={customFocused ? "" : "Custom"} aria-label="Custom quantity" inputMode="numeric" value={customQty} onChange={(e) => setCustomQty(e.target.value.replace(/\D/g, ""))} onFocus={(e) => { setCustomFocused(true); e.currentTarget.select(); }} onBlur={() => setCustomFocused(false)} style={{ width: 72, border: "none", padding: "6px 8px", fontSize: 13, textAlign: "center", outline: "none", background: customQty ? "var(--bg3)" : "var(--bg)", borderLeft: customFocused ? "1px solid var(--border2)" : "none", cursor: customQty || customFocused ? "text" : "pointer" }} />
             </span>
           </div>
-          <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${takeN} × $${unitPrice.toFixed(2)} = $${(takeN * unitPrice).toFixed(2)}` : "—"}</div>
+          <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${effectiveN} × $${unitPrice.toFixed(2)} = $${(effectiveN * unitPrice).toFixed(2)}` : "—"}</div>
         </div>
         <button type="button" className="btn btn-primary" disabled={downloading || !totals.available} onClick={() => setHoldConfirmOpen(true)} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,112,243,.22)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? "All" : poolQty} from {poolMeta.label}</button>
         <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>Take creates a hold. Approval credits the owners. Reject returns the rows.</div>
       </div>
 
-      <h2 style={{ fontSize: 13, fontWeight: 700, margin: "16px 0 8px" }}>Users</h2>
+      <h2 style={{ fontSize: 13, fontWeight: 700, margin: "16px 0 8px" }}>Owners</h2>
       <div style={{ display: "flex", marginBottom: 8 }}>
-        <SearchInput placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search users" containerStyle={{ width: "100%" }} />
+        <SearchInput placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search owners" containerStyle={{ width: "100%" }} />
       </div>
 
       <div className="card-list" style={{ marginTop: 12 }}>
         {filtered.length === 0 ? (
-          <EmptyState title="No delegators yet" sub={search.trim() ? "No match for your search" : "Delegators appear here when they push rows"} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
+          <EmptyState title="No owners yet" sub={search.trim() ? "No match for your search" : "Owners appear here when they push rows"} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
         ) : filtered.map((u) => {
           const d = displayName(u);
           const isAdmin = Boolean(u.isAdmin || cachedProfiles[u.userId]?.isAdmin);
@@ -472,9 +555,9 @@ export default function PoolsView() {
           const checked = selectedUids.includes(u.userId);
           return (
             <div key={u.userId} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              <div className={`pool-card ${expanded ? "expanded" : ""}`} style={{ position: "relative" }} role="button" tabIndex={0} aria-expanded={expanded} aria-controls={`pool-files-${u.userId}`} onClick={() => toggleExpand(u.userId)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(u.userId); } }}>
+              <div className={`pool-card ${expanded ? "expanded" : ""}`} style={{ position: "relative" }} onClick={() => toggleExpand(u.userId)}>
                 {holdMode === "pick" ? <input type="checkbox" aria-label={`Select ${d.line1}`} checked={checked} onChange={() => toggleUid(u.userId)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, flexShrink: 0 }} /> : null}
-                <span className={`expand-icon ${expanded ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6" /></svg></span>
+                <button type="button" className={`expand-icon ${expanded ? "open" : ""}`} aria-expanded={expanded} aria-controls={`pool-files-${u.userId}`} aria-label={`${expanded ? "Hide" : "Show"} files for ${d.line1}`} onClick={(e) => { e.stopPropagation(); toggleExpand(u.userId); }} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(u.userId); } }} style={{ color: "var(--text3)", flexShrink: 0, background: "transparent", border: "none", cursor: "pointer", width: 32, height: 32, display: "inline-grid", placeItems: "center", padding: 0 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden><path d="M9 18l6-6-6-6" /></svg></button>
                 <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}><ProfileAvatar photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={d.line1.charAt(0).toUpperCase()} className="size-9 bg-(--bg3) text-(--text2)" verified={isAdmin} /></span>
                 <div className="pool-card-info">
                   <div className="pool-card-name">{d.line1}{uf ? <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 500 }}>{uf.files.length} file{uf.files.length !== 1 ? "s" : ""}</span> : null}</div>
@@ -487,7 +570,7 @@ export default function PoolsView() {
                 </div>
                 <div className="pool-card-actions" onClick={(e) => e.stopPropagation()}>
                   <button type="button" className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} onClick={() => { setDlUser(u); setPerQty(10); setPerCustom(""); }}>Take</button>
-                  <button type="button" className="btn" title="More options" aria-label={`More options for ${d.line1}`} aria-haspopup="menu" aria-expanded={menuUser === u.userId} style={{ width: 32, height: 32, padding: 0, justifyContent: "center" }} onClick={() => setMenuUser(menuUser === u.userId ? null : u.userId)}>⋯</button>
+                  <button type="button" className="btn" title="More options" aria-label={`More options for ${d.line1}`} aria-haspopup="menu" aria-expanded={menuUser === u.userId} style={{ width: 36, height: 36, padding: 0, justifyContent: "center" }} onClick={() => setMenuUser(menuUser === u.userId ? null : u.userId)}><MoreHorizontal size={18} aria-hidden /></button>
                   {menuUser === u.userId ? (
                     <div data-pool-menu={u.userId} role="menu" aria-label={`Actions for ${d.line1}`} style={{ position: "absolute", right: 8, top: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--rl)", boxShadow: "var(--shadow-lg)", zIndex: 10, minWidth: 160, padding: 4 }}>
                       <button type="button" role="menuitem" style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", borderRadius: 6, fontWeight: 500 }} onClick={() => openFile(u)}>View file</button>
@@ -521,16 +604,29 @@ export default function PoolsView() {
           );
         })}
       </div>
-      </>) : (
-      <section aria-labelledby="holds-title">
+      </div>) : (
+      <section id="pools-panel-approvals" role="tabpanel" aria-labelledby="tab-approvals">
         <div className="pool-switch" style={{ marginBottom: 10 }}>
           {(["PENDING", "APPROVED", "REJECTED"] as const).map((s) => (
             <button key={s} className={apprFilter === s ? "active" : ""} onClick={() => setApprFilter(s)}>{s[0] + s.slice(1).toLowerCase()} <span className="badge" style={{ marginLeft: 2 }}>{apprCounts[s]}</span></button>
           ))}
         </div>
-        {holdsLoading ? <Skeleton className="h-20 w-full" /> : !holds || apprShown.length === 0 ? (
+        {holdsLoading ? <Skeleton className="h-20 w-full" /> : holdsError ? (
+          <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>
+            Could not load approvals. <button type="button" className="btn" style={{ marginLeft: 8 }} onClick={() => { void loadHolds(); }}>Retry</button>
+          </div>
+        ) : !holds || apprShown.length === 0 ? (
           <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>No {apprFilter.toLowerCase()} approvals</div>
         ) : (
+          <>
+          {apprSel.length ? (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg3)" }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text2)", marginRight: "auto" }}>{apprSel.length} selected</span>
+              <button type="button" className="btn btn-primary" disabled={bulkBusy} onClick={() => void doBulk("approve")} style={{ minHeight: 36, fontWeight: 700 }}>Approve</button>
+              <button type="button" className="btn" disabled={bulkBusy} onClick={() => void doBulk("return")} style={{ minHeight: 36 }}>Return</button>
+              <button type="button" className="btn btn-ghost" disabled={bulkBusy} onClick={() => setApprSel([])} style={{ minHeight: 36 }}>Clear</button>
+            </div>
+          ) : null}
           <div className="card-list">
             {apprShown.map((h) => {
               const st = holdStatus(h);
@@ -542,7 +638,8 @@ export default function PoolsView() {
               const qty = (h as unknown as { claimed?: number; held?: number }).held ?? h.claimed ?? 0;
               const isApproved = st === "APPROVED";
               return (
-                <div key={h.id} className="pool-card" role="button" tabIndex={0} aria-label={`View approval ${h.filename}`} onClick={() => setSelectedHold(h)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedHold(h) } }}>
+                <div key={h.id} className="pool-card" onClick={() => setSelectedHold(h)}>
+                  {st === "PENDING" ? <input type="checkbox" aria-label={`Select ${h.filename}`} checked={apprSel.includes(h.id)} onChange={() => setApprSel((prev) => prev.includes(h.id) ? prev.filter((x) => x !== h.id) : [...prev, h.id])} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, flexShrink: 0 }} /> : null}
                   <span className="badge" style={{ background: st === "PENDING" ? "#fef3c7" : isApproved ? "#dcfce7" : "var(--bg3)", color: st === "PENDING" ? "#92400e" : isApproved ? "#166534" : "var(--text3)", borderColor: st === "PENDING" ? "#fde68a" : isApproved ? "#bbf7d0" : "var(--border)" }}>{st}</span>
                   <div className="pool-card-info" style={{ gap: 4 }}>
                     <div className="pool-card-name" title={h.filename}>{h.filename} · {poolLabel} {isApproved ? <InkStamp label="APPROVED" /> : null}</div>
@@ -552,6 +649,7 @@ export default function PoolsView() {
               );
             })}
           </div>
+          </>
           )}
       </section>
       )}
@@ -560,7 +658,7 @@ export default function PoolsView() {
       <Dialog open={holdConfirmOpen} onOpenChange={setHoldConfirmOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Take accounts</DialogTitle><DialogDescription>Rows go ON HOLD. Approve to credit balance, Reject to return rows.</DialogDescription></DialogHeader>
-          <div style={{ fontSize: 12, color: "var(--text3)" }}>Taking {takeN} from {poolMeta.label}{holdMode === "pick" ? ` · ${selectedUids.length} users${selectedFileIds.length ? ` · ${selectedFileIds.length} files` : ""}` : ""}</div>
+          <div style={{ fontSize: 12, color: "var(--text3)" }}>Taking {effectiveN} from {poolMeta.label}{holdMode === "pick" ? ` · ${selectedUids.length} users${selectedFileIds.length ? ` · ${selectedFileIds.length} files` : ""}` : ""}</div>
           <DialogFooter><Button variant="ghost" onClick={() => setHoldConfirmOpen(false)}>Cancel</Button><Button disabled={downloading} onClick={doHoldConfirm}>Confirm hold</Button></DialogFooter>
         </DialogContent>
       </Dialog>
@@ -624,7 +722,7 @@ export default function PoolsView() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <ApprovalDetailDialog hold={selectedHold} open={!!selectedHold} onClose={() => setSelectedHold(null)} onApprove={doApprove} onReturn={doReturn} onDelete={doDeleteHold} acting={holdActing} />
+      <ApprovalDetailDialog hold={selectedHold} open={!!selectedHold} onClose={() => { setSelectedHold(null); updateParams({ hold: null }); }} onApprove={doApprove} onReturn={doReturn} onDelete={doDeleteHold} acting={holdActing} unitPrice={selectedHold ? prices[selectedHold.poolId] ?? null : null} />
       </div>
   );
 }

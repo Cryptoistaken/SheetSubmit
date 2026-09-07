@@ -1,5 +1,5 @@
 import { forwardRef, useRef, useState, type ComponentPropsWithoutRef, type PointerEvent as ReactPointerEvent } from "react"
-import { cn } from "@/lib/utils"
+import { cn, vibrate } from "@/lib/utils"
 import { ArrowRight, Check } from "lucide-react"
 
 const PAD = 4
@@ -52,6 +52,7 @@ export const SlideToConfirmButton = forwardRef<HTMLDivElement, SlideToConfirmBut
       if (dragged && x >= maxX() - 4) {
         setX(maxX())
         setConfirmed(true)
+        vibrate(15)
         onConfirm?.()
       } else {
         setX(0)
@@ -123,6 +124,7 @@ export const SlideToConfirmButton = forwardRef<HTMLDivElement, SlideToConfirmBut
               event.preventDefault()
               setX(maxX())
               setConfirmed(true)
+              vibrate(15)
               onConfirm?.()
             }}
             className={cn(

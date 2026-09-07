@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pool Workspace Blueprint</title>
+  <style>
+    :root { --ink:#075985; --line:#1987c5; --soft:#dff3ff; --wash:#f5fbff; --hot:#0ea5e9; --muted:#4b7894; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#eaf7ff; color:var(--ink); font:14px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    header { padding:28px 5vw 18px; border-bottom:2px solid var(--line); background:var(--wash); }
+    h1 { margin:0 0 8px; font-size:25px; letter-spacing:.05em; }
+    p { margin:5px 0; color:var(--muted); }
+    main { max-width:1440px; margin:auto; padding:22px 5vw 60px; }
+    .note { border:1px dashed var(--line); padding:12px 14px; background:var(--soft); margin-bottom:20px; }
+    .frame { border:2px solid var(--line); background:#fff; padding:16px; margin:20px 0 30px; box-shadow:8px 8px 0 #b8e5fa; }
+    .frame h2 { margin:0 0 12px; font-size:17px; }
+    .measure { color:var(--muted); font-size:11px; }
+    .bar, .tabs, .row, .cards, .toolbar, .dialog-body, .approval-grid { display:flex; gap:10px; }
+    .bar { align-items:center; border-bottom:1px solid var(--line); padding-bottom:12px; }
+    .bar strong { font-size:18px; margin-right:auto; }
+    .control, .tab, .button, .input, .badge, .avatar, .icon { border:1px solid var(--line); background:var(--soft); min-height:34px; padding:8px 10px; }
+    .button { background:#bcecff; font-weight:bold; }
+    .tabs { margin:12px 0; border-bottom:2px solid var(--line); }
+    .tab { border-bottom:0; min-width:140px; text-align:center; }
+    .tab.active { background:#fff; border-width:2px; margin-bottom:-2px; }
+    .cards { align-items:stretch; }
+    .card { border:1px solid var(--line); background:var(--wash); padding:13px; min-height:92px; flex:1; position:relative; }
+    .card h3 { margin:0 0 12px; font-size:13px; }
+    .number { font-size:26px; font-weight:bold; }
+    .card .corner { position:absolute; right:10px; top:10px; color:var(--muted); font-size:10px; }
+    .taker { margin-top:12px; border:2px solid var(--hot); padding:14px; background:#eefaff; }
+    .taker .row > * { flex:1; }
+    .list { border:1px solid var(--line); margin-top:12px; }
+    .list .item { min-height:56px; padding:10px; border-bottom:1px dashed var(--line); display:flex; align-items:center; gap:10px; }
+    .list .item:last-child { border-bottom:0; }
+    .avatar { border-radius:50%; width:36px; height:36px; padding:8px 0; text-align:center; }
+    .avatar.small { width:26px; height:26px; padding:4px 0; }
+    .icon { width:34px; height:34px; padding:8px 0; text-align:center; }
+    .item .grow { flex:1; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .file { border:1px solid var(--line); padding:12px; min-height:110px; background:#fff; }
+    .file .top { display:flex; gap:8px; align-items:center; }
+    .dialog { max-width:680px; margin:20px auto; border:3px solid var(--hot); background:#fff; padding:18px; box-shadow:12px 12px 0 #a9ddf6; }
+    .dialog h3 { margin:0 0 4px; }
+    .dialog-body > * { flex:1; }
+    .approval-grid { flex-wrap:wrap; }
+    .approval-grid .card { min-width:220px; }
+    .slider { height:42px; border:2px solid var(--line); background:var(--soft); padding:11px; text-align:center; }
+    .slider.reject { border-color:#1479a8; }
+    .state { border-left:4px solid var(--hot); padding:10px; background:#eefaff; margin-top:12px; }
+    @media (max-width:700px) {
+      main { padding:14px 3vw 40px; }
+      .cards, .bar, .taker .row, .dialog-body { flex-direction:column; }
+      .tabs { overflow:auto; }
+      .tab { min-width:125px; }
+      .grid { grid-template-columns:1fr; }
+      .frame { padding:10px; box-shadow:5px 5px 0 #b8e5fa; }
+      .approval-grid { flex-direction:column; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>POOL WORKSPACE / BLUEPRINT</h1>
+    <p>Blue lines are structure. Labels are proposed content, not implementation copy.</p>
+  </header>
+  <main>
+    <div class="note"><strong>Shared context:</strong> password navigator + pool navigator + price stay fixed above all three views. <span class="measure">Desktop content max 960px; mobile collapses to one column; tab state is URL-preserved.</span></div>
+
+    <section class="frame">
+      <h2>01 / POOL VIEW <span class="measure">primary pool page, 960px max width</span></h2>
+      <div class="bar"><strong>POOL CONTROL STRIP</strong><span class="control">Password: dgddigital</span><span class="control">Pool: cookies_only</span><span class="control">Price: $0.02</span></div>
+      <div class="tabs"><div class="tab active">POOL</div><div class="tab">USERS / FILES</div><div class="tab">APPROVALS</div></div>
+      <div class="cards">
+        <div class="card"><span class="corner">CARD 280x108</span><h3>READY TO TAKE</h3><div class="number">1,240</div><span class="measure">available accounts</span></div>
+        <div class="card"><span class="corner">CARD 280x108</span><h3>TAKEN</h3><div class="number">320</div><span class="measure">claimed or held accounts</span></div>
+        <div class="card"><span class="corner">CARD 280x108</span><h3>OWNERS</h3><div class="number">28</div><span class="measure">source users / delegators</span></div>
+      </div>
+      <div class="toolbar"><span class="control">Mode: Pool FIFO</span><span class="control">or Pick users</span><span class="control">Page filter: all</span></div>
+      <div class="taker"><h3>TAKER CARD <span class="measure">single action surface</span></h3><div class="row"><div class="control">Pool: cookies_only</div><div class="control">Pick users: 2 users / 4 files</div><div class="control">Amount: 100 x $0.02 = $2.00</div><div class="button">TAKE</div></div><p class="measure">Take creates a HOLD. Approval creates wallet credit. Quantity is not an arbitrary payout.</p></div>
+      <div class="list"><div class="item"><span class="avatar">A</span><span class="grow"><strong>Alex User</strong><br><span class="measure">12 files / 480 accounts / 60 taken</span></span><span class="badge">expand files</span></div><div class="item"><span class="avatar">M</span><span class="grow"><strong>Mina User</strong><br><span class="measure">4 files / 100 accounts / 20 taken</span></span><span class="badge">select</span></div></div>
+    </section>
+
+    <section class="frame">
+      <h2>02 / USERS + FILES VIEW <span class="measure">user-first navigator</span></h2>
+      <div class="bar"><strong>USERS / FILES</strong><span class="input">Search users or files...</span><span class="control">Grid | List</span></div>
+      <div class="tabs"><div class="tab active">USERS</div><div class="tab">FILES</div></div>
+      <div class="list"><div class="item"><span class="avatar">A</span><span class="grow"><strong>Alex User</strong><br><span class="measure">12 files / 480 accounts / 60 taken</span></span><span class="badge">details</span></div><div class="item"><span class="icon">XLS</span><span class="grow"><strong>alex-cookies.xlsx</strong><br><span class="measure">Created Sep 07, 2026 / 120 accounts</span></span><span class="badge">expand row</span></div><div class="item"><span class="icon">XLS</span><span class="grow"><strong>alex-2fa.xlsx</strong><br><span class="measure">Created Sep 06, 2026 / 80 accounts</span></span><span class="badge">open with confirm</span></div></div>
+      <div class="state"><strong>Pick mode:</strong> clicking users/files selects source constraints. <strong>Normal mode:</strong> clicking a file opens the confirmation dialog below.</div>
+    </section>
+
+    <section class="frame">
+      <h2>03 / APPROVALS VIEW <span class="measure">pending is default; rejected remains auditable</span></h2>
+      <div class="bar"><strong>APPROVALS</strong><span class="control">Pending (8)</span><span class="control">Rejected (12)</span><span class="control">Approved (40)</span></div>
+      <div class="list"><div class="item"><span class="avatar small">A</span><span class="avatar small">M</span><span class="icon">XLS</span><span class="grow"><strong>alex-cookies.xlsx</strong><br><span class="measure">Sep 07, 2026 14:32 / 100 accounts / $2.00</span></span><span class="button">DOWNLOAD</span></div><div class="item"><span class="avatar small">R</span><span class="icon">PG</span><span class="grow"><strong>rejected-pages.xlsx</strong><br><span class="measure">Sep 06, 2026 / returned to pool</span></span><span class="badge">REJECTED</span></div></div>
+    </section>
+
+    <section class="frame">
+      <h2>OVERLAY STATES <span class="measure">all overlays retain a title, close action, focus trap, and keyboard path</span></h2>
+      <div class="dialog"><h3>Open alex-cookies.xlsx?</h3><p>This opens the file in the admin sheet view.</p><div class="dialog-body"><div class="button">CANCEL</div><div class="button">OPEN FILE</div></div><p class="measure">On Back: return to `/pools/dgddigital/cookies_only?view=users` with search and expansion preserved.</p></div>
+      <div class="dialog"><h3>User detail / Alex User</h3><p>12 files / 480 accounts / 60 taken / $1.20 pending or approved share</p><div class="list"><div class="item"><span class="icon">XLS</span><span class="grow">alex-cookies.xlsx / 40 taken</span><span class="measure">$0.80 / 66.7%</span></div><div class="item"><span class="icon">XLS</span><span class="grow">alex-2fa.xlsx / 20 taken</span><span class="measure">$0.40 / 33.3%</span></div></div></div>
+      <div class="dialog"><h3>Approval detail / alex-cookies.xlsx</h3><div class="approval-grid"><div class="card"><h3>ACCOUNTS</h3><div class="number">100</div></div><div class="card"><h3>USERS</h3><div class="number">2</div></div><div class="card"><h3>TOTAL PAYMENT</h3><div class="number">$2.00</div></div></div><div class="list"><div class="item"><span class="avatar">A</span><span class="grow"><strong>Alex User</strong><br><span class="measure">60 accounts / 60% / $1.20</span></span><span class="button">USER FILE</span></div><div class="item"><span class="avatar">M</span><span class="grow"><strong>Mina User</strong><br><span class="measure">40 accounts / 40% / $0.80</span></span><span class="button">USER FILE</span></div></div><div class="dialog-body"><div class="slider">SLIDE TO APPROVE</div><div class="slider reject">SLIDE TO REJECT</div></div></div>
+    </section>
+  </main>
+</body>
+</html>

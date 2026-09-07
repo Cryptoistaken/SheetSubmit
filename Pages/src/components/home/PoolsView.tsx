@@ -284,9 +284,16 @@ export default function PoolsView() {
     return errors;
   };
 
+  const hasPriceChanges = POOL_TABS.some((t) => {
+    const raw = priceInputs[t.id] ?? "";
+    const v = Number(raw);
+    return raw.trim() !== "" && Number.isFinite(v) && v !== prices[t.id];
+  });
+
   const openPriceConfirm = () => {
     const errors = validatePrices();
     if (errors.length) { showToast(`Invalid: ${errors.join(", ")}`); return; }
+    if (!hasPriceChanges) { showToast("No changes to save"); return; }
     setPriceConfirm(true);
   };
 
@@ -581,7 +588,7 @@ export default function PoolsView() {
               return <label key={t.id} className="flex flex-col gap-1.5"><span className="text-sm font-medium flex items-center gap-2"><meta.Icon size={14} />{meta.label}{prices[t.id] != null ? <span className="text-muted-foreground text-xs font-normal">· ${prices[t.id]!.toFixed(2)}</span> : null}</span><input aria-label={`${meta.label} price`} type="number" min={0} max={1000} step={0.01} value={priceInputs[t.id] ?? ""} onChange={(e) => setPriceInputs((p) => ({ ...p, [t.id]: e.target.value }))} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></label>;
             })}
           </div>
-          <DialogFooter><Button variant="ghost" onClick={() => setPriceOpen(false)}>Cancel</Button><Button onClick={openPriceConfirm}>Save all</Button></DialogFooter>
+          <DialogFooter><Button variant="ghost" onClick={() => setPriceOpen(false)}>Cancel</Button><Button disabled={!hasPriceChanges} onClick={openPriceConfirm}>Save all</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

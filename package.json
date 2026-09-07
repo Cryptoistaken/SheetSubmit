@@ -11,6 +11,7 @@
     "test:live": "bun test/test.ts",
     "test:two-session": "bun test/twoSession.ts",
     "test:bench": "bun test/benchmark.ts",
+    "test:performance": "bun test/performance.ts",
     "test:stress": "bun test/stress.ts"
   }
 }

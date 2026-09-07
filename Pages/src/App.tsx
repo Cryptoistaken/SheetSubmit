@@ -8,7 +8,6 @@ import {
   useParams,
 } from "react-router";
 
-import LoginScreen from "@/components/auth/LoginScreen";
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 
 import Topbar from "@/components/layout/Topbar";
@@ -18,6 +17,7 @@ import { lazyRetry } from "@/lib/lazyRetry";
 
 const HomePage = lazyRetry(() => import("@/pages/HomePage"));
 const SheetPage = lazyRetry(() => import("@/pages/SheetPage"));
+const LoginScreen = lazyRetry(() => import("@/components/auth/LoginScreen"));
 
 const BubbleMode = lazy(() => import("@/components/bubble/BubbleMode"));
 const BubbleDesignPage = lazy(() => import("@/pages/BubbleDesignPage"));
@@ -170,10 +170,12 @@ function LoginRoute() {
   if (user) return <Navigate to={next} replace />;
   return (
     <div className="flex h-dvh flex-col">
-      <LoginScreen
-        notice={state?.expired ? "Session expired. Please log in again." : undefined}
-        next={next}
-      />
+      <Suspense fallback={<LoadingShell variant="files" />}>
+        <LoginScreen
+          notice={state?.expired ? "Session expired. Please log in again." : undefined}
+          next={next}
+        />
+      </Suspense>
     </div>
   );
 }

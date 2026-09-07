@@ -6,7 +6,7 @@
   "packageManager": "bun@1.4.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "typecheck": "tsc -b",
     "lint": "oxlint",
     "test": "bun test src",

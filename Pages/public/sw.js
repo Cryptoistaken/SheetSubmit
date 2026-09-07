@@ -27,6 +27,7 @@ self.addEventListener("install", (event) => {
           }
         }
       } catch {}
+      self.skipWaiting();
     })(),
   );
 });

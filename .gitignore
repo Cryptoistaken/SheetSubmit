@@ -43,6 +43,7 @@ test/*
 !test/twoSession.ts
 !test/benchmark.ts
 !test/stress.ts
+!test/performance.ts
 !test/lib.ts
 !test/accounts.example.json
 !test/.env.example

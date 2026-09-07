@@ -28,7 +28,9 @@ async function run() {
 
   const [cookieRows, rows2fa, pageRows] = await Promise.all([loadRows("cookie.xlsx"), loadRows("2fa.xlsx"), loadRows("Page.xlsx")]);
   assert(cookieRows.length === 5 && rows2fa.length === 5 && pageRows.length === 5, "fixtures: expected five rows in each workbook");
-  const files = (await Promise.all([["cookie", cookieRows, "cookie"], ["2fa", rows2fa, "combo"], ["page", pageRows, "page"]].map(([name, rows, preset]) => create(name as string, rows as any[], preset as string)))).filter(Boolean) as any[];
+  const runId = Date.now().toString().slice(-7);
+  const uniqueRows = (rows: any[]) => rows.map((row, index) => { const uid = `${row.uid}${runId}${index}`; return { ...row, uid, cookies: row.cookies.replace(/c_user=\d+/, `c_user=${uid}`) }; });
+  const files = (await Promise.all([["cookie", uniqueRows(cookieRows), "cookie"], ["2fa", uniqueRows(rows2fa), "combo"], ["page", uniqueRows(pageRows), "page"]].map(([name, rows, preset]) => create(name as string, rows as any[], preset as string)))).filter(Boolean) as any[];
   console.log(`Created ${files.length}/3 fixture files`);
 
   for (const [label, path] of [["wallet", "/wallet"], ["wallet methods", "/wallet/methods"], ["admin stats", "/admin/stats"], ["pools", "/pools"], ["archive", "/archive"]] as const) {
@@ -44,7 +46,7 @@ async function run() {
   const rows = await request<any[]>(`/files/${files[0].id}/rows`); assertStatus(rows, 200, "rows"); assert(rows.body.length === 5, "rows: count mismatch");
   const dups = await request(`/cross-dups?fileId=${files[0].id}`); assertStatus(dups, 200, "cross-file duplicates");
 
-  const poolReady = await waitFor(async () => { const page = await request<any>("/pools/dgddigital/page"); return page.status === 200 && page.body.totals.available >= 5; });
+  const poolReady = await waitFor(async () => { const page = await request<any>(`/pools/dgddigital/page/rows?fileId=${files[2].id}&limit=10`); return page.status === 200 && page.body.total >= 5; });
   assert(poolReady, "pool feed did not become visible within 15 seconds");
   const hold = await request<any>("/pools/dgddigital/page/hold", json({ count: 1, mode: "pick", srcFileIds: [files[2].id] })); assertStatus(hold, 200, "pool hold"); assert(hold.body.holdId, "pool hold: missing hold id");
   const rejected = await request(`/pools/holds/${hold.body.holdId}/reject`, { method: "POST" }); assertStatus(rejected, 200, "pool hold reject");

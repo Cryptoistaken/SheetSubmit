@@ -132,6 +132,11 @@ async function poolOp(password: string, op: string, a: any) {
 
 async function selectRows(tx: any, password: string, pool: string, a: any, limit: number) {
   const { u, f } = poolFilters(a), cap = a.verifiedOnly || a.unverifiedOnly ? 5000 : limit;
+  if (!u.length && f.length === 1) {
+    const rows: any[] = await tx`SELECT row_key,data FROM pool_rows WHERE password=${password} AND pool_id=${pool} AND state='available' AND src_file_id=${f[0]} ORDER BY inserted_at,row_key LIMIT ${cap} FOR UPDATE SKIP LOCKED`;
+    const normalized = rows.map((r) => ({ ...r, data: json(r.data) }));
+    return (a.verifiedOnly || a.unverifiedOnly) ? normalized.filter((r) => a.verifiedOnly ? eligible(r.data) : !eligible(r.data)).slice(0, limit) : normalized;
+  }
   const rows: any[] = u.length && f.length
     ? await tx`SELECT row_key,data FROM pool_rows WHERE password=${password} AND pool_id=${pool} AND state='available' AND src_uid=ANY(${db.array(u)}::text[]) AND src_file_id=ANY(${db.array(f)}::text[]) ORDER BY inserted_at,row_key LIMIT ${cap} FOR UPDATE SKIP LOCKED`
     : u.length

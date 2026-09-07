@@ -13,6 +13,7 @@ import { ApprovalDetailDialog } from "./ApprovalDetailDialog";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import SearchInput from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { InkStamp } from "@/components/ui/ink-stamp";
 
@@ -81,8 +82,9 @@ export default function PoolsView() {
   // price
   const [prices, setPrices] = useState<Record<string, number | null>>({});
   const [priceOpen, setPriceOpen] = useState(false);
-  const [priceInput, setPriceInput] = useState("");
+  const [priceInputs, setPriceInputs] = useState<Record<string, string>>({});
   const [priceSaving, setPriceSaving] = useState(false);
+  const [priceConfirm, setPriceConfirm] = useState(false);
 
   useEffect(() => {
     if (!menuUser) return;
@@ -272,18 +274,34 @@ export default function PoolsView() {
     showToast("No file found for this user");
   };
 
+  const validatePrices = (): string[] => {
+    const errors: string[] = [];
+    POOL_TABS.forEach((t) => {
+      const raw = priceInputs[t.id] ?? "";
+      const v = Number(raw);
+      if (!raw.trim() || !Number.isFinite(v) || v < 0 || v > 1000) errors.push(`${POOL_META[t.id].label}: 0-1000`);
+    });
+    return errors;
+  };
+
+  const openPriceConfirm = () => {
+    const errors = validatePrices();
+    if (errors.length) { showToast(`Invalid: ${errors.join(", ")}`); return; }
+    setPriceConfirm(true);
+  };
+
   const savePrice = async () => {
-    const v = Number(priceInput);
-    if (!priceInput.trim() || !Number.isFinite(v) || v < 0 || v > 1000) return showToast("Price must be 0-1000");
     setPriceSaving(true);
     try {
       const updated: Record<string, number | null> = {};
       await Promise.all(POOL_TABS.map(async (t) => {
+        const v = Number(priceInputs[t.id] ?? "0");
         try { const res = await api.setPoolPrice(curPwd, t.id, v); updated[t.id] = res.price; } catch { updated[t.id] = prices[t.id] ?? null; }
       }));
       setPrices(updated);
+      setPriceConfirm(false);
       setPriceOpen(false);
-      showToast(`Price set to $${v.toFixed(2)} for all pools`);
+      showToast("Prices saved");
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)) } finally { setPriceSaving(false) }
   };
 
@@ -327,7 +345,7 @@ export default function PoolsView() {
               <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>
             ))}
           </div>
-          <Button variant="outline" size="sm" onClick={() => { const v = prices[cur] ?? prices[Object.keys(prices)[0]] ?? null; setPriceInput(v != null ? String(v) : ""); setPriceOpen(true); }}>{prices[cur] != null ? `$${prices[cur]}` : "Price"}</Button>
+          <Button variant="outline" size="sm" onClick={() => { const init: Record<string, string> = {}; POOL_TABS.forEach((t) => { const v = prices[t.id] ?? prices[Object.keys(prices)[0]] ?? null; init[t.id] = v != null ? String(v) : ""; }); setPriceInputs(init); setPriceOpen(true); }}>{prices[cur] != null ? `$${prices[cur]}` : "Unit price"}</Button>
           <div className="pool-switch">
             {POOL_TABS.map((t) => {
               const meta = POOL_META[t.id];
@@ -556,16 +574,46 @@ export default function PoolsView() {
       {/* price dialog */}
       <Dialog open={priceOpen} onOpenChange={setPriceOpen}>
          <DialogContent>
-          <DialogHeader><DialogTitle>Set price</DialogTitle><DialogDescription>Set price per row for all pools ({curPwd}) — 0 to 1000</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Unit price</DialogTitle><DialogDescription>Set price per row for each pool ({curPwd}) — 0 to 1000</DialogDescription></DialogHeader>
           <div className="flex flex-col gap-3">
             {POOL_TABS.map((t) => {
               const meta = POOL_META[t.id];
-              return <label key={t.id} className="flex flex-col gap-1.5"><span className="text-sm font-medium flex items-center gap-2"><meta.Icon size={14} />{meta.label}{prices[t.id] != null ? <span className="text-muted-foreground text-xs font-normal">· ${prices[t.id]!.toFixed(2)}</span> : null}</span><input aria-label={`${meta.label} price`} type="number" min={0} max={1000} step={0.01} value={priceInput} onChange={(e) => setPriceInput(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></label>;
+              return <label key={t.id} className="flex flex-col gap-1.5"><span className="text-sm font-medium flex items-center gap-2"><meta.Icon size={14} />{meta.label}{prices[t.id] != null ? <span className="text-muted-foreground text-xs font-normal">· ${prices[t.id]!.toFixed(2)}</span> : null}</span><input aria-label={`${meta.label} price`} type="number" min={0} max={1000} step={0.01} value={priceInputs[t.id] ?? ""} onChange={(e) => setPriceInputs((p) => ({ ...p, [t.id]: e.target.value }))} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></label>;
             })}
           </div>
-          <DialogFooter><Button variant="ghost" onClick={() => setPriceOpen(false)}>Cancel</Button><Button disabled={priceSaving} onClick={savePrice}>{priceSaving ? "Saving…" : "Save all"}</Button></DialogFooter>
+          <DialogFooter><Button variant="ghost" onClick={() => setPriceOpen(false)}>Cancel</Button><Button onClick={openPriceConfirm}>Save all</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* price confirm dialog */}
+      <AlertDialog open={priceConfirm} onOpenChange={setPriceConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm price change</AlertDialogTitle>
+            <AlertDialogDescription>Review changes before saving.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-2 text-sm">
+            {POOL_TABS.map((t) => {
+              const meta = POOL_META[t.id];
+              const oldP = prices[t.id];
+              const newP = Number(priceInputs[t.id] ?? "0");
+              if (oldP === newP) return null;
+              return (
+                <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+                  <span className="flex items-center gap-2 font-medium"><meta.Icon size={14} />{meta.label}</span>
+                  <span className="text-muted-foreground">${oldP != null ? oldP.toFixed(2) : "—"}</span>
+                  <span>→</span>
+                  <span className="font-medium">${newP.toFixed(2)}</span>
+                </div>
+              );
+            })}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={priceSaving} onClick={savePrice}>{priceSaving ? "Saving…" : "OK"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ApprovalDetailDialog hold={selectedHold} open={!!selectedHold} onClose={() => setSelectedHold(null)} onApprove={doApprove} onReturn={doReturn} onDelete={doDeleteHold} acting={holdActing} />
       <DownloadDetailModal downloadId={detailId} onClose={() => setDetailId(null)} onDeleted={refreshAll} />

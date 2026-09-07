@@ -1,4 +1,4 @@
-import { assert, assertStatus, base, errorText, fixtureDir, json, loadRows, request, session, waitFor } from "./lib";
+import { assert, assertStatus, base, errorText, fixtureDir, json, loadRows, put, request, session, waitFor } from "./lib";
 
 const created: string[] = [];
 const failures: string[] = [];

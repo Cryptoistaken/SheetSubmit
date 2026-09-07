@@ -5,9 +5,9 @@
 - Git-connected Pages auto-deploy on push; backend deploys through Railway. No CI deploy workflow.
 - Package manager **bun**. Run `bun install` in `backend/` and `Pages/` if `node_modules` missing.
 - Frontend: React 19 + TypeScript + Vite 8 + Tailwind v4 + shadcn/ui (Nova, neutral, lucide, Geist) + Zustand.
-- Worker: Hono + Durable Objects (SQLite) + `xlsx`. No Redis, no KV, no D1.
+- Runtime: Hono on Bun + Postgres (`bun:sql`) + `xlsx`. No Redis used (RAILWAY_REDIS_ID present but unused), no KV/D1/R2.
 - Auth: Telegram bot login → HMAC session cookie (`ss_session`). Stateless verify via `crypto.subtle`.
-- Deploy secrets: `deploy.env` (gitignored) — `CLOUDFLARE_ACCOUNT_ID=9cd0d33911e8b252bf17912dac023e83`, `CLOUDFLARE_API_TOKEN`.
+- Deploy secrets: `deploy.env` (gitignored) — CLOUDFLARE_*, RAILWAY_*, TELEGRAM_LOGIN_CLIENT_ID, ADMIN_IDS, GITHUB_*.
 - Telegram bot: **TEST token** only. Never use prod token.
 
 ## Codebase map
@@ -16,7 +16,8 @@
 ```
 . / package.json          # orchestrator: dev:web/build/typecheck/test (bun --cwd)
   AGENTS.md               # this file
-  deploy.env              # gitignored — CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN
+  deploy.env              # gitignored — CLOUDFLARE_* + RAILWAY_* + TELEGRAM_LOGIN_CLIENT_ID + ADMIN_IDS + GITHUB_*
+  railway.json            # {"services":{"backend":{"rootDirectory":"backend"}}}
   .github/workflows/
     build-android.yml     # APK CI (assembleRelease + keystore-decode, release publish/changelog)
     generate-keystore.yml # one-time Android keystore generator
@@ -24,9 +25,8 @@
                         #   PERFORMANCE.md — 62-entry inventory covering 64 handlers + per-API perf plan (bottleneck → fix → est. speedup), 002_perf.sql migration sketch, rollout order
   Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev; native Telegram Login SDK uses BotFather client 8667114953 and CI GitHub Maven credentials
-  scripts/TestApi.ts      # live API test suite — run: bun scripts/TestApi.ts (secret auto-loads from scripts/.env)
-                        #   subset: TEST_FILTER env or argv — number (55), range (55-70), or name substring (claim), comma/space-combined — e.g. `bun scripts/TestApi.ts 90-97`, `bun scripts/TestApi.ts claim pools`, `--filter=`/`--only=`/`--grep=` prefixes stripped, `h`/`--help` for usage
-  scripts/nuke.ts         # DB nuke via admin API — drains pools + deletes files/users — run: bun scripts/nuke.ts [--dry|--yes|--full|--keep id1,id2] (secret auto-loads from scripts/.env)
+  backend/scripts/schema.ts # DB bootstrap/verify (bun scripts/schema.ts bootstrap|verify)
+  test/                   # test fixture xlsx files (2fa.xlsx, cookie.xlsx, Page.xlsx)
 ```
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
@@ -34,14 +34,16 @@
   index.ts              # app setup, routes, API_VERSION (currently 1.5.4; bump on any route change, surfaced by /api/health),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   /api/auth/me (verifySession, returns CDN photoUrl+phone+isAdmin), POST /api/auth/logout,
-                      #   POST /api/auth/device/claim {token, turnstile} (Turnstile enforced if TURNSTILE_SECRET set),
+                      #   POST /api/auth/device/claim {token} (rateLimit 10/60s, deviceGet/Delete),
                       #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS, stores picture+phone),
-                      #   POST /api/auth/turnstile-verify, GET /api/bot/info, ensureWebhook on first request
+                      #   GET /api/bot/info, ensureWebhook on first request
+                      #   + wallet routes: GET /api/wallet, POST /api/wallet/withdraw, GET /api/wallet/requests, POST /api/wallet/requests/:id/:action
  lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, HITOOLS_CHECK_URL, TELEGRAM_LOGIN_CLIENT_ID)
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
  src/lib/session.ts      # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
- src/lib/do.ts            # repository transport for Postgres operations
- src/lib/pg.ts            # Postgres repository for users, files, pools, wallets and withdrawals
+ src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
+ src/lib/pg.ts            # Postgres repository for users, files, pools, wallets and withdrawals (bun:sql, max 10 connections)
+ src/lib/rateLimit.ts     # sliding window rate limiter, ipKey helper
  src/routes/files.ts      # files, archive and duplicate routes
                       #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup)
                       #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
@@ -59,20 +61,24 @@ src/routes/bot.ts         # Telegram webhook and bot routes
 
 ### Pages — `Pages/src/` (Vite 8, entry `main.tsx`)
 ```
-main.tsx              # StrictMode, Toast>Confirm>Auth>App
+main.tsx              # StrictMode, Toast>Confirm>Auth>App, service-worker + chunk-error reload guard
 App.tsx               # createBrowserRouter: RequireAuth gate (unauth → /login with redirect-back state) → Layout (Topbar+Outlet); public /login route (LoginRoute, bounces authed users back); bubble mode
 index.css / app.css   # tailwind v4 + shadcn + geist + legacy styles
-vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000, vendor-react chunk
+vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000, manualChunks vendor-react|xlsx|vendor-ui|vendor-state|vendor
+server.js             # Bun static server + same-origin /api + /webhook proxy (identity encoding, cookie forward) for Railway Web
 components.json       # shadcn Nova, neutral, cssVariables, lucide
  pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/analysis,/tools (+/pools redirect, /tools/splitter, /admin/user/:userId, /bubble-design); WalletView has user wallet and admin withdrawal-request tabs
 pages/SheetPage.tsx   # /file/:id + /admin/user/:userId/file/:fileId
 pages/BubbleDesignPage.tsx   # /admin renders via HomePage + components/home/AdminView.tsx (no AdminPage file)
  components/layout/Topbar.tsx          # connection card + shadcn profile dropdown + animated theme toggle
-components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, AnalysisView.tsx, Fab.tsx, EmptyState.tsx, DownloadDetailModal.tsx
+components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx, ArchiveView.tsx, AdminView.tsx, AnalysisView.tsx, WalletView.tsx, ApprovalDetailDialog.tsx, Fab.tsx, EmptyState.tsx, DownloadDetailModal.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
 components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed
- components/ui/button.tsx, avatar.tsx, dialog.tsx, alert-dialog.tsx, dropdown-menu.tsx, theme-toggler.tsx, hold-to-delete-button.tsx, slide-to-confirm-button.tsx, ink-stamp.tsx  # shadcn and reusable pool actions
+components/tools/SplitterTool.tsx   # xlsx split into N parts
+components/icons/FileTypeIcons.tsx, FacebookIcon.tsx
+components/profile/ProfileAvatar.tsx
+ components/ui/button.tsx, avatar.tsx, dialog.tsx, alert-dialog.tsx, dropdown-menu.tsx, theme-toggler.tsx, hold-to-delete-button.tsx, slide-to-confirm-button.tsx, ink-stamp.tsx, page-skeleton.tsx, search-input.tsx  # shadcn and reusable pool actions
 contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, retry 3×1.5s
 stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection
 stores/bubbleStore.ts     # {on, pickMode}
@@ -82,11 +88,14 @@ hooks/useUndoRedo.ts, usePersist.ts (beforeunload→flushPersist), useModalA11y.
 lib/types.ts              # FileType, ColumnDef, SheetFile, Row
 lib/xlsx.ts               # importXlsx/buildXlsx/downloadXlsx/parseSheetRows
 lib/downloadOpts.ts       # buildDownloadOpts counts
-lib/utils.ts (cn), theme.ts, device.ts, toast.tsx, confirm.tsx
+lib/utils.ts (cn), theme.ts, device.ts, toast.tsx, confirm.tsx, lazyRetry.ts
 features/filetypes/index.ts, fbcookie.ts, validation.ts, totp.ts
 public/config.js          # injected at runtime: window.APP_CONFIG={apiBase:""}
+public/sw.js              # service worker (chunk-error reload)
 functions/api/[[path]].ts # Pages Functions proxy → BACKEND_URL
 functions/webhook/[[path]].ts
+lib/__tests__/customDownload.test.ts, split.test.ts
+stores/__tests__/sheetStore.test.ts
 ```
 
 ### Auth flow
@@ -107,17 +116,14 @@ functions/webhook/[[path]].ts
 5. No versioning — save increments `seq` counter in meta. Undo/redo is client-side only (Zustand in-memory).
 6. Backend uses Postgres; keep operations lightweight and transactional.
 7. No KV/D1/R2 bindings.
-8. Backend API change flow: bump `API_VERSION` in `backend/src/index.ts` → run `bun run typecheck` in `backend/` → deploy through Railway → confirm via `GET /api/health` → run `bun scripts/TestApi.ts` when the live test suite is available.
-9. New API endpoint → new `test()` in `scripts/TestApi.ts` in the same change (happy path + 400/401/404). Never ship an untested route.
-10. **Commit & push after every completed code-change batch.** After finishing a set of modifications (typecheck + tests pass), immediately inspect `git status`/`git diff`, `git add` only the files changed for this task, commit with a concise message, and `git push` to the current upstream branch. Do not leave completed task changes uncommitted or unpushed. If unrelated work is present, leave it untouched and commit only this task's files. If commit or push fails, report the failure and resolve it before finishing when possible.
-11. **Keep this file fresh.** Any change that adds, removes, renames, or moves a route, file, DO op, store, or workflow → update the Codebase map + Auth flow above in the SAME commit, or the next agent works blind.
+8. Backend API change flow: bump `API_VERSION` in `backend/src/index.ts` → run `bun run typecheck` in `backend/` → deploy through Railway → confirm via `GET /api/health`.
+9. **Commit & push after every completed code-change batch.** After finishing a set of modifications (typecheck + tests pass), immediately inspect `git status`/`git diff`, `git add` only the files changed for this task, commit with a concise message, and `git push` to the current upstream branch. Do not leave completed task changes uncommitted or unpushed. If unrelated work is present, leave it untouched and commit only this task's files. If commit or push fails, report the failure and resolve it before finishing when possible.
+10. **Keep this file fresh.** Any change that adds, removes, renames, or moves a route, file, DO op, store, or workflow → update the Codebase map + Auth flow above in the SAME commit, or the next agent works blind.
 
 ## Capacity
 | Resource | Limit |
 |----------|-------|
-| Worker CPU/request | 10ms |
-| Worker requests/day | 100k (Free) |
-| DO storage | 10 GB max per DO |
 | Pages builds/month | 500 (Free) |
 | Subrequests/request | 50 |
 | Body limit | 4 MB |
+| Bun Postgres pool | 10 connections max |

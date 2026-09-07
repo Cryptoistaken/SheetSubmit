@@ -117,6 +117,7 @@ stores/__tests__/sheetStore.test.ts
 5. No versioning — save increments `seq` counter in meta. Undo/redo is client-side only (Zustand in-memory).
 6. Backend uses Postgres; keep operations lightweight and transactional.
 7. No KV/D1/R2 bindings.
+8. **bun:sql type coercion** — `NUMERIC`/`DECIMAL` and out-of-i32-range `BIGINT` (e.g. epoch-millis timestamps) come back as **strings**; `JSONB` comes back as a **string**. Never `SELECT *` a table with these columns into a JSON response — cast (`amount::float8`, `created_at::float8`) or wrap with the `json()` helper in pg.ts. JSON responses must carry real numbers/objects.
 8. Backend API change flow: bump `API_VERSION` in `backend/src/index.ts` → run `bun run typecheck` in `backend/` → deploy through Railway → confirm via `GET /api/health`.
 9. **Commit & push after every completed code-change batch.** After finishing a set of modifications (typecheck + tests pass), immediately inspect `git status`/`git diff`, `git add` only the files changed for this task, commit with a concise message, and `git push` to the current upstream branch. Do not leave completed task changes uncommitted or unpushed. If unrelated work is present, leave it untouched and commit only this task's files. If commit or push fails, report the failure and resolve it before finishing when possible.
 10. **Keep this file fresh.** Any change that adds, removes, renames, or moves a route, file, DO op, store, or workflow → update the Codebase map + Auth flow above in the SAME commit, or the next agent works blind.

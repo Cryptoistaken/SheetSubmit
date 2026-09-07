@@ -131,7 +131,15 @@ async function poolOp(password: string, op: string, a: any) {
 }
 
 async function selectRows(tx: any, password: string, pool: string, a: any, limit: number) {
-  const { u, f } = poolFilters(a); const rows: any[] = await tx`SELECT row_key,data FROM pool_rows WHERE password=${password} AND pool_id=${pool} AND state='available' ${u.length ? tx`AND src_uid=ANY(${db.array(u)})` : tx``} ${f.length ? tx`AND src_file_id=ANY(${db.array(f)})` : tx``} ORDER BY inserted_at,row_key LIMIT ${a.verifiedOnly || a.unverifiedOnly ? 5000 : limit} FOR UPDATE SKIP LOCKED`; const normalized = rows.map((r) => ({ ...r, data: json(r.data) })); return (a.verifiedOnly || a.unverifiedOnly) ? normalized.filter((r) => a.verifiedOnly ? eligible(r.data) : !eligible(r.data)).slice(0, limit) : normalized;
+  const { u, f } = poolFilters(a), cap = a.verifiedOnly || a.unverifiedOnly ? 5000 : limit;
+  const rows: any[] = u.length && f.length
+    ? await tx`SELECT row_key,data FROM pool_rows WHERE password=${password} AND pool_id=${pool} AND state='available' AND src_uid=ANY(${db.array(u)}) AND src_file_id=ANY(${db.array(f)}) ORDER BY inserted_at,row_key LIMIT ${cap} FOR UPDATE SKIP LOCKED`
+    : u.length
+      ? await tx`SELECT row_key,data FROM pool_rows WHERE password=${password} AND pool_id=${pool} AND state='available' AND src_uid=ANY(${db.array(u)}) ORDER BY inserted_at,row_key LIMIT ${cap} FOR UPDATE SKIP LOCKED`
+      : f.length
+        ? await tx`SELECT row_key,data FROM pool_rows WHERE password=${password} AND pool_id=${pool} AND state='available' AND src_file_id=ANY(${db.array(f)}) ORDER BY inserted_at,row_key LIMIT ${cap} FOR UPDATE SKIP LOCKED`
+        : await tx`SELECT row_key,data FROM pool_rows WHERE password=${password} AND pool_id=${pool} AND state='available' ORDER BY inserted_at,row_key LIMIT ${cap} FOR UPDATE SKIP LOCKED`;
+  const normalized = rows.map((r) => ({ ...r, data: json(r.data) })); return (a.verifiedOnly || a.unverifiedOnly) ? normalized.filter((r) => a.verifiedOnly ? eligible(r.data) : !eligible(r.data)).slice(0, limit) : normalized;
 }
 async function allocate(password: string, op: string, pool: string, a: any) {
   const want = a.count === "all" ? 10000 : Math.min(10000, Math.max(1, Number(a.count) || 1)); if (a.verifiedOnly && a.unverifiedOnly) throw new Error("verifiedOnly and unverifiedOnly are mutually exclusive"); if ((a.verifiedOnly || a.unverifiedOnly) && pool !== "page") throw new Error("verified filters only for page pool");

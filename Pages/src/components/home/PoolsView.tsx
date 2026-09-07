@@ -1,24 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { MoreHorizontal, RefreshCw } from "lucide-react";
+import { Download, ExternalLink, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
-import type { HoldRecord, PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
+import type { DownloadDetail, HoldRecord, PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
 import { useToast } from "@/lib/toast";
 import { useProfileCache } from "@/stores/profileCache";
 import { useAuth } from "@/contexts/AuthContext";
 import { vibrate } from "@/lib/utils";
 
-import { CookieIcon, PageIcon, PasswordIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
+import { CookieIcon, FileTypeIcon, PageIcon, PasswordIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
 import { FacebookIcon } from "@/components/icons/FacebookIcon";
 import EmptyState from "./EmptyState";
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
-import { ApprovalDetailDialog } from "./ApprovalDetailDialog";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import SearchInput from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { InkStamp } from "@/components/ui/ink-stamp";
+import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "@/components/ui/avatar";
+import { HoldToDeleteButton } from "@/components/ui/hold-to-delete-button";
+import { triggerBlobDownload } from "@/lib/xlsx";
 
 const PASSWORDS = ["dgddigital", "L0VE@12345"] as const;
 const POOL_TABS = [
@@ -80,11 +81,6 @@ export default function PoolsView() {
   const [poolQty, setPoolQty] = useState<number | "all">(10);
   const [customQty, setCustomQty] = useState("");
   const [customFocused, setCustomFocused] = useState(false);
-  const [menuUser, setMenuUser] = useState<string | null>(null);
-  const [dlUser, setDlUser] = useState<PoolDetail["users"][number] | null>(null);
-  const [perQty, setPerQty] = useState<number | "all">(10);
-  const [perCustom, setPerCustom] = useState("");
-  const [perCustomFocused, setPerCustomFocused] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [userFiles, setUserFiles] = useState<PoolUserFile[] | null>(null);
@@ -99,9 +95,12 @@ export default function PoolsView() {
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [holds, setHolds] = useState<HoldRecord[] | null>(null);
   const [holdsLoading, setHoldsLoading] = useState(false);
-  const [holdConfirmOpen, setHoldConfirmOpen] = useState(false);
   const [holdActing, setHoldActing] = useState<string | null>(null);
-  const [selectedHold, setSelectedHold] = useState<HoldRecord | null>(null);
+  const [apprOpenId, setApprOpenId] = useState<string | null>(null);
+  const [apprUserOpen, setApprUserOpen] = useState<string | null>(null);
+  const [apprDetails, setApprDetails] = useState<Record<string, DownloadDetail | null>>({});
+  const [apprLoading, setApprLoading] = useState<string | null>(null);
+  const [dlBusyId, setDlBusyId] = useState<string | null>(null);
   const [apprSel, setApprSel] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -113,18 +112,6 @@ export default function PoolsView() {
   const [priceInputs, setPriceInputs] = useState<Record<string, string>>({});
   const [priceSaving, setPriceSaving] = useState(false);
   const [priceConfirm, setPriceConfirm] = useState(false);
-
-  useEffect(() => {
-    if (!menuUser) return;
-    const close = (event: MouseEvent | KeyboardEvent) => {
-      if (event instanceof KeyboardEvent && event.key === "Escape") { setMenuUser(null); return; }
-      const target = event.target as Node;
-      if (!(target instanceof Element) || (!target.closest(`[data-pool-menu="${menuUser}"]`) && !target.closest('button[aria-haspopup="menu"]'))) setMenuUser(null);
-    };
-    document.addEventListener("click", close);
-    document.addEventListener("keydown", close);
-    return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", close); };
-  }, [menuUser]);
 
   const loadHolds = useCallback(async () => {
     setHoldsLoading(true);
@@ -171,7 +158,8 @@ export default function PoolsView() {
   useEffect(() => {
     if (!holdParam || !holds) return;
     const h = holds.find((x) => x.id === holdParam);
-    if (h) setSelectedHold(h);
+    if (h && apprOpenId !== h.id) toggleApproval(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holdParam, holds]);
 
   useEffect(() => {
@@ -269,28 +257,25 @@ export default function PoolsView() {
       if (!held) return showToast("No rows available to claim");
       vibrate(20);
       showToast(`Held ${held} from ${poolMeta.label} — ON HOLD`);
-      setHoldConfirmOpen(false);
       const holdId = (res as unknown as { holdId?: string; downloadId?: string }).holdId ?? (res as unknown as { downloadId?: string }).downloadId;
       await refreshAll();
       if (holdId) updateParams({ view: "approvals", status: null, hold: holdId });
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDownloading(false); }
   };
 
-  const doUserHold = async () => {
-    if (!dlUser) return;
-    const n = perCustom ? Number(perCustom) : perQty === "all" ? dlUser.available : (perQty as number);
-    if (!Number.isInteger(n) || n < 1) return showToast("Enter at least 1 row");
+  const doUserHold = async (u: PoolDetail["users"][number]) => {
+    const n = customQty ? Number(customQty) : poolQty === "all" ? u.available : (poolQty as number);
+    if (!Number.isInteger(n) || n < 1) return showToast("Set a quantity in the taker card first");
     setDownloading(true);
     try {
-      const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: "fifo", srcUids: [dlUser.userId] };
+      const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: "fifo", srcUids: [u.userId] };
       if (cur === "page" && verifiedFilter === "verified") payload.verifiedOnly = true;
       if (cur === "page" && verifiedFilter === "unverified") payload.unverifiedOnly = true;
       const res = await api.holdPool(curPwd, cur, payload);
       const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? 0;
       if (!held) return showToast("No rows available to claim");
       vibrate(20);
-      showToast(`Held ${held} from ${displayName(dlUser).line1} — ON HOLD`);
-      setDlUser(null);
+      showToast(`Held ${held} from ${displayName(u).line1} — ON HOLD`);
       await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDownloading(false); }
   };
@@ -309,11 +294,23 @@ export default function PoolsView() {
 
   const doApprove = async (id: string) => {
     setHoldActing(id);
-    try { await api.approveHold(id); vibrate(20); showToast("Approved"); await refreshAll(); setSelectedHold(null); } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
+    try {
+      const res = await api.approveHold(id);
+      vibrate(20);
+      const dead = Number((res as unknown as { dead?: number }).dead || 0);
+      const n = Number((res as unknown as { approved?: number }).approved || 0);
+      showToast(dead ? `Approved ${n} — ${dead} dead, not paid` : "Approved");
+      await refreshAll();
+    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
   const doReturn = async (id: string) => {
     setHoldActing(id);
-    try { await api.returnHold(id); vibrate(20); showToast("Rows returned to pool"); await refreshAll(); setSelectedHold(null); } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
+    try {
+      const res = await api.returnHold(id);
+      vibrate(20);
+      showToast((res as unknown as { debited?: boolean }).debited ? "Rejected — credited balance debited back" : "Rejected — rows returned to pool");
+      await refreshAll();
+    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
   const doDeleteHold = async (id: string) => {
     setHoldActing(id);
@@ -328,19 +325,27 @@ export default function PoolsView() {
         showToast("Rejected — rows returned")
       }
       await refreshAll()
-      setSelectedHold(null)
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
 
-  const openFile = async (u: PoolDetail["users"][number]) => {
-    setMenuUser(null);
+  const toggleApproval = (h: HoldRecord) => {
+    if (apprOpenId === h.id) { setApprOpenId(null); return; }
+    setApprOpenId(h.id);
+    setApprUserOpen(null);
+    if (!apprDetails[h.id]) {
+      setApprLoading(h.id);
+      api.getDownloadDetail(h.id).then((v) => setApprDetails((p) => ({ ...p, [h.id]: v }))).catch(() => setApprDetails((p) => ({ ...p, [h.id]: null }))).finally(() => setApprLoading(null));
+    }
+  };
+
+  const doDownloadHold = async (h: HoldRecord, opts?: { srcUid?: string; srcFileId?: string; name?: string; busyKey?: string }) => {
+    setDlBusyId(opts?.busyKey ?? h.id);
     try {
-      const r = await api.getPoolRows(curPwd, cur, { userId: u.userId, limit: 1 });
-      const first = r.rows[0] as Record<string, unknown> | undefined;
-      const fid = first?.["srcFileId"] as string | undefined;
-      if (fid) { navigate(`/admin/user/${u.userId}/file/${fid}`); return; }
-    } catch {}
-    showToast("No file found for this user");
+      const blob = await api.getDownloadBlob(h.id, opts);
+      triggerBlobDownload(blob, opts?.name || h.filename || "download.xlsx");
+      vibrate(20);
+      showToast(`Downloaded ${opts?.name || h.filename}`);
+    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDlBusyId(null); }
   };
 
   const validatePrices = (): string[] => {
@@ -392,8 +397,9 @@ export default function PoolsView() {
   return (
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
       <style>{`
-        .pool-switch{display:inline-flex;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px}
-        .pool-switch button{padding:7px 14px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;min-height:36px;display:inline-flex;align-items:center;gap:6px}
+        .pool-switch{display:inline-flex;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px;max-width:100%;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+        .pool-switch::-webkit-scrollbar{display:none}
+        .pool-switch button{padding:7px 14px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;min-height:36px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0}
         .pool-switch button.active{background:var(--bg);border-color:var(--border2);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.04)}
         .badge{font-size:11px;font-weight:600;letter-spacing:.02em;padding:2px 7px;border-radius:999px;border:1px solid var(--border);background:var(--bg3);color:var(--text2)}
         .card-list{display:flex;flex-direction:column;gap:8px}
@@ -418,7 +424,6 @@ export default function PoolsView() {
         @keyframes spin{to{transform:rotate(360deg)}}
         @media(max-width:640px){
           .pools-stats{grid-template-columns:1fr!important}
-          .pool-switch{flex-wrap:wrap;justify-content:center}
           .pool-card{flex-wrap:wrap;row-gap:6px}
           .pool-card-stats{margin-left:34px}
           .pool-card-actions{margin-left:auto}
@@ -428,9 +433,10 @@ export default function PoolsView() {
       `}</style>
 
       {/* top-level view tabs */}
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: 16, position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 16, position: "relative" }}>
         <div
           className="pool-switch"
+          style={{ margin: "0 auto" }}
           role="tablist"
           aria-label="Pools page sections"
           onKeyDown={(e) => {
@@ -453,13 +459,13 @@ export default function PoolsView() {
       <div id="pools-panel-pool" role="tabpanel" aria-labelledby="tab-pool">
       {/* switches */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
-          <div className="pool-switch" style={{ background: "#eef2ff", borderColor: "#ddd6fe" }}>
+          <div className="pool-switch" style={{ background: "#eef2ff", borderColor: "#ddd6fe", margin: "0 auto" }}>
             {PASSWORDS.map((p) => (
               <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>
             ))}
           </div>
           {meIsAdmin ? <Button variant="outline" size="sm" onClick={() => { const init: Record<string, string> = {}; POOL_TABS.forEach((t) => { const v = prices[t.id] ?? prices[Object.keys(prices)[0]] ?? null; init[t.id] = v != null ? String(v) : ""; }); setPriceInputs(init); setPriceOpen(true); }}>{prices[cur] != null ? `price $${prices[cur]}` : "Unit price"}</Button> : null}
-          <div className="pool-switch">
+          <div className="pool-switch" style={{ margin: "0 auto" }}>
             {POOL_TABS.map((t) => {
               const meta = POOL_META[t.id];
               const Icon = meta.Icon;
@@ -538,7 +544,7 @@ export default function PoolsView() {
           </div>
           <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${effectiveN} × $${unitPrice.toFixed(2)} = $${(effectiveN * unitPrice).toFixed(2)}` : "—"}</div>
         </div>
-        <button type="button" className="btn btn-primary" disabled={downloading || !totals.available} onClick={() => setHoldConfirmOpen(true)} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,112,243,.22)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? "All" : poolQty} from {poolMeta.label}</button>
+        <button type="button" className="btn btn-primary" disabled={downloading || !totals.available} onClick={() => void doHoldConfirm()} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,112,243,.22)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? "All" : poolQty} from {poolMeta.label}</button>
         <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>Take creates a hold. Approval credits the owners. Reject returns the rows.</div>
       </div>
 
@@ -572,39 +578,29 @@ export default function PoolsView() {
                   <span className="pool-card-stat" style={{ color: u.claimed ? "var(--red)" : "var(--text3)" }}>{u.claimed} taken</span>
                 </div>
                 <div className="pool-card-actions" onClick={(e) => e.stopPropagation()}>
-                  <button type="button" className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} onClick={() => { setDlUser(u); setPerQty(10); setPerCustom(""); }}>Take</button>
-                  <button type="button" className="btn" title="More options" aria-label={`More options for ${d.line1}`} aria-haspopup="menu" aria-expanded={menuUser === u.userId} style={{ width: 36, height: 36, padding: 0, justifyContent: "center" }} onClick={() => setMenuUser(menuUser === u.userId ? null : u.userId)}><MoreHorizontal size={18} aria-hidden /></button>
-                  {menuUser === u.userId ? (
-                    <div data-pool-menu={u.userId} role="menu" aria-label={`Actions for ${d.line1}`} style={{ position: "absolute", right: 8, top: 40, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--rl)", boxShadow: "var(--shadow-lg)", zIndex: 10, minWidth: 160, padding: 4 }}>
-                      <button type="button" role="menuitem" style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "transparent", cursor: "pointer", borderRadius: 6, fontWeight: 500 }} onClick={() => openFile(u)}>View file</button>
-                      <button type="button" role="menuitem" style={{ display: "flex", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "var(--blue)", color: "#fff", cursor: "pointer", borderRadius: 6, fontWeight: 700, marginTop: 4 }} onClick={() => { setMenuUser(null); setDlUser(u); setPerQty(10); setPerCustom(""); }}>Take</button>
-                    </div>
-                  ) : null}
+                  <button type="button" className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} disabled={downloading} onClick={() => void doUserHold(u)}>Take</button>
                 </div>
               </div>
               {expanded && (
                 <div id={`pool-files-${u.userId}`} className="file-row" style={{ padding: "4px 0 8px 42px" }}>
                   {loadingFiles && !uf ? <Skeleton className="h-4 w-20" /> : !uf || uf.files.length === 0 ? <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>No files in pool</div> : (
-                    <div className="files-grid">
+                    <div className="files-list">
                       {uf.files.map((f) => (
-                        <div key={f.fileId} className="file-card" role="group" aria-label={`File ${f.fileId.slice(-8)}, ${f.available} available`} style={{ touchAction: "manipulation", userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}>
-                          {holdMode === "pick" ? <input type="checkbox" aria-label={`Select file ${f.fileId.slice(-8)}`} checked={selectedFileIds.includes(f.fileId)} onChange={() => toggleFile(f.fileId, u.userId)} style={{ width: 16, height: 16, flexShrink: 0 }} /> : null}
-                          <div className="file-card-icon"><PoolTypeIcon poolId={cur} size={14} /></div>
+                        <div key={f.fileId} className="file-card list-row" role="group" aria-label={`File ${f.name || f.fileId}, ${f.available} available`} style={{ touchAction: "manipulation", userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}>
+                          {holdMode === "pick" ? <input type="checkbox" aria-label={`Select file ${f.name || f.fileId}`} checked={selectedFileIds.includes(f.fileId)} onChange={() => toggleFile(f.fileId, u.userId)} style={{ width: 16, height: 16, flexShrink: 0 }} /> : null}
+                          <div className="file-card-icon"><FileTypeIcon file={{ preset: f.preset ?? undefined, name: f.name ?? undefined }} size={16} /></div>
                           <div style={{ display: "flex", alignItems: "flex-start", gap: 6, minWidth: 0, flex: 1, overflow: "hidden" }}>
                             <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
-                              <div className="file-card-name" dir="auto">#{f.fileId.slice(-8)}</div>
+                              <div className="file-card-name" dir="auto" title={f.name ?? undefined}>{f.name || `#${f.fileId.slice(-8)}`}</div>
+                              <div className="file-card-meta">{f.createdAt ? new Date(f.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"} · {f.available} avail · {f.claimed} taken</div>
                             </div>
                             <div style={{ display: "flex", gap: 4, flexShrink: 0, marginTop: 1 }}>
                               <span className="file-type-badge" title="Facebook" aria-label="Facebook" style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={10} /></span>
                               <span className="file-type-badge" style={{ fontSize: 10, padding: "2px 6px", maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={curPwd}><PasswordIcon password={curPwd} size={12} /></span>
                             </div>
                           </div>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 8px", alignItems: "center" }}>
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11 }}><span title="available" style={{ width: 8, height: 8, borderRadius: 2, background: "var(--grad-live)", border: "1px solid var(--border)", flexShrink: 0 }} />{f.available}</span>
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11 }}><span title="taken" style={{ width: 8, height: 8, borderRadius: 2, background: "var(--grad-dup)", border: "1px solid var(--border)", flexShrink: 0 }} />{f.claimed}</span>
-                          </div>
                           <div className="file-card-actions">
-                            <button type="button" className="file-card-btn" title="Open file" aria-label={`Open file ${f.fileId.slice(-8)}`} onClick={(e) => { e.stopPropagation(); navigate(`/admin/user/${u.userId}/file/${f.fileId}`); }}><MoreHorizontal size={14} aria-hidden /></button>
+                            <button type="button" className="file-card-btn" title="Open file in browser" aria-label={`Open ${f.name || f.fileId} in browser`} onClick={(e) => { e.stopPropagation(); navigate(`/admin/user/${u.userId}/file/${f.fileId}`); }}><ExternalLink size={14} aria-hidden /></button>
                           </div>
                         </div>
                       ))}
@@ -618,10 +614,12 @@ export default function PoolsView() {
       </div>
       </div>) : (
       <section id="pools-panel-approvals" role="tabpanel" aria-labelledby="tab-approvals">
-        <div className="pool-switch" style={{ marginBottom: 10 }}>
-          {(["PENDING", "APPROVED", "REJECTED"] as const).map((s) => (
-            <button key={s} className={apprFilter === s ? "active" : ""} onClick={() => setApprFilter(s)}>{s[0] + s.slice(1).toLowerCase()} <span className="badge" style={{ marginLeft: 2 }}>{apprCounts[s]}</span></button>
-          ))}
+        <div style={{ display: "flex", marginBottom: 10 }}>
+          <div className="pool-switch" style={{ margin: "0 auto" }}>
+            {(["PENDING", "APPROVED", "REJECTED"] as const).map((s) => (
+              <button key={s} className={apprFilter === s ? "active" : ""} onClick={() => setApprFilter(s)}>{s[0] + s.slice(1).toLowerCase()} <span className="badge" style={{ marginLeft: 2 }}>{apprCounts[s]}</span></button>
+            ))}
+          </div>
         </div>
         {holdsLoading ? <Skeleton className="h-20 w-full" /> : holdsError ? (
           <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>
@@ -634,8 +632,8 @@ export default function PoolsView() {
           {apprSel.length ? (
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg3)" }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text2)", marginRight: "auto" }}>{apprSel.length} selected</span>
-              <button type="button" className="btn btn-primary" disabled={bulkBusy} onClick={() => void doBulk("approve")} style={{ minHeight: 36, fontWeight: 700 }}>Approve</button>
-              <button type="button" className="btn" disabled={bulkBusy} onClick={() => void doBulk("return")} style={{ minHeight: 36 }}>Return</button>
+              <button type="button" className="btn btn-primary" disabled={bulkBusy || apprFilter === "APPROVED"} onClick={() => void doBulk("approve")} style={{ minHeight: 36, fontWeight: 700 }}>Approve</button>
+              <button type="button" className="btn" disabled={bulkBusy || apprFilter === "REJECTED"} onClick={() => void doBulk("return")} style={{ minHeight: 36 }}>Return</button>
               <button type="button" className="btn btn-ghost" disabled={bulkBusy} onClick={() => setApprSel([])} style={{ minHeight: 36 }}>Clear</button>
             </div>
           ) : null}
@@ -647,25 +645,105 @@ export default function PoolsView() {
               const dateStr = d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
               const timeStr = d ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
               const poolLabel = POOL_META[h.poolId]?.label ?? h.poolId;
-              const qty = (h as unknown as { claimed?: number; held?: number }).held ?? h.claimed ?? 0;
-              const isApproved = st === "APPROVED";
+              const qty = (h as unknown as { held?: number; claimed?: number }).held ?? h.claimed ?? 0;
+              const price = prices[h.poolId];
+              const open = apprOpenId === h.id;
+              const det = apprDetails[h.id];
+              const fileIds = [...new Set(((h.srcFileIds ?? []) as (string | null)[]).filter(Boolean) as string[])];
+              const ownerUids = det ? [...new Set(det.groups.map((g) => g.srcUid).filter(Boolean) as string[])] : ((h.srcUids ?? []).filter(Boolean) as string[]);
+              const baseName = (h.filename || "approval").replace(/\.xlsx$/i, "");
               return (
-                <div key={h.id} className="pool-card" onClick={() => setSelectedHold(h)}>
-                  {st === "PENDING" ? <input type="checkbox" aria-label={`Select ${h.filename}`} checked={apprSel.includes(h.id)} onChange={() => setApprSel((prev) => prev.includes(h.id) ? prev.filter((x) => x !== h.id) : [...prev, h.id])} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, flexShrink: 0 }} /> : null}
-                  {(() => { const PoolIcon = (POOL_META[h.poolId] ?? POOL_META.cookies_only).Icon; return <span title={poolLabel} style={{ flexShrink: 0, display: "inline-flex", color: "var(--text3)" }}><PoolIcon size={16} /></span>; })()}
-                  {(h.srcUids ?? []).length ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, paddingLeft: 6 }} aria-label={`${(h.srcUids ?? []).length} owner${(h.srcUids ?? []).length > 1 ? "s" : ""}`}>
-                      {(h.srcUids ?? []).slice(0, 3).map((uid) => (
-                        <span key={uid} style={{ marginLeft: -6, border: "2px solid var(--bg)", borderRadius: "50%", display: "inline-flex", lineHeight: 0 }}><ProfileAvatar photoUrl={cachedProfiles[uid]?.photoUrl} fallback={ownerFallback(uid)} className="size-6 bg-(--bg3) text-(--text2)" /></span>
-                      ))}
-                      {(h.srcUids ?? []).length > 3 ? <span style={{ marginLeft: 4, fontSize: 10, color: "var(--text3)", fontWeight: 600 }}>+{(h.srcUids ?? []).length - 3}</span> : null}
-                    </span>
-                  ) : null}
-                  <span className="badge" style={{ background: st === "PENDING" ? "#fef3c7" : isApproved ? "#dcfce7" : "var(--bg3)", color: st === "PENDING" ? "#92400e" : isApproved ? "#166534" : "var(--text3)", borderColor: st === "PENDING" ? "#fde68a" : isApproved ? "#bbf7d0" : "var(--border)" }}>{st}</span>
-                  <div className="pool-card-info" style={{ gap: 4 }}>
-                    <div className="pool-card-name" title={h.filename}>{h.filename} · {poolLabel} {isApproved ? <InkStamp label="APPROVED" /> : null}</div>
-                    <div className="pool-card-sub"><span title={d ? d.toISOString() : ""}>{dateStr} {timeStr}</span><span>·</span><span>{qty} qty</span><span>·</span><span>{h.mode ?? "—"}</span><span>·</span><span>{prices[h.poolId] != null ? `$${(qty * prices[h.poolId]!).toFixed(2)}` : "—"}</span></div>
+                <div key={h.id} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  <div className={`pool-card ${open ? "expanded" : ""}`} onClick={() => toggleApproval(h)} aria-expanded={open}>
+                    <input type="checkbox" aria-label={`Select ${h.filename}`} checked={apprSel.includes(h.id)} onChange={() => setApprSel((prev) => prev.includes(h.id) ? prev.filter((x) => x !== h.id) : [...prev, h.id])} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, flexShrink: 0 }} />
+                    {fileIds.length ? (
+                      <AvatarGroup className="shrink-0" aria-label={`${fileIds.length} file${fileIds.length > 1 ? "s" : ""} in this approval`}>
+                        {fileIds.slice(0, 3).map((fid) => (
+                          <Avatar key={fid} className="size-7 bg-(--bg3) text-(--text2)">
+                            <AvatarFallback><PoolTypeIcon poolId={h.poolId} size={13} /></AvatarFallback>
+                          </Avatar>
+                        ))}
+                        {fileIds.length > 3 ? <AvatarGroupCount>+{fileIds.length - 3}</AvatarGroupCount> : null}
+                      </AvatarGroup>
+                    ) : (
+                      <span title={poolLabel} style={{ flexShrink: 0, display: "inline-flex", color: "var(--text3)" }}><PoolTypeIcon poolId={h.poolId} size={16} /></span>
+                    )}
+                    {(h.srcUids ?? []).length ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, paddingLeft: 6 }} aria-label={`${(h.srcUids ?? []).length} owner${(h.srcUids ?? []).length > 1 ? "s" : ""}`}>
+                        {(h.srcUids ?? []).slice(0, 3).map((uid) => (
+                          <span key={uid} style={{ marginLeft: -6, border: "2px solid var(--bg)", borderRadius: "50%", display: "inline-flex", lineHeight: 0 }}><ProfileAvatar photoUrl={cachedProfiles[uid]?.photoUrl} fallback={ownerFallback(uid)} className="size-6 bg-(--bg3) text-(--text2)" /></span>
+                        ))}
+                        {(h.srcUids ?? []).length > 3 ? <span style={{ marginLeft: 4, fontSize: 10, color: "var(--text3)", fontWeight: 600 }}>+{(h.srcUids ?? []).length - 3}</span> : null}
+                      </span>
+                    ) : null}
+                    <span className="badge" style={{ background: st === "PENDING" ? "#fef3c7" : st === "APPROVED" ? "#dcfce7" : "var(--bg3)", color: st === "PENDING" ? "#92400e" : st === "APPROVED" ? "#166534" : "var(--text3)", borderColor: st === "PENDING" ? "#fde68a" : st === "APPROVED" ? "#bbf7d0" : "var(--border)" }}>{st}</span>
+                    <div className="pool-card-info" style={{ gap: 4 }}>
+                      <div className="pool-card-name" title={h.filename}>{h.filename} · {poolLabel}</div>
+                      <div className="pool-card-sub"><span title={d ? d.toISOString() : ""}>{dateStr} {timeStr}</span><span>·</span><span>{qty} qty</span><span>·</span><span>{h.mode ?? "—"}</span><span>·</span><span>{price != null ? `$${(qty * price).toFixed(2)}` : "—"}</span></div>
+                    </div>
+                    <span className={`expand-icon ${open ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0, display: "inline-flex" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden><path d="M9 18l6-6-6-6" /></svg></span>
                   </div>
+                  {open && (
+                    <div className="file-row" style={{ padding: "6px 0 10px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <span style={{ fontSize: 12, color: "var(--text3)", marginRight: "auto" }}>{qty} rows{price != null ? ` · $${(qty * price).toFixed(2)}` : ""}</span>
+                        <button type="button" className="btn btn-primary" disabled={st === "APPROVED" || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doApprove(h.id); }} style={{ minHeight: 36, fontWeight: 700 }}>{st === "APPROVED" ? "Approved" : "Approve"}</button>
+                        <button type="button" className="btn" disabled={st === "REJECTED" || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doReturn(h.id); }} style={{ minHeight: 36 }}>{st === "REJECTED" ? "Rejected" : "Reject"}</button>
+                        <button type="button" className="btn" disabled={dlBusyId === h.id} onClick={(e) => { e.stopPropagation(); void doDownloadHold(h); }} style={{ minHeight: 36 }}><Download size={14} aria-hidden /> All</button>
+                        {st !== "PENDING" ? <HoldToDeleteButton onConfirm={() => void doDeleteHold(h.id)} disabled={holdActing === h.id} label="Delete" /> : null}
+                      </div>
+                      {apprLoading === h.id ? <Skeleton className="h-16 w-full" /> : !det || ownerUids.length === 0 ? (
+                        <div style={{ fontSize: 12, color: "var(--text3)", padding: "6px 2px" }}>{det ? "No owner breakdown for this approval" : "Could not load details"}</div>
+                      ) : (
+                        <div className="card-list">
+                          {ownerUids.map((uid) => {
+                            const groups = det.groups.filter((g) => g.srcUid === uid);
+                            const rows = groups.reduce((sum, g) => sum + g.count, 0);
+                            const profile = cachedProfiles[uid];
+                            const label = profile?.name || "#" + uid.slice(-6);
+                            const userOpen = apprUserOpen === uid;
+                            return (
+                              <div key={uid} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                                <div className={`pool-card ${userOpen ? "expanded" : ""}`} style={{ padding: "8px 12px" }} onClick={() => setApprUserOpen(userOpen ? null : uid)} aria-expanded={userOpen}>
+                                  <span className={`expand-icon ${userOpen ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0, display: "inline-flex" }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden><path d="M9 18l6-6-6-6" /></svg></span>
+                                  <ProfileAvatar photoUrl={profile?.photoUrl} fallback={label.charAt(0).toUpperCase()} className="size-8 bg-(--bg3) text-(--text2)" verified={profile?.isAdmin} />
+                                  <div className="pool-card-info">
+                                    <div className="pool-card-name">{label}</div>
+                                    <div className="pool-card-sub">{rows} rows · {groups.length} file{groups.length !== 1 ? "s" : ""}{price != null ? ` · $${(rows * price).toFixed(2)}` : ""}</div>
+                                  </div>
+                                  <div className="pool-card-actions" onClick={(e) => e.stopPropagation()}>
+                                    <button type="button" className="btn" title={`Download all of ${label}'s rows in this approval`} aria-label={`Download ${label}'s rows`} disabled={dlBusyId === `${h.id}:u:${uid}`} onClick={() => void doDownloadHold(h, { srcUid: uid, name: `${baseName} - ${label}.xlsx`, busyKey: `${h.id}:u:${uid}` })}><Download size={14} aria-hidden /></button>
+                                  </div>
+                                </div>
+                                {userOpen && (
+                                  <div className="files-list" style={{ padding: "4px 0 6px 36px" }}>
+                                    {groups.map((g) => {
+                                      const fname = g.filename || (g.srcFileId ? `#${g.srcFileId.slice(-8)}` : "Unknown file");
+                                      return (
+                                        <div key={g.srcFileId ?? "unknown"} className="file-card list-row" style={{ cursor: "default" }}>
+                                          <div className="file-card-icon"><FileTypeIcon file={{ preset: g.preset ?? undefined, name: g.filename ?? undefined }} size={16} /></div>
+                                          <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div className="file-card-name" dir="auto" title={g.filename ?? undefined}>{fname}</div>
+                                            <div className="file-card-meta">{g.createdAt ? new Date(g.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"} · {g.count} rows{price != null ? ` · $${(g.count * price).toFixed(2)}` : ""}</div>
+                                          </div>
+                                          <div className="file-card-actions">
+                                            <button type="button" className="file-card-btn" title="Download this file's rows" aria-label={`Download ${fname}`} disabled={!g.srcFileId || dlBusyId === `${h.id}:f:${g.srcFileId}`} onClick={(e) => { e.stopPropagation(); void doDownloadHold(h, { srcUid: uid, srcFileId: g.srcFileId!, name: `${baseName} - ${g.filename || (g.srcFileId ?? "file").slice(-8)}.xlsx`, busyKey: `${h.id}:f:${g.srcFileId}` }); }}><Download size={14} aria-hidden /></button>
+                                            {g.srcFileId ? (
+                                              <button type="button" className="file-card-btn" title="Open file in browser" aria-label={`Open ${fname} in browser`} onClick={(e) => { e.stopPropagation(); navigate(`/admin/user/${uid}/file/${g.srcFileId}`); }}><ExternalLink size={14} aria-hidden /></button>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -674,30 +752,6 @@ export default function PoolsView() {
           )}
       </section>
       )}
-
-      {/* hold confirm dialog */}
-      <Dialog open={holdConfirmOpen} onOpenChange={setHoldConfirmOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Take accounts</DialogTitle><DialogDescription>Rows go ON HOLD. Approve to credit balance, Reject to return rows.</DialogDescription></DialogHeader>
-          <div style={{ fontSize: 12, color: "var(--text3)" }}>Taking {effectiveN} from {poolMeta.label}{holdMode === "pick" ? ` · ${selectedUids.length} users${selectedFileIds.length ? ` · ${selectedFileIds.length} files` : ""}` : ""}</div>
-          <DialogFooter><Button variant="ghost" onClick={() => setHoldConfirmOpen(false)}>Cancel</Button><Button disabled={downloading} onClick={doHoldConfirm}>Confirm hold</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* per-user take dialog */}
-      <Dialog open={!!dlUser} onOpenChange={(o) => { if (!o) setDlUser(null) }}>
-         <DialogContent>
-          <DialogHeader><DialogTitle>Take accounts</DialogTitle><DialogDescription>Rows go ON HOLD. Approve to credit balance, Reject to return rows.</DialogDescription></DialogHeader>
-          {dlUser ? <div style={{ fontSize: 12, color: "var(--text3)" }}>{displayName(dlUser).line1} · {dlUser.available} available</div> : null}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-           {[10, 50].map((n) => <Button key={n} variant={perQty === n && !perCustom ? "default" : "outline"} size="sm" onClick={() => { setPerQty(n); setPerCustom(""); }}>{n}</Button>)}
-             <Button variant={perQty === "all" && !perCustom ? "default" : "outline"} size="sm" onClick={() => { setPerQty("all"); setPerCustom(""); }}>All</Button>
-            <input placeholder={perCustomFocused ? "" : "Custom"} aria-label="Custom quantity" inputMode="numeric" pattern="[0-9]*" value={perCustom} onChange={(e) => setPerCustom(e.target.value.replace(/\D/g, ""))} onFocus={(e) => { setPerCustomFocused(true); e.currentTarget.select(); }} onBlur={() => setPerCustomFocused(false)} style={{ width: 72, padding: "6px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: "var(--r)", outline: "none", textAlign: "center" }} />
-          </div>
-          {dlUser ? <div style={{ fontSize: 12, color: "var(--text3)" }}>Taking {perCustom ? Number(perCustom) || 0 : perQty === "all" ? dlUser.available : perQty as number} of {dlUser.available} available</div> : null}
-          <DialogFooter><Button variant="ghost" onClick={() => setDlUser(null)}>Cancel</Button><Button disabled={downloading} onClick={doUserHold}>Confirm hold</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* price dialog */}
       <Dialog open={priceOpen} onOpenChange={setPriceOpen}>
@@ -742,8 +796,6 @@ export default function PoolsView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <ApprovalDetailDialog hold={selectedHold} open={!!selectedHold} onClose={() => { setSelectedHold(null); updateParams({ hold: null }); }} onApprove={doApprove} onReturn={doReturn} onDelete={doDeleteHold} acting={holdActing} unitPrice={selectedHold ? prices[selectedHold.poolId] ?? null : null} owners={cachedProfiles} />
       </div>
   );
 }

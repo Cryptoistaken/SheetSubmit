@@ -166,3 +166,12 @@ CREATE INDEX IF NOT EXISTS meta_key_prefix_idx ON meta (k text_pattern_ops);
 INSERT INTO schema_migrations(version)
 VALUES (1)
 ON CONFLICT (version) DO NOTHING;
+
+-- 002: dead pool rows — the worker moves held rows whose UID checked dead to state='dead';
+-- dead rows are skipped by selection/counts, stay visible for row coloring, and are never paid
+ALTER TABLE pool_rows DROP CONSTRAINT IF EXISTS pool_rows_state_check;
+ALTER TABLE pool_rows ADD CONSTRAINT pool_rows_state_check
+  CHECK (state IN ('available', 'held', 'claimed', 'dead'));
+
+CREATE INDEX IF NOT EXISTS pool_rows_held_idx
+  ON pool_rows (row_key) WHERE state = 'held';

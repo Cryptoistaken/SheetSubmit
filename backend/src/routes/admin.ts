@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Env, SheetFile } from "../lib/shared";
 import { requireAuth, isAdmin } from "../lib/session";
 import { rpc } from "../lib/do";
-import { ldCounts } from "./files";
+import { ldCounts, decorateHoldState } from "./files";
 export const admin = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 admin.use("/*", requireAuth);
 admin.use("/*", async (c, next) => isAdmin(c.env, c.get("uid")) ? next() : c.json({ error: "admin access required" }, 403));
@@ -20,7 +20,7 @@ const findFile = async (c: any, id: string) => { const found: any = await rpc(c.
 admin.get("/file/:id", async (c) => { const f = await findFile(c, c.req.param("id")); return f ? c.json(f.file) : c.json({ error: "file not found" }, 404); });
 admin.put("/file/:id", async (c) => { const f = await findFile(c, c.req.param("id")); if (!f) return c.json({ error: "file not found" }, 404); const body = await c.req.json<Record<string, unknown>>(); for (const k of ["name", "type", "columns", "password", "poolEnabled"]) if (k in body) (f.file as any)[k] = body[k]; f.file.updatedAt = Date.now(); f.file.lastAction = "modified"; await rpc(c.env.FILES, f.file.id, "save", { file: f.file }); await rpc(c.env.INDEX, "global", "register", { uid: f.owner, file: f.file }); return c.json(f.file); });
 admin.delete("/file/:id", async (c) => { const f = await findFile(c, c.req.param("id")); if (!f) return c.json({ error: "file not found" }, 404); f.file.deletedAt = Date.now(); f.file.lastAction = "archived"; await rpc(c.env.INDEX, "global", "archive", { id: f.file.id, archived: true, file: f.file }); return c.json({ ok: true }); });
-admin.get("/file/:id/rows", async (c) => c.json(await rpc(c.env.FILES, c.req.param("id"), "rows")));
+admin.get("/file/:id/rows", async (c) => { const f = await findFile(c, c.req.param("id")); if (!f) return c.json({ error: "file not found" }, 404); const rows = await rpc(c.env.FILES, f.file.id, "rows") as any[]; return c.json(await decorateHoldState(c.env, (f.file as any).password, rows)); });
 admin.put("/file/:id/persist", async (c) => { const f = await findFile(c, c.req.param("id")); if (!f) return c.json({ error: "file not found" }, 404); const body = await c.req.json<{ rows?: any[]; action?: string; dataCount?: number }>(); const rows = body.rows || []; Object.assign(f.file, ldCounts(rows)); if (body.dataCount !== undefined) f.file.dataCount = body.dataCount; f.file.rowCount = rows.length; f.file.updatedAt = Date.now(); f.file.lastAction = "modified"; const saved = await rpc(c.env.FILES, f.file.id, "save", { file: f.file, rows, action: body.action || "edit" }); await rpc(c.env.INDEX, "global", "register", { uid: f.owner, file: f.file }); return c.json({ ok: true, seq: saved.seq, file: f.file }); });
 admin.get("/file/:id/logs", async (c) => c.json(await rpc(c.env.FILES, c.req.param("id"), "getLogs")));
 admin.get("/file/:id/undo", async (c) => { const f = await findFile(c, c.req.param("id")); if (!f) return c.json({ error: "file not found" }, 404); return c.json({ undo: [], redo: [] }); });

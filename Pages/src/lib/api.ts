@@ -165,7 +165,7 @@ export interface HoldRecord {
 }
 export interface PoolUserFile {
   userId: string;
-  files: { fileId: string; available: number; claimed: number }[];
+  files: { fileId: string; available: number; claimed: number; name?: string | null; createdAt?: number | null; preset?: string | null }[];
   totalAvailable: number;
   totalClaimed: number;
 }
@@ -185,6 +185,9 @@ export interface DownloadDetailGroup {
   srcUid: string | null;
   srcFileId: string | null;
   count: number;
+  filename?: string | null;
+  createdAt?: number | null;
+  preset?: string | null;
 }
 export interface DownloadDetail {
   id: string;
@@ -356,9 +359,9 @@ export const api = {
     }
   },
   getHolds: (status?: string) => request<HoldRecord[]>(`/pools/holds${status ? `?status=${encodeURIComponent(status)}` : ""}`),
-  approveHold: (id: string) => request<{ ok: boolean; status: string }>(`/pools/holds/${encodeURIComponent(id)}/approve`, { method: "POST" }),
-  rejectHold: (id: string) => request<{ ok: boolean; status: string }>(`/pools/holds/${encodeURIComponent(id)}/reject`, { method: "POST" }),
-  returnHold: (id: string) => request<{ ok: boolean; status: string }>(`/pools/holds/${encodeURIComponent(id)}/return`, { method: "POST" }),
+  approveHold: (id: string) => request<{ ok: boolean; status: string; approved?: number; dead?: number; paid?: number }>(`/pools/holds/${encodeURIComponent(id)}/approve`, { method: "POST" }),
+  rejectHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; debited?: boolean }>(`/pools/holds/${encodeURIComponent(id)}/reject`, { method: "POST" }),
+  returnHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; debited?: boolean }>(`/pools/holds/${encodeURIComponent(id)}/return`, { method: "POST" }),
   getPoolLedger: async (password: string, poolId: string): Promise<{ ledger: unknown[] }> => {
     const enc = (s: string) => encodeURIComponent(s);
     try {
@@ -387,7 +390,14 @@ export const api = {
     return request<VerifiedCounts>(`/pools/${enc(password)}/${enc(poolId)}/verified-counts`);
   },
   getDownloadDetail: (id: string) => request<DownloadDetail>(`/pools/downloads/${encodeURIComponent(id)}/detail`),
-  getDownloadBlob: (id: string) => requestBlob(`/pools/downloads/${encodeURIComponent(id)}`),
+  getDownloadBlob: (id: string, opts?: { srcUid?: string; srcFileId?: string; name?: string }) => {
+    const q = new URLSearchParams();
+    if (opts?.srcUid) q.set("srcUid", opts.srcUid);
+    if (opts?.srcFileId) q.set("srcFileId", opts.srcFileId);
+    if (opts?.name) q.set("name", opts.name);
+    const qs = q.toString() ? `?${q}` : "";
+    return requestBlob(`/pools/downloads/${encodeURIComponent(id)}${qs}`);
+  },
   revertDownload: (id: string) => request<{ ok: boolean; reverted: number }>(`/pools/downloads/${encodeURIComponent(id)}/revert`, { method: "POST" }),
   deleteDownload: (id: string) => request<{ ok: boolean }>(`/pools/downloads/${encodeURIComponent(id)}`, { method: "DELETE" }),
   getPoolPrice: (password: string, poolId: string) => {

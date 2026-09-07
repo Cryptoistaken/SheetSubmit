@@ -15,6 +15,7 @@ export interface Env {
   TG_WEBHOOK_SECRET?: string;
   BACKEND_URL?: string;
   FRONTEND_URL?: string;
+  WORKER_URL?: string;
   HITOOLS_CHECK_URL?: string;
   TELEGRAM_LOGIN_CLIENT_ID?: string;
 }

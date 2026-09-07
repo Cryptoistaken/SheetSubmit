@@ -649,7 +649,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const s = get();
     const row = s.rows[rowIdx];
     if (!row) return;
-    if (row._taken) return;
+    if (row._taken || row._hold || row._approved) return;
     const prevVal = row[colKey] ?? "";
     if (value === prevVal) return;
     if (colKey === "cookies" && isPageFile(s.file)) {
@@ -978,7 +978,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   openQuickEdit: (rowIdx, colKey) => {
     const row = get().rows[rowIdx];
     if (!row) return;
-    if (row._taken) return;
+    if (row._taken || row._hold || row._approved) return;
     set({
       selectedCell: { rowIdx, colIdx: colKey, originalVal: row[colKey] ?? "" },
       draft: row[colKey] ?? "",
@@ -990,7 +990,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   openInlineEdit: (rowIdx, colKey) => {
     const row = get().rows[rowIdx];
     if (!row) return;
-    if (row._taken) return;
+    if (row._taken || row._hold || row._approved) return;
     set({
       selectedCell: { rowIdx, colIdx: colKey, originalVal: row[colKey] ?? "" },
       draft: row[colKey] ?? "",

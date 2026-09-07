@@ -1,0 +1,7 @@
+{
+  "name": "sheetsubmit-worker",
+  "private": true,
+  "scripts": {
+    "start": "bun run index.ts"
+  }
+}

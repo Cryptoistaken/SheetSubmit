@@ -2,6 +2,9 @@
   "services": {
     "backend": {
       "rootDirectory": "backend"
+    },
+    "worker": {
+      "rootDirectory": "worker"
     }
   }
 }

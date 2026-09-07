@@ -44,6 +44,11 @@
     --grad-dup: linear-gradient(#fde047 0%, #eab308 100%);
     --grad-cross: linear-gradient(#fdba74 0%, #f6821f 100%);
 
+    /* Pool row states — hold (amber) / approved (green) / dead (red) soft tints */
+    --tint-hold: rgba(245, 158, 11, 0.18);
+    --tint-approved: rgba(22, 163, 74, 0.16);
+    --tint-dead: rgba(238, 0, 0, 0.12);
+
     /* Selection highlight */
     --sel-bg: rgba(0, 112, 243, 0.08);
     --sel-border: rgba(0, 112, 243, 0.4);
@@ -101,6 +106,9 @@
     --grad-dead: #ef4444;
     --grad-dup: #facc15;
     --grad-cross: #fb923c;
+    --tint-hold: rgba(245, 158, 11, 0.22);
+    --tint-approved: rgba(34, 197, 94, 0.2);
+    --tint-dead: rgba(239, 68, 68, 0.16);
     --overlay-light: rgba(0, 0, 0, 0.5);
     --overlay-mid: rgba(0, 0, 0, 0.6);
     --overlay-dark: rgba(0, 0, 0, 0.7);
@@ -1562,6 +1570,11 @@ tr.row-taken { position: relative; }
 tr.row-taken td.dc.cell-taken { background: var(--blue) !important; color: rgba(255,255,255,0.72) !important; border-color: var(--blue) !important; }
 tr.row-taken td.dc.cell-taken.cell-editing { color: #fff !important; }
 tr.row-taken::after { content: ''; position: absolute; left: 36px; right: 36px; top: 50%; height: 1.25px; background: rgba(255,255,255,0.45); pointer-events: none; z-index: 1; }
+
+/* pool row states — no text, tint only (hold amber / approved green / dead red) */
+tr.row-hold td.dc { background: var(--tint-hold) !important; }
+tr.row-approved td.dc { background: var(--tint-approved) !important; }
+tr.row-dead td.dc { background: var(--tint-dead) !important; }
 
 /* file card long-press no text select */
 .file-card, .file-card-name { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }

@@ -27,10 +27,10 @@ try {
     `;
      const indexes = await sql<{ indexname: string }[]>`
        SELECT indexname FROM pg_indexes WHERE schemaname = 'public'
-       AND indexname IN ('file_index_owner_archived_idx', 'file_logs_recent_idx', 'pool_rows_fifo_idx', 'pool_rows_source_idx', 'pool_rows_hold_idx', 'pool_ledger_recent_idx', 'downloads_status_recent_idx', 'wallet_tx_user_idx')
+       AND indexname IN ('file_index_owner_archived_idx', 'file_logs_recent_idx', 'pool_rows_fifo_idx', 'pool_rows_source_idx', 'pool_rows_hold_idx', 'pool_rows_held_idx', 'pool_ledger_recent_idx', 'downloads_status_recent_idx', 'wallet_tx_user_idx')
      `;
      const migration = await sql<{ version: number }[]>`SELECT version FROM schema_migrations WHERE version=1`;
-      if (tables.length !== 15 || indexes.length !== 9 || migration.length !== 1) throw new Error("schema verification failed");
+      if (tables.length !== 15 || indexes.length !== 10 || migration.length !== 1) throw new Error("schema verification failed");
     console.log(`schema verified: ${tables.length} tables, ${indexes.length} indexes`);
   } else {
     throw new Error(`unknown schema command: ${command}`);

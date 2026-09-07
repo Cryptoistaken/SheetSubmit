@@ -17,12 +17,15 @@
 . / package.json          # orchestrator: dev:web/build/typecheck/test (bun --cwd)
   AGENTS.md               # this file
   deploy.env              # gitignored — CLOUDFLARE_* + RAILWAY_* + TELEGRAM_LOGIN_CLIENT_ID + ADMIN_IDS + GITHUB_*
-  railway.json            # {"services":{"backend":{"rootDirectory":"backend"}}}
+  railway.json            # {"services":{"backend":{"rootDirectory":"backend"},"worker":{"rootDirectory":"worker"}}} — connect worker service to Postgres + set WORKER_URL="worker.railway.internal" on backend
   .github/workflows/
     build-android.yml     # APK CI (assembleRelease + keystore-decode, release publish/changelog)
     generate-keystore.yml # one-time Android keystore generator
   backend/                # Railway Hono/Bun service backed by Postgres; src/server.ts is the HTTP entrypoint; railway.toml deploy config; .env local-only template
                         #   PERFORMANCE.md — 62-entry inventory covering 64 handlers + per-API perf plan (bottleneck → fix → est. speedup), 002_perf.sql migration sketch, rollout order
+  worker/                 # Railway background worker service (Bun + Postgres, self-contained; rootDirectory worker in railway.json). Jobs on own intervals (30s tick):
+                        #   held-uid-check (pending-approval monitoring: dead UIDs → pool_rows.state='dead', default 10min), available-uid-check (30min),
+                        #   page-check + wa-check (eligibility sweeps → data.wa_status + wa:{src_uid}:{cuser} meta cache, 30min). Env: DATABASE_URL, CHECK_URL, *_INTERVAL_MS, UID_BATCH, CHECK_BATCH; .env template
   Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev; native Telegram Login SDK uses BotFather client 8667114953 and CI GitHub Maven credentials
   backend/scripts/schema.ts # DB bootstrap/verify (bun scripts/schema.ts bootstrap|verify)
@@ -31,14 +34,14 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 1.7.0; bump on any route change, surfaced by /api/health),
+  index.ts              # app setup, routes, API_VERSION (currently 1.9.0; bump on any route change, surfaced by /api/health),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   /api/auth/me (verifySession, returns CDN photoUrl+phone+isAdmin), POST /api/auth/logout,
                       #   POST /api/auth/device/claim {token} (rateLimit 10/60s, deviceGet/Delete),
                       #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS, stores picture+phone),
                       #   GET /api/bot/info, ensureWebhook on first request
                       #   + wallet routes: GET /api/wallet, POST /api/wallet/withdraw, GET /api/wallet/requests, POST /api/wallet/requests/:id/:action
- lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, HITOOLS_CHECK_URL, TELEGRAM_LOGIN_CLIENT_ID)
+ lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, WORKER_URL, HITOOLS_CHECK_URL, TELEGRAM_LOGIN_CLIENT_ID)
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
  src/lib/session.ts      # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
@@ -46,11 +49,13 @@
  src/lib/rateLimit.ts     # sliding window rate limiter, ipKey helper
  src/routes/files.ts      # files, archive and duplicate routes
                       # + HOLD LOCK: held pool rows block owner deletes — files.delete (archive), persist (removed rows), archive.delete, archive/batch-delete return 409 via heldCheck op (pg.ts); sheetStore persist + HomePage delete surface the error toast
+                      # + decorateHoldState: file row reads (GET /:id/rows, /:id/full; admin.ts /file/:id/rows) overlay pool state → row._hold/_approved/_dead (SheetGrid tints rows; hold+approved rows locked client-side)
                       #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup)
                       #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
 src/routes/pools.ts       # admin pool, hold, download, ledger and pricing routes
-                      #   GET /holds (status filter), POST /holds/:id/approve, POST /holds/:id/reject (aliases return/revert),
-                      #   GET /:pwd/:pool (PoolDetail, delegator=src_uid avail+claimed), /rows (paginated+verifiedOnly/unverifiedOnly), /ledger, /verified-counts, /page-counts (alias), /user-files, /price GET+PUT (stored price 0..1000, admin validated), POST /:pwd/:pool/claim (→ downloadId+filename+unitPrice/total/status), POST /:pwd/:pool/hold (same + mode/pick, srcUids/srcFileIds, HOLD status, FIFO inserted_at/row_key, storedPrice), POST /:pwd/:pool/revert
+                      #   GET /holds (status filter), POST /holds/:id/approve (from HOLD and REJECTED — re-claims still-free rows, dead rows consumed unpaid, {approved, dead, paid}), POST /holds/:id/reject (aliases return/revert; from HOLD and APPROVED — rejecting an approved hold auto-debits wallets in full, {rejected, debited}),
+                      #   GET /downloads/:id (xlsx blob, any approval state; ?srcUid=&srcFileId=&name= → filtered per-user/per-file download via downloadRows op), GET /downloads/:id/detail (groups enriched with file name/createdAt/preset)
+                      #   GET /:pwd/:pool (PoolDetail, delegator=src_uid avail+claimed), /rows (paginated+verifiedOnly/unverifiedOnly), /ledger, /verified-counts, /page-counts (alias), /user-files (files carry name/createdAt/preset from file_index), /price GET+PUT (stored price 0..1000, admin validated), POST /:pwd/:pool/claim (→ downloadId+filename+unitPrice/total/status), POST /:pwd/:pool/hold (same + mode/pick, srcUids/srcFileIds, HOLD status, FIFO inserted_at/row_key, storedPrice), POST /:pwd/:pool/revert
 src/routes/admin.ts       # admin stats, users, files and moderation routes
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist,
                       #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id
@@ -72,8 +77,9 @@ components.json       # shadcn Nova, neutral, cssVariables, lucide
 pages/SheetPage.tsx   # /file/:id + /admin/user/:userId/file/:fileId
 pages/BubbleDesignPage.tsx   # /admin renders via HomePage + components/home/AdminView.tsx (no AdminPage file)
  components/layout/Topbar.tsx          # connection card + shadcn profile dropdown + animated theme toggle
-components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx (top tabs Pool|Approvals, URL state ?view=&status=&hold= deep links, taker card, bulk approve/return, error+retry states, focus refetch, users list, no recent downloads), ArchiveView.tsx, AdminView.tsx, AnalysisView.tsx, WalletView.tsx, ApprovalDetailDialog.tsx (Download + money for all statuses), Fab.tsx, EmptyState.tsx
+components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx (top tabs Pool|Approvals + password/pool/approval-status switches — all horizontally scrollable, never wrap; URL state ?view=&status=&hold= deep links; taker card takes instantly, no confirm dialog; owners list: no "..." menu, click expands user files as list rows with real name+created date+open-in-browser button; approvals: shadcn AvatarGroup file icons per hold, no APPROVED seal, click expands inline drill-down owners→files with per-user/per-file download (server-filtered blob) + open file + Approve (PENDING/REJECTED) / Reject (PENDING/APPROVED) + Delete (hold-to-delete) + dead count toast after approve), ArchiveView.tsx, AdminView.tsx, AnalysisView.tsx, WalletView.tsx, Fab.tsx, EmptyState.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
+                      #   SheetGrid row states: row._hold → amber tint + locked, row._approved → green tint + locked, row._dead/status=bad → red tint (tint vars --tint-hold/--tint-approved/--tint-dead in app.css; no text, dot classes d-yellow/d-taken/d-red)
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
 components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed
 components/tools/SplitterTool.tsx   # xlsx split into N parts
@@ -81,7 +87,7 @@ components/icons/FileTypeIcons.tsx, FacebookIcon.tsx
 components/profile/ProfileAvatar.tsx
  components/ui/button.tsx, avatar.tsx, dialog.tsx, alert-dialog.tsx, dropdown-menu.tsx, theme-toggler.tsx, hold-to-delete-button.tsx, slide-to-confirm-button.tsx, ink-stamp.tsx, page-skeleton.tsx, search-input.tsx  # shadcn and reusable pool actions
 contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, retry 3×1.5s
-stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection
+stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection; _taken/_hold/_approved rows reject cell edits (commitCell, openQuickEdit, openInlineEdit)
 stores/bubbleStore.ts     # {on, pickMode}
 stores/profileCache.ts    # profile cache (fed from /me + admin users)
 hooks/useUndoRedo.ts, usePersist.ts (beforeunload→flushPersist), useModalA11y.ts

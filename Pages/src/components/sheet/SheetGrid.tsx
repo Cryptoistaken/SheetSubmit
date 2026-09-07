@@ -187,7 +187,7 @@ export default function SheetGrid() {
       const rowIdx = Number(td.dataset.row);
       const colKey = td.dataset.col ?? "";
       const row = useSheetStore.getState().rows[rowIdx] as Record<string, unknown> | undefined;
-      if (row && (row as Record<string, unknown>)._taken) return;
+      if (row && ((row as Record<string, unknown>)._taken || (row as Record<string, unknown>)._hold || (row as Record<string, unknown>)._approved)) return;
       if (useSheetStore.getState().isDesktop) {
         if (e.ctrlKey || e.metaKey) {
           useSheetStore.getState().toggleSelection("cell", rowIdx, colKey);
@@ -288,7 +288,7 @@ export default function SheetGrid() {
       const rowIdx = Number(td.dataset.row);
       const colKey = td.dataset.col ?? "";
       const row = useSheetStore.getState().rows[rowIdx] as Record<string, unknown> | undefined;
-      if (row && (row as Record<string, unknown>)._taken) return;
+      if (row && ((row as Record<string, unknown>)._taken || (row as Record<string, unknown>)._hold || (row as Record<string, unknown>)._approved)) return;
       holdTimer.current = setTimeout(() => {
         holdTimer.current = null;
         holdActive.current = true;
@@ -593,37 +593,46 @@ const GridRow = memo(function GridRow({
     (s) => s.dupRows.has(rowIdx) || s.crossDupRows.has(rowIdx),
   );
 
-  const taken = !!(row as Record<string, unknown>)?._taken;
+  const flags = (row ?? {}) as Record<string, unknown>;
+  const taken = !!flags._taken;
+  const hold = !!flags._hold;
+  const approved = !!flags._approved;
+  const deadRow = !!flags._dead;
   const status = row?.status ?? "";
-  const dotClass = taken
-    ? "d-taken"
-    : isDupRow
-      ? "d-yellow"
-      : status === "bad"
+  const dotClass = hold
+    ? "d-yellow"
+    : approved
+      ? "d-taken"
+      : deadRow || status === "bad"
         ? "d-red"
-        : row?.wa_status === "eligible"
-          ? "d-blue"
-          : status === "good" || status === "done"
-            ? "d-green"
-            : status === "pending"
-              ? "d-spin d-yellow"
-              : "";
-  const statusLabel = taken
-    ? "Taken — claimed"
-    : isDupRow
-      ? "Duplicate row"
-      : status === "bad"
+        : isDupRow
+          ? "d-yellow"
+          : row?.wa_status === "eligible"
+            ? "d-blue"
+            : status === "good" || status === "done"
+              ? "d-green"
+              : status === "pending"
+                ? "d-spin d-yellow"
+                : "";
+  const statusLabel = hold
+    ? "On hold by admin"
+    : approved
+      ? "Approved"
+      : deadRow || status === "bad"
         ? "Dead account"
-        : row?.wa_status === "eligible"
-          ? "FB page eligible"
-          : status === "good" || status === "done"
-            ? "Valid account"
-            : status === "pending"
-              ? "Checking…"
-              : "";
+        : isDupRow
+          ? "Duplicate row"
+          : row?.wa_status === "eligible"
+            ? "FB page eligible"
+            : status === "good" || status === "done"
+              ? "Valid account"
+              : status === "pending"
+                ? "Checking…"
+                : "";
+  const rowState = hold ? "row-hold" : approved ? "row-approved" : deadRow ? "row-dead" : taken ? "row-taken" : "";
 
   return (
-    <tr className={`${isRowSel ? "row-selected" : ""}${taken ? " row-taken" : ""}`} role="row">
+    <tr className={`${isRowSel ? "row-selected " : ""}${rowState}`} role="row">
       <th
         className={"rh" + (isRowSel ? " row-sel" : "")}
         data-row={rowIdx}
@@ -690,7 +699,13 @@ const GridCell = memo(function GridCell({
   );
   const styles = parseStyles(row ?? ({} as never))[colKey];
 
-  const taken = !!(row as Record<string, unknown>)?._taken;
+  const flags = (row ?? {}) as Record<string, unknown>;
+  const taken = !!flags._taken;
+  const hold = !!flags._hold;
+  const approved = !!flags._approved;
+  const deadRow = !!flags._dead;
+  const locked = taken || hold || approved;
+  const tint = hold ? "var(--tint-hold)" : approved ? "var(--tint-approved)" : deadRow ? "var(--tint-dead)" : null;
   return (
     <td
       className={
@@ -699,20 +714,21 @@ const GridCell = memo(function GridCell({
         (dup ? " cell-dup" : "") +
         (invalid ? " cell-invalid" : "") +
         (active ? " cell-editing" : "") +
-        (taken ? " cell-taken" : "")
+        (taken ? " cell-taken" : "") +
+        (tint ? " cell-state" : "")
       }
       data-row={rowIdx}
       data-col={colKey}
       role="gridcell"
       aria-colindex={colIndex + 1}
       aria-selected={sel}
-      tabIndex={taken ? -1 : active ? 0 : -1}
+      tabIndex={locked ? -1 : active ? 0 : -1}
       aria-label={value + (dup ? " (duplicate)" : "")}
       style={{
-        backgroundColor: taken ? "#0070f3" : styles?.bg || undefined,
+        backgroundColor: tint ?? (taken ? "#0070f3" : styles?.bg || undefined),
         color: taken ? (active ? "#fff" : "rgba(255,255,255,0.72)") : styles?.color || undefined,
         fontWeight: styles?.bold ? 700 : undefined,
-        pointerEvents: taken ? "none" as const : undefined,
+        pointerEvents: locked ? "none" as const : undefined,
       }}
     >
       <div className="cell-inner">

@@ -59,8 +59,24 @@ files.get("/", async (c) => c.json(await rpc(c.env.INDEX, "global", "files", { u
   const body = await c.req.json<Partial<SheetFile> & { rows?: Row[]; dataCount?: number }>(); const rows = Array.isArray(body.rows) ? body.rows : []; const rawPreset = (body as any).preset ?? (body as any).poolKind; let preset = normalizePreset(rawPreset); if (!preset) { const tmp: SheetFile = { id: "", name: String(body.name || "Untitled"), type: "fb_cookie", columns: Array.isArray(body.columns) ? body.columns as any : undefined } as SheetFile; preset = resolvePreset(tmp) ?? undefined; } const file: SheetFile = { id: fileId(), name: String(body.name || "Untitled"), type: body.type === "fb_cookie" ? "fb_cookie" : "fb_cookie", ...(preset ? { preset, poolKind: preset } : {}), password: String(body.password || "dgddigital"), poolEnabled: body.poolEnabled !== false, ...(Array.isArray(body.columns) ? { columns: body.columns } : {}), createdAt: Date.now(), updatedAt: Date.now(), rowCount: rows.length, dataCount: body.dataCount ?? 0, lastAction: "created" }; Object.assign(file, ldCounts(rows)); await rpc(c.env.INDEX, "global", "register", { uid: c.get("uid"), file }); await rpc(c.env.FILES, file.id, "init", { file, rows }); if (rows.length) void feedPools(c.env, file, rows, c.get("uid")); return c.json(file); });
 files.put("/:id", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const body = await c.req.json<Record<string, unknown>>(); for (const k of ["name", "type", "columns", "password", "poolEnabled", "preset", "poolKind"]) if (k in body) (file as any)[k] = body[k]; if ("poolKind" in body && !("preset" in body)) (file as any).preset = (file as any).poolKind; const np = normalizePreset((file as any).preset ?? (file as any).poolKind); if (np) { (file as any).preset = np; (file as any).poolKind = np; } file.updatedAt = Date.now(); file.lastAction = "renamed"; await rpc(c.env.FILES, file.id, "save", { file }); await rpc(c.env.INDEX, "global", "register", { uid: c.get("uid"), file }); return c.json(file); });
  files.delete("/:id", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const oldRows = await rpc(c.env.FILES, file.id, "rows").catch(() => [] as Row[]) as Row[]; const held = await heldInRows(c, file, oldRows); if (held) return c.json(heldBlock(held), 409); file.deletedAt = Date.now(); file.lastAction = "archived"; await rpc(c.env.INDEX, "global", "archive", { id: file.id, archived: true, file }); return c.json({ ok: true }); });
-files.get("/:id/rows", async (c) => { const file = await owned(c, c.req.param("id")); return file ? c.json(await rpc(c.env.FILES, file.id, "rows")) : c.json({ error: "file not found" }, 404); });
- files.get("/:id/full", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const full = await rpc(c.env.FILES, file.id, "full") as { rows: Row[]; seq: number }; return c.json({ file, rows: full.rows, logs: [], undo: [], redo: [], seq: full.seq ?? 0 }); });
+files.get("/:id/rows", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const rows = await rpc(c.env.FILES, file.id, "rows") as Row[]; return c.json(await decorateHoldState(c.env, file.password, rows)); });
+ files.get("/:id/full", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const full = await rpc(c.env.FILES, file.id, "full") as { rows: Row[]; seq: number }; return c.json({ file, rows: await decorateHoldState(c.env, file.password, full.rows), logs: [], undo: [], redo: [], seq: full.seq ?? 0 }); });
+/** Overlay pool state onto rows so the owner's sheet colors them: _hold (amber), _approved (green), _dead (red). */
+export async function decorateHoldState(env: Env, password: string | undefined, rows: Row[]): Promise<Row[]> {
+  if (!password || !rows.length) return rows;
+  const keys = [...new Set(rows.map((r) => poolId(r)).filter(Boolean))] as string[];
+  if (!keys.length) return rows;
+  const r: any = await rpc(env.POOLS, password, "holdState", { keys }).catch(() => null);
+  const map = r?.map ?? {};
+  for (const row of rows) {
+    const s = map[poolId(row)] as { hold?: boolean; approved?: boolean; dead?: boolean } | undefined;
+    if (!s) continue;
+    if (s.dead) (row as any)._dead = true;
+    else if (s.hold) (row as any)._hold = true;
+    else if (s.approved) (row as any)._approved = true;
+  }
+  return rows;
+}
 async function feedPools(env: Env, file: SheetFile, rows: Row[], uid: string) { if (file.poolEnabled === false || !file.password) return; const preset = resolvePreset(file); await rpc(env.POOLS, file.password, "add", { rows, uid, srcUid: uid, srcFileId: file.id, preset, poolKind: preset }).catch((e: any) => console.error("pool feed failed", e?.message ?? e)); }
 files.put("/:id/persist", async (c) => {
   if (!checkRate(ipKey(c, "files.persist"), 30, 60000)) return c.json({ error: "rate limited" }, 429);

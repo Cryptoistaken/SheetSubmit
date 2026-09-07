@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { api } from "@/lib/api";
 import type { HoldRecord, PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
@@ -65,8 +65,6 @@ export default function PoolsView() {
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [verified, setVerified] = useState<VerifiedCounts | null>(null);
   const { profiles: cachedProfiles, fetchProfiles } = useProfileCache();
-  const [srcUid, setSrcUid] = useState<string>("");
-  const [srcFileId, setSrcFileId] = useState<string>("");
   const [verifiedFilter, setVerifiedFilter] = useState<"all" | "verified" | "unverified">("all");
   const [detailId, setDetailId] = useState<string | null>(null);
 
@@ -81,7 +79,7 @@ export default function PoolsView() {
   const [selectedHold, setSelectedHold] = useState<HoldRecord | null>(null);
 
   // price
-  const [price, setPrice] = useState<number | null>(null);
+  const [prices, setPrices] = useState<Record<string, number | null>>({});
   const [priceOpen, setPriceOpen] = useState(false);
   const [priceInput, setPriceInput] = useState("");
   const [priceSaving, setPriceSaving] = useState(false);
@@ -124,11 +122,14 @@ export default function PoolsView() {
         const uf = await api.getUserFiles(curPwd, cur);
         setUserFiles(uf.users);
        } catch { setUserFiles([]); }
-      // price
+      // prices for all pools
       try {
-        const pr = await api.getPoolPrice(curPwd, cur);
-        setPrice(pr.price);
-      } catch { setPrice(null); }
+        const allPrices: Record<string, number | null> = {};
+        await Promise.all(POOL_TABS.map(async (t) => {
+          try { const pr = await api.getPoolPrice(curPwd, t.id); allPrices[t.id] = pr.price; } catch { allPrices[t.id] = null; }
+        }));
+        setPrices(allPrices);
+      } catch { setPrices({}); }
     } catch { showToast("Could not load pools. Check your connection."); }
   }, [cur, curPwd, showToast]);
 
@@ -144,8 +145,7 @@ export default function PoolsView() {
   }, [cur, curPwd]);
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
-  useEffect(() => { setSrcFileId(""); }, [srcUid]);
-  useEffect(() => { setSrcUid(""); setSrcFileId(""); setVerifiedFilter("all"); setSelectedUids([]); setSelectedFileIds([]); }, [cur, curPwd]);
+  useEffect(() => { setVerifiedFilter("all"); setSelectedUids([]); setSelectedFileIds([]); }, [cur, curPwd]);
 
   const poolCounts: Record<string, number> = {};
   if (pools) pools.filter((p) => (p as unknown as Record<string, unknown>)["password"] === curPwd || !(p as unknown as Record<string, unknown>)["password"]).forEach((p) => { poolCounts[p.id] = p.available; });
@@ -173,12 +173,6 @@ export default function PoolsView() {
   };
 
   const getUserFilesFor = (userId: string) => userFiles?.find((u) => u.userId === userId);
-
-  const srcFileOptions = useMemo(() => {
-    if (!srcUid) return [];
-    const u = userFiles?.find((x) => x.userId === srcUid);
-    return u?.files ?? [];
-  }, [srcUid, userFiles]);
 
   // fixed: avoid nested state update
   const toggleUid = (uid: string) => {
@@ -211,8 +205,8 @@ export default function PoolsView() {
     if (holdMode === "pick" && selectedUids.length === 0 && selectedFileIds.length === 0) { showToast("Pick at least 1 user"); return; }
     setDownloading(true);
     try {
-      const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; srcUid?: string | null; srcFileId?: string | null; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: holdMode };
-      if (holdMode === "fifo") { if (srcUid) payload.srcUid = srcUid; if (srcFileId) payload.srcFileId = srcFileId; } else { if (selectedUids.length) payload.srcUids = selectedUids; if (selectedFileIds.length) payload.srcFileIds = selectedFileIds; }
+      const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: holdMode };
+      if (holdMode === "pick") { if (selectedUids.length) payload.srcUids = selectedUids; if (selectedFileIds.length) payload.srcFileIds = selectedFileIds; }
       if (cur === "page" && verifiedFilter === "verified") payload.verifiedOnly = true;
       if (cur === "page" && verifiedFilter === "unverified") payload.unverifiedOnly = true;
       const res = await api.holdPool(curPwd, cur, payload);
@@ -282,7 +276,15 @@ export default function PoolsView() {
     const v = Number(priceInput);
     if (!priceInput.trim() || !Number.isFinite(v) || v < 0 || v > 1000) return showToast("Price must be 0-1000");
     setPriceSaving(true);
-    try { const res = await api.setPoolPrice(curPwd, cur, v); setPrice(res.price); setPriceOpen(false); showToast(`Price set to $${res.price}`) } catch (e) { showToast(String(e instanceof Error ? e.message : e)) } finally { setPriceSaving(false) }
+    try {
+      const updated: Record<string, number | null> = {};
+      await Promise.all(POOL_TABS.map(async (t) => {
+        try { const res = await api.setPoolPrice(curPwd, t.id, v); updated[t.id] = res.price; } catch { updated[t.id] = prices[t.id] ?? null; }
+      }));
+      setPrices(updated);
+      setPriceOpen(false);
+      showToast(`Price set to $${v.toFixed(2)} for all pools`);
+    } catch (e) { showToast(String(e instanceof Error ? e.message : e)) } finally { setPriceSaving(false) }
   };
 
   if (detail === null) return <PageSkeleton variant="pools" />;
@@ -325,7 +327,7 @@ export default function PoolsView() {
               <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>
             ))}
           </div>
-          <Button variant="outline" size="sm" onClick={() => { setPriceInput(price != null ? String(price) : ""); setPriceOpen(true); }}>Set price{price != null ? ` · $${price}` : ""}</Button>
+          <Button variant="outline" size="sm" onClick={() => { const v = prices[cur] ?? prices[Object.keys(prices)[0]] ?? null; setPriceInput(v != null ? String(v) : ""); setPriceOpen(true); }}>Price{prices[cur] != null ? ` · $${prices[cur]}` : ""}</Button>
           <div className="pool-switch">
             {POOL_TABS.map((t) => {
               const meta = POOL_META[t.id];
@@ -339,7 +341,6 @@ export default function PoolsView() {
           </div>
         </div>
       </div>
-      {price != null ? <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>Active price: <span style={{ fontWeight: 700, color: "var(--text)" }}>${price.toFixed(2)}</span> per {poolMeta.label}</div> : null}
 
       {/* stats */}
       <div className="pools-stats" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 16 }}>
@@ -386,29 +387,6 @@ export default function PoolsView() {
       {/* toolbar */}
       <div className="pools-toolbar pools-stack" style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end", marginTop: 16, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          {holdMode === "fifo" ? (
-            <>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text3)", fontWeight: 600 }}>
-                Source
-                <select aria-label="Source delegator" value={srcUid} onChange={(e) => setSrcUid(e.target.value)} style={{ padding: "7px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", minHeight: 36, maxWidth: 160 }}>
-                  <option value="">All delegators</option>
-                  {(((userFiles as unknown as { userId: string }[] | null) ?? (detail?.users as unknown as { userId: string }[] | null) ?? []) as { userId: string }[]).map((u) => {
-                    const du = detail?.users.find((x) => x.userId === u.userId);
-                    const label = du ? displayName(du).line1 : u.userId.slice(-6);
-                    return <option key={u.userId} value={u.userId}>{label} · {u.userId.slice(-6)}</option>;
-                  })}
-                </select>
-              </label>
-              {srcUid ? (
-                <select aria-label="Source file" value={srcFileId} onChange={(e) => setSrcFileId(e.target.value)} style={{ padding: "7px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", minHeight: 36, maxWidth: 160 }}>
-                  <option value="">All files</option>
-                  {srcFileOptions.map((f) => (
-                    <option key={f.fileId} value={f.fileId}>#{f.fileId.slice(-8)} · {f.available} avail</option>
-                  ))}
-                </select>
-              ) : null}
-            </>
-          ) : null}
           {cur === "page" ? (
             <select aria-label="Page verified filter" value={verifiedFilter} onChange={(e) => setVerifiedFilter(e.target.value as never)} style={{ padding: "7px 8px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: 8, background: "var(--bg)", color: "var(--text)", minHeight: 36 }}>
               <option value="all">All pages</option>
@@ -578,12 +556,14 @@ export default function PoolsView() {
       {/* price dialog */}
       <Dialog open={priceOpen} onOpenChange={setPriceOpen}>
          <DialogContent>
-          <DialogHeader><DialogTitle>Set price</DialogTitle><DialogDescription>Price per row for {poolMeta.label} ({curPwd}) — 0 to 1000</DialogDescription></DialogHeader>
-          <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium">Price</span>
-            <input aria-label="Pool price" type="number" min={0} max={1000} step={0.01} value={priceInput} onChange={(e) => setPriceInput(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-          </label>
-          <DialogFooter><Button variant="ghost" onClick={() => setPriceOpen(false)}>Cancel</Button><Button disabled={priceSaving} onClick={savePrice}>{priceSaving ? "Saving…" : "Save"}</Button></DialogFooter>
+          <DialogHeader><DialogTitle>Set price</DialogTitle><DialogDescription>Set price per row for all pools ({curPwd}) — 0 to 1000</DialogDescription></DialogHeader>
+          <div className="flex flex-col gap-3">
+            {POOL_TABS.map((t) => {
+              const meta = POOL_META[t.id];
+              return <label key={t.id} className="flex flex-col gap-1.5"><span className="text-sm font-medium flex items-center gap-2"><meta.Icon size={14} />{meta.label}{prices[t.id] != null ? <span className="text-muted-foreground text-xs font-normal">· ${prices[t.id]!.toFixed(2)}</span> : null}</span><input aria-label={`${meta.label} price`} type="number" min={0} max={1000} step={0.01} value={priceInput} onChange={(e) => setPriceInput(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" /></label>;
+            })}
+          </div>
+          <DialogFooter><Button variant="ghost" onClick={() => setPriceOpen(false)}>Cancel</Button><Button disabled={priceSaving} onClick={savePrice}>{priceSaving ? "Saving…" : "Save all"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

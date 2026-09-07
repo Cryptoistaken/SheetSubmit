@@ -399,7 +399,7 @@ export default function PoolsView() {
           <button type="button" aria-pressed={holdMode === "pick"} className={holdMode === "pick" ? "btn btn-primary" : "btn btn-ghost"} style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600, minHeight: 32 }} onClick={() => setHoldMode("pick")}>Pick users</button>
         </div>
         {holdMode === "fifo" ? (
-          <div style={{ fontSize: 12, color: "var(--text3)" }}>Oldest rows first (FIFO) — takes the oldest available rows first across all delegators.</div>
+          <div style={{ fontSize: 12, color: "var(--text3)" }}>Oldest rows first (FIFO) takes the oldest available rows first across all delegators.</div>
         ) : (
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button type="button" className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={selectAllPick}>All</button>

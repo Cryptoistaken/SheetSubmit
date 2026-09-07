@@ -135,7 +135,12 @@ pools.delete("/downloads/:id", async (c) => {
   if (!id || id.length > 128) return c.json({ error: "invalid id" }, 400);
   const d = await findDownload(c, id);
   if (!d) return c.json({ error: "not found" }, 404);
-  const r: any = await rpc(c.env.POOLS, d.password, "downloadDelete", { id: d.id });
+  let r: any;
+  try { r = await rpc(c.env.POOLS, d.password, "downloadDelete", { id: d.id }); }
+  catch (error) {
+    if (String((error as Error)?.message || "").includes("active record cannot be deleted")) return c.json({ error: "active record cannot be deleted" }, 400);
+    throw error;
+  }
   if (r?.error) return c.json({ error: r.error }, r.error === "not found" ? 404 : 400);
   return c.json(r);
 });

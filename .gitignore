@@ -40,6 +40,7 @@ compare-*.html
 !android/gradlew.bat
 test/*
 !test/test.ts
+!test/twoSession.ts
 !test/benchmark.ts
 !test/stress.ts
 !test/lib.ts

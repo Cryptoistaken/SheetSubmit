@@ -20,7 +20,7 @@ try {
     const tables = await sql<{ table_name: string }[]>`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public' AND table_name IN (
-        'schema_migrations', 'users', 'file_index', 'sessions', 'meta', 'wallets',
+         'schema_migrations', 'users', 'file_index', 'sessions', 'meta', 'wallets', 'withdrawals',
         'file_meta', 'file_rows', 'file_logs', 'pool_settings', 'pool_rows',
         'pool_ledger', 'downloads'
       )
@@ -30,7 +30,7 @@ try {
        AND indexname IN ('file_index_owner_archived_idx', 'file_logs_recent_idx', 'pool_rows_fifo_idx', 'pool_rows_source_idx', 'pool_rows_hold_idx', 'pool_ledger_recent_idx', 'downloads_status_recent_idx')
      `;
      const migration = await sql<{ version: number }[]>`SELECT version FROM schema_migrations WHERE version=1`;
-     if (tables.length !== 13 || indexes.length !== 7 || migration.length !== 1) throw new Error("schema verification failed");
+      if (tables.length !== 14 || indexes.length !== 8 || migration.length !== 1) throw new Error("schema verification failed");
     console.log(`schema verified: ${tables.length} tables, ${indexes.length} indexes`);
   } else {
     throw new Error(`unknown schema command: ${command}`);

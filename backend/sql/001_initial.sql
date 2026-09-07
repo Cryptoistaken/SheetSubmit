@@ -42,6 +42,18 @@ CREATE TABLE IF NOT EXISTS wallets (
   balance NUMERIC NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS withdrawals (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  amount NUMERIC NOT NULL CHECK (amount > 0),
+  method TEXT NOT NULL,
+  account TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')),
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS withdrawals_status_idx ON withdrawals (status, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS file_meta (
   file_id TEXT PRIMARY KEY REFERENCES file_index(file_id) ON DELETE CASCADE,
   data JSONB,

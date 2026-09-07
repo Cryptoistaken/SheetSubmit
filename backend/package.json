@@ -1,5 +1,5 @@
 {
-  "name": "sheetsubmit-worker",
+  "name": "sheetsubmit-backend",
   "private": true,
   "type": "module",
   "scripts": {

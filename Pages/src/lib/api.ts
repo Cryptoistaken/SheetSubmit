@@ -202,6 +202,18 @@ export interface DownloadDetail {
   groups: DownloadDetailGroup[];
 }
 export interface PoolPrice { poolId: string; password: string | null; price: number }
+export interface Withdrawal {
+  id: string;
+  user_id: string;
+  amount: number;
+  method: string;
+  account: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  created_at: number;
+  updated_at: number;
+  name?: string | null;
+  username?: string | null;
+}
 
 export const api = {
   getFiles: () => request<SheetFile[]>("/files"),
@@ -218,6 +230,10 @@ export const api = {
   append: (id: string, data: AppendPayload, opts?: { keepalive?: boolean }) =>
     request<{ ok: boolean; seq: number; file?: SheetFile }>(`/files/${id}/append`, { method: "PUT", body: JSON.stringify(data) }, opts),
   health: () => request<{ ok: boolean; ts: number; version: string }>("/health"),
+  getWallet: () => request<{ uid: string; balance: number; withdrawals: Withdrawal[] }>("/wallet"),
+  withdraw: (data: { amount: number; method: string; account: string }) => request<Withdrawal>("/wallet/withdraw", { method: "POST", body: JSON.stringify(data) }),
+  getWithdrawalRequests: (status = "PENDING") => request<Withdrawal[]>(`/wallet/requests?status=${encodeURIComponent(status)}`),
+  decideWithdrawal: (id: string, action: "approve" | "reject") => request<{ id: string; status: Withdrawal["status"] }>(`/wallet/requests/${encodeURIComponent(id)}/${action}`, { method: "POST" }),
   getArchive: () => request<ArchiveFile[]>("/archive"),
   restoreFile: (id: string) => request<{ ok: boolean }>(`/archive/${id}/restore`, { method: "POST" }),
   permanentDelete: (id: string) => request<{ ok: boolean }>(`/archive/${id}`, { method: "DELETE" }),

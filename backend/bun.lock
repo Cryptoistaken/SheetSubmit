@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "sheetsubmit-worker",
+      "name": "sheetsubmit-backend",
       "dependencies": {
         "hono": "^4.11.0",
         "xlsx": "^0.18.5",

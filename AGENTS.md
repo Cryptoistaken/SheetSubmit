@@ -1,9 +1,9 @@
 # SheetSubmit — Agent Rules
 
 ## Project quick facts
-- Cloudflare Worker (`sheetsubmit.traderspopy.workers.dev`) + Pages (`sheetsubmit.pages.dev`).
-- Git-connected Pages + Worker auto-deploy on push. No CI deploy workflow.
-- Package manager **bun**. Run `bun install` in `worker/` and `Pages/` if `node_modules` missing.
+- Railway backend + Pages (`sheetsubmit.pages.dev`).
+- Git-connected Pages auto-deploy on push; backend deploys through Railway. No CI deploy workflow.
+- Package manager **bun**. Run `bun install` in `backend/` and `Pages/` if `node_modules` missing.
 - Frontend: React 19 + TypeScript + Vite 8 + Tailwind v4 + shadcn/ui (Nova, neutral, lucide, Geist) + Zustand.
 - Worker: Hono + Durable Objects (SQLite) + `xlsx`. No Redis, no KV, no D1.
 - Auth: Telegram bot login → HMAC session cookie (`ss_session`). Stateless verify via `crypto.subtle`.
@@ -20,47 +20,41 @@
   .github/workflows/
     build-android.yml     # APK CI (assembleRelease + keystore-decode, release publish/changelog)
     generate-keystore.yml # one-time Android keystore generator
-  worker/                 # Cloudflare Worker (Hono + DO), unchanged rollback implementation
   backend/                # Railway Hono/Bun service backed by Postgres; src/server.ts is the HTTP entrypoint; railway.toml deploy config; .env local-only template
                         #   PERFORMANCE.md — 62-entry inventory covering 64 handlers + per-API perf plan (bottleneck → fix → est. speedup), 002_perf.sql migration sketch, rollout order
   Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev; native Telegram Login SDK uses BotFather client 8667114953 and CI GitHub Maven credentials
-  scripts/TestApi.ts      # live API test suite (mirrors every worker route, all must pass) — run: bun scripts/TestApi.ts (secret auto-loads from scripts/.env)
+  scripts/TestApi.ts      # live API test suite — run: bun scripts/TestApi.ts (secret auto-loads from scripts/.env)
                         #   subset: TEST_FILTER env or argv — number (55), range (55-70), or name substring (claim), comma/space-combined — e.g. `bun scripts/TestApi.ts 90-97`, `bun scripts/TestApi.ts claim pools`, `--filter=`/`--only=`/`--grep=` prefixes stripped, `h`/`--help` for usage
   scripts/nuke.ts         # DB nuke via admin API — drains pools + deletes files/users — run: bun scripts/nuke.ts [--dry|--yes|--full|--keep id1,id2] (secret auto-loads from scripts/.env)
 ```
 
-### Worker — `worker/src/` (Hono, entry `src/index.ts`)
+### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 1.5.1; bump on any route change, surfaced by /api/health),
+  index.ts              # app setup, routes, API_VERSION (currently 1.5.4; bump on any route change, surfaced by /api/health),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   /api/auth/me (verifySession, returns CDN photoUrl+phone+isAdmin), POST /api/auth/logout,
                       #   POST /api/auth/device/claim {token, turnstile} (Turnstile enforced if TURNSTILE_SECRET set),
                       #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS, stores picture+phone),
                       #   POST /api/auth/turnstile-verify, GET /api/bot/info, ensureWebhook on first request
-lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, WORKER_URL, FRONTEND_URL, HITOOLS_CHECK_URL, TURNSTILE_*, TELEGRAM_LOGIN_CLIENT_ID, DO bindings INDEX/FILES/POOLS)
-lib/telegramOidc.ts     # Telegram Login OIDC/JWKS token verification
-lib/session.ts        # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
-lib/do.ts             # rpc(namespace, name, op, args) — single fetch to DO
-do/IndexDO.ts         # singleton global: users, file_index, sessions, device tokens, meta KV, wallets(balance) (SQLite).
-                      #   ops: ensureUser/user/users/adminUsers(file+archive counts)/ban/deleteUser/register/file/files(archived filter)/archive/batchArchive/purge/batchPurge/allFiles/session/getSession/deleteSession/deviceSet/deviceGet/deviceDelete/deviceByChat/deviceSession/metaSet/metaGet/metaGetMany/metaDel/stats/walletCredit/walletGet
-do/FileDO.ts          # per-file: init/meta/seq/rows/full/save/getLogs(200 cap)/wipe (SQLite). save increments seq counter. wipe returns rows before deletion for pool cleanup
-do/PoolDO.ts          # per-pool-password: pool_rows(inserted_at,hold_id), pool_settings(price), ledger, downloads(status,unit_price,total,mode,src_uids/src_file_ids,selection) (SQLite). PRICES cookies_only .02 / cookies_2fa .05 / page .10 (fallback, claim/hold now use stored price).
-                      #   ops: add(counts)/detail/claim(FIFO inserted_at+row_key, storedPrice/total)/hold(FIFO, count|'all', mode fifo|pick, srcUids/srcFileIds+scalar+verified filters, HOLD→download, storedPrice)/priceGet/priceSet(0<=price<=1000)/downloadDelete(safe, only REVERTED/REJECTED)/holds(status filter)/holdApprove→APPROVED/holdReject→REJECTED(aliases holdRevert/holdReturn)/verifiedCounts(+pageCounts alias)/userFiles/downloads/download/downloadDetail/revertDownload/ledger/revert/removeAvailable
-routes/files.ts       # files router (GET/POST /, PUT/:id, DELETE/:id=archive, PUT/:id/persist|append (feeds pools), GET/:id/rows|full)
+ lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, HITOOLS_CHECK_URL, TELEGRAM_LOGIN_CLIENT_ID)
+ src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
+ src/lib/session.ts      # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
+ src/lib/do.ts            # repository transport for Postgres operations
+ src/lib/pg.ts            # Postgres repository for users, files, pools, wallets and withdrawals
+ src/routes/files.ts      # files, archive and duplicate routes
                       #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup)
                       #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
-routes/pools.ts       # admin: GET / (PoolSummary[]), GET /downloads, GET /downloads/:id/detail, GET /downloads/:id (xlsx blob, ?format=json), POST /downloads/:id/revert, DELETE /downloads/:id (only REVERTED/REJECTED),
+src/routes/pools.ts       # admin pool, hold, download, ledger and pricing routes
                       #   GET /holds (status filter), POST /holds/:id/approve, POST /holds/:id/reject (aliases return/revert),
                       #   GET /:pwd/:pool (PoolDetail, delegator=src_uid avail+claimed), /rows (paginated+verifiedOnly/unverifiedOnly), /ledger, /verified-counts, /page-counts (alias), /user-files, /price GET+PUT (stored price 0..1000, admin validated), POST /:pwd/:pool/claim (→ downloadId+filename+unitPrice/total/status), POST /:pwd/:pool/hold (same + mode/pick, srcUids/srcFileIds, HOLD status, FIFO inserted_at/row_key, storedPrice), POST /:pwd/:pool/revert
-routes/admin.ts       # GET /stats, /users, /users/search, /user/:id (+files), /user/:id/archive, /file/:id,
+src/routes/admin.ts       # admin stats, users, files and moderation routes
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist,
                       #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id
-routes/wa.ts          # POST /fb/check (check.fb.tools proxy), /fb/page-check + /fb/wa-check (FB graphql ports, requireAuth),
+src/routes/wa.ts          # POST /fb/check, /fb/page-check, /fb/wa-check and WA cache routes
                       #   GET /wa/cache?uids= (meta-backed, eligible-only, 24h TTL)
-routes/bot.ts         # ensureWebhook, POST /webhook/tg (handleBotUpdate) — GET /bot/info lives in index.ts
-scheduled.ts          # cron: ensureWebhook
-  wrangler.jsonc         # DO bindings INDEX/FILES/POOLS, cron 0 */6 * * *, vars (FRONTEND_URL/HITOOLS_CHECK_URL/WORKER_URL); add TELEGRAM_LOGIN_CLIENT_ID after BotFather setup
+src/routes/bot.ts         # Telegram webhook and bot routes
+  railway.toml          # Railway build and deployment configuration
 ```
 
 ### Pages — `Pages/src/` (Vite 8, entry `main.tsx`)
@@ -70,7 +64,7 @@ App.tsx               # createBrowserRouter: RequireAuth gate (unauth → /login
 index.css / app.css   # tailwind v4 + shadcn + geist + legacy styles
 vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000, vendor-react chunk
 components.json       # shadcn Nova, neutral, cssVariables, lucide
-pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/analysis,/tools (+/pools redirect, /tools/splitter, /admin/user/:userId, /bubble-design)
+ pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/analysis,/tools (+/pools redirect, /tools/splitter, /admin/user/:userId, /bubble-design); WalletView has user wallet and admin withdrawal-request tabs
 pages/SheetPage.tsx   # /file/:id + /admin/user/:userId/file/:fileId
 pages/BubbleDesignPage.tsx   # /admin renders via HomePage + components/home/AdminView.tsx (no AdminPage file)
  components/layout/Topbar.tsx          # connection card + shadcn profile dropdown + animated theme toggle
@@ -106,14 +100,14 @@ functions/webhook/[[path]].ts
 5. On success → set `ss_had_session` flag, reload to saved destination (default `/`) → AuthContext picks up cookie.
 
 ## Rules
-1. **Production isolation** — test bot token only, own Cloudflare project. Never touch prod.
+1. **Production isolation** — test bot token only, own Railway project. Never touch prod.
 2. Use tokens/CSS variables for colors — no hardcoded hex.
 3. **Android — NEVER build locally, CI only.**
-4. Pages + Worker auto-deploy on git push (git-connected). No CI deploy step.
+4. Pages auto-deploy on git push; backend deploys through Railway. No CI deploy step.
 5. No versioning — save increments `seq` counter in meta. Undo/redo is client-side only (Zustand in-memory).
-6. Worker CPU limit: 10ms per request. Keep operations lightweight.
-7. No KV/D1/R2 bindings. Storage is Durable Objects + SQLite only.
-8. Worker API change flow (TestApi.ts hits the LIVE worker, so order matters): bump `API_VERSION` in `worker/src/index.ts` → `bun run typecheck` + `bun run test` in `worker/` → push so Cloudflare auto-deploys → confirm via `GET /api/health` `version` → then run `EXPECT_VERSION=<new> bun scripts/TestApi.ts` (secret auto-loads from `scripts/.env`, all must pass).
+6. Backend uses Postgres; keep operations lightweight and transactional.
+7. No KV/D1/R2 bindings.
+8. Backend API change flow: bump `API_VERSION` in `backend/src/index.ts` → run `bun run typecheck` in `backend/` → deploy through Railway → confirm via `GET /api/health` → run `bun scripts/TestApi.ts` when the live test suite is available.
 9. New API endpoint → new `test()` in `scripts/TestApi.ts` in the same change (happy path + 400/401/404). Never ship an untested route.
 10. **Commit & push after every completed code-change batch.** After finishing a set of modifications (typecheck + tests pass), immediately inspect `git status`/`git diff`, `git add` only the files changed for this task, commit with a concise message, and `git push` to the current upstream branch. Do not leave completed task changes uncommitted or unpushed. If unrelated work is present, leave it untouched and commit only this task's files. If commit or push fails, report the failure and resolve it before finishing when possible.
 11. **Keep this file fresh.** Any change that adds, removes, renames, or moves a route, file, DO op, store, or workflow → update the Codebase map + Auth flow above in the SAME commit, or the next agent works blind.

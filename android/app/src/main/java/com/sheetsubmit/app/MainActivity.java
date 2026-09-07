@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
 
     private static final String PREFS_NAME = "sheetsubmit";
     private static final String TAG = "SheetSubmit";
-    // Telegram Login — keep in sync with worker wrangler.jsonc TELEGRAM_LOGIN_CLIENT_ID + BotFather app-link
+    // Telegram Login — keep in sync with backend deployment config + BotFather app-link
     private static final String TG_HOST = TelegramLoginBridge.HOST;
     private static final String TG_CLIENT_ID = TelegramLoginBridge.CLIENT_ID;
     private static final String TG_REDIRECT_URI = TelegramLoginBridge.REDIRECT_URI;

@@ -32,6 +32,7 @@ const AnalysisView = lazyRetry(() => import("@/components/home/AnalysisView"));
 const ArchiveView = lazyRetry(() => import("@/components/home/ArchiveView"));
 const SplitterTool = lazyRetry(() => import("@/components/tools/SplitterTool"));
 const PoolsView = lazyRetry(() => import("@/components/home/PoolsView"));
+const WalletView = lazyRetry(() => import("@/components/home/WalletView"));
 import Fab from "@/components/home/Fab";
 import FileGrid from "@/components/home/FileGrid";
 import PageSkeleton from "@/components/ui/page-skeleton";
@@ -506,6 +507,7 @@ export default function HomePage() {
 
       {tab === "wallet" ? (
         <div className="home-pane" id="homePaneWallet" style={{ padding: "32px 24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
+          <Suspense fallback={<PageSkeleton variant="files" />}><WalletView /></Suspense>
         </div>
       ) : null}
 

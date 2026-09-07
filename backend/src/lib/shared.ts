@@ -13,7 +13,7 @@ export interface Env {
   TG_BOT_TOKEN?: string;
   ADMIN_IDS?: string;
   TG_WEBHOOK_SECRET?: string;
-  WORKER_URL?: string;
+  BACKEND_URL?: string;
   FRONTEND_URL?: string;
   HITOOLS_CHECK_URL?: string;
   TELEGRAM_LOGIN_CLIENT_ID?: string;

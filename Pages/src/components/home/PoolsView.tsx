@@ -344,9 +344,9 @@ export default function PoolsView() {
       `}</style>
 
       {/* header + switches */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
-        <div><div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-.02em" }}>Pools</div></div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-.02em" }}>Pools</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
           <div className="pool-switch" style={{ background: "#eef2ff", borderColor: "#ddd6fe" }}>
             {PASSWORDS.map((p) => (
               <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Copy } from "lucide-react";
+import { Copy, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SlideToConfirmButton } from "@/components/ui/slide-to-confirm-button";
 import { HoldToDeleteButton } from "@/components/ui/hold-to-delete-button";
@@ -23,9 +23,11 @@ function copyText(text: string) {
   const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
 }
 
-function CopyField({ label, value, copy, mono, className }: { label: string; value: string; copy?: string; mono?: boolean; className?: string }) {
-  const showToast = useToast();
-  return <button type="button" title="Tap to copy" onClick={() => { copyText(copy ?? value); showToast("Copied to clipboard"); }} className={`group flex w-full items-center justify-between gap-3 text-left transition-colors hover:text-foreground ${className ?? ""}`}><span className="shrink-0 text-muted-foreground capitalize">{label}</span><span className={`ml-4 inline-flex min-w-0 items-center gap-1.5 ${mono ? "font-mono" : ""}`}><span className="break-all">{value}</span><Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-primary" /></span></button>;
+const shortId = (id: string) => (id.length > 20 ? id.slice(0, 16) + "…" : id);
+
+function CopyField({ label, value, copy, display, mono, className }: { label: string; value: string; copy?: string; display?: string; mono?: boolean; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  return <button type="button" title="Tap to copy" onClick={() => { copyText(copy ?? value); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className={`group flex w-full cursor-pointer items-center justify-between gap-3 text-left transition-colors hover:text-foreground active:scale-[0.99] ${className ?? ""}`}><span className="shrink-0 text-muted-foreground capitalize">{label}</span><span className={`ml-4 inline-flex min-w-0 items-center gap-1.5 ${mono ? "font-mono" : ""}`}><span className="break-all">{display ?? value}</span>{copied ? <><span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">Copied</span><Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" /></> : <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-primary" />}</span></button>;
 }
 
 function groupByDate(items: WalletTransaction[]) {
@@ -69,7 +71,7 @@ function BalanceHistory({ items }: { items: WalletTransaction[] }) {
             {detail.meta && Object.entries(detail.meta).map(([k, v]) => <CopyField key={k} label={k.replace(/_/g, " ")} value={String(v)} />)}
           </div>
           <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">{detail.description}</div>
-          <CopyField label="Transaction ID" value={detail.id} mono className="border-t pt-2 text-xs text-muted-foreground" />
+          <CopyField label="Transaction ID" value={detail.id} display={shortId(detail.id)} mono className="border-t pt-2 text-xs text-muted-foreground" />
         </div>}
       </DialogContent>
     </Dialog>
@@ -117,7 +119,7 @@ function RequestDialog({ request, onClose, onDone }: { request: Withdrawal | nul
   const [acting, setActing] = useState(false);
   if (!request) return null;
   const decide = async (action: "approve" | "reject") => { setActing(true); try { await api.decideWithdrawal(request.id, action); showToast(action === "approve" ? "Withdrawal approved" : "Withdrawal rejected and refunded"); onDone(); onClose(); } catch { showToast("Could not update withdrawal request."); } finally { setActing(false); } };
-  return <Dialog open={!!request} onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent><DialogHeader><DialogTitle>Withdrawal request</DialogTitle><DialogDescription>{request.name || request.user_id} · {new Date(request.created_at).toLocaleString()}</DialogDescription></DialogHeader><div className="flex flex-col gap-2 text-sm"><CopyField label="Amount" value={`$${Number(request.amount).toFixed(2)}`} copy={Number(request.amount).toFixed(2)} /><CopyField label="Method" value={request.method} /><CopyField label="Account" value={request.account} /><div className="flex justify-between"><span className="text-muted-foreground">Status</span><span>{request.status}</span></div><CopyField label="Withdrawal ID" value={request.id} mono className="border-t pt-2 text-xs text-muted-foreground" /></div>{request.status === "PENDING" ? <div className="flex flex-col gap-3 pt-2"><SlideToConfirmButton onConfirm={() => void decide("approve")} disabled={acting} label="Slide to approve"/><HoldToDeleteButton onConfirm={() => void decide("reject")} disabled={acting} label="Hold to reject"/></div> : null}</DialogContent></Dialog>;
+  return <Dialog open={!!request} onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent><DialogHeader><DialogTitle>Withdrawal request</DialogTitle><DialogDescription>{request.name || request.user_id} · {new Date(request.created_at).toLocaleString()}</DialogDescription></DialogHeader><div className="flex flex-col gap-2 text-sm"><CopyField label="Amount" value={`$${Number(request.amount).toFixed(2)}`} copy={Number(request.amount).toFixed(2)} /><CopyField label="Method" value={request.method} /><CopyField label="Account" value={request.account} /><div className="flex justify-between"><span className="text-muted-foreground">Status</span><span>{request.status}</span></div><CopyField label="Withdrawal ID" value={request.id} display={shortId(request.id)} mono className="border-t pt-2 text-xs text-muted-foreground" /></div>{request.status === "PENDING" ? <div className="flex flex-col gap-3 pt-2"><SlideToConfirmButton onConfirm={() => void decide("approve")} disabled={acting} label="Slide to approve"/><HoldToDeleteButton onConfirm={() => void decide("reject")} disabled={acting} label="Hold to reject"/></div> : null}</DialogContent></Dialog>;
 }
 
 type FilterStatus = "ALL" | "PENDING" | "APPROVED" | "REJECTED";

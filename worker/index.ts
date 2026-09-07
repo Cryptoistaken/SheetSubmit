@@ -130,12 +130,29 @@ async function bootstrap() { await db.unsafe(await Bun.file(new URL("../backend/
 await bootstrap().catch((e) => console.error("[worker] bootstrap failed", (e as Error)?.message ?? e));
 console.log(`[worker] started — jobs: ${JOBS.map((j) => `${j.name}@${j.every / 1000}s`).join(", ")}`);
 const last = new Map<string, number>();
+const lastError = new Map<string, string>();
 for (;;) {
   for (const job of JOBS) {
     const due = (last.get(job.name) ?? 0) + job.every <= Date.now();
     if (!due) continue;
     last.set(job.name, Date.now());
-    try { await job.run(job.limit); } catch (e) { console.error(`[worker:${job.name}]`, (e as Error)?.message ?? e); }
+    try { await job.run(job.limit); lastError.delete(job.name); } catch (e) { lastError.set(job.name, String((e as Error)?.message ?? e)); console.error(`[worker:${job.name}]`, (e as Error)?.message ?? e); }
   }
   await new Promise((r) => setTimeout(r, 30_000));
 }
+
+// tiny HTTP API so the backend (WORKER_URL) and Railway health checks can confirm the worker is alive
+const startedAt = Date.now();
+Bun.serve({
+  port: Number(Bun.env.PORT) || 3000,
+  fetch: (req) => {
+    const url = new URL(req.url);
+    if (url.pathname !== "/health") return new Response("not found", { status: 404 });
+    return Response.json({
+      ok: true,
+      startedAt,
+      uptimeMs: Date.now() - startedAt,
+      jobs: JOBS.map((j) => ({ name: j.name, everyMs: j.every, lastRunAt: last.get(j.name) ?? null, lastRunAgoMs: last.has(j.name) ? Date.now() - (last.get(j.name) as number) : null, lastError: lastError.get(j.name) ?? null })),
+    });
+  },
+});

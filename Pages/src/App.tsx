@@ -104,7 +104,7 @@ function Layout() {
     <div className="flex h-dvh flex-col">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded-md focus:bg-[var(--bg)] focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-[var(--text)] focus:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded-md focus:bg-(--bg) focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-(--text) focus:shadow-md focus:outline-none focus:ring-2 focus:ring-(--ring)"
       >
         Skip to content
       </a>

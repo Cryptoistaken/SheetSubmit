@@ -137,7 +137,7 @@ async function run() {
   assert(afterApproval.body.length === beforeApproval.body.length, "approval deleted user source rows");
   const walletAfterApproval = await user<any>("/wallet");
   assertStatus(walletAfterApproval, 200, "wallet after approval");
-  assert(Number(walletAfterApproval.body.balance) >= Number(walletBeforeApproval.body.balance) + Number(detail.body.total || 0), "approved hold did not credit source user wallet");
+  assert(Number(walletAfterApproval.body.balance) >= Number(walletBeforeApproval.body.balance) + Number(detail.body.total || 0), `approved hold did not credit source user wallet: before=${walletBeforeApproval.body.balance} after=${walletAfterApproval.body.balance} total=${detail.body.total}`);
   console.log("PASS hold -> approved state and source-file integrity");
 
   const rejectedHold = await admin<any>("/pools/dgddigital/page/hold", json({ count: 1, mode: "pick", srcFileIds: [pageFile.id] }));

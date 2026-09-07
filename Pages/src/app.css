@@ -979,8 +979,8 @@ button, input, select, textarea {
     transition: box-shadow 0.15s, border-color 0.15s;
 }
 .search-input-group:focus-within {
-    border-color: var(--text);
-    box-shadow: 0 0 0 1px var(--text), var(--shadow-md);
+    border-color: var(--text2);
+    box-shadow: 0 0 0 1px var(--text2), var(--shadow-md);
 }
 .search-input-icon {
     display: inline-flex;

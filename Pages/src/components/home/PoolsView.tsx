@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { vibrate } from "@/lib/utils";
 
 import { CookieIcon, PageIcon, PasswordIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
+import { FacebookIcon } from "@/components/icons/FacebookIcon";
 import EmptyState from "./EmptyState";
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 import { ApprovalDetailDialog } from "./ApprovalDetailDialog";
@@ -33,6 +34,12 @@ const POOL_META: Record<string, { label: string; Icon: typeof CookieIcon }> = {
   page: { label: "Page", Icon: PageIcon },
 };
 
+const PoolTypeIcon = ({ poolId, size = 16 }: { poolId: string; size?: number }) => {
+  const Icon = (POOL_META[poolId] ?? POOL_META.cookies_only).Icon;
+  return <Icon size={size} />;
+};
+export { PoolTypeIcon };
+
 function displayName(u: PoolDetail["users"][number]) {
   const raw: Record<string, unknown> = u as unknown as Record<string, unknown>;
   const n = String(raw["name"] ?? raw["displayName"] ?? "").trim();
@@ -52,6 +59,7 @@ export default function PoolsView() {
   const cur = (POOL_TABS.find((t) => t.id === params.poolId)?.id as PoolId) || "cookies_only";
   const { user: me } = useAuth();
   const meIsAdmin = Boolean(me?.isAdmin);
+  const ownerFallback = (uid: string) => (cachedProfiles[uid]?.name || uid).trim().charAt(0).toUpperCase();
 
   const view = searchParams.get("view") === "approvals" ? "approvals" : "pool";
   const apprFilter = (["PENDING", "APPROVED", "REJECTED"].includes((searchParams.get("status") ?? "").toUpperCase())
@@ -402,11 +410,6 @@ export default function PoolsView() {
         .expand-icon.open{transform:rotate(90deg)}
         .file-row{animation:fadeIn .15s}
         @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-        .file-card{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r)}
-        .file-card-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-        .file-card-id{font-size:12px;font-family:var(--mono);color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .file-card-stats{display:flex;align-items:center;gap:6px;flex-shrink:0}
-        .file-card-stat{font-size:12px;font-family:var(--mono);font-weight:600}
         .taker-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:stretch}
         .taker-cell{flex:1;min-width:120px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg3);padding:8px 10px;font-size:13px;font-family:var(--mono);font-weight:600}
         .taker-cell small{display:block;font-family:var(--sans);font-weight:500;color:var(--text3);font-size:10px;margin-bottom:2px}
@@ -539,12 +542,12 @@ export default function PoolsView() {
         <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>Take creates a hold. Approval credits the owners. Reject returns the rows.</div>
       </div>
 
-      <h2 style={{ fontSize: 13, fontWeight: 700, margin: "16px 0 8px" }}>Owners</h2>
-      <div style={{ display: "flex", marginBottom: 8 }}>
+      <div style={{ display: "flex", marginTop: 16, marginBottom: 8 }}>
         <SearchInput placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search owners" containerStyle={{ width: "100%" }} />
       </div>
+      <h2 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 8px" }}>Owners</h2>
 
-      <div className="card-list" style={{ marginTop: 12 }}>
+      <div className="card-list">
         {filtered.length === 0 ? (
           <EmptyState title="No owners yet" sub={search.trim() ? "No match for your search" : "Owners appear here when they push rows"} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
         ) : filtered.map((u) => {
@@ -582,18 +585,27 @@ export default function PoolsView() {
               {expanded && (
                 <div id={`pool-files-${u.userId}`} className="file-row" style={{ padding: "4px 0 8px 42px" }}>
                   {loadingFiles && !uf ? <Skeleton className="h-4 w-20" /> : !uf || uf.files.length === 0 ? <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>No files in pool</div> : (
-                    <div className="card-list">
+                    <div className="files-grid">
                       {uf.files.map((f) => (
-                        <div key={f.fileId} className="file-card" style={{ cursor: "default" }}>
+                        <div key={f.fileId} className="file-card" role="group" aria-label={`File ${f.fileId.slice(-8)}, ${f.available} available`} style={{ touchAction: "manipulation", userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}>
                           {holdMode === "pick" ? <input type="checkbox" aria-label={`Select file ${f.fileId.slice(-8)}`} checked={selectedFileIds.includes(f.fileId)} onChange={() => toggleFile(f.fileId, u.userId)} style={{ width: 16, height: 16, flexShrink: 0 }} /> : null}
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--text3)", flexShrink: 0 }}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>
-                          <div className="file-card-info"><div className="file-card-id">#{f.fileId.slice(-8)}</div></div>
-                          <div className="file-card-stats">
-                            <span className="file-card-stat" style={{ color: "var(--green)" }}>{f.available} avail</span>
-                            <span className="file-card-stat" style={{ color: "var(--text3)" }}>/</span>
-                            <span className="file-card-stat" style={{ color: "var(--red)" }}>{f.claimed} taken</span>
+                          <div className="file-card-icon"><PoolTypeIcon poolId={cur} size={14} /></div>
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 6, minWidth: 0, flex: 1, overflow: "hidden" }}>
+                            <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+                              <div className="file-card-name" dir="auto">#{f.fileId.slice(-8)}</div>
+                            </div>
+                            <div style={{ display: "flex", gap: 4, flexShrink: 0, marginTop: 1 }}>
+                              <span className="file-type-badge" title="Facebook" aria-label="Facebook" style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={10} /></span>
+                              <span className="file-type-badge" style={{ fontSize: 10, padding: "2px 6px", maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={curPwd}><PasswordIcon password={curPwd} size={12} /></span>
+                            </div>
                           </div>
-                          <button type="button" className="btn" style={{ padding: "4px 8px", fontSize: 11, fontWeight: 600, flexShrink: 0 }} onClick={() => navigate(`/admin/user/${u.userId}/file/${f.fileId}`)}>View file</button>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 8px", alignItems: "center" }}>
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11 }}><span title="available" style={{ width: 8, height: 8, borderRadius: 2, background: "var(--grad-live)", border: "1px solid var(--border)", flexShrink: 0 }} />{f.available}</span>
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11 }}><span title="taken" style={{ width: 8, height: 8, borderRadius: 2, background: "var(--grad-dup)", border: "1px solid var(--border)", flexShrink: 0 }} />{f.claimed}</span>
+                          </div>
+                          <div className="file-card-actions">
+                            <button type="button" className="file-card-btn" title="Open file" aria-label={`Open file ${f.fileId.slice(-8)}`} onClick={(e) => { e.stopPropagation(); navigate(`/admin/user/${u.userId}/file/${f.fileId}`); }}><MoreHorizontal size={14} aria-hidden /></button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -640,6 +652,15 @@ export default function PoolsView() {
               return (
                 <div key={h.id} className="pool-card" onClick={() => setSelectedHold(h)}>
                   {st === "PENDING" ? <input type="checkbox" aria-label={`Select ${h.filename}`} checked={apprSel.includes(h.id)} onChange={() => setApprSel((prev) => prev.includes(h.id) ? prev.filter((x) => x !== h.id) : [...prev, h.id])} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, flexShrink: 0 }} /> : null}
+                  {(() => { const PoolIcon = (POOL_META[h.poolId] ?? POOL_META.cookies_only).Icon; return <span title={poolLabel} style={{ flexShrink: 0, display: "inline-flex", color: "var(--text3)" }}><PoolIcon size={16} /></span>; })()}
+                  {(h.srcUids ?? []).length ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, paddingLeft: 6 }} aria-label={`${(h.srcUids ?? []).length} owner${(h.srcUids ?? []).length > 1 ? "s" : ""}`}>
+                      {(h.srcUids ?? []).slice(0, 3).map((uid) => (
+                        <span key={uid} style={{ marginLeft: -6, border: "2px solid var(--bg)", borderRadius: "50%", display: "inline-flex", lineHeight: 0 }}><ProfileAvatar photoUrl={cachedProfiles[uid]?.photoUrl} fallback={ownerFallback(uid)} className="size-6 bg-(--bg3) text-(--text2)" /></span>
+                      ))}
+                      {(h.srcUids ?? []).length > 3 ? <span style={{ marginLeft: 4, fontSize: 10, color: "var(--text3)", fontWeight: 600 }}>+{(h.srcUids ?? []).length - 3}</span> : null}
+                    </span>
+                  ) : null}
                   <span className="badge" style={{ background: st === "PENDING" ? "#fef3c7" : isApproved ? "#dcfce7" : "var(--bg3)", color: st === "PENDING" ? "#92400e" : isApproved ? "#166534" : "var(--text3)", borderColor: st === "PENDING" ? "#fde68a" : isApproved ? "#bbf7d0" : "var(--border)" }}>{st}</span>
                   <div className="pool-card-info" style={{ gap: 4 }}>
                     <div className="pool-card-name" title={h.filename}>{h.filename} · {poolLabel} {isApproved ? <InkStamp label="APPROVED" /> : null}</div>
@@ -722,7 +743,7 @@ export default function PoolsView() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <ApprovalDetailDialog hold={selectedHold} open={!!selectedHold} onClose={() => { setSelectedHold(null); updateParams({ hold: null }); }} onApprove={doApprove} onReturn={doReturn} onDelete={doDeleteHold} acting={holdActing} unitPrice={selectedHold ? prices[selectedHold.poolId] ?? null : null} />
+      <ApprovalDetailDialog hold={selectedHold} open={!!selectedHold} onClose={() => { setSelectedHold(null); updateParams({ hold: null }); }} onApprove={doApprove} onReturn={doReturn} onDelete={doDeleteHold} acting={holdActing} unitPrice={selectedHold ? prices[selectedHold.poolId] ?? null : null} owners={cachedProfiles} />
       </div>
   );
 }

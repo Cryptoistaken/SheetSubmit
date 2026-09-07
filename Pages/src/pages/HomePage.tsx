@@ -217,8 +217,9 @@ export default function HomePage() {
     }
     try {
       await api.deleteFile(f.id);
-    } catch {
-      showToast("Could not archive file. Check your connection.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(msg.includes("—") ? msg.split("—").slice(1).join("—").trim() : "Could not archive file. Check your connection.");
       return;
     }
     loadFiles();
@@ -278,8 +279,9 @@ export default function HomePage() {
     if (!ok) return;
     try {
       await Promise.all(ids.map((id) => api.deleteFile(id)));
-    } catch {
-      showToast("Could not archive files. Check your connection.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(msg.includes("—") ? msg.split("—").slice(1).join("—").trim() : "Could not archive files. Check your connection.");
       return;
     }
     setSelected(new Set());

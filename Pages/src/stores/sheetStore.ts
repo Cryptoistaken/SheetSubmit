@@ -778,6 +778,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
             resp = await api.persist(s.fileId, payload, { keepalive: !!viaUnload });
           }
         } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          if (errMsg.startsWith("409")) {
+            // Server refused the structural save (e.g. deleted rows are ON HOLD
+            // and locked). Keep local dirty state and tell the owner why.
+            toast(errMsg.split("—").slice(1).join("—").trim() || "Change rejected — rows on hold are locked");
+            return;
+          }
           // swallow — old app is fire-and-forget
         }
         const cur = get();

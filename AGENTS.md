@@ -31,7 +31,7 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 1.6.0; bump on any route change, surfaced by /api/health),
+  index.ts              # app setup, routes, API_VERSION (currently 1.7.0; bump on any route change, surfaced by /api/health),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   /api/auth/me (verifySession, returns CDN photoUrl+phone+isAdmin), POST /api/auth/logout,
                       #   POST /api/auth/device/claim {token} (rateLimit 10/60s, deviceGet/Delete),
@@ -45,6 +45,7 @@
   src/lib/pg.ts            # Postgres repository for users, files, pools, wallets, withdrawals and wallet_transactions (bun:sql, max 10 connections)
  src/lib/rateLimit.ts     # sliding window rate limiter, ipKey helper
  src/routes/files.ts      # files, archive and duplicate routes
+                      # + HOLD LOCK: held pool rows block owner deletes — files.delete (archive), persist (removed rows), archive.delete, archive/batch-delete return 409 via heldCheck op (pg.ts); sheetStore persist + HomePage delete surface the error toast
                       #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup)
                       #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
 src/routes/pools.ts       # admin pool, hold, download, ledger and pricing routes

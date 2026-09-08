@@ -10,6 +10,7 @@
     "test": "bun run --cwd Pages test",
     "test:live": "bun test/test.ts",
     "test:dupcheck": "bun test/dupcheck.ts",
+    "test:pipeline": "bun test/pipeline.ts",
     "test:two-session": "bun test/twoSession.ts",
     "test:bench": "bun test/benchmark.ts",
     "test:performance": "bun test/performance.ts",

@@ -41,6 +41,7 @@ compare-*.html
 test/*
 !test/test.ts
 !test/dupcheck.ts
+!test/pipeline.ts
 !test/twoSession.ts
 !test/benchmark.ts
 !test/stress.ts

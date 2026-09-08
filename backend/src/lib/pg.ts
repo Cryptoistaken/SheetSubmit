@@ -27,8 +27,8 @@ const preset = (v: unknown) => { const s = String(v || "").toLowerCase(); return
 const liveRow = (r: Row) => !!r.uid && /c_user=\d+/.test(String(r.cookies || "")) && !["bad", "dead"].includes(String(r.status || "").toLowerCase());
 function classify(r: Row, p?: string | null): Pool | null {
   if (!liveRow(r)) return null;
-  // strict routing: a file type feeds ONLY its own pool — 2fa files → cookies_2fa, page files → page (only wa-eligible rows: the blue dot); key-less/ineligible rows are invalid (counted in pool_rejects), never cookies_only
-  const two = real2fa(r); if (p === "page") return eligible(r) && two ? "page" : null; if (p === "combo") return two ? "cookies_2fa" : null; if (p === "cookie") return "cookies_only";
+  // strict routing: a file type feeds ONLY its own pool — 2fa files → cookies_2fa, page files → page (2fa required: no 2fa = invalid/pool_rejects; page-eligible = verified, cookie+2fa only = unverified, claimable via unverifiedOnly)
+  const two = real2fa(r); if (p === "page") return two ? "page" : null; if (p === "combo") return two ? "cookies_2fa" : null; if (p === "cookie") return "cookies_only";
   return eligible(r) && two ? "page" : two ? "cookies_2fa" : "cookies_only";
 }
 function counts(rows: Row[]) { let live = 0, dead = 0, page = 0, dup = 0; const keys = new Map<string, number>(); for (const r of rows) { const s = String(r.status || "").toLowerCase(); if (s === "good") live++; else if (s === "bad") dead++; if (String(r.wa_status || "").toLowerCase() === "eligible") page++; const k = key(r); if (k) keys.set(k, (keys.get(k) || 0) + 1); } keys.forEach((n) => { if (n > 1) dup += n; }); return { liveCount: live, deadCount: dead, pageCount: page, dupCount: dup }; }

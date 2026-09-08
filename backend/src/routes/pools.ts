@@ -113,7 +113,6 @@ const handleReject = async (c: any) => {
 };
 pools.post("/holds/:id/reject", handleReject);
 pools.post("/holds/:id/return", handleReject);
-pools.post("/holds/:id/revert", handleReject);
 
 pools.get("/downloads", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const results = await Promise.all(DL_PASSWORDS.map((pwd) => rpc(c.env.POOLS, pwd, "downloads").catch(() => ({ downloads: [] })))); const all = results.flatMap((r, i) => (r.downloads || []).map((d: any) => dlMeta({ ...d, password: DL_PASSWORDS[i] }))); all.sort((a, b) => b.at - a.at); return c.json(all.slice(0, 50)); });
 pools.get("/downloads/:id/detail", async (c) => {
@@ -185,14 +184,6 @@ pools.get("/:password/:pool/verified-counts", async (c) => {
   if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
   if (!pwd || pwd.length > 64) return c.json({ error: "invalid password" }, 400);
   // for pid==="page": {verified: page available, unverified: cookies_2fa candidates (c_user+real 2FA+alive+wa not eligible)}, bounded scan
-  const r: any = await rpc(c.env.POOLS, pwd, "verifiedCounts", { pool: pid });
-  return c.json(r);
-});
-pools.get("/:password/:pool/page-counts", async (c) => {
-  if (!admin(c)) return c.json({ error: "admin access required" }, 403);
-  const pid = c.req.param("pool");
-  const pwd = c.req.param("password");
-  if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
   const r: any = await rpc(c.env.POOLS, pwd, "verifiedCounts", { pool: pid });
   return c.json(r);
 });
@@ -296,9 +287,4 @@ pools.put("/:password/:pool/price", async (c) => {
   const r: any = await rpc(c.env.POOLS, pwd, "priceSet", { pool: pid, password: pwd, price });
   if (r?.error) return c.json({ error: r.error }, 400);
   return c.json(r);
-});
-pools.post("/:password/:pool/revert", async (c) => {
-  if (!admin(c)) return c.json({ error: "admin access required" }, 403);
-  const body = await c.req.json<{ id?: string }>().catch(() => ({}) as { id?: string });
-  return c.json(await rpc(c.env.POOLS, c.req.param("password"), "revert", { id: body.id }));
 });

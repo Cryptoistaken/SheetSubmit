@@ -365,17 +365,6 @@ export const api = {
   approveHold: (id: string) => request<{ ok: boolean; status: string; approved?: number; dead?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/approve`, { method: "POST" }),
   rejectHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/reject`, { method: "POST" }),
   returnHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/return`, { method: "POST" }),
-  getPoolLedger: async (password: string, poolId: string): Promise<{ ledger: unknown[] }> => {
-    const enc = (s: string) => encodeURIComponent(s);
-    try {
-      return await request<{ ledger: unknown[] }>(`/pools/${enc(password)}/${enc(poolId)}/ledger`);
-    } catch (e) {
-      if (password === "dgddigital" && String(e).includes("404")) {
-        return request<{ ledger: unknown[] }>(`/pools/${enc(poolId)}/ledger`);
-      }
-      throw e;
-    }
-  },
   getDownloads: () => request<unknown[]>("/pools/downloads"),
   getUserFiles: async (password: string, poolId: string): Promise<PoolUserFilesResult> => {
     const enc = (s: string) => encodeURIComponent(s);

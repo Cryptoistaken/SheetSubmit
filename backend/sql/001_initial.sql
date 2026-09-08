@@ -112,19 +112,6 @@ CREATE INDEX IF NOT EXISTS pool_rows_hold_idx
   ON pool_rows (password, pool_id, hold_id)
   WHERE hold_id IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS pool_ledger (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  password TEXT NOT NULL,
-  pool_id TEXT NOT NULL,
-  row_key TEXT NOT NULL,
-  user_id TEXT,
-  action TEXT NOT NULL,
-  ts BIGINT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS pool_ledger_recent_idx
-  ON pool_ledger (password, pool_id, id DESC);
-
 CREATE TABLE IF NOT EXISTS downloads (
   id TEXT PRIMARY KEY,
   password TEXT NOT NULL,
@@ -206,3 +193,7 @@ CREATE TABLE IF NOT EXISTS pool_rejects (
   ts BIGINT NOT NULL,
   PRIMARY KEY (password, pool_id, row_key)
 );
+
+-- 006: drop pool_ledger — the only reader (per-pool ledger route) was never called by any client;
+-- removing it kills one INSERT per pool add/claim/hold/approve/reject and drops a write-heavy table
+DROP TABLE IF EXISTS pool_ledger;

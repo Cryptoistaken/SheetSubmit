@@ -53,7 +53,7 @@
  src/routes/files.ts      # files, archive and duplicate routes
                       # + HOLD LOCK: held pool rows block owner deletes — files.delete (archive), persist (removed rows), archive.delete, archive/batch-delete return 409 via heldCheck op (pg.ts); sheetStore persist + HomePage delete surface the error toast
                       # + decorateHoldState: file row reads (GET /:id/rows, /:id/full; admin.ts /file/:id/rows) overlay pool state → row._hold/_approved/_dead (SheetGrid tints rows; hold+approved rows locked client-side)
-                      #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup)
+                      #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup; archive removes the file's available pool rows (claimed/held stay), restore + batch-restore re-feed them via feedPools)
                       #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
 src/routes/pools.ts       # admin pool, hold, download and pricing routes
                       #   GET /holds (status filter), POST /holds/:id/approve (from HOLD and REJECTED — re-claims still-free rows, dead rows consumed unpaid, {approved, dead, paid}), POST /holds/:id/reject + /return (same handler → holdReject op; from HOLD and APPROVED — rejecting an approved hold auto-debits wallets in full, {rejected, debited}),

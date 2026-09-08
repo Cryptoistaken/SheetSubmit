@@ -45,7 +45,7 @@ function poolForRowWithPreset(r: Row, preset: FilePreset | null): string | null 
   const c = String(r.cookies || "");
   if (!/c_user=\d+/.test(c) || !r.uid || ["bad", "dead"].includes(String(r.status || "").toLowerCase())) return null;
   const has2 = hasReal2FA(r);
-  if (preset === "page") return has2 ? "page" : null;
+  if (preset === "page") return has2 && String(r.wa_status || r.waStatus || "").toLowerCase() === "eligible" ? "page" : null;
   if (preset === "combo") return has2 ? "cookies_2fa" : null;
   if (preset === "cookie") return "cookies_only";
   const two = has2;

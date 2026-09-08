@@ -517,7 +517,7 @@ export default function PoolsView() {
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Invalid</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.invalid ?? 0 : "—"}</div>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>missing / incomplete 2fa</div>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>{cur === "page" ? "not page-eligible / no 2fa" : "missing / incomplete 2fa"}</div>
         </div>
         ) : null}
       </div>

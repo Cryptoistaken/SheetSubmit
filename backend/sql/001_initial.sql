@@ -190,3 +190,8 @@ WHERE settled = false AND status IN ('APPROVED', 'REJECTED', 'REVERTED');
 
 CREATE INDEX IF NOT EXISTS downloads_settle_idx
   ON downloads (first_action_at) WHERE settled = false;
+
+-- 004: single-pool membership — adds check row_key globally (any password/pool) before insert;
+-- sold (claimed) accounts can never re-enter any pool; dead rows are removed on re-feed
+CREATE INDEX IF NOT EXISTS pool_rows_rowkey_idx
+  ON pool_rows (row_key);

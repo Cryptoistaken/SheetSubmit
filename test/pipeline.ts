@@ -92,13 +92,13 @@ async function run() {
   const s4Presets = ["combo", "cookie", "page", "combo", "cookie", "page"];
   const s4 = [];
   for (let i = 0; i < 6; i++) s4.push(await create(session, `s4-f${i + 1}-${s4Presets[i]}`, s4Rows, s4Presets[i]));
-  await waitFor(async () => (await poolKeys("page", s4[2]?.id)).size === 2, 15000);
-  await Bun.sleep(2500);
+  await waitFor(async () => (await poolKeys("cookies_2fa", s4[0]?.id)).size === 2, 15000);
+  await Bun.sleep(3000);
   check("S4 f1(combo): 2fa rows → cookies_2fa, no-2fa rows → cookies_only", eq(await poolKeys("cookies_2fa", s4[0]?.id), [a1, a2]) && eq(await poolKeys("cookies_only", s4[0]?.id), [b1, b2]));
-  check("S4 f2(cookie): 2fa rows re-added to cookies_only (B rows deduped)", eq(await poolKeys("cookies_only", s4[1]?.id), [a1, a2]));
-  check("S4 f3(page): 2fa rows → page pool", eq(await poolKeys("page", s4[2]?.id), [a1, a2]));
+  check("S4 f2(cookie): accounts already pooled elsewhere → 0 (single-pool rule)", eq(await poolKeys("cookies_only", s4[1]?.id), []));
+  check("S4 f3(page): accounts already pooled elsewhere → 0 (single-pool rule)", eq(await poolKeys("page", s4[2]?.id), []));
   check("S4 f4/f5/f6 (dups): contributed 0", eq(await poolKeys("cookies_2fa", s4[3]?.id), []) && eq(await poolKeys("cookies_only", s4[4]?.id), []) && eq(await poolKeys("page", s4[5]?.id), []));
-  quirk("S4: 4 unique accounts occupy 8 pool rows across 3 pools — the same account sits in cookies_2fa AND cookies_only AND page simultaneously, because dedup is per-pool and presets route the same uid differently (claiming from one pool doesn't remove it from others)");
+  quirk("S4: 4 unique accounts occupy 4 pool rows in 2 pools (a1,a2 in cookies_2fa, b1,b2 in cookies_only) — single-pool rule: each account lives in exactly one pool, later uploads (any preset, any password) contribute 0");
 
   // ── S5: edit migrates account cookies_only → cookies_2fa ────────────
   const g1 = uid(), g2 = uid();
@@ -110,18 +110,19 @@ async function run() {
   await waitFor(async () => (await poolKeys("cookies_2fa", s5?.id)).size === 2, 15000);
   check("S5 edit: account moved cookies_only → cookies_2fa", eq(await poolKeys("cookies_2fa", s5?.id), [g1, g2]) && eq(await poolKeys("cookies_only", s5?.id), []));
 
-  // ── S6: edit when ANOTHER file owns the uid in the target pool ──────
+  // ── S6: a second file cannot claim an account that's already pooled; owner edit still migrates ──
   if (user) {
     const x = uid();
-    const s6P = await create(session, "s6-P-cookie", [row(x)], "cookie");
+    const s6P = await create(session, "s6-P-combo", [row(x)], "combo");
+    await waitFor(async () => (await poolKeys("cookies_only", s6P?.id)).size === 1, 15000);
     const s6Q = await create(user, "s6-Q-combo", [row(x, { two: true })], "combo");
-    await waitFor(async () => (await poolKeys("cookies_2fa", s6Q?.id)).size === 1, 15000);
-    check("S6 setup: P owns X in cookies_only, Q owns X in cookies_2fa", eq(await poolKeys("cookies_only", s6P?.id), [x]) && eq(await poolKeys("cookies_2fa", s6Q?.id), [x]));
+    await Bun.sleep(2500);
+    check("S6 setup: P owns X in cookies_only, Q's upload blocked (single-pool)", eq(await poolKeys("cookies_only", s6P?.id), [x]) && eq(await poolKeys("cookies_2fa", s6Q?.id), []));
     const persistP = await request(`/files/${s6P?.id}/persist`, put({ rows: [row(x, { two: true })], dataCount: 1, action: "add-2fa" }));
     check("S6 persist accepted", persistP.status === 200);
     await Bun.sleep(3000);
-    const pAfter = await poolKeys("cookies_only", s6P?.id), qAfter = await poolKeys("cookies_2fa", s6Q?.id);
-    quirk(`S6: after P's edit, P's cookies_only copy was deleted (cross-pool cleanup) but cookies_2fa stays owned by Q (fed first) — file P now pools 0 rows: cookies_only(P)=[${[...pAfter]}] cookies_2fa(Q)=[${[...qAfter]}]`);
+    const pAfter = await poolKeys("cookies_2fa", s6P?.id), qAfter = await poolKeys("cookies_2fa", s6Q?.id);
+    check("S6 edit: P's account migrated cookies_only → cookies_2fa (P still the only owner)", eq(pAfter, [x]) && qAfter.size === 0 && (await poolKeys("cookies_only", s6P?.id)).size === 0);
     check("S6 pool still holds exactly 1 copy of X overall", (await poolKeys("cookies_2fa")).has(x) || (await poolKeys("cookies_only")).has(x));
   }
 
@@ -141,6 +142,19 @@ async function run() {
     if (zLeft.size === 0) quirk("S7: purging duplicate file W deleted USER file U's pooled copy (removeAvailable matches row_key regardless of src_file_id) — U's account vanished while U is still active");
     else quirk("S7: purging duplicate file W did NOT remove U's copy (removeAvailable is file-scoped)");
   }
+
+  // ── S10: sold (claimed) account can never re-enter any pool ─────────
+  const h1 = uid();
+  const s10 = await create(session, "s10-sold", [row(h1, { two: true })], "combo");
+  await waitFor(async () => (await poolKeys("cookies_2fa", s10?.id)).size === 1, 15000);
+  const claim = await request<any>(`/pools/${encodeURIComponent(PWD)}/cookies_2fa/claim`, json({ count: 1, filename: `pipe-${runId}-s10.xlsx` }));
+  check("S10 claim accepted (account sold)", claim.status === 200 && claim.body?.claimed === 1);
+  await Bun.sleep(2000);
+  const s10dup = await create(session, "s10-dup", [row(h1, { two: true })], "combo");
+  await Bun.sleep(2500);
+  check("S10 sold account: re-upload contributed 0 — burned forever", claim.body?.downloadId != null && eq(await poolKeys("cookies_2fa", s10dup?.id), []));
+  const s10revert = await request(`/pools/downloads/${claim.body?.downloadId}/revert`, { method: "POST" });
+  check("S10 cleanup: claim reverted", s10revert.status === 200 || s10revert.status === 404);
 
   // ── S9: hold-state decoration (holdState cast site) ─────────────────
   const s9rows = await request<any[]>(`/files/${s2a?.id}/rows`);

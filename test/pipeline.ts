@@ -126,7 +126,7 @@ async function run() {
     check("S6 pool still holds exactly 1 copy of X overall", (await poolKeys("cookies_2fa")).has(x) || (await poolKeys("cookies_only")).has(x));
   }
 
-  // ── S7: purging a duplicate file removes ANOTHER file's pooled copy ─
+  // ── S7: purging a duplicate file must NOT touch another file's pooled copy ─
   if (user) {
     const z = uid();
     const s7U = await create(user, "s7-U-first", [row(z, { two: true })], "combo");
@@ -138,9 +138,7 @@ async function run() {
     const wpurge = await request(`/archive/${s7W?.id}`, { method: "DELETE" }, session);
     check("S7 purge W accepted", wpurge.status === 200);
     await Bun.sleep(2500);
-    const zLeft = await poolKeys("cookies_2fa", s7U?.id);
-    if (zLeft.size === 0) quirk("S7: purging duplicate file W deleted USER file U's pooled copy (removeAvailable matches row_key regardless of src_file_id) — U's account vanished while U is still active");
-    else quirk("S7: purging duplicate file W did NOT remove U's copy (removeAvailable is file-scoped)");
+    check("S7: purging duplicate W leaves U's pooled copy of Z intact (removeAvailable is file-scoped)", eq(await poolKeys("cookies_2fa", s7U?.id), [z]));
   }
 
   // ── S10: sold (claimed) account can never re-enter any pool ─────────

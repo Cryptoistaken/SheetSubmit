@@ -409,6 +409,20 @@ let structuralCounter = 0;
 let saveChain: Promise<void> = Promise.resolve();
 const MAX_JOURNAL = 200;
 
+// Merge new ops into existing journal by rowIdx+col instead of replacing whole
+// rows. The old `filter(rowIdx)+push` pattern dropped `status` when a later
+// page sweep added only `wa_*` for the same row — file looked correct in
+// memory (blue/green) but server only got `wa_*`, so reload showed white.
+function mergeJournal(
+  base: { rowIdx: number; cols: Record<string, string> }[],
+  extra: { rowIdx: number; cols: Record<string, string> }[],
+) {
+  const m = new Map<number, Record<string, string>>();
+  base.forEach((op) => m.set(op.rowIdx, { ...op.cols }));
+  extra.forEach((c) => m.set(c.rowIdx, { ...m.get(c.rowIdx), ...c.cols }));
+  return [...m].map(([rowIdx, cols]) => ({ rowIdx, cols }));
+}
+
 export const useSheetStore = create<SheetState>()((set, get) => ({
   status: "idle",
   fileId: null,
@@ -691,9 +705,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     deltas.forEach((d) => {
       journalCols[d.colKey] = newRows[rowIdx][d.colKey] ?? "";
     });
+    const prevCols = s.changeJournal.find((op) => op.rowIdx === rowIdx)?.cols;
     const changeJournal: AppendOp[] = [
       ...s.changeJournal.filter((op) => op.rowIdx !== rowIdx),
-      { rowIdx, cols: journalCols },
+      { rowIdx, cols: { ...prevCols, ...journalCols } },
     ];
     if (changeJournal.length > MAX_JOURNAL) {
       changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
@@ -1613,7 +1628,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         return;
       }
       const apiLogs = s.apiLogs.slice();
-      const changedSet = new Set(changed.map((c) => c.rowIdx));
       changed.forEach(({ rowIdx }) => {
         const row = rows[rowIdx];
         let uid = row.uid ?? null;
@@ -1637,10 +1651,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         const hit = changedByRow.get(i);
         return hit ? { ...r, ...hit.cols } : r;
       });
-      const changeJournal = [
-        ...s.changeJournal.filter((op) => !changedSet.has(op.rowIdx)),
-        ...changed.map((c) => ({ rowIdx: c.rowIdx, cols: c.cols })),
-      ];
+      const changeJournal = mergeJournal(s.changeJournal, changed);
       if (changeJournal.length > MAX_JOURNAL) {
         changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
       }
@@ -1785,7 +1796,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         const cur = get();
         const WA_FIELDS = ["wa_status", "wa_ban_reason", "wa_page_name", "wa_linked_number"] as const;
         const changed: { rowIdx: number; cols: Record<string, string> }[] = [];
-        const changedSet = new Set<number>();
         finalRows.forEach((row, i) => {
           const prev = s.rows[i] ?? {};
           const cols: Record<string, string> = {};
@@ -1800,14 +1810,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           }
           if (diff) {
             changed.push({ rowIdx: i, cols });
-            changedSet.add(i);
           }
         });
         if (changed.length === 0) return;
-        const changeJournal = [
-          ...s.changeJournal.filter((op) => !changedSet.has(op.rowIdx)),
-          ...changed,
-        ];
+        const changeJournal = mergeJournal(s.changeJournal, changed);
         if (changeJournal.length > MAX_JOURNAL) changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
         set({ rows: finalRows, changeJournal, isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
         get().persist();
@@ -1936,7 +1942,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const cur = get();
     const WA_FIELDS = ["wa_status", "wa_ban_reason", "wa_page_name", "wa_linked_number"] as const;
     const changed: { rowIdx: number; cols: Record<string, string> }[] = [];
-    const changedSet = new Set<number>();
     finalRows.forEach((row, i) => {
       const prev = s.rows[i] ?? {};
       const cols: Record<string, string> = {};
@@ -1951,14 +1956,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       }
       if (diff) {
         changed.push({ rowIdx: i, cols });
-        changedSet.add(i);
       }
     });
     if (changed.length === 0) return;
-    const changeJournal = [
-      ...s.changeJournal.filter((op) => !changedSet.has(op.rowIdx)),
-      ...changed,
-    ];
+    const changeJournal = mergeJournal(s.changeJournal, changed);
     if (changeJournal.length > MAX_JOURNAL) changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
     set({ rows: finalRows, changeJournal, isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
     get().persist();
@@ -2372,7 +2373,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (!json) delete (newRows[rowIdx] as Record<string, unknown>)._cellStyles;
     const undoStack = [...s.undoStack, { rowIdx, colKey: "_cellStyles", prevVal } as CellDelta];
     if (undoStack.length > 100) undoStack.shift();
-    const changeJournal = [...s.changeJournal.filter((op) => op.rowIdx !== rowIdx), { rowIdx, cols: { _cellStyles: json } as Record<string, string> }];
+    const changeJournal = mergeJournal(s.changeJournal, [{ rowIdx, cols: { _cellStyles: json } as Record<string, string> }]);
     if (changeJournal.length > MAX_JOURNAL) changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
     set({ rows: newRows, isDirty: true, changeJournal, undoStack, redoStack: [] });
     get().persist();

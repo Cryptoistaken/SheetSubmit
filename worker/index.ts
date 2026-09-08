@@ -35,7 +35,7 @@ async function checkUids(limit: number): Promise<number> {
       if (uid && x.data?.status?.name !== "valid") dead.push(uid);
     } catch {}
   }
-  if (dead.length) await db`UPDATE pool_rows SET state='dead' WHERE state='held' AND row_key=ANY(${db.array(dead)})`;
+  if (dead.length) await db`UPDATE pool_rows SET state='dead' WHERE state='held' AND row_key IN ${db(dead)}`;
   console.log(`[worker:held] checked ${uids.length} uid(s) — ${dead.length} dead`);
   return dead.length;
 }

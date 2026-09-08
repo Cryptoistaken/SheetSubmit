@@ -576,11 +576,21 @@ export default function PoolsView() {
           const uf = getUserFilesFor(u.userId);
           const checked = selectedUids.includes(u.userId);
           return (
-            <div key={u.userId} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            <div key={u.userId} style={{ display: "flex", flexDirection: "column", gap: expanded ? 8 : 0 }}>
               <div className={`pool-card ${expanded ? "expanded" : ""}`} style={{ position: "relative" }} onClick={() => toggleExpand(u.userId)}>
                 {holdMode === "pick" ? <input type="checkbox" aria-label={`Select ${d.line1}`} checked={checked} onChange={() => toggleUid(u.userId)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, flexShrink: 0 }} /> : null}
                 <button type="button" className={`expand-icon ${expanded ? "open" : ""}`} aria-expanded={expanded} aria-controls={`pool-files-${u.userId}`} aria-label={`${expanded ? "Hide" : "Show"} files for ${d.line1}`} onClick={(e) => { e.stopPropagation(); toggleExpand(u.userId); }} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(u.userId); } }} style={{ color: "var(--text3)", flexShrink: 0, background: "transparent", border: "none", cursor: "pointer", width: 32, height: 32, display: "inline-grid", placeItems: "center", padding: 0 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden><path d="M9 18l6-6-6-6" /></svg></button>
                 <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}><ProfileAvatar photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={d.line1.charAt(0).toUpperCase()} className="size-9 bg-(--bg3) text-(--text2)" verified={isAdmin} /></span>
+                {uf && uf.files.length ? (
+                  <AvatarGroup className="shrink-0" aria-label={`${uf.files.length} file${uf.files.length > 1 ? "s" : ""} in pool`}>
+                    {uf.files.slice(0, 3).map((f) => (
+                      <Avatar key={f.fileId} className="size-7 bg-(--bg3) text-(--text2)" title={f.name || f.fileId}>
+                        <AvatarFallback><FileTypeIcon file={{ preset: f.preset ?? undefined, name: f.name ?? undefined }} size={13} /></AvatarFallback>
+                      </Avatar>
+                    ))}
+                    {uf.files.length > 3 ? <AvatarGroupCount>+{uf.files.length - 3}</AvatarGroupCount> : null}
+                  </AvatarGroup>
+                ) : null}
                 <div className="pool-card-info">
                   <div className="pool-card-name">{d.line1}{uf ? <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 500 }}>{uf.files.length} file{uf.files.length !== 1 ? "s" : ""}</span> : null}</div>
                   {d.line2 ? <div className="pool-card-sub">{d.line2}</div> : null}
@@ -595,12 +605,13 @@ export default function PoolsView() {
                 </div>
               </div>
               {expanded && (
-                <div id={`pool-files-${u.userId}`} className="file-row" style={{ padding: "4px 0 8px 42px" }}>
+                <div id={`pool-files-${u.userId}`} className="file-row" style={{ padding: 0 }}>
                   {loadingFiles && !uf ? <Skeleton className="h-4 w-20" /> : !uf || uf.files.length === 0 ? <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>No files in pool</div> : (
                     <div className="files-list">
                       {uf.files.map((f) => (
-                        <div key={f.fileId} className="file-card list-row" role="group" aria-label={`File ${f.name || f.fileId}, ${f.available} available`} style={{ touchAction: "manipulation", userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}>
+                        <div key={f.fileId} className="file-card list-row" role="group" aria-label={`File ${f.name || f.fileId}, ${f.available} available`} style={{ touchAction: "manipulation", userSelect: "none", WebkitUserSelect: "none", width: "100%", margin: 0 } as React.CSSProperties}>
                           {holdMode === "pick" ? <input type="checkbox" aria-label={`Select file ${f.name || f.fileId}`} checked={selectedFileIds.includes(f.fileId)} onChange={() => toggleFile(f.fileId, u.userId)} style={{ width: 16, height: 16, flexShrink: 0 }} /> : null}
+                          <span style={{ display: "inline-flex", flexShrink: 0 }} title={d.line1}><ProfileAvatar photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={d.line1.charAt(0).toUpperCase()} className="size-7 bg-(--bg3) text-(--text2)" verified={false} /></span>
                           <div className="file-card-icon"><FileTypeIcon file={{ preset: f.preset ?? undefined, name: f.name ?? undefined }} size={16} /></div>
                           <div style={{ display: "flex", alignItems: "flex-start", gap: 6, minWidth: 0, flex: 1, overflow: "hidden" }}>
                             <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>

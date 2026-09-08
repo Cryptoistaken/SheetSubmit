@@ -40,7 +40,7 @@
                       #   GET /api/worker/health (proxies worker.railway.internal:3000/health — proves worker connectivity from the public URL),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   /api/auth/me (verifySession, returns CDN photoUrl+phone+isAdmin), POST /api/auth/logout,
-                      #   POST /api/auth/device/claim {token} (rateLimit 10/60s, deviceGet/Delete),
+                      #   POST /api/auth/device/claim {token} (deviceGet/Delete),
                       #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS, stores picture+phone),
                       #   GET /api/bot/info, ensureWebhook on first request
                       #   + wallet routes: GET /api/wallet, POST /api/wallet/withdraw, GET /api/wallet/requests, POST /api/wallet/requests/:id/:action
@@ -50,7 +50,6 @@
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
   src/lib/pg.ts            # Postgres repository for users, files, pools, wallets, withdrawals and wallet_transactions (bun:sql, max 10 connections)
                         # + STRICT ROUTING (classify): file preset feeds ONLY its own pool — combo→cookies_2fa, page→page (real 2fa required; wa-eligible = verified, cookie+2fa only = unverified, both claimable in page pool via verifiedOnly/unverifiedOnly), cookie→cookies_only; key-less or no-2fa live rows are invalid → pool_rejects (deduped per account, cleared on successful pooling), never cookies_only
- src/lib/rateLimit.ts     # sliding window rate limiter, ipKey helper
  src/routes/files.ts      # files, archive and duplicate routes
                       # + HOLD LOCK: held pool rows block owner deletes — files.delete (archive), persist (removed rows), archive.delete, archive/batch-delete return 409 via heldCheck op (pg.ts); sheetStore persist + HomePage delete surface the error toast
                       # + decorateHoldState: file row reads (GET /:id/rows, /:id/full; admin.ts /file/:id/rows) overlay pool state → row._hold/_approved/_dead (SheetGrid tints rows; hold+approved rows locked client-side)

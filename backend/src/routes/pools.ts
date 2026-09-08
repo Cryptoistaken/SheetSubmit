@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import type { Env } from "../lib/shared";
 import { requireAuth, isAdmin } from "../lib/session";
 import { rpc } from "../lib/do";
-import { checkRate, ipKey } from "../lib/rateLimit";
 export const pools = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 function admin(c: any) { return isAdmin(c.env, c.get("uid")); }
 const PASSWORDS = ["dgddigital", "L0VE@12345"];
@@ -207,7 +206,6 @@ pools.get("/:password/:pool", async (c) => {
 });
 pools.post("/:password/:pool/claim", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
-  if (!checkRate(ipKey(c, "pool.claim"), 10, 60000)) return c.json({ error: "rate limited" }, 429);
   const pid = c.req.param("pool");
   const pwd = c.req.param("password");
   if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
@@ -234,7 +232,6 @@ pools.post("/:password/:pool/claim", async (c) => {
 });
 pools.post("/:password/:pool/hold", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
-  if (!checkRate(ipKey(c, "pool.hold"), 20, 60000)) return c.json({ error: "rate limited" }, 429);
   const pid = c.req.param("pool");
   const pwd = c.req.param("password");
   if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);

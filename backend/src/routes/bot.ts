@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import type { Env } from "../lib/shared";
 import { rpc } from "../lib/do";
 import { signSession } from "../lib/session";
-import { checkRate, ipKey } from "../lib/rateLimit";
 export const bot = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 const tg = async (env: Env, method: string, body: unknown) => fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 export async function ensureWebhook(env: Env): Promise<void> {
@@ -17,7 +16,6 @@ export async function ensureWebhook(env: Env): Promise<void> {
   } catch { /* ignore transient network failures */ }
 }
 bot.post("/webhook/tg", async (c) => {
-  if (!checkRate(ipKey(c, "webhook.tg"), 30, 60000)) return c.json({ error: "rate limited" }, 429);
   if (!c.env.TG_BOT_TOKEN || c.req.header("X-Telegram-Bot-Api-Secret-Token") !== c.env.TG_WEBHOOK_SECRET) return c.json({ error: "unauthorized" }, 401);
   const update = await c.req.json<any>(); const message = update.message; const callback = update.callback_query;
   if (message?.text?.startsWith("/start")) { const did = message.text.split(" ")[1]?.replace(/^login_/, ""); if (did && /^[A-Za-z0-9-]{8,64}$/.test(did)) await rpc(c.env.INDEX, "global", "deviceSet", { did, chatId: String(message.chat.id) }); await tg(c.env, "sendMessage", { chat_id: message.chat.id, text: "Welcome to Sheet Submit. Tap Login to continue.", reply_markup: { inline_keyboard: [[{ text: "Login", callback_data: "login" }]] } }); }

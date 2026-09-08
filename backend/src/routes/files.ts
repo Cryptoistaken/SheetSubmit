@@ -3,7 +3,6 @@ import type { Env, Row, SheetFile, FilePreset } from "../lib/shared";
 import { requireAuth } from "../lib/session";
 import { rpc } from "../lib/do";
 import { classify as poolForRowWithPreset } from "../lib/pg";
-import { checkRate, ipKey } from "../lib/rateLimit";
 
 export const files = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 const fileId = () => crypto.randomUUID().replaceAll("-", "").slice(0, 12);
@@ -44,7 +43,6 @@ function resolvePreset(file: SheetFile): FilePreset | null {
 files.use("/*", requireAuth);
 files.get("/", async (c) => c.json(await rpc(c.env.INDEX, "global", "files", { uid: c.get("uid") })));
  files.post("/", async (c) => {
-  if (!checkRate(ipKey(c, "files.create"), 20, 60000)) return c.json({ error: "rate limited" }, 429);
   const body = await c.req.json<Partial<SheetFile> & { rows?: Row[]; dataCount?: number }>(); const rows = Array.isArray(body.rows) ? body.rows : []; const rawPreset = (body as any).preset ?? (body as any).poolKind; let preset = normalizePreset(rawPreset); if (!preset) { const tmp: SheetFile = { id: "", name: String(body.name || "Untitled"), type: "fb_cookie", columns: Array.isArray(body.columns) ? body.columns as any : undefined } as SheetFile; preset = resolvePreset(tmp) ?? undefined; } const file: SheetFile = { id: fileId(), name: String(body.name || "Untitled"), type: body.type === "fb_cookie" ? "fb_cookie" : "fb_cookie", ...(preset ? { preset, poolKind: preset } : {}), password: String(body.password || "dgddigital"), poolEnabled: body.poolEnabled !== false, ...(Array.isArray(body.columns) ? { columns: body.columns } : {}), createdAt: Date.now(), updatedAt: Date.now(), rowCount: rows.length, dataCount: body.dataCount ?? 0, lastAction: "created" }; Object.assign(file, ldCounts(rows)); await rpc(c.env.INDEX, "global", "register", { uid: c.get("uid"), file }); await rpc(c.env.FILES, file.id, "init", { file, rows }); if (rows.length) void feedPools(c.env, file, rows, c.get("uid")); return c.json(file); });
 files.put("/:id", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const body = await c.req.json<Record<string, unknown>>(); for (const k of ["name", "type", "columns", "password", "poolEnabled", "preset", "poolKind"]) if (k in body) (file as any)[k] = body[k]; if ("poolKind" in body && !("preset" in body)) (file as any).preset = (file as any).poolKind; const np = normalizePreset((file as any).preset ?? (file as any).poolKind); if (np) { (file as any).preset = np; (file as any).poolKind = np; } file.updatedAt = Date.now(); file.lastAction = "renamed"; await rpc(c.env.FILES, file.id, "save", { file }); await rpc(c.env.INDEX, "global", "register", { uid: c.get("uid"), file }); return c.json(file); });
  files.delete("/:id", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const oldRows = await rpc(c.env.FILES, file.id, "rows").catch(() => [] as Row[]) as Row[]; const held = await heldInRows(c, file, oldRows); if (held) return c.json(heldBlock(held), 409); file.deletedAt = Date.now(); file.lastAction = "archived"; await rpc(c.env.INDEX, "global", "archive", { id: file.id, archived: true, file }); return c.json({ ok: true }); });
@@ -68,10 +66,8 @@ export async function decorateHoldState(env: Env, password: string | undefined, 
 }
 async function feedPools(env: Env, file: SheetFile, rows: Row[], uid: string) { if (file.poolEnabled === false || !file.password) return; const preset = resolvePreset(file); await rpc(env.POOLS, file.password, "add", { rows, uid, srcUid: uid, srcFileId: file.id, preset, poolKind: preset }).catch((e: any) => console.error("pool feed failed", e?.message ?? e)); }
 files.put("/:id/persist", async (c) => {
-  if (!checkRate(ipKey(c, "files.persist"), 30, 60000)) return c.json({ error: "rate limited" }, 429);
   const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const body = await c.req.json<{ rows?: Row[]; action?: string; dataCount?: number }>(); const rows = body.rows || []; const oldRows = await rpc(c.env.FILES, file.id, "rows").catch(() => [] as Row[]) as Row[]; const newKeys = new Set(rows.map((r) => poolId(r)).filter(Boolean)); const removed = oldRows.filter((r) => { const k = poolId(r); return k && !newKeys.has(k); }); const removedHeld = removed.length ? await heldInRows(c, file, removed) : 0; if (removedHeld) return c.json(heldBlock(removedHeld), 409); Object.assign(file, ldCounts(rows)); if (body.dataCount !== undefined) file.dataCount = body.dataCount; file.rowCount = rows.length; file.updatedAt = Date.now(); file.lastAction = "modified"; const saved = await rpc(c.env.FILES, file.id, "save", { file, rows, action: body.action || "edit" }); await rpc(c.env.INDEX, "global", "register", { uid: c.get("uid"), file }); void feedPools(c.env, file, rows, c.get("uid")); return c.json({ ok: true, seq: saved.seq, file }); });
 files.put("/:id/append", async (c) => {
-  if (!checkRate(ipKey(c, "files.append"), 30, 60000)) return c.json({ error: "rate limited" }, 429);
   const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const body = await c.req.json<{ base: number; ops: { rowIdx: number; cols: Record<string, string> }[]; dataCount?: number; action?: string }>(); if (!Number.isInteger(body.base) || !Array.isArray(body.ops) || body.ops.length > 10000) return c.json({ error: "invalid append payload" }, 400);
   let saved: any; try { saved = await rpc(c.env.FILES, file.id, "append", { base: body.base, ops: body.ops, file, action: body.action || "append", dataCount: body.dataCount }); } catch (e: any) { if (String(e?.message ?? e).includes("409") || String(e?.message ?? e).includes("version conflict")) return c.json({ error: "version conflict" }, 409); throw e; }
   if (saved?.error) return c.json({ error: saved.error }, 400);
@@ -106,7 +102,6 @@ archive.post("/batch-restore", async (c) => { const body = await c.req.json<{ id
 export const crossDups = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 crossDups.use("/*", requireAuth);
 crossDups.get("/", async (c) => {
-  if (!checkRate(ipKey(c, "crossdups"), 20, 60000)) return c.json({ error: "rate limited" }, 429);
   const uid = c.get("uid");
   const files = await rpc(c.env.INDEX, "global", "files", { uid }) as SheetFile[];
   const fileId = c.req.query("fileId") || null;

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env, Row, SheetFile, FilePreset } from "../lib/shared";
 import { requireAuth } from "../lib/session";
 import { rpc } from "../lib/do";
+import { classify as poolForRowWithPreset } from "../lib/pg";
 import { checkRate, ipKey } from "../lib/rateLimit";
 
 export const files = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
@@ -10,7 +11,6 @@ async function owned(c: any, id: string) { const found = await rpc(c.env.INDEX, 
 async function ownedArchived(c: any, id: string) { const found = await rpc(c.env.INDEX, "global", "file", { id }); return found && found.owner_id === c.get("uid") && found.archived ? JSON.parse(found.data) as SheetFile : null; }
 const poolId = (r: Row) => String(r.uid || (String(r.cookies || "").match(/c_user=(\d+)/)?.[1] || ""));
 const normalizePreset = (v: unknown): FilePreset | undefined => { const s = String(v || "").toLowerCase(); if (s === "cookie") return "cookie"; if (s === "combo" || s === "2fa") return "combo"; if (s === "page") return "page"; return undefined; };
-const hasReal2FA = (r: Row) => { const v = String(r.twofakey ?? r["2fa key"] ?? "").trim(); return !!v && v !== "No_2Fa"; };
 export const ldCounts = (rows: Row[]) => {
   let live = 0, dead = 0, page = 0;
   const keys = new Map<string, number>();
@@ -40,17 +40,6 @@ function resolvePreset(file: SheetFile): FilePreset | null {
   if (name.startsWith("2fa") || name.startsWith("combo")) return "combo";
   if (name.startsWith("page")) return "page";
   return null;
-}
-function poolForRowWithPreset(r: Row, preset: FilePreset | null): string | null {
-  const c = String(r.cookies || "");
-  if (!/c_user=\d+/.test(c) || !r.uid || ["bad", "dead"].includes(String(r.status || "").toLowerCase())) return null;
-  const has2 = hasReal2FA(r);
-  if (preset === "page") return has2 && String(r.wa_status || r.waStatus || "").toLowerCase() === "eligible" ? "page" : null;
-  if (preset === "combo") return has2 ? "cookies_2fa" : null;
-  if (preset === "cookie") return "cookies_only";
-  const two = has2;
-  if (String(r.wa_status || r.waStatus || "") === "eligible" && two) return "page";
-  return two ? "cookies_2fa" : "cookies_only";
 }
 files.use("/*", requireAuth);
 files.get("/", async (c) => c.json(await rpc(c.env.INDEX, "global", "files", { uid: c.get("uid") })));

@@ -25,7 +25,7 @@ const eligible = (r: any) => String(r?.wa_status ?? r?.waStatus ?? "").toLowerCa
 const real2fa = (r: Row) => { const v = String(r.twofakey ?? r["2fa key"] ?? "").trim(); return !!v && v !== "No_2Fa"; };
 const preset = (v: unknown) => { const s = String(v || "").toLowerCase(); return s === "2fa" ? "combo" : ["cookie", "combo", "page"].includes(s) ? s : null; };
 const liveRow = (r: Row) => !!r.uid && /c_user=\d+/.test(String(r.cookies || "")) && !["bad", "dead"].includes(String(r.status || "").toLowerCase());
-function classify(r: Row, p?: string | null): Pool | null {
+export function classify(r: Row, p?: string | null): Pool | null {
   if (!liveRow(r)) return null;
   // strict routing: a file type feeds ONLY its own pool — 2fa files → cookies_2fa, page files → page (2fa required: no 2fa = invalid/pool_rejects; page-eligible = verified, cookie+2fa only = unverified, claimable via unverifiedOnly)
   const two = real2fa(r); if (p === "page") return two ? "page" : null; if (p === "combo") return two ? "cookies_2fa" : null; if (p === "cookie") return "cookies_only";

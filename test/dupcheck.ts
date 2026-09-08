@@ -5,11 +5,11 @@ import { assert, assertStatus, errorText, json, loadRows, request, session, wait
 // it returns ALL accounts or only deduplicated ones. Cleans up (archive + purge) everything.
 const PASSWORDS = ["dgddigital", "L0VE@12345"];
 const POOLS = ["cookies_only", "cookies_2fa", "page"] as const;
-const prefix = `dup${Date.now().toString(36).slice(-6)}`;
+const prefix = `${Date.now().toString().slice(-9)}`; // digits only — pool classify() requires c_user=<digits>
 const created: string[] = [];
 const failures: string[] = [];
 
-const tag = (rows: any[]) => rows.map((row, i) => { const uid = `${prefix}${i}`; return { ...row, uid, cookies: row.cookies.replace(/c_user=\d+/, `c_user=${uid}`) }; });
+const tag = (rows: any[], base: number) => rows.map((row, i) => { const uid = `${prefix}${base}${i}`; return { ...row, uid, cookies: row.cookies.replace(/c_user=\d+/, `c_user=${uid}`) }; });
 
 async function create(label: string, rows: any[], preset: string, password: string) {
   const res = await request<any>("/files", json({ name: `dupcheck-${prefix}-${label}`, type: "fb_cookie", preset, poolKind: preset, password, poolEnabled: true, rows, dataCount: rows.length, columns: [{ key: "cookies", label: "cookies", width: 340 }, { key: "twofakey", label: "2fa key", width: 200 }, { key: "uid", label: "uid", width: 120 }] }));
@@ -44,16 +44,16 @@ async function run() {
 
   const [rows2fa, rowsCookie, rowsPage] = await Promise.all([loadRows("2fa.xlsx"), loadRows("cookie.xlsx"), loadRows("Page.xlsx")]);
   assert(rows2fa.length && rowsCookie.length && rowsPage.length, "fixtures: 2fa.xlsx / cookie.xlsx / Page.xlsx must each have rows");
-  const [fa, fc, fp] = [tag(rows2fa), tag(rowsCookie), tag(rowsPage)];
+  const [fa, fc, fp] = [tag(rows2fa, 0), tag(rowsCookie, 1), tag(rowsPage, 2)];
   const uniquePerPassword = new Set([...fa, ...fc, ...fp].map((r) => r.uid)).size;
 
   // Phase 1 — first upload per password: 2fa + cookie + page files (uids unique to this run)
-  const firstByPwd = new Map<string, { twoA: string; cookieA: string; pageA: string }>();
+  const firstByPwd = new Map<string, Record<string, string>>();
   for (const password of PASSWORDS) {
     const a = await create("2fa-a", fa, "combo", password);
     const ck = await create("cookie-a", fc, "cookie", password);
     const pg = await create("page-a", fp, "page", password);
-    if (a && ck && pg) firstByPwd.set(password, { twoA: a.id, cookieA: ck.id, pageA: pg.id });
+    if (a && ck && pg) firstByPwd.set(password, { "2fa-a": a.id, "cookie-a": ck.id, "page-a": pg.id });
   }
   assert(firstByPwd.size === PASSWORDS.length, "first-phase file creation failed");
 

@@ -49,7 +49,7 @@
  src/lib/session.ts      # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
   src/lib/pg.ts            # Postgres repository for users, files, pools, wallets, withdrawals and wallet_transactions (bun:sql, max 10 connections)
-                        # + STRICT ROUTING (classify): file preset feeds ONLY its own pool — combo→cookies_2fa, page→page, cookie→cookies_only; key-less live rows in 2fa/page files are invalid → pool_rejects (deduped per account, cleared on successful pooling), never cookies_only
+                        # + STRICT ROUTING (classify): file preset feeds ONLY its own pool — combo→cookies_2fa, page→page (only wa-eligible/blue-dot rows), cookie→cookies_only; key-less or not-page-eligible live rows are invalid → pool_rejects (deduped per account, cleared on successful pooling), never cookies_only
  src/lib/rateLimit.ts     # sliding window rate limiter, ipKey helper
  src/routes/files.ts      # files, archive and duplicate routes
                       # + HOLD LOCK: held pool rows block owner deletes — files.delete (archive), persist (removed rows), archive.delete, archive/batch-delete return 409 via heldCheck op (pg.ts); sheetStore persist + HomePage delete surface the error toast

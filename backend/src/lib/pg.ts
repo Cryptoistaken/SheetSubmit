@@ -33,6 +33,8 @@ export function classify(r: Row, p?: string | null): Pool | null {
 }
 function counts(rows: Row[]) { let live = 0, dead = 0, page = 0, dup = 0; const keys = new Map<string, number>(); for (const r of rows) { const s = String(r.status || "").toLowerCase(); if (s === "good") live++; else if (s === "bad") dead++; if (String(r.wa_status || "").toLowerCase() === "eligible") page++; const k = key(r); if (k) keys.set(k, (keys.get(k) || 0) + 1); } keys.forEach((n) => { if (n > 1) dup += n; }); return { liveCount: live, deadCount: dead, pageCount: page, dupCount: dup }; }
 const rowOut = (r: any) => ({ ...json(r.data), _key: r.row_key, _state: r.state, _claimedBy: r.claimed_by, _claimedAt: r.claimed_at, _srcUid: r.src_uid, _srcFileId: r.src_file_id, _insertedAt: r.inserted_at, _holdId: r.hold_id });
+// ponytail: single bulk INSERT via jsonb_to_recordset — one param holds all rows; chunk into per-10k calls if files ever exceed ~50k rows
+const bulkInsert = (tx: any, id: string, rows: Row[], start = 0) => tx`INSERT INTO file_rows(file_id,idx,data) SELECT ${id},s.idx,s.d FROM jsonb_to_recordset(${j(rows.map((r, i) => ({ idx: start + i, d: r })))}::jsonb) AS s(idx int,d jsonb)`;
 const price = (p: string) => prices[p as Pool] ?? 0;
 
 async function indexOp(op: string, a: any) {
@@ -117,7 +119,7 @@ async function deviceOp(kind: string, a: any) {
 }
 
 async function fileOp(id: string, op: string, a: any) {
-  if (op === "init") return db.transaction(async (tx: any) => { await tx`INSERT INTO file_meta(file_id,data,seq) VALUES(${id},${j(a.file)},0) ON CONFLICT(file_id) DO UPDATE SET data=EXCLUDED.data,seq=0`; await tx`DELETE FROM file_rows WHERE file_id=${id}`; await tx`DELETE FROM file_logs WHERE file_id=${id}`; for (const [i, r] of (a.rows || []).entries()) await tx`INSERT INTO file_rows(file_id,idx,data) VALUES(${id},${i},${j(r)})`; return { ok: true }; });
+  if (op === "init") return db.transaction(async (tx: any) => { await tx`INSERT INTO file_meta(file_id,data,seq) VALUES(${id},${j(a.file)},0) ON CONFLICT(file_id) DO UPDATE SET data=EXCLUDED.data,seq=0`; await tx`DELETE FROM file_rows WHERE file_id=${id}`; await tx`DELETE FROM file_logs WHERE file_id=${id}`; if ((a.rows || []).length) await bulkInsert(tx, id, a.rows); return { ok: true }; });
   if (op === "meta") { const r: any = (await db`SELECT data FROM file_meta WHERE file_id=${id}`)[0]; return r?.data ?? null; }
   if (op === "seq") { const r: any = (await db`SELECT seq FROM file_meta WHERE file_id=${id}`)[0]; return { seq: Number(r?.seq || 0) }; }
   const readRows = async (q: any = db) => (await q`SELECT data FROM file_rows WHERE file_id=${id} ORDER BY idx`).map((r: any) => json(r.data) as Row);
@@ -143,7 +145,7 @@ async function fileOp(id: string, op: string, a: any) {
       if (rows.length > origLen) await tx`INSERT INTO file_rows(file_id,idx,data) SELECT ${id},s.idx,s.d FROM jsonb_to_recordset(${j(rows.slice(origLen).map((r, i) => ({ idx: origLen + i, d: r })))}::jsonb) AS s(idx int,d jsonb)`;
     } else {
       await tx`DELETE FROM file_rows WHERE file_id=${id}`;
-      for (const [i, r] of rows.entries()) await tx`INSERT INTO file_rows(file_id,idx,data) VALUES(${id},${i},${j(r)})`;
+      if (rows.length) await bulkInsert(tx, id, rows);
     }
     await tx`INSERT INTO file_logs(file_id,ts,action,seq) VALUES(${id},${Date.now()},${String(a.action || (op === "append" ? "append" : "edit"))},${next})`; await tx`DELETE FROM file_logs WHERE file_id=${id} AND id NOT IN (SELECT id FROM file_logs WHERE file_id=${id} ORDER BY id DESC LIMIT 200)`;
     return { ok: true, seq: next, ...(op === "append" ? { file, rows: [...touched.values(), ...rows.slice(origLen)] } : Array.isArray(a.rows) ? { rows } : {}) };

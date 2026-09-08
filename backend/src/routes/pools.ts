@@ -211,10 +211,11 @@ pools.post("/:password/:pool/claim", async (c) => {
   if (srcUidRaw != null && (typeof srcUidRaw !== "string" || !srcUidRaw.trim() || srcUidRaw.length > 64)) return c.json({ error: "invalid srcUid" }, 400);
   if (srcFileIdRaw != null && (typeof srcFileIdRaw !== "string" || !srcFileIdRaw.trim() || srcFileIdRaw.length > 64)) return c.json({ error: "invalid srcFileId" }, 400);
   // page is verified-only; verifiedOnly => claims from page (all eligible), unverifiedOnly => 0 (unverified live in cookies_2fa, use verified-counts to inspect)
-  const verifiedOnly = !!body.verifiedOnly;
+  let verifiedOnly = !!body.verifiedOnly;
   const unverifiedOnly = !!body.unverifiedOnly;
   if (verifiedOnly && unverifiedOnly) return c.json({ error: "verifiedOnly and unverifiedOnly are mutually exclusive" }, 400);
   if ((verifiedOnly || unverifiedOnly) && pid !== "page") return c.json({ error: "verified filters only for page pool" }, 400);
+  if (pid === "page") { if (unverifiedOnly) return c.json({ error: "page pool is verified-only" }, 400); verifiedOnly = true; }
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const filename = `${META[pid].label.toLowerCase().replace(/\s+/g, "_")}_${pwd.replace(/[^A-Za-z0-9_-]/g, "_")}_${new Date().toISOString().slice(0, 10)}_${id.slice(-4)}.xlsx`;
   const out = await rpc(c.env.POOLS, pwd, "claim", { pool: pid, uid: c.get("uid"), count, srcUid: srcUidRaw ? String(srcUidRaw) : null, srcFileId: srcFileIdRaw ? String(srcFileIdRaw) : null, claimForUser: srcUidRaw ? String(srcUidRaw) : null, verifiedOnly, unverifiedOnly, downloadId: id, filename });
@@ -248,10 +249,11 @@ pools.post("/:password/:pool/hold", async (c) => {
   const srcFileIdRaw = body.srcFileId ?? body.fileId ?? null;
   if (srcUidRaw != null && (typeof srcUidRaw !== "string" || !srcUidRaw.trim() || srcUidRaw.length > 64)) return c.json({ error: "invalid srcUid" }, 400);
   if (srcFileIdRaw != null && (typeof srcFileIdRaw !== "string" || !srcFileIdRaw.trim() || srcFileIdRaw.length > 64)) return c.json({ error: "invalid srcFileId" }, 400);
-  const verifiedOnly = !!body.verifiedOnly;
+  let verifiedOnly = !!body.verifiedOnly;
   const unverifiedOnly = !!body.unverifiedOnly;
   if (verifiedOnly && unverifiedOnly) return c.json({ error: "verifiedOnly and unverifiedOnly are mutually exclusive" }, 400);
   if ((verifiedOnly || unverifiedOnly) && pid !== "page") return c.json({ error: "verified filters only for page pool" }, 400);
+  if (pid === "page") { if (unverifiedOnly) return c.json({ error: "page pool is verified-only" }, 400); verifiedOnly = true; }
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const filename = `${META[pid].label.toLowerCase().replace(/\s+/g, "_")}_${pwd.replace(/[^A-Za-z0-9_-]/g, "_")}_${new Date().toISOString().slice(0, 10)}_${id.slice(-4)}.xlsx`;
   const out: any = await rpc(c.env.POOLS, pwd, "hold", { pool: pid, uid: c.get("uid"), count, mode: modeRaw, srcUid: srcUidRaw ? String(srcUidRaw) : null, srcFileId: srcFileIdRaw ? String(srcFileIdRaw) : null, srcUids: Array.isArray(body.srcUids) ? body.srcUids : null, srcFileIds: Array.isArray(body.srcFileIds) ? body.srcFileIds : null, verifiedOnly, unverifiedOnly, downloadId: id, filename });

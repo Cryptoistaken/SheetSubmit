@@ -92,7 +92,6 @@ export default function PoolsView() {
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [verified, setVerified] = useState<VerifiedCounts | null>(null);
   const { profiles: cachedProfiles, fetchProfiles } = useProfileCache();
-  const [verifiedFilter, setVerifiedFilter] = useState<"all" | "verified" | "unverified">("all");
 
 
   const [holdMode, setHoldMode] = useState<"fifo" | "pick">("fifo");
@@ -181,7 +180,7 @@ export default function PoolsView() {
   }, [cur, curPwd]);
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
-  useEffect(() => { setVerifiedFilter("all"); setSelectedUids([]); setSelectedFileIds([]); setApprSel([]); }, [cur, curPwd]);
+  useEffect(() => { setSelectedUids([]); setSelectedFileIds([]); setApprSel([]); }, [cur, curPwd]);
 
   const poolCounts: Record<string, number> = {};
   if (pools) pools.filter((p) => (p as unknown as Record<string, unknown>)["password"] === curPwd || !(p as unknown as Record<string, unknown>)["password"]).forEach((p) => { poolCounts[p.id] = p.available; });
@@ -192,7 +191,7 @@ export default function PoolsView() {
   const apprCounts: Record<"PENDING" | "APPROVED" | "REJECTED", number> = { PENDING: 0, APPROVED: 0, REJECTED: 0 };
   (holds ?? []).forEach((h) => { const s = holdStatus(h); if (s === "PENDING" || s === "APPROVED" || s === "REJECTED") apprCounts[s]++; });
   const apprShown = (holds ?? []).filter((h) => holdStatus(h) === apprFilter);
-  const takeN = customQty ? Number(customQty) || 0 : poolQty === "all" ? totals.available : poolQty as number;
+  const takeN = customQty ? Number(customQty) || 0 : poolQty === "all" ? (cur === "page" && verified ? verified.verified : totals.available) : poolQty as number;
   const pickAvail = useMemo(() => {
     if (selectedFileIds.length) {
       return userFiles?.reduce((sum, u) => sum + u.files.filter((f) => selectedFileIds.includes(f.fileId)).reduce((s, f) => s + f.available, 0), 0) ?? 0;
@@ -252,7 +251,8 @@ export default function PoolsView() {
   const clearPick = () => { setSelectedUids([]); setSelectedFileIds([]); };
 
   const doHoldConfirm = async () => {
-    const n = customQty ? Number(customQty) : poolQty === "all" ? totals.available : (poolQty as number);
+    const n = customQty ? Number(customQty) : poolQty === "all" ? (cur === "page" && verified ? verified.verified : totals.available) : (poolQty as number);
+    if (cur === "page" && verified && verified.verified === 0) return showToast("No verified rows available to claim");
     if (!totals.available) return showToast("No rows available to claim");
     if (!Number.isInteger(n) || n < 1) return showToast("Enter at least 1 row");
     if (holdMode === "pick" && selectedUids.length === 0 && selectedFileIds.length === 0) { showToast("Pick at least 1 user"); return; }
@@ -261,8 +261,7 @@ export default function PoolsView() {
     try {
       const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: holdMode };
       if (holdMode === "pick") { if (selectedUids.length) payload.srcUids = selectedUids; if (selectedFileIds.length) payload.srcFileIds = selectedFileIds; }
-      if (cur === "page" && verifiedFilter === "verified") payload.verifiedOnly = true;
-      if (cur === "page" && verifiedFilter === "unverified") payload.unverifiedOnly = true;
+      if (cur === "page") payload.verifiedOnly = true;
       const res = await api.holdPool(curPwd, cur, payload);
       const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? n;
       if (!held) return showToast("No rows available to claim");
@@ -276,12 +275,12 @@ export default function PoolsView() {
 
   const doUserHold = async (u: PoolDetail["users"][number]) => {
     const n = customQty ? Number(customQty) : poolQty === "all" ? u.available : (poolQty as number);
+    if (cur === "page" && verified && verified.verified === 0) return showToast("No verified rows available to claim");
     if (!Number.isInteger(n) || n < 1) return showToast("Set a quantity in the taker card first");
     setDownloading(true);
     try {
       const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: "fifo", srcUids: [u.userId] };
-      if (cur === "page" && verifiedFilter === "verified") payload.verifiedOnly = true;
-      if (cur === "page" && verifiedFilter === "unverified") payload.unverifiedOnly = true;
+      if (cur === "page") payload.verifiedOnly = true;
       const res = await api.holdPool(curPwd, cur, payload);
       const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? 0;
       if (!held) return showToast("No rows available to claim");
@@ -493,8 +492,8 @@ export default function PoolsView() {
       <div className="pools-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${cur === "cookies_only" ? 3 : 4},1fr)`, gap: 12, marginTop: 16 }}>
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }} aria-busy={detail === null}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Ready to take</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.available : "—"}</div>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>available accounts</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? (cur === "page" && verified ? verified.verified : totals.available) : "—"}</div>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>{cur === "page" ? "verified accounts (unverified cannot be taken)" : "available accounts"}</div>
           {cur === "page" && verified ? (
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", gap: 12, flexWrap: "wrap" }}>
               <span style={{ fontSize: 12, color: "var(--text2)" }}><span style={{ fontWeight: 700, color: "var(--green)", fontFamily: "var(--mono)" }}>{verified.verified}</span> verified</span>
@@ -543,11 +542,7 @@ export default function PoolsView() {
           {cur === "page" ? (
             <div className="taker-cell">
               <small>Pages</small>
-              <select aria-label="Page verified filter" value={verifiedFilter} onChange={(e) => setVerifiedFilter(e.target.value as never)} style={{ padding: "4px 6px", fontSize: 13, border: "1px solid var(--border2)", borderRadius: 6, background: "var(--bg)", color: "var(--text)", minHeight: 32, maxWidth: "100%" }}>
-                <option value="all">All pages</option>
-                <option value="verified">Verified only</option>
-                <option value="unverified">Unverified only</option>
-              </select>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--green)" }}>Verified only</span>
             </div>
           ) : null}
           <div className="taker-cell" style={{ minWidth: 200 }}>
@@ -562,8 +557,8 @@ export default function PoolsView() {
           </div>
           <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${effectiveN} × $${unitPrice.toFixed(2)} = $${(effectiveN * unitPrice).toFixed(2)}` : "—"}</div>
         </div>
-        <button type="button" className="btn btn-primary" disabled={downloading || !totals.available} onClick={() => void doHoldConfirm()} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,112,243,.22)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? "All" : poolQty} from {poolMeta.label}</button>
-        <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles.</div>
+        <button type="button" className="btn btn-primary" disabled={downloading || (cur === "page" ? !(verified ? verified.verified > 0 : totals.available > 0) : !totals.available)} onClick={() => void doHoldConfirm()} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,112,243,.22)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? (cur === "page" ? "All verified" : "All") : poolQty} from {poolMeta.label}</button>
+        <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>{cur === "page" ? "Page pool is verified-only. Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles." : "Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles."}</div>
       </div>
 
       <div style={{ display: "flex", marginTop: 16, marginBottom: 8 }}>

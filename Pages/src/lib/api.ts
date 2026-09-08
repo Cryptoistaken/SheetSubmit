@@ -133,7 +133,7 @@ export interface PoolUser {
 export interface PoolDetail {
   pool: { id: string; label: string; badge: string; cols: string[]; filename: string; rule?: string };
   password: string;
-  totals: { available: number; claimed: number; users: number };
+  totals: { available: number; claimed: number; users: number; invalid?: number };
   users: PoolUser[];
 }
 export interface PoolRowsResult {

@@ -490,7 +490,7 @@ export default function PoolsView() {
       </div>
 
       {/* stats */}
-      <div className="pools-stats" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 16 }}>
+      <div className="pools-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${cur === "cookies_only" ? 3 : 4},1fr)`, gap: 12, marginTop: 16 }}>
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }} aria-busy={detail === null}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Ready to take</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.available : "—"}</div>
@@ -513,6 +513,13 @@ export default function PoolsView() {
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.users : "—"}</div>
           <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>source users</div>
         </div>
+        {cur !== "cookies_only" ? (
+        <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
+          <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Invalid</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.invalid ?? 0 : "—"}</div>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>missing / incomplete 2fa</div>
+        </div>
+        ) : null}
       </div>
 
       {/* taker card */}

@@ -147,8 +147,8 @@ pools.delete("/downloads/:id", async (c) => {
 pools.get("/", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const out = await Promise.all(PASSWORDS.flatMap((pwd) => POOL_IDS.map(async (pid) => {
-    const st: any = await rpc(c.env.POOLS, pwd, "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0 }));
-    return { id: pid, ...META[pid], password: pwd, available: st.available, claimed: st.claimed, users: st.users };
+    const st: any = await rpc(c.env.POOLS, pwd, "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0, invalid: 0 }));
+    return { id: pid, ...META[pid], password: pwd, available: st.available, claimed: st.claimed, users: st.users, invalid: st.invalid ?? 0 };
   })));
   return c.json({ pools: out });
 });
@@ -201,9 +201,9 @@ pools.get("/:password/:pool", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const pid = c.req.param("pool");
   if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
-  const st: any = await rpc(c.env.POOLS, c.req.param("password"), "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0 }));
+  const st: any = await rpc(c.env.POOLS, c.req.param("password"), "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0, invalid: 0 }));
   const rows: any[] = await detailRows(c, c.req.param("password"), pid).catch(() => []) as any; const summ = summarize(rows);
-  return c.json({ pool: { id: pid, ...META[pid] }, password: c.req.param("password"), totals: { available: st.available, claimed: st.claimed, users: summ.users.length }, users: summ.users });
+  return c.json({ pool: { id: pid, ...META[pid] }, password: c.req.param("password"), totals: { available: st.available, claimed: st.claimed, users: summ.users.length, invalid: st.invalid ?? 0 }, users: summ.users });
 });
 pools.post("/:password/:pool/claim", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);

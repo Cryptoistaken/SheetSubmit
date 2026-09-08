@@ -195,3 +195,14 @@ CREATE INDEX IF NOT EXISTS downloads_settle_idx
 -- sold (claimed) accounts can never re-enter any pool; dead rows are removed on re-feed
 CREATE INDEX IF NOT EXISTS pool_rows_rowkey_idx
   ON pool_rows (row_key);
+
+-- 005: invalid/incomplete accounts - rows from 2fa/page files missing the 2fa key are rejected
+-- at feed time (strict routing: never cookies_only) and counted per pool, deduped per account;
+-- cleared when the account is later pooled successfully
+CREATE TABLE IF NOT EXISTS pool_rejects (
+  password TEXT NOT NULL,
+  pool_id TEXT NOT NULL,
+  row_key TEXT NOT NULL,
+  ts BIGINT NOT NULL,
+  PRIMARY KEY (password, pool_id, row_key)
+);

@@ -60,10 +60,12 @@ async function run() {
   const s1cookie = await create(session, "s1-cookie", [row(k1, { two: true }), row(k2)], "cookie");
   const s1page = await create(session, "s1-page", [row(p1, { two: true }), row(p2), row(p3, { two: true, eligible: true })], "page");
   await waitFor(async () => (await poolKeys("cookies_2fa", s1combo?.id)).size === 1 && (await poolKeys("cookies_only", s1cookie?.id)).size === 2 && (await poolKeys("page", s1page?.id)).size === 2, 15000);
-  check("S1 combo: 2fa row → cookies_2fa, no-2fa row → cookies_only", eq(await poolKeys("cookies_2fa", s1combo?.id), [c1]) && eq(await poolKeys("cookies_only", s1combo?.id), [c2]));
+  check("S1 combo: 2fa row → cookies_2fa, no-2fa row invalid (pooled nowhere)", eq(await poolKeys("cookies_2fa", s1combo?.id), [c1]) && eq(await poolKeys("cookies_only", s1combo?.id), []));
   check("S1 combo: status=bad row pooled nowhere", ![...(await poolKeys("cookies_2fa")), ...(await poolKeys("cookies_only"))].some((k) => k === c3));
   check("S1 cookie: all rows → cookies_only (2fa ignored)", eq(await poolKeys("cookies_only", s1cookie?.id), [k1, k2]));
-  check("S1 page: 2fa rows → page pool, no-2fa row → cookies_only", eq(await poolKeys("page", s1page?.id), [p1, p3]) && eq(await poolKeys("cookies_only", s1page?.id), [p2]));
+  check("S1 page: 2fa rows → page pool, no-2fa row invalid (pooled nowhere)", eq(await poolKeys("page", s1page?.id), [p1, p3]) && eq(await poolKeys("cookies_only", s1page?.id), []));
+  const s1inv = await request<any>(`/pools/${encodeURIComponent(PWD)}/cookies_2fa`);
+  check("S1 invalid 2fa count surfaced in pool stats", s1inv.status === 200 && (s1inv.body?.totals?.invalid ?? 0) >= 1);
 
   // ── S2: same user re-uploads same rows ──────────────────────────────
   const d1 = uid(), d2 = uid(), dRows = [row(d1, { two: true }), row(d2, { two: true })];
@@ -94,36 +96,34 @@ async function run() {
   for (let i = 0; i < 6; i++) s4.push(await create(session, `s4-f${i + 1}-${s4Presets[i]}`, s4Rows, s4Presets[i]));
   await waitFor(async () => (await poolKeys("cookies_2fa", s4[0]?.id)).size === 2, 15000);
   await Bun.sleep(3000);
-  check("S4 f1(combo): 2fa rows → cookies_2fa, no-2fa rows → cookies_only", eq(await poolKeys("cookies_2fa", s4[0]?.id), [a1, a2]) && eq(await poolKeys("cookies_only", s4[0]?.id), [b1, b2]));
-  check("S4 f2(cookie): accounts already pooled elsewhere → 0 (single-pool rule)", eq(await poolKeys("cookies_only", s4[1]?.id), []));
-  check("S4 f3(page): accounts already pooled elsewhere → 0 (single-pool rule)", eq(await poolKeys("page", s4[2]?.id), []));
+  check("S4 f1(combo): 2fa rows → cookies_2fa, no-2fa rows invalid (pooled nowhere)", eq(await poolKeys("cookies_2fa", s4[0]?.id), [a1, a2]) && eq(await poolKeys("cookies_only", s4[0]?.id), []));
+  check("S4 f2(cookie): b1,b2 → cookies_only (only cookie files feed cookies_only)", eq(await poolKeys("cookies_only", s4[1]?.id), [b1, b2]));
+  check("S4 f3(page): accounts busy or invalid → 0 (single-pool rule)", eq(await poolKeys("page", s4[2]?.id), []));
   check("S4 f4/f5/f6 (dups): contributed 0", eq(await poolKeys("cookies_2fa", s4[3]?.id), []) && eq(await poolKeys("cookies_only", s4[4]?.id), []) && eq(await poolKeys("page", s4[5]?.id), []));
-  quirk("S4: 4 unique accounts occupy 4 pool rows in 2 pools (a1,a2 in cookies_2fa, b1,b2 in cookies_only) — single-pool rule: each account lives in exactly one pool, later uploads (any preset, any password) contribute 0");
+  quirk("S4: strict routing — a1,a2 pooled only by the 2fa file (cookies_2fa); b1,b2 rejected as invalid by the 2fa file (pool_rejects) and pooled by the cookie file (cookies_only); page file fed 0 — no file type feeds another type's pool");
 
-  // ── S5: edit migrates account cookies_only → cookies_2fa ────────────
+  // ── S5: key-less combo rows are invalid; owner edit adding 2fa pools them and clears the count ─
   const g1 = uid(), g2 = uid();
   const s5 = await create(session, "s5-migrate", [row(g1), row(g2)], "combo");
-  await waitFor(async () => (await poolKeys("cookies_only", s5?.id)).size === 2, 15000);
+  await Bun.sleep(3000);
+  const invBefore = await request<any>(`/pools/${encodeURIComponent(PWD)}/cookies_2fa`);
+  check("S5 setup: key-less combo rows counted invalid, pooled nowhere", invBefore.status === 200 && (invBefore.body?.totals?.invalid ?? 0) >= 2 && eq(await poolKeys("cookies_2fa", s5?.id), []));
   const migrated = [row(g1, { two: true }), row(g2, { two: true })];
   const persist = await request(`/files/${s5?.id}/persist`, put({ rows: migrated, dataCount: 2, action: "add-2fa" }));
   check("S5 persist accepted", persist.status === 200);
   await waitFor(async () => (await poolKeys("cookies_2fa", s5?.id)).size === 2, 15000);
-  check("S5 edit: account moved cookies_only → cookies_2fa", eq(await poolKeys("cookies_2fa", s5?.id), [g1, g2]) && eq(await poolKeys("cookies_only", s5?.id), []));
+  const invAfter = await request<any>(`/pools/${encodeURIComponent(PWD)}/cookies_2fa`);
+  check("S5 edit: accounts pooled in cookies_2fa, invalid count cleared", eq(await poolKeys("cookies_2fa", s5?.id), [g1, g2]) && (invAfter.body?.totals?.invalid ?? 0) === (invBefore.body?.totals?.invalid ?? 0) - 2);
 
-  // ── S6: a second file cannot claim an account that's already pooled; owner edit still migrates ──
+  // ── S6: a second file cannot claim an account that's already pooled (single-pool) ──
   if (user) {
     const x = uid();
-    const s6P = await create(session, "s6-P-combo", [row(x)], "combo");
-    await waitFor(async () => (await poolKeys("cookies_only", s6P?.id)).size === 1, 15000);
+    const s6P = await create(session, "s6-P-combo", [row(x, { two: true })], "combo");
+    await waitFor(async () => (await poolKeys("cookies_2fa", s6P?.id)).size === 1, 15000);
     const s6Q = await create(user, "s6-Q-combo", [row(x, { two: true })], "combo");
     await Bun.sleep(2500);
-    check("S6 setup: P owns X in cookies_only, Q's upload blocked (single-pool)", eq(await poolKeys("cookies_only", s6P?.id), [x]) && eq(await poolKeys("cookies_2fa", s6Q?.id), []));
-    const persistP = await request(`/files/${s6P?.id}/persist`, put({ rows: [row(x, { two: true })], dataCount: 1, action: "add-2fa" }));
-    check("S6 persist accepted", persistP.status === 200);
-    await Bun.sleep(3000);
-    const pAfter = await poolKeys("cookies_2fa", s6P?.id), qAfter = await poolKeys("cookies_2fa", s6Q?.id);
-    check("S6 edit: P's account migrated cookies_only → cookies_2fa (P still the only owner)", eq(pAfter, [x]) && qAfter.size === 0 && (await poolKeys("cookies_only", s6P?.id)).size === 0);
-    check("S6 pool still holds exactly 1 copy of X overall", (await poolKeys("cookies_2fa")).has(x) || (await poolKeys("cookies_only")).has(x));
+    check("S6 setup: P owns X in cookies_2fa, Q's upload blocked (single-pool)", eq(await poolKeys("cookies_2fa", s6P?.id), [x]) && eq(await poolKeys("cookies_2fa", s6Q?.id), []));
+    check("S6 pool still holds exactly 1 copy of X overall", (await poolKeys("cookies_2fa")).has(x));
   }
 
   // ── S7: purging a duplicate file must NOT touch another file's pooled copy ─

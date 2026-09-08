@@ -24,7 +24,7 @@
   backend/                # Railway Hono/Bun service backed by Postgres; src/server.ts is the HTTP entrypoint; railway.toml deploy config; .env local-only template
                         #   PERFORMANCE.md — 62-entry inventory covering 64 handlers + per-API perf plan (bottleneck → fix → est. speedup), 002_perf.sql migration sketch, rollout order
   worker/                 # Railway background worker service (Bun + Postgres, self-contained; rootDirectory worker in railway.json). Jobs on own intervals (30s tick):
-                        #   held-uid-check (pending-approval monitoring: dead UIDs → pool_rows.state='dead', default 10min), available-uid-check (30min),
+                        #   held-uid-check (pending-approval monitoring: dead UIDs → pool_rows.state='dead', default 10min; NO background check of available rows — they die via user checks, see wa.ts markDead),
                         #   page-check + wa-check (eligibility sweeps → data.wa_status + wa:{src_uid}:{cuser} meta cache, 30min). Env: DATABASE_URL, CHECK_URL, *_INTERVAL_MS, UID_BATCH, CHECK_BATCH; .env template
                         #   + HTTP GET /health (port 3000): {ok, startedAt, uptimeMs, jobs:[{name, everyMs, lastRunAt, lastRunAgoMs, lastError}]} — backend proxies it at GET /api/worker/health
   Pages/                  # React SPA (Vite)
@@ -65,7 +65,7 @@ src/routes/pools.ts       # admin pool, hold, download, ledger and pricing route
 src/routes/admin.ts       # admin stats, users, files and moderation routes
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist,
                       #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id
-src/routes/wa.ts          # POST /fb/check, /fb/page-check, /fb/wa-check and WA cache routes
+src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows), /fb/page-check, /fb/wa-check and WA cache routes
                       #   GET /wa/cache?uids= (meta-backed, eligible-only, 24h TTL)
 src/routes/bot.ts         # Telegram webhook and bot routes
   railway.toml          # Railway build and deployment configuration

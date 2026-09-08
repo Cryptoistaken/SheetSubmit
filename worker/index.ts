@@ -1,10 +1,10 @@
 // Background worker — self-contained (Bun + Postgres, same DB as backend).
 // Jobs (each on its own interval, sequential):
 //   1. held-uid-check      — pending-approval monitoring: held rows whose UID checks dead → state='dead' (never paid)
-//   2. available-uid-check — same UID check for available pool rows, keeps the pool clean
-//   3. wa-check            — WhatsApp eligibility for rows without eligible wa_status (writes data.wa_status + wa:{uid}:{cuser} cache)
-//   4. page-check          — FB pages scrape for rows without wa_status (sets eligible + page name + cache)
-// Env: DATABASE_URL, CHECK_URL, HELD_INTERVAL_MS (10min), UID_INTERVAL_MS (30min), WA_INTERVAL_MS (30min), PAGE_INTERVAL_MS (30min)
+//   2. wa-check            — WhatsApp eligibility for rows without eligible wa_status (writes data.wa_status + wa:{uid}:{cuser} cache)
+//   3. page-check          — FB pages scrape for rows without wa_status (sets eligible + page name + cache)
+// Available pool rows are NOT background-monitored — they are killed by user checks (POST /fb/check → markDead).
+// Env: DATABASE_URL, CHECK_URL, HELD_INTERVAL_MS (10min), WA_INTERVAL_MS (30min), PAGE_INTERVAL_MS (30min)
 import { SQL } from "bun";
 
 const db = new SQL({ url: Bun.env.DATABASE_URL || "", max: 2, idleTimeout: 20, connectionTimeout: 10 });
@@ -15,9 +15,9 @@ const extractPages = (html: string) => { const pages: { name: string; type: stri
 const extractLinkedNumber = (html: string) => html.match(/"__typename":"XFBFXSettingsContactPoint"[^}]*?"navigation_row_subtitle":"([^"]+)"/)?.[1] ?? null;
 const j = (v: unknown) => JSON.stringify(v);
 
-// ── UID liveness (check.fb.tools, batch ≤500) → dead rows leave circulation ──
-async function checkUids(state: "held" | "available", limit: number): Promise<number> {
-  const held: { row_key: string }[] = await db`SELECT DISTINCT row_key FROM pool_rows WHERE state=${state} AND row_key ~ '^\d{5,20}$' LIMIT ${limit}`;
+// ── UID liveness for HELD rows (check.fb.tools, batch ≤500) → dead rows never get paid ──
+async function checkUids(limit: number): Promise<number> {
+  const held: { row_key: string }[] = await db`SELECT DISTINCT row_key FROM pool_rows WHERE state='held' AND row_key ~ '^\d{5,20}$' LIMIT ${limit}`;
   if (!held.length) return 0;
   const uids = held.map((r) => r.row_key);
   const res = await fetch(CHECK_URL, {
@@ -35,8 +35,8 @@ async function checkUids(state: "held" | "available", limit: number): Promise<nu
       if (uid && x.data?.status?.name !== "valid") dead.push(uid);
     } catch {}
   }
-  if (dead.length) await db`UPDATE pool_rows SET state='dead' WHERE state=${state} AND row_key=ANY(${db.array(dead)})`;
-  console.log(`[worker:${state}] checked ${uids.length} uid(s) — ${dead.length} dead`);
+  if (dead.length) await db`UPDATE pool_rows SET state='dead' WHERE state='held' AND row_key=ANY(${db.array(dead)})`;
+  console.log(`[worker:held] checked ${uids.length} uid(s) — ${dead.length} dead`);
   return dead.length;
 }
 
@@ -119,8 +119,7 @@ async function sweepPages(limit: number) {
 
 const interval = (k: string, def: number) => Math.max(60_000, Number(Bun.env[k]) || def);
 const JOBS = [
-  { name: "held-uid-check", every: interval("HELD_INTERVAL_MS", 600_000), limit: Number(Bun.env.UID_BATCH) || 500, run: (n: number) => checkUids("held", n) },
-  { name: "available-uid-check", every: interval("UID_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.UID_BATCH) || 500, run: (n: number) => checkUids("available", n) },
+  { name: "held-uid-check", every: interval("HELD_INTERVAL_MS", 600_000), limit: Number(Bun.env.UID_BATCH) || 500, run: (n: number) => checkUids(n) },
   { name: "page-check", every: interval("PAGE_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepPages(n) },
   { name: "wa-check", every: interval("WA_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepWa(n) },
 ];

@@ -2,7 +2,8 @@ import { assert, errorText, json, put, request, session, waitFor } from "./lib";
 
 // Pipeline check: verifies accounts flow correctly from user files into pools across
 // routing, dedup (same/different user), multi-file, edit-migration and purge scenarios.
-// Needs SESSION_TOKEN (admin) + USER_SESSION_TOKEN (second, non-admin account).
+// Needs SESSION_TOKEN (admin); USER_SESSION_TOKEN (second account) optional — cross-user
+// scenarios S3/S6/S7 are skipped when it's missing/invalid.
 const PWD = "dgddigital";
 const runId = Date.now().toString().slice(-9);
 let seq = 0;
@@ -42,11 +43,16 @@ async function cleanup() {
 }
 
 async function run() {
-  if (!session || !Bun.env.USER_SESSION_TOKEN) throw new Error("Set SESSION_TOKEN (admin) and USER_SESSION_TOKEN in test/.env");
+  if (!session) throw new Error("Set SESSION_TOKEN (admin) in test/.env");
   const adminMe = await request("/auth/me"); assert(adminMe.status === 200 && adminMe.body?.isAdmin, "admin session must be admin");
-  const userMe = await request("/auth/me", {}, Bun.env.USER_SESSION_TOKEN); assert(userMe.status === 200 && !userMe.body?.isAdmin, "user session must be a non-admin account");
-  const adminId = String(adminMe.body.id), userId = String(userMe.body.id);
-  console.log(`PASS sessions admin=${adminId} user=${userId}`);
+  const adminId = String(adminMe.body.id);
+  let user: string | null = Bun.env.USER_SESSION_TOKEN || null, userId = "";
+  if (user) {
+    const userMe = await request("/auth/me", {}, user);
+    if (userMe.status !== 200 || String(userMe.body?.id) === adminId) { console.log(`SKIP second user: /auth/me → ${userMe.status} ${errorText(userMe)} — cross-user scenarios S3/S6/S7 will not run`); user = null; }
+    else { userId = String(userMe.body.id); if (userMe.body?.isAdmin) quirk("user session is also admin on this env — cross-user scenarios still valid (dedup is uid-based, not role-based)"); }
+  }
+  console.log(`PASS sessions admin=${adminId}${user ? ` user=${userId}` : " (single-user mode)"}`);
 
   // ── S1: routing matrix ──────────────────────────────────────────────
   const c1 = uid(), c2 = uid(), c3 = uid(), k1 = uid(), k2 = uid(), p1 = uid(), p2 = uid(), p3 = uid();
@@ -69,17 +75,17 @@ async function run() {
   check("S2 same user dup: dup file contributed 0", eq(await poolKeys("cookies_2fa", s2b?.id), []));
 
   // ── S3: different users upload the same account ─────────────────────
-  const e1 = uid(), e2 = uid(), eRows = [row(e1, { two: true }), row(e2, { two: true })];
-  const s3a = await create(session, "s3-admin", eRows, "combo");
-  const s3u = await create(Bun.env.USER_SESSION_TOKEN!, "s3-user", eRows, "combo");
-  await waitFor(async () => (await poolKeys("cookies_2fa", s3a?.id)).size === 2, 15000);
-  await Bun.sleep(2500);
-  check("S3 cross-user dup: pool keeps 1 copy (2 rows, not 4)", (await poolKeys("cookies_2fa")).has(e1) && (await poolKeys("cookies_2fa", s3u?.id)).size === 0);
-  const uf = await request<any>(`/pools/${encodeURIComponent(PWD)}/cookies_2fa/user-files`);
-  console.log("DEBUG user-files:", uf.status, JSON.stringify(uf.body).slice(0, 500));
-  const adminUf = (uf.body?.users || []).find((u: any) => u.userId === adminId), userUf = (uf.body?.users || []).find((u: any) => u.userId === userId);
-  const adminS3 = adminUf?.files?.find((f: any) => f.fileId === s3a?.id);
-  check("S3 attribution: pool attributes rows to FIRST user; second user's file shows 0", !!adminUf && adminUf.totalAvailable >= 2 && (!userUf || (userUf.files || []).every((f: any) => f.available === 0)));
+  if (user) {
+    const e1 = uid(), e2 = uid(), eRows = [row(e1, { two: true }), row(e2, { two: true })];
+    const s3a = await create(session, "s3-admin", eRows, "combo");
+    const s3u = await create(user, "s3-user", eRows, "combo");
+    await waitFor(async () => (await poolKeys("cookies_2fa", s3a?.id)).size === 2, 15000);
+    await Bun.sleep(2500);
+    check("S3 cross-user dup: pool keeps 1 copy (2 rows, not 4)", (await poolKeys("cookies_2fa")).has(e1) && (await poolKeys("cookies_2fa", s3u?.id)).size === 0);
+    const uf = await request<any>(`/pools/${encodeURIComponent(PWD)}/cookies_2fa/user-files`);
+    const adminUf = (uf.body?.users || []).find((u: any) => u.userId === adminId), userUf = (uf.body?.users || []).find((u: any) => u.userId === userId);
+    check("S3 attribution: pool attributes rows to FIRST user; second user's file shows 0", uf.status === 200 && !!adminUf && adminUf.totalAvailable >= 2 && (!userUf || (userUf.files || []).every((f: any) => f.available === 0)));
+  }
 
   // ── S4: 6 files, mixed presets, same 4 accounts ─────────────────────
   const a1 = uid(), a2 = uid(), b1 = uid(), b2 = uid(), s4Rows = [row(a1, { two: true }), row(a2, { two: true }), row(b1), row(b2)];
@@ -105,32 +111,40 @@ async function run() {
   check("S5 edit: account moved cookies_only → cookies_2fa", eq(await poolKeys("cookies_2fa", s5?.id), [g1, g2]) && eq(await poolKeys("cookies_only", s5?.id), []));
 
   // ── S6: edit when ANOTHER file owns the uid in the target pool ──────
-  const x = uid();
-  const s6P = await create(session, "s6-P-cookie", [row(x)], "cookie");
-  const s6Q = await create(Bun.env.USER_SESSION_TOKEN!, "s6-Q-combo", [row(x, { two: true })], "combo");
-  await waitFor(async () => (await poolKeys("cookies_2fa", s6Q?.id)).size === 1, 15000);
-  check("S6 setup: P owns X in cookies_only, Q owns X in cookies_2fa", eq(await poolKeys("cookies_only", s6P?.id), [x]) && eq(await poolKeys("cookies_2fa", s6Q?.id), [x]));
-  const persistP = await request(`/files/${s6P?.id}/persist`, put({ rows: [row(x, { two: true })], dataCount: 1, action: "add-2fa" }));
-  check("S6 persist accepted", persistP.status === 200);
-  await Bun.sleep(3000);
-  const pAfter = await poolKeys("cookies_only", s6P?.id), qAfter = await poolKeys("cookies_2fa", s6Q?.id);
-  quirk(`S6: after P's edit, P's cookies_only copy was deleted (cross-pool cleanup) but cookies_2fa stays owned by Q (fed first) — file P now pools 0 rows: cookies_only(P)=[${[...pAfter]}] cookies_2fa(Q)=[${[...qAfter]}]`);
-  check("S6 pool still holds exactly 1 copy of X overall", (await poolKeys("cookies_2fa")).has(x) || (await poolKeys("cookies_only")).has(x));
+  if (user) {
+    const x = uid();
+    const s6P = await create(session, "s6-P-cookie", [row(x)], "cookie");
+    const s6Q = await create(user, "s6-Q-combo", [row(x, { two: true })], "combo");
+    await waitFor(async () => (await poolKeys("cookies_2fa", s6Q?.id)).size === 1, 15000);
+    check("S6 setup: P owns X in cookies_only, Q owns X in cookies_2fa", eq(await poolKeys("cookies_only", s6P?.id), [x]) && eq(await poolKeys("cookies_2fa", s6Q?.id), [x]));
+    const persistP = await request(`/files/${s6P?.id}/persist`, put({ rows: [row(x, { two: true })], dataCount: 1, action: "add-2fa" }));
+    check("S6 persist accepted", persistP.status === 200);
+    await Bun.sleep(3000);
+    const pAfter = await poolKeys("cookies_only", s6P?.id), qAfter = await poolKeys("cookies_2fa", s6Q?.id);
+    quirk(`S6: after P's edit, P's cookies_only copy was deleted (cross-pool cleanup) but cookies_2fa stays owned by Q (fed first) — file P now pools 0 rows: cookies_only(P)=[${[...pAfter]}] cookies_2fa(Q)=[${[...qAfter]}]`);
+    check("S6 pool still holds exactly 1 copy of X overall", (await poolKeys("cookies_2fa")).has(x) || (await poolKeys("cookies_only")).has(x));
+  }
 
   // ── S7: purging a duplicate file removes ANOTHER file's pooled copy ─
-  const z = uid();
-  const s7U = await create(Bun.env.USER_SESSION_TOKEN!, "s7-U-first", [row(z, { two: true })], "combo");
-  const s7W = await create(session, "s7-W-dup", [row(z, { two: true })], "combo");
-  await waitFor(async () => (await poolKeys("cookies_2fa", s7U?.id)).size === 1, 15000);
-  await Bun.sleep(2500);
-  check("S7 setup: U owns Z, W contributed 0", eq(await poolKeys("cookies_2fa", s7U?.id), [z]) && eq(await poolKeys("cookies_2fa", s7W?.id), []));
-  await request(`/files/${s7W?.id}`, { method: "DELETE" }, session);
-  const wpurge = await request(`/archive/${s7W?.id}`, { method: "DELETE" }, session);
-  check("S7 purge W accepted", wpurge.status === 200);
-  await Bun.sleep(2500);
-  const zLeft = await poolKeys("cookies_2fa", s7U?.id);
-  if (zLeft.size === 0) quirk("S7: purging duplicate file W deleted USER file U's pooled copy (removeAvailable matches row_key regardless of src_file_id) — U's account vanished while U is still active");
-  else quirk("S7: purging duplicate file W did NOT remove U's copy (removeAvailable is file-scoped)");
+  if (user) {
+    const z = uid();
+    const s7U = await create(user, "s7-U-first", [row(z, { two: true })], "combo");
+    const s7W = await create(session, "s7-W-dup", [row(z, { two: true })], "combo");
+    await waitFor(async () => (await poolKeys("cookies_2fa", s7U?.id)).size === 1, 15000);
+    await Bun.sleep(2500);
+    check("S7 setup: U owns Z, W contributed 0", eq(await poolKeys("cookies_2fa", s7U?.id), [z]) && eq(await poolKeys("cookies_2fa", s7W?.id), []));
+    await request(`/files/${s7W?.id}`, { method: "DELETE" }, session);
+    const wpurge = await request(`/archive/${s7W?.id}`, { method: "DELETE" }, session);
+    check("S7 purge W accepted", wpurge.status === 200);
+    await Bun.sleep(2500);
+    const zLeft = await poolKeys("cookies_2fa", s7U?.id);
+    if (zLeft.size === 0) quirk("S7: purging duplicate file W deleted USER file U's pooled copy (removeAvailable matches row_key regardless of src_file_id) — U's account vanished while U is still active");
+    else quirk("S7: purging duplicate file W did NOT remove U's copy (removeAvailable is file-scoped)");
+  }
+
+  // ── S9: hold-state decoration (holdState cast site) ─────────────────
+  const s9rows = await request<any[]>(`/files/${s2a?.id}/rows`);
+  check("S9 file rows: holdState decoration OK (200 + rows)", s9rows.status === 200 && Array.isArray(s9rows.body));
 
   console.log(`\n=== SUMMARY ===`);
   console.log(`${fails.length ? "FAILURES:\n- " + fails.join("\n- ") : "All pipeline checks passed."}`);

@@ -33,7 +33,7 @@
   backend/scripts/schema.ts # DB bootstrap/verify (bun scripts/schema.ts bootstrap|verify)
   test/                   # test fixture xlsx files (2fa.xlsx, cookie.xlsx, Page.xlsx)
   Pages/e2e/              # Playwright browser tests (auth.ts cookie-injection login, smoke.spec.ts) — `bun run test:e2e`, needs backend ALLOW_TEST_AUTH=1 + test DB, never prod; CI e2e job in .github/workflows/ci.yml
-  agent/                  # dev debugging tools (call.ts authed caller, health.ts backend+worker sweep) — need AGENT_TOKEN + BACKEND_URL env; never commit tokens
+  agent/                  # dev debugging tools (call.ts authed caller, health.ts backend+worker sweep) — secrets from gitignored agent/.env (AGENT_TOKEN + BACKEND_URL), real env overrides; never commit tokens
 ```
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)

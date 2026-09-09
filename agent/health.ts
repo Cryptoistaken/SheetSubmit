@@ -1,7 +1,9 @@
 // agent/health.ts — one-shot backend + worker sweep for the debugging agent.
-// Usage:
-//   AGENT_TOKEN=<token> BACKEND_URL=https://<backend> bun agent/health.ts
+// Secrets come from agent/.env (this folder, gitignored); real env vars override.
+// Usage: bun agent/health.ts
 // Hits /api/health, /api/agent/health, /api/worker/health. Exit 1 if backend unreachable.
+import { loadAgentEnv } from "./env";
+await loadAgentEnv();
 const token = (Bun.env.AGENT_TOKEN || "").trim();
 const base = (Bun.env.BACKEND_URL || "").trim().replace(/\/+$/, "");
 if (!base) throw new Error("BACKEND_URL is required (e.g. https://<service>.up.railway.app)");

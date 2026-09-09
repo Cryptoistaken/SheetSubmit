@@ -1,8 +1,11 @@
 // agent/call.ts — authenticated backend caller through the dev agent door.
+// Secrets come from agent/.env (this folder, gitignored); real env vars override.
 // Usage:
-//   AGENT_TOKEN=<token> BACKEND_URL=https://<backend> bun agent/call.ts GET /api/agent/health
-//   AGENT_TOKEN=<token> BACKEND_URL=https://<backend> bun agent/call.ts POST /api/pools/holds/<id>/approve '{}'
-// Reads the token from env only; never prints it. Prints status, latency, pretty JSON.
+//   bun agent/call.ts GET /api/agent/health
+//   bun agent/call.ts POST /api/pools/holds/<id>/approve '{}'
+// Never prints the token. Prints status, latency, pretty JSON.
+import { loadAgentEnv } from "./env";
+await loadAgentEnv();
 const token = (Bun.env.AGENT_TOKEN || "").trim();
 const base = (Bun.env.BACKEND_URL || "").trim().replace(/\/+$/, "");
 const [methodRaw, path, bodyRaw] = Bun.argv.slice(2);

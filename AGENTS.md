@@ -104,7 +104,7 @@ stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /pers
 stores/bubbleStore.ts     # {on, pickMode}
 stores/profileCache.ts    # profile cache (fed from /me + admin users)
 hooks/useUndoRedo.ts, usePersist.ts (beforeunload→flushPersist), useModalA11y.ts
-  lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, useConnStore (connection status fed by request outcomes), files/persist/append/WA/admin/pools, me/logout/botInfo/Telegram Login/claimDeviceSession; RUNTIME_BASE goes direct to Railway on the prod web host (override → proxy otherwise; Android app always proxies — WebView blocks third-party cookies)
+  lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, useConnStore (connection status fed by request outcomes), files/persist/append/WA/admin/pools, me/logout/botInfo/Telegram Login/claimDeviceSession; RUNTIME_BASE goes direct to Railway on the prod web host (override → proxy otherwise; Android app always proxies — WebView blocks third-party cookies); verifyTelegramLogin falls back to the same-origin proxy when the direct cross-site POST fails and pins it via ss_api_proxy localStorage (cleared on logout) so later calls stay on the cookie's host
 lib/types.ts              # FileType, ColumnDef, SheetFile, Row
 lib/xlsx.ts               # importXlsx/buildXlsx/downloadXlsx/parseSheetRows
 lib/downloadOpts.ts       # buildDownloadOpts counts

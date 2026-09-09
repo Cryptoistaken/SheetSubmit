@@ -19,7 +19,11 @@ import type {
 const DIRECT_API_BASE = "https://sheetsubmit.up.railway.app";
 const isProdWeb = typeof location !== "undefined" && location.hostname === "sheetsubmit.pages.dev";
 const isAndroidApp = typeof window !== "undefined" && !!(window as unknown as { Android?: unknown }).Android;
-const RUNTIME_BASE = (window.APP_CONFIG?.apiBase || import.meta.env.VITE_API_BASE || (!isAndroidApp && isProdWeb ? DIRECT_API_BASE : "")).replace(/\/+$/, "");
+// ponytail: sticky first-party proxy — pinned after a proxied login (direct cross-site
+// path blocked); keeps every later call on the same host as the session cookie
+const PROXY_FLAG = "ss_api_proxy";
+function proxyPinned() { try { return localStorage.getItem(PROXY_FLAG) === "1"; } catch { return false; } }
+const RUNTIME_BASE = (proxyPinned() ? "" : (window.APP_CONFIG?.apiBase || import.meta.env.VITE_API_BASE || (!isAndroidApp && isProdWeb ? DIRECT_API_BASE : ""))).replace(/\/+$/, "");
 declare global {
   interface Window {
     APP_CONFIG?: { apiBase?: string };
@@ -433,7 +437,10 @@ export const api = {
     if (!raw) return { user: null, expired: false, loginRequired: true };
     return { user: normalizeUser(raw), expired: false, loginRequired: false };
   },
-  logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+  logout: async () => {
+    try { return await request<{ ok: boolean }>("/auth/logout", { method: "POST" }); }
+    finally { try { localStorage.removeItem(PROXY_FLAG); } catch {} }
+  },
   botInfo: () => request<{ username: string }>("/bot/info"),
   // ponytail: login-critical — if the direct call fails (edge-cache poisoning, CORS
   // hiccup), fall back to the same-origin proxy instead of a dead login button
@@ -443,8 +450,25 @@ export const api = {
       return res.json() as Promise<{ clientId: string }>;
     }),
   ),
-  verifyTelegramLogin: (id_token: string) =>
-    request<{ ok: boolean }>("/auth/telegram/verify", { method: "POST", body: JSON.stringify({ id_token }) }),
+  // ponytail: login-critical — a blocked direct cross-site POST must not kill login;
+  // fall back to the same-origin proxy and pin it so later calls carry the pages.dev cookie
+  verifyTelegramLogin: async (id_token: string) => {
+    try {
+      return await request<{ ok: boolean }>("/auth/telegram/verify", { method: "POST", body: JSON.stringify({ id_token }) });
+    } catch (directErr) {
+      let res: Response;
+      try {
+        res = await fetch("/api/auth/telegram/verify", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id_token }), signal: AbortSignal.timeout(30000) });
+      } catch { throw directErr; }
+      if (!res.ok) {
+        let detail = "";
+        try { const body = await res.json(); detail = typeof body?.error === "string" ? body.error : JSON.stringify(body); } catch { detail = await res.text().catch(() => ""); }
+        throw new Error(`${res.status} ${res.statusText}${detail ? ` — ${detail}` : ""}`);
+      }
+      try { localStorage.setItem(PROXY_FLAG, "1"); } catch {}
+      return res.json() as Promise<{ ok: boolean }>;
+    }
+  },
   claimDeviceSession: (token: string) =>
     request<{ ok: boolean }>("/auth/device/claim", { method: "POST", body: JSON.stringify({ token }) }),
 };

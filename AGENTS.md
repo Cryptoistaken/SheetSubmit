@@ -49,7 +49,7 @@
                       #   + wallet routes: GET /api/wallet, POST /api/wallet/withdraw, GET /api/wallet/requests, POST /api/wallet/requests/:id/:action
  lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, WORKER_URL, CHECK_URL, ALLOW_TEST_AUTH, TELEGRAM_LOGIN_CLIENT_ID)
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
-  src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder
+  src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder (SameSite=None on https for direct cross-origin calls, Lax on http)
   src/lib/redis.ts        # optional standard node-redis client; fail-open read-through cache helpers using REDIS_URL
   src/lib/agent.ts        # DEV-ONLY agent door: agentDoorOpen (ALLOW_AGENT_ACCESS=1 + AGENT_TOKEN), timing-safe token check, requireAgent (404s when closed)
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
@@ -104,7 +104,7 @@ stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /pers
 stores/bubbleStore.ts     # {on, pickMode}
 stores/profileCache.ts    # profile cache (fed from /me + admin users)
 hooks/useUndoRedo.ts, usePersist.ts (beforeunload→flushPersist), useModalA11y.ts
- lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, useConnStore (connection status fed by request outcomes), files/persist/append/WA/admin/pools, me/logout/botInfo/Telegram Login/claimDeviceSession
+  lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, useConnStore (connection status fed by request outcomes), files/persist/append/WA/admin/pools, me/logout/botInfo/Telegram Login/claimDeviceSession; RUNTIME_BASE goes direct to Railway on the prod web host (override → proxy otherwise; Android app always proxies — WebView blocks third-party cookies)
 lib/types.ts              # FileType, ColumnDef, SheetFile, Row
 lib/xlsx.ts               # importXlsx/buildXlsx/downloadXlsx/parseSheetRows
 lib/downloadOpts.ts       # buildDownloadOpts counts
@@ -127,6 +127,7 @@ stores/__tests__/sheetStore.test.ts
    - Valid → 200 user JSON → set user.
 4. LoginScreen: web shows official Telegram Login widget (Turnstile-gated) → `POST /api/auth/telegram/verify {id_token}`; inside the app it invokes the Android native SDK bridge instead (no Turnstile, no legacy bot flow).
 5. On success → set `ss_had_session` flag, reload to saved destination (default `/`) → AuthContext picks up cookie.
+6. Prod web calls the backend directly (cross-origin, `SameSite=None` cookie); one re-login is needed after switching modes because the old host-only proxy cookie is not sent cross-origin. Android keeps the same-origin proxy.
 
 ## Rules
 1. **Production isolation** — test bot token only, own Railway project. Never touch prod.

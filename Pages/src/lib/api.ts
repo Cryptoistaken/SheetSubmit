@@ -11,7 +11,15 @@ import type {
   User,
 } from "./types";
 
-const RUNTIME_BASE = (window.APP_CONFIG?.apiBase ?? import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+// ponytail: web site calls the backend directly (the CF proxy strips gzip via
+// accept-encoding:identity and swaps error JSON for HTML pages). Android WebView
+// blocks third-party cookies, so the app keeps the same-origin proxy; every other
+// host keeps the old behavior (explicit override → proxy). One re-login after deploy:
+// the old host-only pages.dev cookie is not sent cross-origin.
+const DIRECT_API_BASE = "https://sheetsubmit.up.railway.app";
+const isProdWeb = typeof location !== "undefined" && location.hostname === "sheetsubmit.pages.dev";
+const isAndroidApp = typeof window !== "undefined" && !!(window as unknown as { Android?: unknown }).Android;
+const RUNTIME_BASE = (window.APP_CONFIG?.apiBase ?? import.meta.env.VITE_API_BASE ?? (!isAndroidApp && isProdWeb ? DIRECT_API_BASE : "")).replace(/\/+$/, "");
 declare global {
   interface Window {
     APP_CONFIG?: { apiBase?: string };

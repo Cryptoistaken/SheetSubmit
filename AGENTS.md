@@ -20,12 +20,13 @@
   railway.json            # {"services":{"backend":{"rootDirectory":"backend"},"worker":{"rootDirectory":"worker"}}} — connect worker service to Postgres + set WORKER_URL="worker.railway.internal" on backend
   .github/workflows/
     build-android.yml     # APK CI (assembleRelease + keystore-decode, release publish/changelog)
-    generate-keystore.yml # one-time Android keystore generator
+    generate-keystore.yml # one-time Android keystore generator (password via workflow input, never uploaded/logged)
+    ci.yml                # backend/Pages/worker typecheck+lint+test on push/PR
   backend/                # Railway Hono/Bun service backed by Postgres; src/server.ts is the HTTP entrypoint; railway.toml deploy config; .env local-only template
                         #   PERFORMANCE.md — 62-entry inventory covering 64 handlers + per-API perf plan (bottleneck → fix → est. speedup), 002_perf.sql migration sketch, rollout order
-  worker/                 # Railway background worker service (Bun + Postgres, self-contained; rootDirectory worker in railway.json). Jobs on own intervals (30s tick):
-                        #   held-uid-check (pending-approval monitoring: dead UIDs → pool_rows.state='dead', default 10min; NO background check of available rows — they die via user checks, see wa.ts markDead),
-                        #   page-check + wa-check (eligibility sweeps → data.wa_status + wa:{src_uid}:{cuser} meta cache, 30min). Env: DATABASE_URL, CHECK_URL, *_INTERVAL_MS, UID_BATCH, CHECK_BATCH; .env template
+  worker/                 # Railway background worker service (Bun + Postgres, self-contained; rootDirectory worker in railway.json, railway.toml deploy config w/ /health check, single replica). Jobs on own intervals (30s tick, single-leader advisory lock):
+                        #   held-uid-check first (pending-approval monitoring: dead UIDs → pool_rows.state='dead', default 10min; NO background check of available rows — they die via user checks, see wa.ts markDead),
+                        #   page-check + wa-check (eligibility sweeps → data.wa_status + wa:{src_uid}:{cuser} meta cache, 30min). Env: DATABASE_URL, CHECK_URL, *_INTERVAL_MS, UID_BATCH, CHECK_BATCH, WORKER_TOKEN (gates /health error detail); .env template
                         #   + HTTP GET /health (port 3000): {ok, startedAt, uptimeMs, jobs:[{name, everyMs, lastRunAt, lastRunAgoMs, lastError}]} — backend proxies it at GET /api/worker/health
   Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev; native Telegram Login SDK uses BotFather client 8667114953 and CI GitHub Maven credentials
@@ -35,7 +36,7 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 1.9.1; bump on any route change, surfaced by /api/health),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.6; bump on any route change, surfaced by /api/health),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   GET /api/worker/health (proxies worker.railway.internal:3000/health — proves worker connectivity from the public URL),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -44,9 +45,9 @@
                       #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS, stores picture+phone),
                       #   GET /api/bot/info, ensureWebhook on first request
                       #   + wallet routes: GET /api/wallet, POST /api/wallet/withdraw, GET /api/wallet/requests, POST /api/wallet/requests/:id/:action
- lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, WORKER_URL, HITOOLS_CHECK_URL, TELEGRAM_LOGIN_CLIENT_ID)
+ lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, WORKER_URL, CHECK_URL, TELEGRAM_LOGIN_CLIENT_ID)
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
- src/lib/session.ts      # signSession, verifySession (HMAC SHA-256), requireAuth, isAdmin, cookie builder
+ src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
   src/lib/pg.ts            # Postgres repository for users, files, pools, wallets, withdrawals and wallet_transactions (bun:sql, max 10 connections)
                         # + STRICT ROUTING (classify): file preset feeds ONLY its own pool — combo→cookies_2fa, page→page (real 2fa required; wa-eligible = verified, cookie+2fa only = unverified, both claimable in page pool via verifiedOnly/unverifiedOnly), cookie→cookies_only; key-less or no-2fa live rows are invalid → pool_rejects (deduped per account, cleared on successful pooling), never cookies_only
@@ -60,8 +61,9 @@ src/routes/pools.ts       # admin pool, hold, download and pricing routes
                       #   GET /holds (status filter), POST /holds/:id/approve + /reject + /return (REVERT WINDOW: first action starts 5min, exactly one flip allowed, then final — pg.ts throws "decision is final — revert window closed"; NO wallet ops at action time),
                       #   settlement: backend sweeps every 30s (startBackgroundTasks → settleHolds op) — after first_action_at+5min, APPROVED credits owners for rows still claimed (dead unpaid), REJECTED pays nothing; legacy rows frozen settled
                       #   GET /downloads/:id (xlsx blob, any approval state; ?srcUid=&srcFileId=&name= → filtered per-user/per-file download via downloadRows op), GET /downloads/:id/detail (groups enriched with file name/createdAt/preset)
-                      #   GET /:pwd/:pool (PoolDetail, delegator=src_uid avail+claimed), /rows (paginated+verifiedOnly/unverifiedOnly), /verified-counts, /user-files (files carry name/createdAt/preset from file_index), /price GET+PUT (stored price 0..1000, admin validated), POST /:pwd/:pool/claim (→ downloadId+filename+unitPrice/total/status), POST /:pwd/:pool/hold (same + mode/pick, srcUids/srcFileIds, HOLD status, FIFO inserted_at/row_key, storedPrice)
+                      #   GET /:pwd/:pool/ledger → 410 gone (pool_ledger dropped; use download detail + wallet tx), GET /:pwd/:pool (PoolDetail, delegator=src_uid avail+claimed), /rows (paginated+verifiedOnly/unverifiedOnly, detail capped 5000), /verified-counts (SQL-side eligible count, no 5k starvation), /user-files (files carry name/createdAt/preset from file_index), /price GET+PUT (stored price 0..1000, admin validated), POST /:pwd/:pool/claim (→ downloadId+filename+unitPrice/total/status), POST /:pwd/:pool/hold (same + mode/pick, srcUids/srcFileIds, HOLD status, FIFO inserted_at/row_key, storedPrice)
 src/routes/admin.ts       # admin stats, users, files and moderation routes
+                      #   GET /users/search (SQL ILIKE, limit 50 via adminUsersSearch op),
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist,
                       #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id
 src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows), /fb/page-check, /fb/wa-check and WA cache routes

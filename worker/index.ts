@@ -7,6 +7,7 @@
 // Env: DATABASE_URL, CHECK_URL, HELD_INTERVAL_MS (10min), WA_INTERVAL_MS (30min), PAGE_INTERVAL_MS (30min)
 import { SQL } from "bun";
 
+if (!Bun.env.DATABASE_URL) throw new Error("DATABASE_URL is required for worker");
 const db = new SQL({ url: Bun.env.DATABASE_URL || "", max: 2, idleTimeout: 20, connectionTimeout: 10 });
 const CHECK_URL = Bun.env.CHECK_URL || "https://check.fb.tools/api/check/facebook";
 const UA_IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
@@ -131,25 +132,49 @@ const last = new Map<string, number>();
 const lastError = new Map<string, string>();
 // tiny HTTP API so the backend (WORKER_URL) and Railway health checks can confirm the worker is alive
 const startedAt = Date.now();
+let stopping = false;
+process.once("SIGTERM", () => { stopping = true; console.log("[worker] SIGTERM — finishing current tick"); });
+process.once("SIGINT", () => { stopping = true; console.log("[worker] SIGINT — finishing current tick"); });
 Bun.serve({
   port: Number(Bun.env.PORT) || 3000,
   fetch: (req) => {
     const url = new URL(req.url);
     if (url.pathname !== "/health") return new Response("not found", { status: 404 });
+    const token = Bun.env.WORKER_TOKEN;
+    const detailed = !token || req.headers.get("authorization") === `Bearer ${token}`;
     return Response.json({
       ok: true,
       startedAt,
       uptimeMs: Date.now() - startedAt,
-      jobs: JOBS.map((jn) => ({ name: jn.name, everyMs: jn.every, lastRunAt: last.get(jn.name) ?? null, lastRunAgoMs: last.has(jn.name) ? Date.now() - (last.get(jn.name) as number) : null, lastError: lastError.get(jn.name) ?? null })),
+      jobs: JOBS.map((jn) => ({ name: jn.name, everyMs: jn.every, lastRunAt: last.get(jn.name) ?? null, lastRunAgoMs: last.has(jn.name) ? Date.now() - (last.get(jn.name) as number) : null, lastError: detailed ? (lastError.get(jn.name) ?? null) : undefined })),
     });
   },
 });
 for (;;) {
-  for (const job of JOBS) {
-    const due = (last.get(job.name) ?? 0) + job.every <= Date.now();
-    if (!due) continue;
-    last.set(job.name, Date.now());
-    try { await job.run(job.limit); lastError.delete(job.name); } catch (e) { lastError.set(job.name, String((e as Error)?.message ?? e)); console.error(`[worker:${job.name}]`, (e as Error)?.message ?? e); }
+  if (stopping) { await db.close().catch(() => {}); break; }
+  // single-leader: only one replica sweeps at a time; losers skip the tick
+  let leader = false;
+  try {
+    const r: any[] = await db`SELECT pg_try_advisory_lock(918273645) AS locked`;
+    leader = !!r[0]?.locked;
+  } catch { leader = true; }
+  if (!leader) { await new Promise((r) => setTimeout(r, 30_000)); continue; }
+  try {
+    // held-uid-check first: dead held rows must stop being payable ASAP, don't let slow sweeps starve it
+    const heldJob = JOBS[0];
+    if ((last.get(heldJob.name) ?? 0) + heldJob.every <= Date.now()) {
+      last.set(heldJob.name, Date.now());
+      try { await heldJob.run(heldJob.limit); lastError.delete(heldJob.name); } catch (e) { lastError.set(heldJob.name, String((e as Error)?.message ?? e).slice(0, 200)); console.error(`[worker:${heldJob.name}]`, (e as Error)?.message ?? e); }
+    }
+    for (const job of JOBS.slice(1)) {
+      if (stopping) break;
+      const due = (last.get(job.name) ?? 0) + job.every <= Date.now();
+      if (!due) continue;
+      last.set(job.name, Date.now());
+      try { await job.run(job.limit); lastError.delete(job.name); } catch (e) { lastError.set(job.name, String((e as Error)?.message ?? e).slice(0, 200)); console.error(`[worker:${job.name}]`, (e as Error)?.message ?? e); }
+    }
+  } finally {
+    try { await db`SELECT pg_advisory_unlock(918273645)`; } catch {}
   }
   await new Promise((r) => setTimeout(r, 30_000));
 }

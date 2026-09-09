@@ -12,22 +12,34 @@ import { signSession as signSessionFn } from "./lib/session";
 
 export const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any backend route change — lets health checks confirm a deploy landed
-export const API_VERSION = "2.0.5";
+export const API_VERSION = "2.0.6";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
-  const allowed = [c.env.FRONTEND_URL, "http://localhost:5173", "http://127.0.0.1:5173"].filter(Boolean) as string[];
+  const allowed = [c.env.FRONTEND_URL, "https://sheetsubmit.pages.dev", "http://localhost:5173", "http://127.0.0.1:5173"].filter(Boolean) as string[];
   if (origin && allowed.includes(origin)) {
     c.header("Access-Control-Allow-Origin", origin);
     c.header("Vary", "Origin");
     c.header("Access-Control-Allow-Credentials", "true");
-    c.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    c.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,HEAD,OPTIONS");
     c.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    c.header("Access-Control-Max-Age", "86400");
   }
-  if (c.req.method === "OPTIONS") return new Response(null, { status: 204, headers: c.res.headers });
+  if (c.req.method === "OPTIONS") {
+    const headers: Record<string, string> = {};
+    if (origin && allowed.includes(origin)) {
+      headers["Access-Control-Allow-Origin"] = origin;
+      headers["Vary"] = "Origin";
+      headers["Access-Control-Allow-Credentials"] = "true";
+      headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,PATCH,HEAD,OPTIONS";
+      headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization";
+      headers["Access-Control-Max-Age"] = "86400";
+    }
+    return new Response(null, { status: 204, headers });
+  }
   return next();
 });
-app.use("/api/*", async (c, next) => { if (Number(c.req.header("Content-Length")) > 4_000_000) return c.json({ error: "payload too large" }, 413); if (c.req.raw.body) { try { const reader = c.req.raw.clone().body!.getReader(); let size = 0; while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > 4_000_000) { await reader.cancel(); return c.json({ error: "payload too large" }, 413); } } } catch { return c.json({ error: "invalid request body" }, 400); } } return next(); });
+app.use("/api/*", async (c, next) => { const len = Number(c.req.header("Content-Length")); if (Number.isFinite(len) && len > 4_000_000) return c.json({ error: "payload too large" }, 413); return next(); });
 app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now(), version: API_VERSION }));
 // Pings the worker over Railway's internal network (WORKER_URL) so connectivity is verifiable from the public backend URL
 app.get("/api/worker/health", async (c) => {
@@ -41,11 +53,11 @@ app.get("/api/worker/health", async (c) => {
   } catch (e) { return c.json({ ok: false, worker: null, error: String((e as Error)?.message || e) }, 502); }
 });
 app.get("/api/wallet", requireAuth, async (c) => { const uid = c.get("uid"); const [wallet, withdrawals, transactions] = await Promise.all([rpc(c.env.INDEX, "global", "walletGet", { uid }), rpc(c.env.INDEX, "global", "walletWithdrawals", { uid }), rpc(c.env.INDEX, "global", "walletTxList", { uid })]); return c.json({ ...(wallet as object), withdrawals, transactions }); });
-app.post("/api/wallet/withdraw", requireAuth, async (c) => { let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "invalid body" }, 400); } const amount = Number(body?.amount); const method = String(body?.method || "").trim(); const account = String(body?.account || "").trim(); if (!Number.isFinite(amount) || amount <= 0 || !method || account.length < 3 || account.length > 256) return c.json({ error: "invalid withdrawal" }, 400); try { return c.json(await rpc(c.env.INDEX, "global", "walletWithdraw", { uid: c.get("uid"), id: crypto.randomUUID(), amount, method, account })); } catch (error) { const message = String((error as Error)?.message || ""); if (message.includes("insufficient")) return c.json({ error: "insufficient balance" }, 400); throw error; } });
+app.post("/api/wallet/withdraw", requireAuth, async (c) => { let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "invalid body" }, 400); } const amount = Number(body?.amount); const method = String(body?.method || "").trim(); const account = String(body?.account || "").trim(); if (!Number.isFinite(amount) || amount <= 0 || amount > 100000 || !method || method.length > 64 || account.length < 3 || account.length > 256) return c.json({ error: "invalid withdrawal" }, 400); try { return c.json(await rpc(c.env.INDEX, "global", "walletWithdraw", { uid: c.get("uid"), id: crypto.randomUUID(), amount: Math.round(amount * 100) / 100, method: method.slice(0, 64), account })); } catch (error) { const message = String((error as Error)?.message || ""); if (message.includes("insufficient")) return c.json({ error: "insufficient balance" }, 400); throw error; } });
 app.get("/api/wallet/requests", requireAuth, async (c) => { if (!isAdmin(c.env, c.get("uid"))) return c.json({ error: "admin access required" }, 403); return c.json(await rpc(c.env.INDEX, "global", "walletRequests", { status: c.req.query("status") || "" })); });
 app.post("/api/wallet/requests/:id/:action", requireAuth, async (c) => { if (!isAdmin(c.env, c.get("uid"))) return c.json({ error: "admin access required" }, 403); const action = c.req.param("action"); if (action !== "approve" && action !== "reject") return c.json({ error: "unsupported action" }, 400); try { return c.json(await rpc(c.env.INDEX, "global", "walletDecision", { id: c.req.param("id"), status: action === "approve" ? "APPROVED" : "REJECTED" })); } catch (error) { if (String((error as Error)?.message || "").includes("withdrawal not found")) return c.json({ error: "withdrawal not found" }, 404); throw error; } });
 app.get("/api/wallet/methods", requireAuth, async (c) => { return c.json(await rpc(c.env.INDEX, "global", "paymentMethodsGet", { uid: c.get("uid") })); });
-app.put("/api/wallet/methods", requireAuth, async (c) => { let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "invalid body" }, 400); } const methods = body?.methods ?? {}; if (typeof methods !== "object") return c.json({ error: "invalid methods" }, 400); return c.json(await rpc(c.env.INDEX, "global", "paymentMethodsSet", { uid: c.get("uid"), methods })); });
+app.put("/api/wallet/methods", requireAuth, async (c) => { let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "invalid body" }, 400); } const methods = body?.methods ?? {}; if (typeof methods !== "object" || methods === null || Array.isArray(methods)) return c.json({ error: "invalid methods" }, 400); if (Object.keys(methods).length > 20 || JSON.stringify(methods).length > 10000) return c.json({ error: "invalid methods" }, 400); return c.json(await rpc(c.env.INDEX, "global", "paymentMethodsSet", { uid: c.get("uid"), methods })); });
 app.route("/api/files", files);
 app.route("/api/archive", archive);
 app.route("/api/cross-dups", crossDups);
@@ -53,7 +65,7 @@ app.route("/api/pools", pools);
 app.route("/api/admin", admin);
 app.route("/api", wa);
 app.route("/", bot);
-app.get("/api/auth/me", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (!token) return c.json({ error: "not_authenticated" }, 401); if (!c.env.SESSION_SECRET) return c.json({ error: "Server configuration error" }, 500); const session = await verifySession(token, c.env.SESSION_SECRET); if (!session) return c.json({ error: "session_expired" }, 401); const user: any = await rpc(c.env.INDEX, "global", "user", { id: session.uid }); if (!user) return c.json({ error: "session_expired" }, 401); return c.json({ id: String(user.user_id), name: user.name || "", username: user.username || "", photoUrl: user.photo_url || null, phone: user.phone || null, isAdmin: isAdmin(c.env, session.uid) }); });
+app.get("/api/auth/me", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (!token) return c.json({ error: "not_authenticated" }, 401); if (!c.env.SESSION_SECRET) return c.json({ error: "Server configuration error" }, 500); let session: { uid: string } | null = null; try { session = await verifySession(token, c.env.SESSION_SECRET); } catch { return c.json({ error: "session_expired" }, 401); } if (!session) return c.json({ error: "session_expired" }, 401); try { const dbSession: any = await rpc(c.env.INDEX, "global", "getSession", { token }); if (!dbSession) return c.json({ error: "session_expired" }, 401); } catch { return c.json({ error: "session_expired" }, 401); } const user: any = await rpc(c.env.INDEX, "global", "user", { id: session.uid }); if (!user) return c.json({ error: "session_expired" }, 401); if (user.banned) return c.json({ error: "account_banned" }, 403); return c.json({ id: String(user.user_id), name: user.name || "", username: user.username || "", photoUrl: user.photo_url || null, phone: user.phone || null, isAdmin: isAdmin(c.env, session.uid) }); });
 app.post("/api/auth/logout", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (token) await rpc(c.env.INDEX, "global", "deleteSession", { token }); const secure = c.req.header("x-forwarded-proto") !== "http" ? " Secure;" : ""; return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": `ss_session=; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=0` } }); });
 app.post("/api/auth/device/claim", async (c) => {
   let body: { token?: string }; try { body = await c.req.json(); } catch { return c.json({ ok: false }, 400); } const did = body.token || ""; if (!/^[A-Za-z0-9-]{8,64}$/.test(did)) return c.json({ ok: false }); const info: any = await rpc(c.env.INDEX, "global", "deviceGet", { did }); if (!info?.chatId || !info.chatId.includes(".")) return c.json({ ok: false }); await rpc(c.env.INDEX, "global", "deviceDelete", { did }); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": cookie(info.chatId, 2592000, c.req.header("x-forwarded-proto") !== "http") } }); });

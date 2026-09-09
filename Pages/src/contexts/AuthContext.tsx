@@ -71,10 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         if (active && retryRef.current < 3) {
           retryRef.current++;
-          timer = setTimeout(load, 1500 * retryRef.current);
+          timer = setTimeout(() => { if (active) void load(); }, 1500 * retryRef.current);
           return;
         }
-        if (active) setUser(null);
+        // outage: stay degraded with cached user instead of forcing a login bounce
         setLoading(false);
       }
     };

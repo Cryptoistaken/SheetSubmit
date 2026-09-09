@@ -151,11 +151,13 @@ const router = createBrowserRouter([
           { path: "admin/user/:userId/file/:fileId", element: <SheetPage /> },
           { path: "file/:id", element: <SheetPage /> },
           { path: "bubble-design", element: <BubbleDesignPage /> },
+          { path: "*", element: <HomePage /> },
         ],
       },
     ],
   },
   { path: "login", element: <LoginRoute /> },
+  { path: "*", element: <Navigate to="/" replace /> },
 ]);
 
 // Public sign-in page. Reads the redirect-back destination + expired flag from

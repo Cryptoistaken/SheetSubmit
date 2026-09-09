@@ -404,10 +404,11 @@ export interface SheetState {
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let persistTimerFileId: string | null = null;
 let openSeq = 0;
 let structuralCounter = 0;
 let saveChain: Promise<void> = Promise.resolve();
-const MAX_JOURNAL = 200;
+const MAX_JOURNAL = 10000;
 
 // Merge new ops into existing journal by rowIdx+col instead of replacing whole
 // rows. The old `filter(rowIdx)+push` pattern dropped `status` when a later
@@ -465,6 +466,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   openFile: async (id) => {
     const seq = ++openSeq;
     pendingAutoTriggerRow = null;
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; persistTimerFileId = null; }
     set({ status: "loading", adminMode: false, adminOwnerId: null, pendingAutoCheck: false });
     try {
       const [full, crossDups] = await Promise.all([
@@ -527,6 +529,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   closeFile: async () => {
     openSeq++;
     pendingAutoTriggerRow = null;
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; persistTimerFileId = null; }
     set({ pendingAutoCheck: false });
     const st = get();
     if (st.selectedCell && (st.qebOpen || st.inlineEdit)) {
@@ -577,6 +580,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   openFileAdmin: async (id, ownerId) => {
     const seq = ++openSeq;
     pendingAutoTriggerRow = null;
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; persistTimerFileId = null; }
     set({ status: "loading", adminMode: true, adminOwnerId: ownerId, pendingAutoCheck: false });
     try {
       const [f, rowsRes, logsRes, undoData] = await Promise.all([
@@ -640,16 +644,17 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   refreshSheet: async () => {
     const fileId = get().fileId;
     if (!fileId) return;
-    if (get().isDirty) return;
+    if (get().isDirty || get().changeJournal.length || get().dirtyStructural) return;
+    const rowsBefore = get().rows;
     try {
       const rowsRes = get().adminMode
         ? await api.adminFileRows(fileId)
         : await api.getRows(fileId);
       if (fileId !== get().fileId) return;
-      // A local edit (bubble save / commitCell) landed while the fetch was in
-      // flight — applying the stale snapshot would wipe it. Keep the local rows
-      // and let the next clean cycle refresh instead.
-      if (get().isDirty) return;
+      // A local edit landed while the fetch was in flight — applying the stale
+      // snapshot would wipe it. Bail if dirty or rows identity changed.
+      if (get().isDirty || get().changeJournal.length || get().dirtyStructural) return;
+      if (get().rows !== rowsBefore) return;
       const columns = get().columns;
       const rows: Row[] = [...(rowsRes ?? [])];
       while (rows.length < 100) rows.push(makeEmptyRow(columns));
@@ -711,7 +716,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       { rowIdx, cols: { ...prevCols, ...journalCols } },
     ];
     if (changeJournal.length > MAX_JOURNAL) {
-      changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
+      // journal overflow: force a flush first instead of silently dropping oldest ops
+      toast("Syncing changes… journal full, flushing");
+      void get().flushPersist();
     }
     set({
       rows: newRows,
@@ -742,9 +749,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   },
 
   persist: (action) => {
+    const fileId = get().fileId;
     if (persistTimer) clearTimeout(persistTimer);
+    persistTimerFileId = fileId;
     persistTimer = setTimeout(() => {
       persistTimer = null;
+      // stale timer from a previous file must not flush into the new file
+      if (persistTimerFileId !== get().fileId) return;
       void get().flushPersist(action);
     }, action ? 0 : 300);
   },
@@ -800,7 +811,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
             toast(errMsg.split("—").slice(1).join("—").trim() || "Change rejected — rows on hold are locked");
             return;
           }
-          // swallow — old app is fire-and-forget
+          toast("Sync failed — will retry: " + errMsg.slice(0, 120));
+          return;
         }
         const cur = get();
         if (cur.fileId === s.fileId && cur.rows === s.rows) {
@@ -859,27 +871,25 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
               const freshCols = fileColumns(f);
               const rows: Row[] = [...(fresh.rows ?? [])];
               while (rows.length < 100) rows.push(makeEmptyRow(freshCols));
-              s.changeJournal.forEach((op) => {
+              const liveJournal = get().changeJournal.length ? get().changeJournal : s.changeJournal;
+              liveJournal.forEach((op) => {
                 const row = rows[op.rowIdx];
                 if (!row) return;
                 rows[op.rowIdx] = { ...row, ...op.cols };
               });
               set({
                 rows,
-                changeJournal: s.changeJournal,
+                changeJournal: liveJournal,
                 lastSeq: fresh.seq ?? s.lastSeq,
-                undoStack: (fresh.undo ?? []) as UndoEntry[],
-                redoStack: (fresh.redo ?? []) as UndoEntry[],
-                apiLogs: fresh.logs ?? [],
-                logBase: fresh.logs?.length ?? 0,
-                undoBase: fresh.undo?.length ?? 0,
-                redoBase: fresh.redo?.length ?? 0,
                 isDirty: true,
                 ...recomputeMarks(rows, cur.crossDups, cur.columns),
               });
             } catch {
-              // swallow — keep journal for the next flush attempt
+              toast("Sync conflict — will retry");
             }
+          } else {
+            toast("Sync failed — will retry: " + errMsg.slice(0, 120));
+          }
           }
         }
       }
@@ -1651,14 +1661,15 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         const hit = changedByRow.get(i);
         return hit ? { ...r, ...hit.cols } : r;
       });
-      const changeJournal = mergeJournal(s.changeJournal, changed);
+      const changeJournal = mergeJournal(get().changeJournal, changed);
       if (changeJournal.length > MAX_JOURNAL) {
-        changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
+        toast("Too many unsynced edits — syncing now, please wait");
+        void get().flushPersist();
       }
       set({
         rows: finalRows,
         apiLogs,
-        changeJournal,
+        changeJournal: changeJournal.slice(-MAX_JOURNAL),
         isDirty: true,
         checkRunning: false,
         ...recomputeMarks(finalRows, s.crossDups, s.columns),
@@ -1813,9 +1824,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           }
         });
         if (changed.length === 0) return;
-        const changeJournal = mergeJournal(s.changeJournal, changed);
-        if (changeJournal.length > MAX_JOURNAL) changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
-        set({ rows: finalRows, changeJournal, isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
+        const changeJournal = mergeJournal(get().changeJournal, changed);
+        if (changeJournal.length > MAX_JOURNAL) toast("Too many unsynced edits — syncing now");
+        set({ rows: finalRows, changeJournal: changeJournal.slice(-MAX_JOURNAL), isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
         get().persist();
         return;
       }
@@ -1959,9 +1970,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       }
     });
     if (changed.length === 0) return;
-    const changeJournal = mergeJournal(s.changeJournal, changed);
-    if (changeJournal.length > MAX_JOURNAL) changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
-    set({ rows: finalRows, changeJournal, isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
+    const changeJournal = mergeJournal(get().changeJournal, changed);
+    if (changeJournal.length > MAX_JOURNAL) toast("Too many unsynced edits — syncing now");
+    set({ rows: finalRows, changeJournal: changeJournal.slice(-MAX_JOURNAL), isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
     get().persist();
   },
 
@@ -2373,9 +2384,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (!json) delete (newRows[rowIdx] as Record<string, unknown>)._cellStyles;
     const undoStack = [...s.undoStack, { rowIdx, colKey: "_cellStyles", prevVal } as CellDelta];
     if (undoStack.length > 100) undoStack.shift();
-    const changeJournal = mergeJournal(s.changeJournal, [{ rowIdx, cols: { _cellStyles: json } as Record<string, string> }]);
-    if (changeJournal.length > MAX_JOURNAL) changeJournal.splice(0, changeJournal.length - MAX_JOURNAL);
-    set({ rows: newRows, isDirty: true, changeJournal, undoStack, redoStack: [] });
+    const changeJournal = mergeJournal(get().changeJournal, [{ rowIdx, cols: { _cellStyles: json } as Record<string, string> }]);
+    if (changeJournal.length > MAX_JOURNAL) toast("Too many unsynced edits — syncing now");
+    set({ rows: newRows, isDirty: true, changeJournal: changeJournal.slice(-MAX_JOURNAL), undoStack, redoStack: [] });
     get().persist();
   },
 }));

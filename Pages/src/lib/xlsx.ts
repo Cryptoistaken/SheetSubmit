@@ -147,16 +147,17 @@ function arrBufToDataUrl(buf: ArrayBuffer, mime: string): string {
 
 /** Trigger a browser/Android download of a server blob (pool downloads). */
 export function triggerBlobDownload(blob: Blob, filename: string): void {
+  const safe = filename.replace(/["\r\n;\\]/g, "_").replace(/\.\.+/g, "_").slice(0, 128) || "download.xlsx";
   const w = window as unknown as { Android?: { download?: (name: string, data: string) => void } };
   if (typeof w.Android?.download === "function") {
     const reader = new FileReader();
-    reader.onload = () => w.Android!.download!(filename, String(reader.result));
+    reader.onload = () => w.Android!.download!(safe, String(reader.result));
     reader.readAsDataURL(blob);
     return;
   }
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  a.href = url; a.download = safe; document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
@@ -167,7 +168,8 @@ export async function downloadXlsx(
 ): Promise<void> {
   const buf = await buildXlsx(rows, columns);
   const mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  const name = (fileName || "export") + ".xlsx";
+  const base = String(fileName || "export").split(/[\\/]/).pop()!.replace(/["\r\n;\\]/g, "_").slice(0, 100) || "export";
+  const name = base + ".xlsx";
   if (isNativeWebView()) {
     (window as unknown as { Android: { download: (n: string, d: string) => void } })
       .Android.download(name, arrBufToDataUrl(buf, mime));

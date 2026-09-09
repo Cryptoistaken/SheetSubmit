@@ -86,7 +86,11 @@ export default function Topbar() {
   }, [user?.photoUrl]);
 
   useEffect(() => {
-    api.getWallet().then((w) => setBalance(w.balance)).catch(() => {});
+    let cancelled = false;
+    const last = Number(sessionStorage.getItem("ss_wallet_ts") || 0);
+    if (Date.now() - last < 60000) return;
+    api.getWallet().then((w) => { if (!cancelled) { setBalance(w.balance); sessionStorage.setItem("ss_wallet_ts", String(Date.now())); } }).catch(() => {});
+    return () => { cancelled = true; };
   }, [location.pathname]);
 
   if (!user) return null;
@@ -126,7 +130,7 @@ export default function Topbar() {
   const logout = () => {
     api
       .logout()
-      .then(() => { window.location.href = "/login"; })
+      .then(() => { localStorage.removeItem("ss_had_session"); localStorage.removeItem("ss_auth_user"); sessionStorage.removeItem("ss_wallet_ts"); window.location.href = "/login"; })
       .catch(() => showToast("Could not log out. Try again."));
   };
 

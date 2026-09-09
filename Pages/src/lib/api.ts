@@ -22,7 +22,9 @@ const BASE = RUNTIME_BASE + "/api";
 
 export type ConnStatus = "connecting" | "ok" | "err";
 export const useConnStore = create<{ status: ConnStatus }>()(() => ({ status: "connecting" }));
-function markConn(res: Response) { useConnStore.setState({ status: "ok" }); return res; }
+function markConn(res: Response) { useConnStore.setState({ status: res.ok ? "ok" : "err" }); return res; }
+function isNotFound(e: unknown) { return e instanceof Error && /^\s*404[\s—\-:]/.test(e.message); }
+function sanitizeDownloadName(name: string) { return name.replace(/["\r\n;\\]/g, "_").replace(/\.\.+/g, "_").slice(0, 128) || "download.xlsx"; }
 
 export function normalizeUser(raw: any): User {
   const parts = String(raw?.name || "").split(" ").filter(Boolean);
@@ -55,26 +57,30 @@ async function requestBlob(path: string): Promise<Blob> {
   return res.blob();
 }
 
-async function request<T>(path: string, init?: RequestInit, opts?: { keepalive?: boolean }): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, opts?: { keepalive?: boolean; timeoutMs?: number }): Promise<T> {
   const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error("timeout")), opts?.timeoutMs ?? 30000);
   let res: Response;
   try {
+    const hasBody = init?.body !== undefined;
     res = await fetch(BASE + path, {
       ...init,
       keepalive: opts?.keepalive,
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...init?.headers },
-      signal: controller.signal,
+      headers: { ...(hasBody ? { "Content-Type": "application/json" } : {}), ...init?.headers },
+      signal: init?.signal ?? controller.signal,
     }).then(markConn);
   } catch (e) {
     useConnStore.setState({ status: "err" });
     throw e;
+  } finally {
+    clearTimeout(timeout);
   }
   if (!res.ok) {
     let detail = "";
     try {
       const body = await res.json();
-      detail = body?.error ?? JSON.stringify(body);
+      detail = typeof body?.error === "string" ? body.error : (body?.message ?? JSON.stringify(body));
     } catch {
       detail = await res.text().catch(() => "");
     }
@@ -309,7 +315,7 @@ export const api = {
     try {
       return await request<PoolDetail>(`/pools/${enc(password)}/${enc(poolId)}`);
     } catch (e) {
-      if (password === "dgddigital" && String(e).includes("404")) {
+      if (password === "dgddigital" && isNotFound(e)) {
         return request<PoolDetail>(`/pools/${enc(poolId)}`);
       }
       throw e;
@@ -325,7 +331,7 @@ export const api = {
     try {
       return await request<PoolRowsResult>(`/pools/${enc(password)}/${enc(poolId)}/rows${qs}`);
     } catch (e) {
-      if (password === "dgddigital" && String(e).includes("404")) {
+      if (password === "dgddigital" && isNotFound(e)) {
         return request<PoolRowsResult>(`/pools/${enc(poolId)}/rows${qs}`);
       }
       throw e;
@@ -339,7 +345,7 @@ export const api = {
     try {
       return await request<PoolClaimResult>(`/pools/${enc(password)}/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(payload) });
     } catch (e) {
-      if (password === "dgddigital" && String(e).includes("404")) {
+      if (password === "dgddigital" && isNotFound(e)) {
         return request<PoolClaimResult>(`/pools/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(payload) });
       }
       throw e;
@@ -355,7 +361,7 @@ export const api = {
     try {
       return await request<HoldResult>(`/pools/${enc(password)}/${enc(poolId)}/hold`, { method: "POST", body: JSON.stringify(payload) });
     } catch (e) {
-      if (password === "dgddigital" && String(e).includes("404")) {
+      if (password === "dgddigital" && isNotFound(e)) {
         return request<HoldResult>(`/pools/${enc(poolId)}/hold`, { method: "POST", body: JSON.stringify(payload) });
       }
       throw e;
@@ -371,7 +377,7 @@ export const api = {
     try {
       return await request<PoolUserFilesResult>(`/pools/${enc(password)}/${enc(poolId)}/user-files`);
     } catch (e) {
-      if (password === "dgddigital" && String(e).includes("404")) {
+      if (password === "dgddigital" && isNotFound(e)) {
         return request<PoolUserFilesResult>(`/pools/${enc(poolId)}/user-files`);
       }
       throw e;
@@ -386,7 +392,7 @@ export const api = {
     const q = new URLSearchParams();
     if (opts?.srcUid) q.set("srcUid", opts.srcUid);
     if (opts?.srcFileId) q.set("srcFileId", opts.srcFileId);
-    if (opts?.name) q.set("name", opts.name);
+    if (opts?.name) q.set("name", sanitizeDownloadName(opts.name));
     const qs = q.toString() ? `?${q}` : "";
     return requestBlob(`/pools/downloads/${encodeURIComponent(id)}${qs}`);
   },

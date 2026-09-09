@@ -110,9 +110,10 @@ export default function PoolsView() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [holdsError, setHoldsError] = useState(false);
   const [nowTick, setNowTick] = useState(Date.now());
+  void nowTick;
   useEffect(() => {
     if (view !== "approvals") return;
-    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    const t = setInterval(() => setNowTick(Date.now()), 5000);
     return () => clearInterval(t);
   }, [view]);
 
@@ -143,15 +144,16 @@ export default function PoolsView() {
   const load = useCallback(async () => {
     setLoadFailed(false);
     try {
-      const [ps, d] = await Promise.all([api.getPools(), api.getPoolDetail(curPwd, cur)]);
+      const [ps, d, uf] = await Promise.all([
+        api.getPools(),
+        api.getPoolDetail(curPwd, cur),
+        api.getUserFiles(curPwd, cur).catch(() => ({ users: [] }) as unknown as { users: [] }),
+      ]);
       const list = (ps as { pools: PoolSummary[] }).pools ?? (ps as unknown as PoolSummary[]);
       setPools(list);
       setDetail(d);
       try { useProfileCache.getState().setProfiles(d.users as unknown[]); } catch {}
-      try {
-        const uf = await api.getUserFiles(curPwd, cur);
-        setUserFiles(uf.users);
-       } catch { setUserFiles([]); }
+      setUserFiles((uf as { users: never[] }).users ?? []);
     } catch { setLoadFailed(true); showToast("Could not load pools. Check your connection."); }
   }, [cur, curPwd, showToast]);
 
@@ -169,8 +171,7 @@ export default function PoolsView() {
     if (!holdParam || !holds) return;
     const h = holds.find((x) => x.id === holdParam);
     if (h && apprOpenId !== h.id) toggleApproval(h);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [holdParam, holds]);
+  }, [holdParam, holds, apprOpenId]);
 
   useEffect(() => {
     if (cur !== "page") { setVerified(null); return; }
@@ -294,9 +295,12 @@ export default function PoolsView() {
     if (!apprSel.length) return;
     setBulkBusy(true);
     try {
-      await Promise.all(apprSel.map((id) => (action === "approve" ? api.approveHold(id) : api.returnHold(id))));
+      const results = await Promise.allSettled(apprSel.map((id) => (action === "approve" ? api.approveHold(id) : api.returnHold(id))));
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const fail = results.length - ok;
       vibrate(20);
-      showToast(`${action === "approve" ? "Approved" : "Returned"} ${apprSel.length} hold${apprSel.length > 1 ? "s" : ""}`);
+      if (fail) showToast(`${action === "approve" ? "Approved" : "Returned"} ${ok}/${results.length} — ${fail} failed, retry them`);
+      else showToast(`${action === "approve" ? "Approved" : "Returned"} ${ok} hold${ok > 1 ? "s" : ""}`);
       setApprSel([]);
       await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); await loadHolds(); } finally { setBulkBusy(false); }
@@ -327,8 +331,16 @@ export default function PoolsView() {
     try {
       const hold = holds?.find((item) => item.id === id)
       if (String(hold?.status || "").toUpperCase() === "APPROVED") {
-        await api.revertDownload(id)
-        await api.deleteDownload(id)
+        try {
+          await api.revertDownload(id)
+        } catch (e) { showToast("Could not return rows: " + String(e instanceof Error ? e.message : e)); return; }
+        try {
+          await api.deleteDownload(id)
+        } catch {
+          showToast("Rows returned — record kept (delete failed, retry Delete)");
+          await refreshAll();
+          return;
+        }
         showToast("Approval deleted — rows returned")
       } else {
         await api.rejectHold(id)

@@ -15,7 +15,7 @@ const env: Env = {
   BACKEND_URL: Bun.env.BACKEND_URL || Bun.env.RAILWAY_PUBLIC_DOMAIN,
   FRONTEND_URL: Bun.env.FRONTEND_URL,
   WORKER_URL: Bun.env.WORKER_URL,
-  HITOOLS_CHECK_URL: Bun.env.HITOOLS_CHECK_URL,
+  CHECK_URL: Bun.env.CHECK_URL,
   TELEGRAM_LOGIN_CLIENT_ID: Bun.env.TELEGRAM_LOGIN_CLIENT_ID,
 };
 
@@ -23,7 +23,7 @@ if (!env.DATABASE_URL) throw new Error("DATABASE_URL is required");
 const port = Number(Bun.env.PORT || 3000);
 await bootstrapDatabase();
 startBackgroundTasks(env);
-const server = serve({ port, hostname: "0.0.0.0", fetch: (request) => { startBackgroundTasks(env); return app.fetch(request, env); } });
+const server = serve({ port, hostname: "0.0.0.0", fetch: (request) => app.fetch(request, env) });
 console.log(`SheetSubmit backend listening on 0.0.0.0:${port}`);
 
 let stopping = false;

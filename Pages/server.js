@@ -6,6 +6,7 @@
 // login page again).
 import { readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
+import { timingSafeEqual } from "node:crypto";
 
 const ROOT = join(import.meta.dir, "dist");
 const PORT = Number(process.env.PORT || 80);
@@ -94,7 +95,10 @@ async function handleRedeploy(req) {
   if (!token || !serviceId || !environmentId) {
     return json(503, { ok: false, error: "RAILWAY_TOKEN / RAILWAY_SERVICE_ID / RAILWAY_ENVIRONMENT_ID not set" });
   }
-  if (req.headers.get("authorization") !== "Bearer " + token) {
+  const got = req.headers.get("authorization") || "";
+  const want = "Bearer " + token;
+  const ok = got.length === want.length && (() => { try { return timingSafeEqual(Buffer.from(got), Buffer.from(want)); } catch { return false; } })();
+  if (!ok) {
     return json(401, { ok: false, error: "unauthorized" });
   }
   const res = await fetch(RAILWAY_API, {

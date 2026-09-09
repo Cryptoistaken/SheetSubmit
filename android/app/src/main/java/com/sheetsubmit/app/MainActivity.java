@@ -177,7 +177,11 @@ public class MainActivity extends Activity {
                 popup.setWebViewClient(new WebViewClient() {
                     @Override
                     public boolean shouldOverrideUrlLoading(WebView v, String url) {
-                        v.loadUrl(url);
+                        try {
+                            String host = Uri.parse(url).getHost();
+                            if (host != null && host.equals(Config.APP_HOST)) { v.loadUrl(url); return true; }
+                        } catch (Exception ignored) {}
+                        openExternal(url);
                         return true;
                     }
                 });
@@ -594,7 +598,10 @@ public class MainActivity extends Activity {
     private void saveDownload(final String rawName, final String dataUrl) {
         try {
             if (dataUrl == null || dataUrl.indexOf(',') < 0) return;
+            // cap at ~50MB base64 (~37MB binary) to prevent JS disk-fill
+            if (dataUrl.length() > 70_000_000) { Toast.makeText(MainActivity.this, "Download too large (max ~37MB)", Toast.LENGTH_LONG).show(); return; }
             String meta = dataUrl.substring(0, dataUrl.indexOf(','));
+            if (!meta.startsWith("data:")) return;
             String b64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
             byte[] bytes = Base64.decode(b64, Base64.DEFAULT);
             final String name = sanitizeFileName(rawName);

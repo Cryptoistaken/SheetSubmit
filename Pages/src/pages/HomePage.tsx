@@ -187,7 +187,13 @@ export default function HomePage() {
   };
 
   const downloadFile = async (f: SheetFile) => {
-    const rows = await api.getRows(f.id);
+    let rows;
+    try {
+      rows = await api.getRows(f.id);
+    } catch {
+      showToast("Could not fetch rows. Check your connection.");
+      return;
+    }
     if (!rows || !rows.length) {
       showToast("No rows to download. Add content first.");
       return;

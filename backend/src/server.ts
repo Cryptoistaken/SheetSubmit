@@ -2,6 +2,7 @@ import { serve } from "bun";
 import { app, startBackgroundTasks } from "./index";
 import type { Env } from "./lib/shared";
 import { bootstrapDatabase, closeDatabase } from "./lib/pg";
+import { closeRedis } from "./lib/redis";
 
 const env: Env = {
   INDEX: "index",
@@ -18,6 +19,7 @@ const env: Env = {
   CHECK_URL: Bun.env.CHECK_URL,
   ALLOW_TEST_AUTH: Bun.env.ALLOW_TEST_AUTH,
   TELEGRAM_LOGIN_CLIENT_ID: Bun.env.TELEGRAM_LOGIN_CLIENT_ID,
+  REDIS_URL: Bun.env.REDIS_URL,
 };
 
 if (!env.DATABASE_URL) throw new Error("DATABASE_URL is required");
@@ -28,6 +30,6 @@ const server = serve({ port, hostname: "0.0.0.0", fetch: (request) => app.fetch(
 console.log(`SheetSubmit backend listening on 0.0.0.0:${port}`);
 
 let stopping = false;
-async function shutdown(signal: string) { if (stopping) return; stopping = true; console.log(`${signal}: shutting down`); server.stop(true); await closeDatabase(); process.exit(0); }
+async function shutdown(signal: string) { if (stopping) return; stopping = true; console.log(`${signal}: shutting down`); server.stop(true); await closeDatabase(); await closeRedis(); process.exit(0); }
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 process.once("SIGINT", () => void shutdown("SIGINT"));

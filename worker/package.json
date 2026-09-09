@@ -6,6 +6,7 @@
     "start": "bun run index.ts"
   },
   "dependencies": {
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "redis": "~6.2.1"
   }
 }

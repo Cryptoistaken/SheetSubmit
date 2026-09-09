@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import type { Row, SheetFile } from "./shared";
+import { redisDel, redisJsonGet, redisJsonGetMany, redisJsonSet } from "./redis";
 
 const db = postgres(Bun.env.DATABASE_URL || "", {
   max: 10,
@@ -90,11 +91,11 @@ async function indexOp(op: string, a: any) {
     case "paymentMethodsSet": { const uid = String(a.uid || ""); if (!uid) throw new Error("uid required"); const methods = a.methods ?? {}; await db`INSERT INTO meta(k,v) VALUES(${`paymentMethods:${uid}`},${j(methods)}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`; return { ok: true }; }
     case "adminUsers": { const rows: any[] = await db`SELECT u.*,COUNT(f.file_id) FILTER (WHERE f.archived=false) AS "fileCount",COUNT(f.file_id) FILTER (WHERE f.archived=true) AS "archivedCount" FROM users u LEFT JOIN file_index f ON f.owner_id=u.user_id GROUP BY u.user_id ORDER BY u.created_at DESC LIMIT 500`; return rows; }
     case "adminUsersSearch": { const q = String(a.q || "").trim().slice(0, 64); if (!q) return db`SELECT u.*,COUNT(f.file_id) FILTER (WHERE f.archived=false) AS "fileCount",COUNT(f.file_id) FILTER (WHERE f.archived=true) AS "archivedCount" FROM users u LEFT JOIN file_index f ON f.owner_id=u.user_id GROUP BY u.user_id ORDER BY u.created_at DESC LIMIT 50`; const like = `%${q}%`; return db`SELECT u.*,COUNT(f.file_id) FILTER (WHERE f.archived=false) AS "fileCount",COUNT(f.file_id) FILTER (WHERE f.archived=true) AS "archivedCount" FROM users u LEFT JOIN file_index f ON f.owner_id=u.user_id WHERE u.user_id ILIKE ${like} OR u.name ILIKE ${like} OR u.username ILIKE ${like} GROUP BY u.user_id ORDER BY u.created_at DESC LIMIT 50`; }
-    case "metaSet": await db`INSERT INTO meta(k,v) VALUES(${a.k},${j(a.v)}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`; return { ok: true };
+    case "metaSet": await db`INSERT INTO meta(k,v) VALUES(${a.k},${j(a.v)}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`; void redisDel(`ss:meta:${a.k}`); return { ok: true };
     case "adminUser": { const rows: any[] = await db`SELECT u.*,COUNT(f.file_id) FILTER (WHERE f.archived=false) AS "fileCount",COUNT(f.file_id) FILTER (WHERE f.archived=true) AS "archivedCount" FROM users u LEFT JOIN file_index f ON f.owner_id=u.user_id WHERE u.user_id=${String(a.id || "")} GROUP BY u.user_id`; return rows[0] || null; }
-    case "metaGet": { const r: any = (await db`SELECT v FROM meta WHERE k=${a.k}`)[0]; return json(r?.v) ?? null; }
-    case "metaGetMany": { const keys = (a.keys || []).slice(0, 1000); if (!keys.length) return {}; const rows: any[] = await db`SELECT k,v FROM meta WHERE k IN ${db(keys)}`; return Object.fromEntries(rows.map((r) => [r.k, json(r.v)])); }
-    case "metaDel": await db`DELETE FROM meta WHERE k=${a.k}`; return { ok: true };
+    case "metaGet": { const k = String(a.k || ""), cached = await redisJsonGet(`ss:meta:${k}`); if (cached !== undefined) return cached; const r: any = (await db`SELECT v FROM meta WHERE k=${k}`)[0]; const value = json(r?.v) ?? null; if (r) void redisJsonSet(`ss:meta:${k}`, value, k.startsWith("wa:") ? 60 : 60); return value; }
+    case "metaGetMany": { const keys: string[] = (Array.isArray(a.keys) ? a.keys : []).slice(0, 1000).map((k: unknown) => String(k)); if (!keys.length) return {}; const cached = await redisJsonGetMany<unknown>(keys.map((k: string) => `ss:meta:${k}`)); const values: [string, unknown | undefined][] = keys.map((k: string, i: number) => [k, cached?.[i]]); const missing = values.filter((entry) => entry[1] === undefined).map((entry) => entry[0]); const rows: any[] = missing.length ? await db`SELECT k,v FROM meta WHERE k IN ${db(missing)}` : []; const out: Record<string, unknown> = {}; for (const [k, value] of values) if (value !== undefined) out[k] = value; for (const r of rows) { out[r.k] = json(r.v); void redisJsonSet(`ss:meta:${r.k}`, out[r.k], 60); } return out; }
+    case "metaDel": await db`DELETE FROM meta WHERE k=${a.k}`; void redisDel(`ss:meta:${a.k}`); return { ok: true };
     case "allFiles": return db`SELECT data,owner_id FROM file_index`;
     case "stats": { const r: any = (await db`SELECT (SELECT COUNT(*) FROM users) AS users,(SELECT COUNT(*) FROM file_index WHERE archived=false) AS files`)[0]; return { totalUsers: Number(r.users), totalFiles: Number(r.files) }; }
     case "session": await db`INSERT INTO sessions(token,user_id,exp) VALUES(${a.token},${a.uid},${a.exp}) ON CONFLICT(token) DO UPDATE SET user_id=EXCLUDED.user_id,exp=EXCLUDED.exp`; return { ok: true };

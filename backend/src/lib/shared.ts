@@ -19,4 +19,5 @@ export interface Env {
   CHECK_URL?: string;
   ALLOW_TEST_AUTH?: string;
   TELEGRAM_LOGIN_CLIENT_ID?: string;
+  REDIS_URL?: string;
 }

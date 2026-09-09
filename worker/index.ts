@@ -4,8 +4,9 @@
 //   2. wa-check            — WhatsApp eligibility for rows without eligible wa_status (writes data.wa_status + wa:{uid}:{cuser} cache)
 //   3. page-check          — FB pages scrape for rows without wa_status (sets eligible + page name + cache)
 // Available pool rows are NOT background-monitored — they are killed by user checks (POST /fb/check → markDead).
-// Env: DATABASE_URL, CHECK_URL, HELD_INTERVAL_MS (10min), WA_INTERVAL_MS (30min), PAGE_INTERVAL_MS (30min)
+// Env: DATABASE_URL, REDIS_URL (optional), CHECK_URL, HELD_INTERVAL_MS (10min), WA_INTERVAL_MS (30min), PAGE_INTERVAL_MS (30min)
 import postgres from "postgres";
+import { closeRedis, redisDel } from "./redis";
 
 if (!Bun.env.DATABASE_URL) throw new Error("DATABASE_URL is required for worker");
 const db = postgres(Bun.env.DATABASE_URL || "", { max: 2, idle_timeout: 20, connect_timeout: 10 });
@@ -90,7 +91,7 @@ async function rowsNeedingCheck(kind: "wa" | "page", limit: number): Promise<Poo
 }
 async function applyResult(r: PoolRowRef, patch: Record<string, unknown>, cache: Record<string, unknown> | null) {
   await db`UPDATE pool_rows SET data=data||${j(patch)}::jsonb WHERE password=${r.password} AND pool_id=${r.pool_id} AND row_key=${r.row_key}`;
-  if (r.src_uid && cache) await db`INSERT INTO meta(k,v) VALUES(${`wa:${r.src_uid}:${r.cuser}`},${j({ ...cache, ts: Date.now() })}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`;
+  if (r.src_uid && cache) { const k = `wa:${r.src_uid}:${r.cuser}`; await db`INSERT INTO meta(k,v) VALUES(${k},${j({ ...cache, ts: Date.now() })}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`; void redisDel(`ss:meta:${k}`); }
 }
 
 async function sweepWa(limit: number) {
@@ -102,7 +103,7 @@ async function sweepWa(limit: number) {
     if (res.banReason) patch.wa_ban_reason = res.banReason;
     if (res.linkedNumber) patch.wa_linked_number = res.linkedNumber;
     await applyResult(r, patch, res.eligible ? { status: "eligible", banReason: res.banReason, error: null } : null);
-    if (!res.eligible && r.src_uid) await db`DELETE FROM meta WHERE k=${`wa:${r.src_uid}:${r.cuser}`}`;
+    if (!res.eligible && r.src_uid) { const k = `wa:${r.src_uid}:${r.cuser}`; await db`DELETE FROM meta WHERE k=${k}`; void redisDel(`ss:meta:${k}`); }
   }
   console.log(`[worker:wa-check] swept ${rows.length} row(s)`);
 }
@@ -151,7 +152,7 @@ Bun.serve({
   },
 });
 for (;;) {
-  if (stopping) { await db.end().catch(() => {}); break; }
+  if (stopping) { await db.end().catch(() => {}); await closeRedis().catch(() => {}); break; }
   // single-leader: only one replica sweeps at a time; losers skip the tick
   let leader = false;
   try {

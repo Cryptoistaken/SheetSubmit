@@ -435,7 +435,14 @@ export const api = {
   },
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   botInfo: () => request<{ username: string }>("/bot/info"),
-  telegramConfig: () => request<{ clientId: string }>("/auth/telegram/config"),
+  // ponytail: login-critical — if the direct call fails (edge-cache poisoning, CORS
+  // hiccup), fall back to the same-origin proxy instead of a dead login button
+  telegramConfig: () => request<{ clientId: string }>("/auth/telegram/config").catch(() =>
+    fetch("/api/auth/telegram/config", { credentials: "include" }).then((res) => {
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      return res.json() as Promise<{ clientId: string }>;
+    }),
+  ),
   verifyTelegramLogin: (id_token: string) =>
     request<{ ok: boolean }>("/auth/telegram/verify", { method: "POST", body: JSON.stringify({ id_token }) }),
   claimDeviceSession: (token: string) =>

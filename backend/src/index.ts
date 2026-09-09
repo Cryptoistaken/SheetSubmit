@@ -37,6 +37,9 @@ app.onError((err, c) => {
 app.notFound((c) => c.json({ error: "not found" }, 404));
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
+  // ponytail: unconditional — an Origin-less first hit gets edge-cached; without
+  // Vary: Origin every later browser gets the ACAO-less copy → CORS failures
+  c.header("Vary", "Origin");
   const allowed = [c.env.FRONTEND_URL, "https://sheetsubmit.pages.dev", "http://localhost:5173", "http://127.0.0.1:5173"].filter(Boolean) as string[];
   if (origin && allowed.includes(origin)) {
     c.header("Access-Control-Allow-Origin", origin);

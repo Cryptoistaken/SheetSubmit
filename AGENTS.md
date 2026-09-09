@@ -24,7 +24,7 @@
     ci.yml                # backend/Pages/worker typecheck+lint+test on push/PR
   backend/                # Railway Hono/Bun service backed by Postgres; src/server.ts is the HTTP entrypoint; railway.toml deploy config; .env local-only template; optional REDIS_URL enables safe read-through caching
                         #   PERFORMANCE.md — 62-entry inventory covering 64 handlers + per-API perf plan (bottleneck → fix → est. speedup), 002_perf.sql migration sketch, rollout order
-  worker/                 # Railway background worker service (Bun + postgres.js + standard redis client + Postgres, self-contained; Root Directory=worker in dashboard, railway.toml deploy config w/ /health check, single replica). Set optional REDIS_URL alongside DATABASE_URL. Jobs on own intervals (30s tick, single-leader advisory lock):
+  worker/                 # Railway background worker service (Bun + postgres.js + standard redis client + Postgres, self-contained; Root Directory=worker in dashboard, railway.toml deploy config w/ /health check, single replica). Set optional REDIS_URL alongside DATABASE_URL. /health listens on $PORT and fixed :3000 (backend dials worker.railway.internal:3000), hostname 0.0.0.0. Jobs on own intervals (30s tick, single-leader advisory lock):
                         #   held-uid-check first (pending-approval monitoring: dead UIDs → pool_rows.state='dead', default 10min; NO background check of available rows — they die via user checks, see wa.ts markDead),
                         #   page-check + wa-check (eligibility sweeps → data.wa_status + wa:{src_uid}:{cuser} meta cache, 30min). Env: DATABASE_URL, CHECK_URL, *_INTERVAL_MS, UID_BATCH, CHECK_BATCH, WORKER_TOKEN (gates /health error detail); .env template
                         #   + HTTP GET /health (port 3000): {ok, startedAt, uptimeMs, jobs:[{name, everyMs, lastRunAt, lastRunAgoMs, lastError}]} — backend proxies it at GET /api/worker/health
@@ -33,7 +33,7 @@
   backend/scripts/schema.ts # DB bootstrap/verify (bun scripts/schema.ts bootstrap|verify)
   test/                   # test fixture xlsx files (2fa.xlsx, cookie.xlsx, Page.xlsx)
   Pages/e2e/              # Playwright browser tests (auth.ts cookie-injection login, smoke.spec.ts) — `bun run test:e2e`, needs backend ALLOW_TEST_AUTH=1 + test DB, never prod; CI e2e job in .github/workflows/ci.yml
-  agent/                  # dev debugging tools (call.ts authed caller, health.ts backend+worker sweep) — secrets from gitignored agent/.env (AGENT_TOKEN + BACKEND_URL), real env overrides; never commit tokens
+  agent/                  # dev debugging tools (call.ts authed caller, health.ts backend+worker sweep, timing.ts dual-origin latency sweep) — secrets from gitignored agent/.env (AGENT_TOKEN + BACKEND_URL + FRONT_URL + SS_SESSION), real env overrides; never commit tokens
 ```
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)

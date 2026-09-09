@@ -136,21 +136,23 @@ const startedAt = Date.now();
 let stopping = false;
 process.once("SIGTERM", () => { stopping = true; console.log("[worker] SIGTERM — finishing current tick"); });
 process.once("SIGINT", () => { stopping = true; console.log("[worker] SIGINT — finishing current tick"); });
-Bun.serve({
-  port: Number(Bun.env.PORT) || 3000,
-  fetch: (req) => {
-    const url = new URL(req.url);
-    if (url.pathname !== "/health") return new Response("not found", { status: 404 });
-    const token = Bun.env.WORKER_TOKEN;
-    const detailed = !token || req.headers.get("authorization") === `Bearer ${token}`;
-    return Response.json({
-      ok: true,
-      startedAt,
-      uptimeMs: Date.now() - startedAt,
-      jobs: JOBS.map((jn) => ({ name: jn.name, everyMs: jn.every, lastRunAt: last.get(jn.name) ?? null, lastRunAgoMs: last.has(jn.name) ? Date.now() - (last.get(jn.name) as number) : null, lastError: detailed ? (lastError.get(jn.name) ?? null) : undefined })),
-    });
-  },
-});
+// ponytail: Railway sets a dynamic $PORT, but the backend dials worker.railway.internal:3000 —
+// serve both so neither side needs to know the other's port. 0.0.0.0 or private-net dials fail.
+const healthFetch = (req: Request) => {
+  const url = new URL(req.url);
+  if (url.pathname !== "/health") return new Response("not found", { status: 404 });
+  const token = Bun.env.WORKER_TOKEN;
+  const detailed = !token || req.headers.get("authorization") === `Bearer ${token}`;
+  return Response.json({
+    ok: true,
+    startedAt,
+    uptimeMs: Date.now() - startedAt,
+    jobs: JOBS.map((jn) => ({ name: jn.name, everyMs: jn.every, lastRunAt: last.get(jn.name) ?? null, lastRunAgoMs: last.has(jn.name) ? Date.now() - (last.get(jn.name) as number) : null, lastError: detailed ? (lastError.get(jn.name) ?? null) : undefined })),
+  });
+};
+const publicPort = Number(Bun.env.PORT) || 3000;
+Bun.serve({ port: publicPort, hostname: "0.0.0.0", fetch: healthFetch });
+if (publicPort !== 3000) Bun.serve({ port: 3000, hostname: "0.0.0.0", fetch: healthFetch });
 for (;;) {
   if (stopping) { await db.end().catch(() => {}); await closeRedis().catch(() => {}); break; }
   // single-leader: only one replica sweeps at a time; losers skip the tick

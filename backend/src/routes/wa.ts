@@ -78,6 +78,6 @@ wa.get("/wa/cache", async (c) => {
     if (!v || v.status !== "eligible" || (v.ts && Date.now() - v.ts > WA_TTL)) { if (v) stale.push(u); continue; }
     cache[u] = { status: v.status ?? null, banReason: v.banReason ?? null, error: v.error ?? null, pageName: v.pageName ?? null, linkedNumber: v.linkedNumber ?? null, ts: v.ts ?? null };
   }
-  await Promise.all(stale.map((u) => waCacheDel(c.env, uid, u)));
+  if (stale.length) await rpc(c.env.INDEX, "global", "metaDelMany", { keys: stale.map((u) => waCacheKey(uid, u)) }).catch(() => {});
   return c.json({ cache });
 });

@@ -12,27 +12,9 @@ const META: Record<PoolId, { label: string; badge: string; cols: string[]; filen
   cookies_2fa: { label: "2FA", badge: "2FA", cols: ["cookies", "twofakey"], filename: "2fa_pool.xlsx", rule: "cookies + 2FA key" },
   page: { label: "Page", badge: "Page", cols: ["cookies", "twofakey"], filename: "page_pool.xlsx", rule: 'cookies + 2FA + wa_status === "eligible"' },
 };
-const summarize = (rows: any[]) => {
-  const available = rows.filter((r) => r._state === "available").length;
-  const claimedRows = rows.filter((r) => r._state === "claimed");
-  const claimed = claimedRows.length;
-  const m = new Map<string, { available: number; claimed: number }>();
-  for (const r of rows) {
-    const uid = String(r._srcUid || "").trim();
-    if (!uid) continue;
-    const cur = m.get(uid) ?? { available: 0, claimed: 0 };
-    if (r._state === "available") cur.available++;
-    else if (r._state === "claimed") cur.claimed++;
-    m.set(uid, cur);
-  }
-  const users = [...m.entries()].map(([userId, c]) => ({ userId, displayName: userId, username: null, photoUrl: null, firstName: null, lastName: null, isAdmin: false, available: c.available, claimed: c.claimed }));
-  return { available, claimed, users };
-};
 const isPool = (v: string): v is PoolId => (POOL_IDS as readonly string[]).includes(v);
-const detailRows = async (c: any, password: string, pool: string) => rpc(c.env.POOLS, password, "detail", { pool }) as Promise<any[]>;
 
 pools.use("/*", requireAuth);
-const DL_PASSWORDS = ["dgddigital", "L0VE@12345"];
 const dlMeta = (m: any) => ({
   id: m.id,
   at: m.ts,
@@ -52,86 +34,64 @@ const dlMeta = (m: any) => ({
   srcFileIds: m.srcFileIds ?? (m.src_file_ids ? (typeof m.src_file_ids === "string" ? JSON.parse(m.src_file_ids) : m.src_file_ids) : null),
   selection: m.selection ?? (m.selection ? (typeof m.selection === "string" ? JSON.parse(m.selection) : m.selection) : null),
 });
-const findDownload = async (c: any, id: string) => {
-  const results = await Promise.all(DL_PASSWORDS.map((pwd) => rpc(c.env.POOLS, pwd, "download", { id }).catch(() => null) as any));
-  for (let i = 0; i < results.length; i++) if (results[i]) return { ...results[i], password: DL_PASSWORDS[i] };
-  return null;
-};
-const findHold = async (c: any, id: string) => {
-  const results = await Promise.all(DL_PASSWORDS.map((pwd) => rpc(c.env.POOLS, pwd, "download", { id }).catch(() => null) as any));
-  for (let i = 0; i < results.length; i++) if (results[i]) return { ...results[i], password: DL_PASSWORDS[i] };
-  return null;
-};
+// ponytail: downloads.id is a global PK — one lookup, no password probing
+const findRecord = async (c: any, id: string) => rpc(c.env.POOLS, "global", "downloadAny", { id }).catch(() => null) as any;
 
 // holds listing must be before /:password handlers
 pools.get("/holds", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const status = c.req.query("status");
   if (status && status.length > 32) return c.json({ error: "invalid status" }, 400);
-  const results = await Promise.all(DL_PASSWORDS.map((pwd) => rpc(c.env.POOLS, pwd, "holds", { status: status || null }).catch((e: any) => { console.error("holds fetch failed", pwd, e?.message ?? e); return { holds: [] }; }) as any));
-  const all = results.flatMap((r, i) => {
-    const arr = r.holds || r.downloads || [];
-    return arr.map((d: any) => ({ ...dlMeta({ ...d, password: DL_PASSWORDS[i] }), password: DL_PASSWORDS[i], held: d.claimed ?? d.held ?? 0 }));
-  });
-  all.sort((a: any, b: any) => (b.at ?? 0) - (a.at ?? 0));
-  // if status filter provided, already filtered in DO; if no filter, keep only HOLDs (DO returns HOLDs)
+  const r: any = await rpc(c.env.POOLS, "global", "holdsAll", { status: status || null }).catch((e: any) => { console.error("holds fetch failed", e?.message ?? e); return { holds: [] }; });
+  const all = (r.holds || r.downloads || []).map((d: any) => ({ ...dlMeta(d), held: d.claimed ?? d.held ?? 0 }));
+  // if status filter provided, already filtered in SQL; if no filter, keep only HOLDs (SQL returns HOLDs)
   return c.json(all.slice(0, 50));
 });
 pools.post("/holds/:id/approve", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const id = c.req.param("id");
   if (!id || id.length > 128) return c.json({ error: "invalid id" }, 400);
-  // find password
-  let lastErr: any = null;
-  for (const pwd of DL_PASSWORDS) {
-    const r: any = await rpc(c.env.POOLS, pwd, "holdApprove", { id, uid: c.get("uid") }).catch((e: any) => ({ _err: String(e?.message ?? e) }));
-    if (r && r._err) { lastErr = r; continue; }
-    if (r && r.error) {
-      if (r.error === "not found") continue;
-      return c.json({ error: r.error }, r.error === "not found" ? 404 : 400);
-    }
-    if (r && r.ok) return c.json(r);
-    lastErr = r;
-  }
-  if (lastErr && lastErr.error === "not found") return c.json({ error: "not found" }, 404);
-  return c.json({ error: "not found" }, 404);
+  const d = await findRecord(c, id);
+  if (!d) return c.json({ error: "not found" }, 404);
+  try {
+    const r: any = await rpc(c.env.POOLS, d.password, "holdApprove", { id, uid: c.get("uid") });
+    if (r?.error) return c.json({ error: r.error }, r.error === "not found" ? 404 : 400);
+    return c.json(r);
+  } catch (e) { const m = String((e as Error)?.message || ""); return c.json({ error: m || "not found" }, m === "not found" ? 404 : 400); }
 });
 const handleReject = async (c: any) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const id = c.req.param("id");
   if (!id || id.length > 128) return c.json({ error: "invalid id" }, 400);
-  for (const pwd of DL_PASSWORDS) {
-    const r: any = await rpc(c.env.POOLS, pwd, "holdReject", { id, uid: c.get("uid") }).catch((e: any) => ({ _err: String(e?.message ?? e) }));
-    if (r && r._err) continue;
-    if (r && r.error) {
-      if (r.error === "not found") continue;
-      return c.json({ error: r.error }, r.error === "not found" ? 404 : 400);
-    }
-    if (r && r.ok) return c.json(r);
-  }
-  return c.json({ error: "not found" }, 404);
+  const d = await findRecord(c, id);
+  if (!d) return c.json({ error: "not found" }, 404);
+  try {
+    const r: any = await rpc(c.env.POOLS, d.password, "holdReject", { id, uid: c.get("uid") });
+    if (r?.error) return c.json({ error: r.error }, r.error === "not found" ? 404 : 400);
+    return c.json(r);
+  } catch (e) { const m = String((e as Error)?.message || ""); return c.json({ error: m || "not found" }, m === "not found" ? 404 : 400); }
 };
 pools.post("/holds/:id/reject", handleReject);
 pools.post("/holds/:id/return", handleReject);
 
-pools.get("/downloads", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const results = await Promise.all(DL_PASSWORDS.map((pwd) => rpc(c.env.POOLS, pwd, "downloads").catch((e: any) => { console.error("downloads fetch failed", pwd, e?.message ?? e); return { downloads: [] }; }))); const all = results.flatMap((r, i) => (r.downloads || []).map((d: any) => dlMeta({ ...d, password: DL_PASSWORDS[i] }))); all.sort((a, b) => b.at - a.at); return c.json(all.slice(0, 50)); });
+pools.get("/downloads", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const r: any = await rpc(c.env.POOLS, "global", "downloadsAll", {}).catch((e: any) => { console.error("downloads fetch failed", e?.message ?? e); return { downloads: [] }; }); return c.json((r.downloads || []).map(dlMeta).slice(0, 50)); });
 pools.get("/downloads/:id/detail", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const id = c.req.param("id");
   if (!id || id.length > 128) return c.json({ error: "invalid id" }, 400);
-  const d = await findDownload(c, id);
+  const d = await findRecord(c, id);
   if (!d) return c.json({ error: "not found" }, 404);
   const detail: any = await rpc(c.env.POOLS, d.password, "downloadDetail", { id: d.id }).catch(() => null);
   if (!detail) return c.json({ error: "not found" }, 404);
   return c.json({ ...dlMeta({ ...detail, password: d.password }), rows: detail.rows, keys: detail.keys, groups: detail.groups ?? [] });
 });
-  pools.get("/downloads/:id", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findDownload(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); if (c.req.query("format") === "json") return c.json(dlMeta({ ...d, rows: d.rows })); const srcUid = c.req.query("srcUid") || "", srcFileId = c.req.query("srcFileId") || ""; let rows: any[] = d.rows || [], filename = String(d.filename || "download.xlsx"); if (srcUid || srcFileId) { const f: any = await rpc(c.env.POOLS, d.password, "downloadRows", { id: d.id, srcUid: srcUid || null, srcFileId: srcFileId || null }).catch(() => null); if (!f) return c.json({ error: "not found" }, 404); rows = f.rows; filename = String(c.req.query("name") || filename).replace(/["\r\n;\\]/g, "_").slice(0, 128); } else { filename = filename.replace(/["\r\n;\\]/g, "_").slice(0, 128); } const pid = d.poolId as PoolId; const cols = META[pid]?.cols || ["cookies"]; const XLSX = await import("xlsx"); const ws = XLSX.utils.aoa_to_sheet(rows.map((r: any) => cols.map((k) => String(r[k] ?? "")))); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "pool"); const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as unknown as Uint8Array; return new Response(buf as any, { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${filename}"` } }); });
-pools.post("/downloads/:id/revert", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findDownload(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); return c.json(await rpc(c.env.POOLS, d.password, "revertDownload", { id: d.id, uid: c.get("uid") })); });
+  pools.get("/downloads/:id", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findRecord(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); if (c.req.query("format") === "json") return c.json(dlMeta({ ...d, rows: d.rows })); const srcUid = c.req.query("srcUid") || "", srcFileId = c.req.query("srcFileId") || ""; let rows: any[] = d.rows || [], filename = String(d.filename || "download.xlsx"); if (srcUid || srcFileId) { const f: any = await rpc(c.env.POOLS, d.password, "downloadRows", { id: d.id, srcUid: srcUid || null, srcFileId: srcFileId || null }).catch(() => null); if (!f) return c.json({ error: "not found" }, 404); rows = f.rows; filename = String(c.req.query("name") || filename).replace(/["\r\n;\\]/g, "_").slice(0, 128); } else { filename = filename.replace(/["\r\n;\\]/g, "_").slice(0, 128); } const pid = d.poolId as PoolId; const cols = META[pid]?.cols || ["cookies"]; const XLSX = await import("xlsx"); const ws = XLSX.utils.aoa_to_sheet(rows.map((r: any) => cols.map((k) => String(r[k] ?? "")))); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "pool"); const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as unknown as Uint8Array; return new Response(buf as any, { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${filename}"` } }); });
+pools.post("/downloads/:id/revert", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findRecord(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); return c.json(await rpc(c.env.POOLS, d.password, "revertDownload", { id: d.id, uid: c.get("uid") })); });
 pools.delete("/downloads/:id", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const id = c.req.param("id");
   if (!id || id.length > 128) return c.json({ error: "invalid id" }, 400);
-  const d = await findDownload(c, id);
+  const d = await findRecord(c, id);
   if (!d) return c.json({ error: "not found" }, 404);
   let r: any;
   try { r = await rpc(c.env.POOLS, d.password, "downloadDelete", { id: d.id }); }
@@ -144,11 +104,9 @@ pools.delete("/downloads/:id", async (c) => {
 });
 pools.get("/", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
-  const out = await Promise.all(PASSWORDS.flatMap((pwd) => POOL_IDS.map(async (pid) => {
-    const st: any = await rpc(c.env.POOLS, pwd, "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0, invalid: 0 }));
-    return { id: pid, ...META[pid], password: pwd, available: st.available, claimed: st.claimed, users: st.users, invalid: st.invalid ?? 0 };
-  })));
-  return c.json({ pools: out });
+  const all = await rpc(c.env.POOLS, "global", "summaryAll", {}).catch(() => []) as any[];
+  const m = new Map((Array.isArray(all) ? all : []).map((s: any) => [JSON.stringify([s.password, s.pool]), s]));
+  return c.json({ pools: PASSWORDS.flatMap((pwd) => POOL_IDS.map((pid) => { const st: any = m.get(JSON.stringify([pwd, pid])); return { id: pid, ...META[pid], password: pwd, available: st?.available || 0, claimed: st?.claimed || 0, users: st?.users || 0, invalid: st?.invalid ?? 0 }; })) });
 });
 pools.get("/:password/:pool/rows", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
@@ -188,8 +146,8 @@ pools.get("/:password/:pool", async (c) => {
   const pid = c.req.param("pool");
   if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
   const st: any = await rpc(c.env.POOLS, c.req.param("password"), "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0, invalid: 0 }));
-  const rows: any[] = await detailRows(c, c.req.param("password"), pid).catch(() => []) as any; const summ = summarize(rows);
-  return c.json({ pool: { id: pid, ...META[pid] }, password: c.req.param("password"), totals: { available: st.available, claimed: st.claimed, users: summ.users.length, invalid: st.invalid ?? 0 }, users: summ.users });
+  const users: any[] = await rpc(c.env.POOLS, c.req.param("password"), "poolUsers", { pool: pid }).catch(() => []);
+  return c.json({ pool: { id: pid, ...META[pid] }, password: c.req.param("password"), totals: { available: st.available, claimed: st.claimed, users: users.length, invalid: st.invalid ?? 0 }, users });
 });
 pools.post("/:password/:pool/claim", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);

@@ -45,6 +45,8 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 app.use("/api/*", async (c, next) => { const len = Number(c.req.header("Content-Length")); if (Number.isFinite(len) && len > 4_000_000) return c.json({ error: "payload too large" }, 413); return next(); });
+// ponytail: Server-Timing separates backend ms from network ms when diagnosing slow APIs
+app.use("/api/*", async (c, next) => { const t = Date.now(); await next(); c.header("Server-Timing", `app;dur=${Date.now() - t}`); });
 // compress after CORS so Vary: Origin is kept (compress appends Accept-Encoding); xlsx blobs are skipped by hono's compressible-type filter
 app.use("/api/*", compress());
 // ETag/304 only for public, low-churn endpoints — never on authed/user-specific routes

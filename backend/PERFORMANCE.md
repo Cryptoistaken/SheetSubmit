@@ -6,17 +6,6 @@ Estimates below are ranges for the affected payload, not guarantees — verify l
 
 ## Remaining
 
-### R1. `poolOp add` bulk insert (old #3) — biggest one left, no migration needed
-Today: `pg.ts` classifies each row in JS (keep that logic) but issues ~7 statements
-per row (advisory lock, cross-pool DELETE, dead DELETE, rejects DELETE, 2 SELECTs, INSERT-or-UPDATE).
-Fix: preserve `classify()`/`key()`/`liveRow()` in JS, then move the accepted rows into set-based SQL:
-one `DELETE ... WHERE row_key = ANY($)` per cleanup, one bulk `INSERT ... SELECT FROM
-jsonb_to_recordset(...)`, one bulk UPDATE for re-fed available rows, batched `pool_rejects`
-inserts with `ON CONFLICT DO NOTHING`. Hits file create + persist/append feedPools.
-Est. **20–100x** on bulk uploads. Watch: keep the single-pool-membership rule
-(available/held/claimed anywhere blocks; claimed never re-enters) and the advisory-lock
-semantics under concurrency — benchmark parallel uploads before/after.
-
 ### R2. Migration `002_perf.sql` + cross-dups SQL (rest of old #4)
 Done already: pool rows pagination (`rows` op), SQL `verifiedCounts`, SQL key projection
 (`keys`/`dupKeys`), expression indexes `pool_rows_eligible_fifo_idx` + `file_rows_key_idx`,
@@ -71,10 +60,9 @@ regenerate at download) cuts storage/transfer substantially. Chunk large `keys` 
 used with `ANY(...)`.
 
 ## Rollout order (each step independently shippable)
-1. R1 (pool add bulk) — biggest remaining x, contained to `pg.ts`.
-2. R2 migration + cross-dups SQL.
-3. R3 ETag + Pages client change (only step touching `Pages/`).
-4. R4 delete-user bulk, then R5 if storage/transfer ever hurts.
+1. R2 migration + cross-dups SQL.
+2. R3 ETag + Pages client change (only step touching `Pages/`).
+3. R4 delete-user bulk, then R5 if storage/transfer ever hurts.
 
 ## Verify
 - `bun run typecheck` in `backend/`.
@@ -84,6 +72,7 @@ used with `ANY(...)`.
 
 ## Landed (do not re-do)
 | Fix | Where | Live evidence |
+| `poolOp add` bulk ingest (R1): JS classify, one sorted-hash lock sweep, bulk DELETEs (`ANY($)`), one `INSERT ... jsonb_to_recordset`, one bulk UPDATE, batched rejects | `pg.ts` | 5k-row feed pool-ingest 44.2s → 1.2s (**~37x**); 22/22 semantic checks (re-feed noop, held/claimed frozen, dead repooled, claimed-never-reenters, rejects lifecycle); 3× concurrent overlapping 1k feeds → 2000 distinct keys, 0 dupes |
 |---|---|---|
 | claim/hold CTE + `FOR UPDATE SKIP LOCKED` | `allocate()` in `pg.ts` | `/api/pools` 2350ms → 68ms |
 | append deltas + meta-only rename saves, bulk persist | `fileOp` in `pg.ts` | typecheck + review |

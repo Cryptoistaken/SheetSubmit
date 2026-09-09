@@ -170,7 +170,48 @@ async function poolOp(password: string, op: string, a: any) {
   // available/held/claimed anywhere → skip (held/claimed = taken; claimed is never reversible to other pools — sold accounts can never re-enter any pool).
   // dead rows are unconsumed husks — removed on re-feed so the account can be pooled again.
   // an existing AVAILABLE row gets its data refreshed from the newest feed (fresh wa_status/cookie edits); held/claimed stay frozen.
-  if (op === "add") return db.begin(async (tx: any) => { let added = 0; const pp = preset(a.preset ?? a.poolKind ?? a.filePreset ?? a.file?.preset ?? a.file?.poolKind); for (const r of a.rows as Row[]) { const pool = classify(r, pp), k = key(r); if (!pool || !k) { if (!pool && k && (pp === "combo" || pp === "page") && liveRow(r)) await tx`INSERT INTO pool_rejects(password,pool_id,row_key,ts) VALUES(${password},${pp === "combo" ? "cookies_2fa" : "page"},${k},${Date.now()}) ON CONFLICT (password,pool_id,row_key) DO NOTHING`; continue; } await tx`SELECT pg_advisory_xact_lock(hashtext(${k}))`; if (a.srcFileId && pp) await tx`DELETE FROM pool_rows WHERE password=${password} AND pool_id<>${pool} AND row_key=${k} AND src_file_id=${a.srcFileId} AND state='available'`; await tx`DELETE FROM pool_rows WHERE row_key=${k} AND state='dead'`; await tx`DELETE FROM pool_rejects WHERE row_key=${k}`; const exists = await tx`SELECT state FROM pool_rows WHERE password=${password} AND pool_id=${pool} AND row_key=${k}`; const busy = exists.length ? [] : await tx`SELECT 1 FROM pool_rows WHERE row_key=${k} AND state IN ('available','held','claimed') LIMIT 1`; if (!exists.length && !busy.length) { await tx`INSERT INTO pool_rows(password,pool_id,row_key,data,src_uid,src_file_id,inserted_at) VALUES(${password},${pool},${k},${j(r)},${a.srcUid || null},${a.srcFileId || null},${Date.now()})`; added++; } else if (exists[0].state === "available") await tx`UPDATE pool_rows SET data=${j(r)} WHERE password=${password} AND pool_id=${pool} AND row_key=${k}`; } return { added }; });
+  // R1: set-based pool ingest — classify()/key()/liveRow() stay in JS exactly as-is;
+  // one tx with a single sorted-hash lock sweep, bulk DELETEs (row_key = ANY($)),
+  // one bulk INSERT via jsonb_to_recordset, one bulk UPDATE for re-fed available
+  // rows, one batched pool_rejects upsert. Response stays { added }.
+  if (op === "add") return db.begin(async (tx: any) => {
+    const pp = preset(a.preset ?? a.poolKind ?? a.filePreset ?? a.file?.preset ?? a.file?.poolKind);
+    const cand = new Map<string, { pool: Pool; data: Row }>(); // last classifiable row wins per key (was: insert then refresh)
+    const rej = new Map<string, boolean>(); // sequential net effect of the old per-row reject DELETE/INSERT
+    for (const r of a.rows as Row[]) {
+      const pool = classify(r, pp), k = key(r);
+      if (!pool || !k) { if (!pool && k && (pp === "combo" || pp === "page") && liveRow(r)) rej.set(k, true); continue; }
+      cand.set(k, { pool, data: r }); rej.set(k, false);
+    }
+    const keys = [...cand.keys()];
+    const bad = [...rej].filter(([, v]) => v).map(([k]) => k);
+    if (!keys.length && !bad.length) return { added: 0 };
+    const now = Date.now(), srcUid = a.srcUid || null, srcFileId = a.srcFileId || null;
+    if (keys.length) await tx`SELECT pg_advisory_xact_lock(x.h) FROM (SELECT DISTINCT hashtext(u.k) AS h FROM unnest(${keys}::text[]) AS u(k)) x ORDER BY x.h`;
+    if (keys.length && srcFileId && pp) {
+      const byPool = new Map<string, string[]>();
+      for (const [k, v] of cand) (byPool.get(v.pool) || byPool.set(v.pool, []).get(v.pool)!).push(k);
+      for (const [pool, ks] of byPool) await tx`DELETE FROM pool_rows WHERE password=${password} AND pool_id<>${pool} AND row_key = ANY(${ks}) AND src_file_id=${srcFileId} AND state='available'`;
+    }
+    const put: { pool: string; k: string; d: Row }[] = [], touch: typeof put = [];
+    if (keys.length) {
+      await tx`DELETE FROM pool_rows WHERE row_key = ANY(${keys}) AND state='dead'`;
+      await tx`DELETE FROM pool_rejects WHERE row_key = ANY(${keys})`;
+      const same: any[] = await tx`SELECT pool_id,row_key,state FROM pool_rows WHERE password=${password} AND row_key = ANY(${keys})`;
+      const busy: any[] = await tx`SELECT DISTINCT row_key FROM pool_rows WHERE row_key = ANY(${keys}) AND state IN ('available','held','claimed')`;
+      const mine = new Map(same.map((r: any) => [`${r.pool_id} ${r.row_key}`, r.state]));
+      const blocked = new Set(busy.map((r: any) => String(r.row_key)));
+      for (const [k, v] of cand) {
+        const st = mine.get(`${v.pool} ${k}`);
+        if (st) { if (st === "available") touch.push({ pool: v.pool, k, d: v.data }); continue; } // held/claimed stay frozen
+        if (!blocked.has(k)) put.push({ pool: v.pool, k, d: v.data }); // available/held/claimed anywhere blocks
+      }
+      if (put.length) await tx`INSERT INTO pool_rows(password,pool_id,row_key,data,src_uid,src_file_id,inserted_at) SELECT ${password},s.pool,s.k,s.d,${srcUid},${srcFileId},${now} FROM jsonb_to_recordset(${j(put.map((r) => ({ pool: r.pool, k: r.k, d: r.d })))}::jsonb) AS s(pool text,k text,d jsonb)`;
+      if (touch.length) await tx`UPDATE pool_rows p SET data=s.d FROM jsonb_to_recordset(${j(touch.map((r) => ({ pool: r.pool, k: r.k, d: r.d })))}::jsonb) AS s(pool text,k text,d jsonb) WHERE p.password=${password} AND p.pool_id=s.pool AND p.row_key=s.k AND p.state='available'`;
+    }
+    if (bad.length) { const rp = pp === "combo" ? "cookies_2fa" : "page"; await tx`INSERT INTO pool_rejects(password,pool_id,row_key,ts) SELECT ${password},s.pool,s.k,s.ts FROM jsonb_to_recordset(${j(bad.map((k) => ({ pool: rp, k, ts: now })))}::jsonb) AS s(pool text,k text,ts bigint) ON CONFLICT (password,pool_id,row_key) DO NOTHING`; }
+    return { added: put.length };
+  });
   if (op === "counts") { const r: any[] = await db`SELECT pool_id,COUNT(*) n FROM pool_rows WHERE password=${password} AND state='available' GROUP BY pool_id`; return Object.fromEntries(pools.map((x) => [x, Number(r.find((y) => y.pool_id === x)?.n || 0)])); }
   if (op === "summary") { const r: any = (await db`SELECT COUNT(*) FILTER (WHERE state='available') available,COUNT(*) FILTER (WHERE state='claimed') claimed,COUNT(DISTINCT src_uid) users,(SELECT COUNT(*) FROM pool_rejects WHERE password=${password} AND pool_id=${p}) invalid FROM pool_rows WHERE password=${password} AND pool_id=${p}`)[0]; return { available: Number(r.available), claimed: Number(r.claimed), users: Number(r.users), invalid: Number(r.invalid) }; }
   if (op === "detail") return (await db`SELECT row_key,data,state,claimed_by,claimed_at::float8 AS claimed_at,src_uid,src_file_id,inserted_at::float8 AS inserted_at,hold_id FROM pool_rows WHERE password=${password} AND pool_id=${p} ORDER BY inserted_at,row_key LIMIT 5000`).map(rowOut);

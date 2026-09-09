@@ -32,11 +32,12 @@
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev; native Telegram Login SDK uses BotFather client 8667114953 and CI GitHub Maven credentials
   backend/scripts/schema.ts # DB bootstrap/verify (bun scripts/schema.ts bootstrap|verify)
   test/                   # test fixture xlsx files (2fa.xlsx, cookie.xlsx, Page.xlsx)
+  Pages/e2e/              # Playwright browser tests (auth.ts cookie-injection login, smoke.spec.ts) — `bun run test:e2e`, needs backend ALLOW_TEST_AUTH=1 + test DB, never prod; CI e2e job in .github/workflows/ci.yml
 ```
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 2.0.6; bump on any route change, surfaced by /api/health),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.7; bump on any route change, surfaced by /api/health),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   GET /api/worker/health (proxies worker.railway.internal:3000/health — proves worker connectivity from the public URL),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -45,7 +46,7 @@
                       #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS, stores picture+phone),
                       #   GET /api/bot/info, ensureWebhook on first request
                       #   + wallet routes: GET /api/wallet, POST /api/wallet/withdraw, GET /api/wallet/requests, POST /api/wallet/requests/:id/:action
- lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, WORKER_URL, CHECK_URL, TELEGRAM_LOGIN_CLIENT_ID)
+ lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, WORKER_URL, CHECK_URL, ALLOW_TEST_AUTH, TELEGRAM_LOGIN_CLIENT_ID)
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
  src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
@@ -69,6 +70,7 @@ src/routes/admin.ts       # admin stats, users, files and moderation routes
 src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows), /fb/page-check, /fb/wa-check and WA cache routes
                       #   GET /wa/cache?uids= (meta-backed, eligible-only, 24h TTL)
 src/routes/bot.ts         # Telegram webhook and bot routes
+src/routes/testAuth.ts    # TEST-ONLY POST /api/test/login (mints ss_session for Playwright e2e; 404s unless ALLOW_TEST_AUTH=1 — never set on prod)
   railway.toml          # Railway build and deployment configuration
 ```
 

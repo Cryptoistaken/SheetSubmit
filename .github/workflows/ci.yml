@@ -40,3 +40,66 @@ jobs:
       - name: Test web
         working-directory: Pages
         run: bun run test
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sheetsubmit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/sheetsubmit_test
+      SESSION_SECRET: e2e-test-secret
+      ALLOW_TEST_AUTH: "1"
+      ADMIN_IDS: e2e-user
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install Playwright system deps
+        run: bunx --cwd Pages playwright install --with-deps chromium
+      - name: Install backend deps
+        working-directory: backend
+        run: bun install --frozen-lockfile
+      - name: Install web deps
+        working-directory: Pages
+        run: bun install --frozen-lockfile
+      - name: Bootstrap test DB schema
+        working-directory: backend
+        run: bun scripts/schema.ts bootstrap
+      - name: Start backend (test env, never prod)
+        working-directory: backend
+        run: |
+          PORT=3001 FRONTEND_URL=http://127.0.0.1:8080 bun src/server.ts > /tmp/backend.log 2>&1 &
+          echo $! > /tmp/backend.pid
+      - name: Build + serve web (same-origin /api proxy)
+        working-directory: Pages
+        run: |
+          bun run build
+          PORT=8080 BACKEND_URL=http://127.0.0.1:3001 bun server.js > /tmp/web.log 2>&1 &
+          echo $! > /tmp/web.pid
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8080/config.js && break || sleep 2; done
+      - name: Run Playwright e2e
+        working-directory: Pages
+        run: bun run test:e2e
+        env:
+          E2E_BASE_URL: http://127.0.0.1:8080
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: Pages/playwright-report
+      - name: Dump server logs
+        if: failure()
+        run: tail -n 100 /tmp/backend.log /tmp/web.log

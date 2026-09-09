@@ -8,6 +8,7 @@
     "build": "bun run --cwd Pages build",
     "typecheck": "bun run --cwd Pages typecheck && bun run --cwd backend typecheck",
     "test": "bun run --cwd Pages test",
+    "test:e2e": "bun run --cwd Pages test:e2e",
     "test:live": "bun test/test.ts",
     "test:dupcheck": "bun test/dupcheck.ts",
     "test:pipeline": "bun test/pipeline.ts",

@@ -17,5 +17,6 @@ export interface Env {
   FRONTEND_URL?: string;
   WORKER_URL?: string;
   CHECK_URL?: string;
+  ALLOW_TEST_AUTH?: string;
   TELEGRAM_LOGIN_CLIENT_ID?: string;
 }

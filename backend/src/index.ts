@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { compress } from "hono/compress";
 import { etag } from "hono/etag";
 import type { Env } from "./lib/shared";
@@ -18,7 +19,22 @@ import { signSession as signSessionFn } from "./lib/session";
 export const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any backend route change — lets health checks confirm a deploy landed
 export const API_VERSION = "2.0.9";
-app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
+// ponytail: repository errors are plain Errors — map known client failures to typed
+// 4xx JSON instead of masking everything as 500. Unknown (incl. SQL internals) stays masked.
+const CLIENT_ERRORS: [RegExp, ContentfulStatusCode][] = [
+  [/not found|file not found|withdrawal not found/i, 404],
+  [/cannot be deleted|decision is final|version conflict|on hold|locked|already approved|already rejected|insufficient wallet balance/i, 409],
+  [/upstream|service unavailable|jwks unavailable|timed? ?out|fetch failed/i, 502],
+  [/could not |temporarily unavailable/i, 503],
+  [/invalid|required|too many|too large|exclusive|pick mode|verified|already|not a hold|not revertable|expired|unsupported|conflict/i, 400],
+];
+app.onError((err, c) => {
+  const message = String((err as Error)?.message || "").slice(0, 256);
+  console.error(`[api-error] ${c.req.method} ${c.req.path} :: ${message || err}`);
+  for (const [re, status] of CLIENT_ERRORS) if (re.test(message)) return c.json({ error: message }, status);
+  return c.json({ error: "Internal server error" }, 500);
+});
+app.notFound((c) => c.json({ error: "not found" }, 404));
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
   const allowed = [c.env.FRONTEND_URL, "https://sheetsubmit.pages.dev", "http://localhost:5173", "http://127.0.0.1:5173"].filter(Boolean) as string[];

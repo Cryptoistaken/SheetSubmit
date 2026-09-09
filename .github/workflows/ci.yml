@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'Pages/**'
+      - 'worker/**'
+      - 'package.json'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'Pages/**'
+      - 'worker/**'
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install backend deps
+        working-directory: backend
+        run: bun install --frozen-lockfile
+      - name: Install web deps
+        working-directory: Pages
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Lint web
+        working-directory: Pages
+        run: bun run lint
+      - name: Test web
+        working-directory: Pages
+        run: bun run test

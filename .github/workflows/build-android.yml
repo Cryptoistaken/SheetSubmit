@@ -40,7 +40,7 @@ jobs:
             exit 1
           fi
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/android-release.keystore
-          echo "KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "::add-mask::$ANDROID_KEYSTORE_PASSWORD"
           echo "Release keystore decoded"
 
       - name: Build release APK
@@ -50,6 +50,7 @@ jobs:
           VERSION_CODE: ${{ github.run_number }}
           GITHUB_USERNAME: ${{ secrets.TELEGRAM_LOGIN_GITHUB_USERNAME }}
           GITHUB_TOKEN: ${{ secrets.TELEGRAM_LOGIN_GITHUB_TOKEN }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
       - name: Rename APK with version name
         run: |

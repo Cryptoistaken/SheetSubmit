@@ -893,7 +893,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           } else {
             toast("Sync failed — will retry: " + errMsg.slice(0, 120));
           }
-          }
         }
       }
     };

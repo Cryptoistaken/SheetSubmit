@@ -4,10 +4,10 @@ import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
-import { parseStyles, useSheetStore } from "@/stores/sheetStore";
+import { parseStyles, GRID_PAGE, useSheetStore } from "@/stores/sheetStore";
 import { vibrate } from "@/lib/utils";
 import type { ColumnDef, CrossDupEntry } from "@/lib/types";
-import { Check, Phone, TriangleAlert } from "lucide-react";
+import { Check, Phone, Plus, TriangleAlert } from "lucide-react";
 
 interface ApiCall {
   type?: string;
@@ -36,6 +36,19 @@ export default function SheetGrid() {
   const visibleCols = useSheetStore((s) => s.visibleCols);
   const selectionMode = useSheetStore((s) => s.selectionMode);
   const selCols = useSheetStore((s) => s.selCols);
+  const fileId = useSheetStore((s) => s.fileId);
+
+  // Windowed rendering: show GRID_PAGE rows at a time so large sheets don't
+  // mount thousands of <tr>. Row indices match the store (slice from 0).
+  const [visibleCount, setVisibleCount] = useState(GRID_PAGE);
+  useEffect(() => {
+    setVisibleCount(GRID_PAGE);
+  }, [fileId]);
+  useEffect(() => {
+    if (visibleCount > rows.length) setVisibleCount(Math.max(GRID_PAGE, rows.length));
+  }, [rows.length, visibleCount]);
+  const visibleRows = rows.slice(0, visibleCount);
+  const hiddenCount = rows.length - visibleRows.length;
 
   const displayCols = useMemo(
     () => columns.filter((c) => visibleCols.has(c.key)),
@@ -377,9 +390,28 @@ export default function SheetGrid() {
           </tr>
         </thead>
         <tbody role="rowgroup">
-          {rows.map((_, i) => (
+          {visibleRows.map((_, i) => (
             <GridRow key={i} rowIdx={i} displayCols={displayCols} />
           ))}
+          {hiddenCount > 0 && (
+            <tr className="show-more-row" role="row">
+              <td
+                className="rh-add"
+                colSpan={displayCols.length + 2}
+                role="button"
+                tabIndex={0}
+                onClick={() => setVisibleCount((c) => Math.min(c + GRID_PAGE, rows.length))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setVisibleCount((c) => Math.min(c + GRID_PAGE, rows.length));
+                  }
+                }}
+              >
+                <Plus size={14} style={{ display: "inline", verticalAlign: "-2px" }} /> Show more ({hiddenCount} more)
+              </td>
+            </tr>
+          )}
           <tr className="add-row" role="row">
             <td
               className="rh-add"

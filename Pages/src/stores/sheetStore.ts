@@ -409,6 +409,9 @@ let openSeq = 0;
 let structuralCounter = 0;
 let saveChain: Promise<void> = Promise.resolve();
 const MAX_JOURNAL = 10000;
+// Grid caps: at most 500 rows in the sheet buffer, revealed 100 at a time.
+export const MAX_GRID_ROWS = 500;
+export const GRID_PAGE = 100;
 
 // Merge new ops into existing journal by rowIdx+col instead of replacing whole
 // rows. The old `filter(rowIdx)+push` pattern dropped `status` when a later
@@ -1372,12 +1375,18 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   addRow: () => {
     const s = get();
+    const room = MAX_GRID_ROWS - s.rows.length;
+    if (room <= 0) {
+      toast(`Row limit reached (${MAX_GRID_ROWS})`);
+      return;
+    }
+    const n = Math.min(GRID_PAGE, room);
     const rows = s.rows.concat(
-      Array.from({ length: 100 }, () => makeEmptyRow(s.columns)),
+      Array.from({ length: n }, () => makeEmptyRow(s.columns)),
     );
     set({ rows, isDirty: true, dirtyStructural: true, structuralVersion: ++structuralCounter });
     get().persist();
-    toast("100 rows added");
+    toast(n < GRID_PAGE ? `Row limit reached (${MAX_GRID_ROWS})` : `${n} rows added`);
   },
 
   doubleTap: async (rowIdx, colKey) => {
@@ -2017,12 +2026,18 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       toast(`Merged 0 (skipped ${skipped})`);
       return;
     }
+    const room = MAX_GRID_ROWS - s.rows.length;
+    if (room <= 0) {
+      toast(`Row limit reached (${MAX_GRID_ROWS}) — merge skipped`);
+      return;
+    }
+    const fitting = added.slice(0, room);
     const undoStack: UndoEntry[] = [
       ...s.undoStack,
       { type: "rows", prevRows: s.rows.map((r) => ({ ...r })) },
     ];
     if (undoStack.length > 100) undoStack.shift();
-    const rows = s.rows.concat(added);
+    const rows = s.rows.concat(fitting);
     set({
       rows,
       undoStack,
@@ -2034,10 +2049,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     });
     get().persist("merge");
     void refreshCrossDups(s.fileId);
-    if (added.some((r) => r.cookies || r.uid)) {
+    if (fitting.some((r) => r.cookies || r.uid)) {
       get().maybeAutoCheck(null, "cookies");
     }
-    toast(`Merged ${added.length} (skipped ${skipped})`);
+    toast(fitting.length < added.length ? `Merged ${fitting.length} (skipped ${skipped}, limit ${MAX_GRID_ROWS})` : `Merged ${fitting.length} (skipped ${skipped})`);
   },
 
   applyUpload: (mode, incoming) => {
@@ -2052,7 +2067,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     ];
     if (undoStack.length > 100) undoStack.shift();
     if (mode === "replace") {
-      const rows = [...incoming];
+      const capped = incoming.slice(0, MAX_GRID_ROWS);
+      const rows = [...capped];
       while (rows.length < 100) rows.push(makeEmptyRow(s.columns));
       set({
         rows,
@@ -2067,10 +2083,12 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         ...recomputeMarks(rows, s.crossDups, s.columns),
       });
       get().persist("replace");
-      toast(`Replaced with ${incoming.length} rows`);
+      toast(incoming.length > capped.length ? `Replaced with ${capped.length} rows (limit ${MAX_GRID_ROWS})` : `Replaced with ${incoming.length} rows`);
     } else {
       const rows = s.rows.slice();
-      rows.splice(lastDataIdx + 1, 0, ...incoming);
+      const room = MAX_GRID_ROWS - rows.length;
+      const fitting = incoming.slice(0, Math.max(0, room));
+      rows.splice(lastDataIdx + 1, 0, ...fitting);
       set({
         rows,
         undoStack,
@@ -2081,7 +2099,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         ...recomputeMarks(rows, s.crossDups, s.columns),
       });
       get().persist("append");
-      toast(`Appended ${incoming.length} rows`);
+      toast(fitting.length < incoming.length ? `Appended ${fitting.length} rows (limit ${MAX_GRID_ROWS})` : `Appended ${incoming.length} rows`);
     }
     void refreshCrossDups(s.fileId);
     if (incoming.some((r) => r.cookies || r.uid)) {
@@ -2194,7 +2212,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         return i;
       }
     }
-    const rows = s.rows.concat(makeEmptyRow(s.columns));
+    const rows = s.rows.length >= MAX_GRID_ROWS ? s.rows : s.rows.concat(makeEmptyRow(s.columns));
     const idx = rows.length - 1;
     set({ rows, bubbleActiveRow: idx });
     return idx;
@@ -2204,8 +2222,12 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const s = get();
     let idx = s.bubbleActiveRow + 1;
     let rows = s.rows;
-    while (idx >= rows.length) {
+    while (idx >= rows.length && rows.length < MAX_GRID_ROWS) {
       rows = rows.concat(makeEmptyRow(s.columns));
+    }
+    if (idx >= rows.length) {
+      toast(`Row limit reached (${MAX_GRID_ROWS})`);
+      idx = rows.length - 1;
     }
     set({ bubbleActiveRow: idx, rows });
   },

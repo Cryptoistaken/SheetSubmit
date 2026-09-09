@@ -415,7 +415,7 @@ export const api = {
     return request<PoolPrice>(`/pools/${enc(password)}/${enc(poolId)}/price`, { method: "PUT", body: JSON.stringify({ price }) });
   },
 
-  me: async (): Promise<{ user: User | null; expired: boolean }> => {
+  me: async (): Promise<{ user: User | null; expired: boolean; loginRequired: boolean }> => {
     let res: Response;
     try {
       res = await fetch(BASE + "/auth/me", { credentials: "include" }).then(markConn);
@@ -423,14 +423,15 @@ export const api = {
       useConnStore.setState({ status: "err" });
       throw e;
     }
-    if (res.status === 401) {
-      const body = await res.json().catch(() => ({}) as { error?: string });
-      return { user: null, expired: body?.error === "session_expired" };
+    if (res.status === 401 || res.status === 403) {
+      // ponytail: backend marks definitive auth failures — caller must NOT retry, go to login
+      const body = await res.json().catch(() => ({}) as { error?: string; loginRequired?: boolean });
+      return { user: null, expired: body?.error === "session_expired", loginRequired: body?.loginRequired !== false };
     }
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const raw = (await res.json()) as any;
-    if (!raw) return { user: null, expired: false };
-    return { user: normalizeUser(raw), expired: false };
+    if (!raw) return { user: null, expired: false, loginRequired: true };
+    return { user: normalizeUser(raw), expired: false, loginRequired: false };
   },
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   botInfo: () => request<{ username: string }>("/bot/info"),

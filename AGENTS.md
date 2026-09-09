@@ -121,9 +121,9 @@ stores/__tests__/sheetStore.test.ts
 ### Auth flow
 1. User opens site → AuthContext checks `ss_had_session` localStorage flag.
 2. No flag → skip `/me`, RequireAuth bounces to `/login` immediately (zero wasted requests).
-3. Flag exists → call `GET /api/auth/me`:
-   - No cookie → 401 `not_authenticated` → clear flag, bounce to `/login`.
-   - Invalid/expired cookie → 401 `session_expired` → clear flag, `/login` with notice.
+3. Flag exists → call `GET /api/auth/me` (once per page-load at most):
+   - No cookie → 401 `not_authenticated` + `loginRequired:true` → clear flag, bounce to `/login`, never retry.
+   - Invalid/expired cookie → 401 `session_expired` + `loginRequired:true` → clear flag, `/login` with notice, never retry.
    - Valid → 200 user JSON → set user.
 4. LoginScreen: web shows official Telegram Login widget (Turnstile-gated) → `POST /api/auth/telegram/verify {id_token}`; inside the app it invokes the Android native SDK bridge instead (no Turnstile, no legacy bot flow).
 5. On success → set `ss_had_session` flag, reload to saved destination (default `/`) → AuthContext picks up cookie.

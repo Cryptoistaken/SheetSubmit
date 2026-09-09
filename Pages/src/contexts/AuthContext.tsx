@@ -13,6 +13,8 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const CACHE_KEY = "ss_auth_user";
+// Backend said login is required — never call /me again this page-load (no retry storms ever).
+let loginRefused = false;
 // Set when a session cookie has ever been issued to this browser; cleared on
 // logout/expiry. Lets us skip the /auth/me round-trip entirely for first-time
 // visitors (no cookie yet) instead of firing a doomed 401 call on every load.
@@ -28,8 +30,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
-    // No cookie has ever been issued to this browser → skip the /me call.
-    if (localStorage.getItem(HAD_SESSION) !== "1" && !window.Android?.startTelegramLogin) {
+    // Refused before, or no cookie has ever been issued → skip the /me call entirely.
+    if (loginRefused || (localStorage.getItem(HAD_SESSION) !== "1" && !window.Android?.startTelegramLogin)) {
       setLoading(false);
       return () => {
         active = false;
@@ -38,9 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const load = async () => {
       try {
-        const { user: u, expired } = await api.me();
+        const { user: u, expired, loginRequired } = await api.me();
         if (!active) return;
-        if (expired) {
+        if (loginRequired || expired) {
+          loginRefused = true;
           localStorage.removeItem(HAD_SESSION);
           localStorage.removeItem(CACHE_KEY);
           setSessionExpired(true);

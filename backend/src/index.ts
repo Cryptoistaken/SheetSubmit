@@ -43,7 +43,7 @@ app.use("/api/*", async (c, next) => {
     c.header("Vary", "Origin");
     c.header("Access-Control-Allow-Credentials", "true");
     c.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,HEAD,OPTIONS");
-    c.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    c.header("Access-Control-Allow-Headers", "Content-Type,Authorization,Cache-Control,Pragma,Priority");
     c.header("Access-Control-Max-Age", "86400");
   }
   if (c.req.method === "OPTIONS") {
@@ -53,7 +53,7 @@ app.use("/api/*", async (c, next) => {
       headers["Vary"] = "Origin";
       headers["Access-Control-Allow-Credentials"] = "true";
       headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,PATCH,HEAD,OPTIONS";
-      headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization";
+      headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,Cache-Control,Pragma,Priority";
       headers["Access-Control-Max-Age"] = "86400";
     }
     return new Response(null, { status: 204, headers });

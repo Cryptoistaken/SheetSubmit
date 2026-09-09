@@ -17,14 +17,14 @@
 . / package.json          # orchestrator: dev:web/build/typecheck/test (bun --cwd)
   AGENTS.md               # this file
   deploy.env              # gitignored — CLOUDFLARE_* + RAILWAY_* + TELEGRAM_LOGIN_CLIENT_ID + ADMIN_IDS + GITHUB_*
-  railway.json            # {"services":{"backend":{"rootDirectory":"backend"},"worker":{"rootDirectory":"worker"}}} — connect worker service to Postgres + set WORKER_URL="worker.railway.internal" on backend
+  backend + worker deploys: Railway dashboard per service — Root Directory=backend|worker, Config Path=/backend/railway.toml|/worker/railway.toml, Watch Paths=service dir. No root railway.json (services.rootDirectory is NOT valid config). Connect worker service to Postgres + set WORKER_URL="worker.railway.internal" on backend
   .github/workflows/
     build-android.yml     # APK CI (assembleRelease + keystore-decode, release publish/changelog)
     generate-keystore.yml # one-time Android keystore generator (password via workflow input, never uploaded/logged)
     ci.yml                # backend/Pages/worker typecheck+lint+test on push/PR
   backend/                # Railway Hono/Bun service backed by Postgres; src/server.ts is the HTTP entrypoint; railway.toml deploy config; .env local-only template
                         #   PERFORMANCE.md — 62-entry inventory covering 64 handlers + per-API perf plan (bottleneck → fix → est. speedup), 002_perf.sql migration sketch, rollout order
-  worker/                 # Railway background worker service (Bun + Postgres, self-contained; rootDirectory worker in railway.json, railway.toml deploy config w/ /health check, single replica). Jobs on own intervals (30s tick, single-leader advisory lock):
+  worker/                 # Railway background worker service (Bun + Postgres, self-contained; Root Directory=worker in dashboard, railway.toml deploy config w/ /health check, single replica). Jobs on own intervals (30s tick, single-leader advisory lock):
                         #   held-uid-check first (pending-approval monitoring: dead UIDs → pool_rows.state='dead', default 10min; NO background check of available rows — they die via user checks, see wa.ts markDead),
                         #   page-check + wa-check (eligibility sweeps → data.wa_status + wa:{src_uid}:{cuser} meta cache, 30min). Env: DATABASE_URL, CHECK_URL, *_INTERVAL_MS, UID_BATCH, CHECK_BATCH, WORKER_TOKEN (gates /health error detail); .env template
                         #   + HTTP GET /health (port 3000): {ok, startedAt, uptimeMs, jobs:[{name, everyMs, lastRunAt, lastRunAgoMs, lastError}]} — backend proxies it at GET /api/worker/health
@@ -71,7 +71,7 @@ src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → 
                       #   GET /wa/cache?uids= (meta-backed, eligible-only, 24h TTL)
 src/routes/bot.ts         # Telegram webhook and bot routes
 src/routes/testAuth.ts    # TEST-ONLY POST /api/test/login (mints ss_session for Playwright e2e; 404s unless ALLOW_TEST_AUTH=1 — never set on prod)
-  railway.toml          # Railway build and deployment configuration
+  railway.toml          # Railway deploy config (builder + startCommand + healthcheck ONLY — no buildCommand; Railpack auto-installs, packageManager=bun@1.4.0 in package.json is what pins bun over npm)
 ```
 
 ### Pages — `Pages/src/` (Vite 8, entry `main.tsx`)

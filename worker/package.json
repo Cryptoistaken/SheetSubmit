@@ -1,7 +1,11 @@
 {
   "name": "sheetsubmit-worker",
   "private": true,
+  "packageManager": "bun@1.4.0",
   "scripts": {
     "start": "bun run index.ts"
+  },
+  "dependencies": {
+    "postgres": "^3.4.9"
   }
 }

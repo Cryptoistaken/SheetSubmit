@@ -2,6 +2,7 @@
   "name": "sheetsubmit-testmycode",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "bun@1.4.0",
   "description": "SheetSubmit backend and Pages app (no workspaces)",
   "scripts": {
     "dev:web": "bun run --cwd Pages dev",

@@ -5,16 +5,16 @@
 //   3. page-check          — FB pages scrape for rows without wa_status (sets eligible + page name + cache)
 // Available pool rows are NOT background-monitored — they are killed by user checks (POST /fb/check → markDead).
 // Env: DATABASE_URL, CHECK_URL, HELD_INTERVAL_MS (10min), WA_INTERVAL_MS (30min), PAGE_INTERVAL_MS (30min)
-import { SQL } from "bun";
+import postgres from "postgres";
 
 if (!Bun.env.DATABASE_URL) throw new Error("DATABASE_URL is required for worker");
-const db = new SQL({ url: Bun.env.DATABASE_URL || "", max: 2, idleTimeout: 20, connectionTimeout: 10 });
+const db = postgres(Bun.env.DATABASE_URL || "", { max: 2, idle_timeout: 20, connect_timeout: 10 });
 const CHECK_URL = Bun.env.CHECK_URL || "https://check.fb.tools/api/check/facebook";
 const UA_IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
 const challenged = (html: string) => html.includes("checkpointSubmitButton") || html.includes("m_login_email") || /checkpoint|login_attempt|force_login/i.test(html.substring(0, 5000));
 const extractPages = (html: string) => { const pages: { name: string; type: string }[] = []; const re = /"identity_type":"FB_ADDITIONAL_PROFILE"[^}]*?"full_name":"([^"]+)"[^}]*?"identity_type_string":"([^"]+)"/g; let m: RegExpExecArray | null; while ((m = re.exec(html))) pages.push({ name: m[1], type: m[2] }); return pages; };
 const extractLinkedNumber = (html: string) => html.match(/"__typename":"XFBFXSettingsContactPoint"[^}]*?"navigation_row_subtitle":"([^"]+)"/)?.[1] ?? null;
-const j = (v: unknown) => JSON.stringify(v);
+const j = (v: unknown) => v;
 
 // ── UID liveness for HELD rows (check.fb.tools, batch ≤500) → dead rows never get paid ──
 async function checkUids(limit: number): Promise<number> {
@@ -151,7 +151,7 @@ Bun.serve({
   },
 });
 for (;;) {
-  if (stopping) { await db.close().catch(() => {}); break; }
+  if (stopping) { await db.end().catch(() => {}); break; }
   // single-leader: only one replica sweeps at a time; losers skip the tick
   let leader = false;
   try {

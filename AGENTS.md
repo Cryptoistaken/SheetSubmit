@@ -5,7 +5,7 @@
 - Git-connected Pages auto-deploy on push; backend deploys through Railway. No CI deploy workflow.
 - Package manager **bun**. Run `bun install` in `backend/` and `Pages/` if `node_modules` missing.
 - Frontend: React 19 + TypeScript + Vite 8 + Tailwind v4 + shadcn/ui (Nova, neutral, lucide, Geist) + Zustand.
-- Runtime: Hono on Bun + Postgres (`bun:sql`) + `xlsx`. No Redis used (RAILWAY_REDIS_ID present but unused), no KV/D1/R2.
+- Runtime: Hono on Bun + Postgres (`postgres.js`) + `xlsx`. No Redis used (RAILWAY_REDIS_ID present but unused), no KV/D1/R2.
 - Auth: Telegram bot login → HMAC session cookie (`ss_session`). Stateless verify via `crypto.subtle`.
 - Deploy secrets: `deploy.env` (gitignored) — CLOUDFLARE_*, RAILWAY_*, TELEGRAM_LOGIN_CLIENT_ID, ADMIN_IDS, GITHUB_*.
 - Telegram bot: **TEST token** only. Never use prod token.
@@ -24,7 +24,7 @@
     ci.yml                # backend/Pages/worker typecheck+lint+test on push/PR
   backend/                # Railway Hono/Bun service backed by Postgres; src/server.ts is the HTTP entrypoint; railway.toml deploy config; .env local-only template
                         #   PERFORMANCE.md — 62-entry inventory covering 64 handlers + per-API perf plan (bottleneck → fix → est. speedup), 002_perf.sql migration sketch, rollout order
-  worker/                 # Railway background worker service (Bun + Postgres, self-contained; Root Directory=worker in dashboard, railway.toml deploy config w/ /health check, single replica). Jobs on own intervals (30s tick, single-leader advisory lock):
+  worker/                 # Railway background worker service (Bun + postgres.js + Postgres, self-contained; Root Directory=worker in dashboard, railway.toml deploy config w/ /health check, single replica). Jobs on own intervals (30s tick, single-leader advisory lock):
                         #   held-uid-check first (pending-approval monitoring: dead UIDs → pool_rows.state='dead', default 10min; NO background check of available rows — they die via user checks, see wa.ts markDead),
                         #   page-check + wa-check (eligibility sweeps → data.wa_status + wa:{src_uid}:{cuser} meta cache, 30min). Env: DATABASE_URL, CHECK_URL, *_INTERVAL_MS, UID_BATCH, CHECK_BATCH, WORKER_TOKEN (gates /health error detail); .env template
                         #   + HTTP GET /health (port 3000): {ok, startedAt, uptimeMs, jobs:[{name, everyMs, lastRunAt, lastRunAgoMs, lastError}]} — backend proxies it at GET /api/worker/health
@@ -50,7 +50,7 @@
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
  src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
-  src/lib/pg.ts            # Postgres repository for users, files, pools, wallets, withdrawals and wallet_transactions (bun:sql, max 10 connections)
+ src/lib/pg.ts            # Postgres.js repository for users, files, pools, wallets, withdrawals and wallet_transactions (max 10 connections)
                         # + STRICT ROUTING (classify): file preset feeds ONLY its own pool — combo→cookies_2fa, page→page (real 2fa required; wa-eligible = verified, cookie+2fa only = unverified, both claimable in page pool via verifiedOnly/unverifiedOnly), cookie→cookies_only; key-less or no-2fa live rows are invalid → pool_rejects (deduped per account, cleared on successful pooling), never cookies_only
  src/routes/files.ts      # files, archive and duplicate routes
                       # + HOLD LOCK: held pool rows block owner deletes — files.delete (archive), persist (removed rows), archive.delete, archive/batch-delete return 409 via heldCheck op (pg.ts); sheetStore persist + HomePage delete surface the error toast
@@ -132,7 +132,7 @@ stores/__tests__/sheetStore.test.ts
 5. No versioning — save increments `seq` counter in meta. Undo/redo is client-side only (Zustand in-memory).
 6. Backend uses Postgres; keep operations lightweight and transactional.
 7. No KV/D1/R2 bindings.
-8. **bun:sql type coercion** — `NUMERIC`/`DECIMAL` and out-of-i32-range `BIGINT` (e.g. epoch-millis timestamps) come back as **strings**; `JSONB` comes back as a **string**. Never `SELECT *` a table with these columns into a JSON response — cast (`amount::float8`, `created_at::float8`) or wrap with the `json()` helper in pg.ts. JSON responses must carry real numbers/objects.
+8. **Postgres.js type coercion** — `NUMERIC`/`DECIMAL` and out-of-i32-range `BIGINT` (e.g. epoch-millis timestamps) may come back as **strings**; cast (`amount::float8`, `created_at::float8`) or wrap with the `json()` helper in pg.ts. Pass JSONB objects/arrays directly to postgres.js parameters; do not pre-stringify them, or JSONB recordset inputs become doubly encoded. JSON responses must carry real numbers/objects.
 8. Backend API change flow: bump `API_VERSION` in `backend/src/index.ts` → run `bun run typecheck` in `backend/` → deploy through Railway → confirm via `GET /api/health`.
 9. **Commit & push after every completed code-change batch.** After finishing a set of modifications (typecheck + tests pass), immediately inspect `git status`/`git diff`, `git add` only the files changed for this task, commit with a concise message, and `git push` to the current upstream branch. Do not leave completed task changes uncommitted or unpushed. If unrelated work is present, leave it untouched and commit only this task's files. If commit or push fails, report the failure and resolve it before finishing when possible.
 10. **Keep this file fresh.** Any change that adds, removes, renames, or moves a route, file, DO op, store, or workflow → update the Codebase map + Auth flow above in the SAME commit, or the next agent works blind.
@@ -143,4 +143,4 @@ stores/__tests__/sheetStore.test.ts
 | Pages builds/month | 500 (Free) |
 | Subrequests/request | 50 |
 | Body limit | 4 MB |
-| Bun Postgres pool | 10 connections max |
+| Postgres.js pool | 10 connections max |

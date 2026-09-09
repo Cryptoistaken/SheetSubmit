@@ -164,13 +164,8 @@ pools.get("/:password/:pool/rows", async (c) => {
   const uvOnly = c.req.query("unverifiedOnly");
   if ((vOnly === "true" || vOnly === "1") && (uvOnly === "true" || uvOnly === "1")) return c.json({ error: "verifiedOnly and unverifiedOnly are mutually exclusive" }, 400);
   if ((vOnly === "true" || vOnly === "1" || uvOnly === "true" || uvOnly === "1") && pid !== "page") return c.json({ error: "verified filters only for page pool" }, 400);
-  let rows = (await detailRows(c, pwd, pid)).filter((r) => r._state === "available");
-  if (rawUser) rows = rows.filter((r) => String(r._srcUid || "") === rawUser);
-  if (rawFile) rows = rows.filter((r) => String(r._srcFileId || "") === rawFile);
-  // ponytail: bounded scan without SQL JSON parsing — JS filter, avoids json_extract in SQLite
-  if (vOnly === "true" || vOnly === "1") rows = rows.filter((r) => String(r.wa_status || r.waStatus || "").toLowerCase() === "eligible");
-  else if (uvOnly === "true" || uvOnly === "1") rows = rows.filter((r) => String(r.wa_status || r.waStatus || "").toLowerCase() !== "eligible");
-  return c.json({ password: pwd, poolId: pid, total: rows.length, offset, limit, rows: rows.slice(offset, offset + limit) });
+  const result = await rpc(c.env.POOLS, pwd, "rows", { pool: pid, limit, offset, userId: rawUser, fileId: rawFile, verifiedOnly: vOnly === "true" || vOnly === "1", unverifiedOnly: uvOnly === "true" || uvOnly === "1" }) as { total: number; rows: any[]; offset: number; limit: number };
+  return c.json({ password: pwd, poolId: pid, total: result.total, offset: result.offset, limit: result.limit, rows: result.rows });
 });
 pools.get("/:password/:pool/ledger", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);

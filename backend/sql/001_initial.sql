@@ -108,6 +108,11 @@ CREATE INDEX IF NOT EXISTS pool_rows_fifo_idx
 CREATE INDEX IF NOT EXISTS pool_rows_source_idx
   ON pool_rows (password, pool_id, state, src_uid, src_file_id, inserted_at, row_key);
 
+CREATE INDEX IF NOT EXISTS pool_rows_eligible_fifo_idx
+  ON pool_rows (password, pool_id, inserted_at, row_key)
+  WHERE state = 'available'
+    AND lower(COALESCE(data->>'wa_status', data->>'waStatus', '')) = 'eligible';
+
 CREATE INDEX IF NOT EXISTS pool_rows_hold_idx
   ON pool_rows (password, pool_id, hold_id)
   WHERE hold_id IS NOT NULL;
@@ -149,6 +154,10 @@ CREATE INDEX IF NOT EXISTS wallet_tx_user_idx ON wallet_transactions (user_id, c
 
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id);
 CREATE INDEX IF NOT EXISTS meta_key_prefix_idx ON meta (k text_pattern_ops);
+
+CREATE INDEX IF NOT EXISTS file_rows_key_idx
+  ON file_rows (file_id, (COALESCE(NULLIF(data->>'uid', ''), substring(data->>'cookies' FROM 'c_user=([0-9]+)'))))
+  WHERE COALESCE(NULLIF(data->>'uid', ''), substring(data->>'cookies' FROM 'c_user=([0-9]+)')) IS NOT NULL;
 
 INSERT INTO schema_migrations(version)
 VALUES (1)

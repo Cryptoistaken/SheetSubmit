@@ -50,7 +50,7 @@
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
  src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
- src/lib/pg.ts            # Postgres.js repository for users, files, pools, wallets, withdrawals and wallet_transactions (max 10 connections)
+  src/lib/pg.ts            # Postgres.js repository for users, files, pools, wallets, withdrawals and wallet_transactions (max 10 connections); SQL-side pool pagination, batched claims/removals, file-key projection, session cleanup and admin user lookup
                         # + STRICT ROUTING (classify): file preset feeds ONLY its own pool — combo→cookies_2fa, page→page (real 2fa required; wa-eligible = verified, cookie+2fa only = unverified, both claimable in page pool via verifiedOnly/unverifiedOnly), cookie→cookies_only; key-less or no-2fa live rows are invalid → pool_rejects (deduped per account, cleared on successful pooling), never cookies_only
  src/routes/files.ts      # files, archive and duplicate routes
                       # + HOLD LOCK: held pool rows block owner deletes — files.delete (archive), persist (removed rows), archive.delete, archive/batch-delete return 409 via heldCheck op (pg.ts); sheetStore persist + HomePage delete surface the error toast

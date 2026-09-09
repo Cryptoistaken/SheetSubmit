@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { compress } from "hono/compress";
+import { etag } from "hono/etag";
 import type { Env } from "./lib/shared";
 import { requireAuth, isAdmin, cookie, verifySession } from "./lib/session";
 import { rpc } from "./lib/do";
@@ -13,7 +15,7 @@ import { signSession as signSessionFn } from "./lib/session";
 
 export const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any backend route change — lets health checks confirm a deploy landed
-export const API_VERSION = "2.0.7";
+export const API_VERSION = "2.0.8";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
@@ -41,6 +43,11 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 app.use("/api/*", async (c, next) => { const len = Number(c.req.header("Content-Length")); if (Number.isFinite(len) && len > 4_000_000) return c.json({ error: "payload too large" }, 413); return next(); });
+// compress after CORS so Vary: Origin is kept (compress appends Accept-Encoding); xlsx blobs are skipped by hono's compressible-type filter
+app.use("/api/*", compress());
+// ETag/304 only for public, low-churn endpoints — never on authed/user-specific routes
+app.use("/api/bot/info", etag());
+app.use("/api/auth/telegram/config", etag());
 app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now(), version: API_VERSION }));
 // Pings the worker over Railway's internal network (WORKER_URL) so connectivity is verifiable from the public backend URL
 app.get("/api/worker/health", async (c) => {
@@ -72,8 +79,10 @@ app.get("/api/auth/me", async (c) => { const token = c.req.header("Cookie")?.mat
 app.post("/api/auth/logout", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (token) await rpc(c.env.INDEX, "global", "deleteSession", { token }); const secure = c.req.header("x-forwarded-proto") !== "http" ? " Secure;" : ""; return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": `ss_session=; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=0` } }); });
 app.post("/api/auth/device/claim", async (c) => {
   let body: { token?: string }; try { body = await c.req.json(); } catch { return c.json({ ok: false }, 400); } const did = body.token || ""; if (!/^[A-Za-z0-9-]{8,64}$/.test(did)) return c.json({ ok: false }); const info: any = await rpc(c.env.INDEX, "global", "deviceGet", { did }); if (!info?.chatId || !info.chatId.includes(".")) return c.json({ ok: false }); await rpc(c.env.INDEX, "global", "deviceDelete", { did }); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": cookie(info.chatId, 2592000, c.req.header("x-forwarded-proto") !== "http") } }); });
-app.get("/api/bot/info", async (c) => { if (!c.env.TG_BOT_TOKEN) return c.json({ username: "" }); try { const r = await fetch(`https://api.telegram.org/bot${c.env.TG_BOT_TOKEN}/getMe`); if (!r.ok) return c.json({ username: "" }); const j = await r.json() as any; return c.json({ username: j.result?.username || "" }); } catch { return c.json({ username: "" }); } });
-app.get("/api/auth/telegram/config", (c) => c.json({ clientId: c.env.TELEGRAM_LOGIN_CLIENT_ID || "" }));
+// ponytail: getMe is env-static — module-memory cache keyed by token (success 10min, failure 60s)
+let botCache: { token: string; username: string; exp: number } | null = null;
+app.get("/api/bot/info", async (c) => { const token = c.env.TG_BOT_TOKEN || ""; if (botCache && botCache.token === token && Date.now() < botCache.exp) { c.header("Cache-Control", "public, max-age=600"); return c.json({ username: botCache.username }); } if (!token) return c.json({ username: "" }); try { const r = await fetch(`https://api.telegram.org/bot${token}/getMe`); if (!r.ok) { botCache = { token, username: "", exp: Date.now() + 60_000 }; return c.json({ username: "" }); } const j = await r.json() as any; const username = j.result?.username || ""; botCache = { token, username, exp: Date.now() + (username ? 600_000 : 60_000) }; c.header("Cache-Control", "public, max-age=600"); return c.json({ username }); } catch { botCache = { token, username: "", exp: Date.now() + 60_000 }; return c.json({ username: "" }); } });
+app.get("/api/auth/telegram/config", (c) => { c.header("Cache-Control", "public, max-age=3600"); return c.json({ clientId: c.env.TELEGRAM_LOGIN_CLIENT_ID || "" }); });
 app.post("/api/auth/telegram/verify", async (c) => {
    let body: { id_token?: string }; try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "invalid body" }, 400); }
    const idToken = String(body.id_token || "").trim();
@@ -93,6 +102,6 @@ let webhookChecked = false;
 let settleTimer: ReturnType<typeof setInterval> | null = null;
 export function startBackgroundTasks(env: Env) {
   if (!webhookChecked) { webhookChecked = true; void ensureWebhook(env).catch((error) => console.error("webhook check failed", error)); }
-  // pay out holds whose 5-minute revert window closed (see settleHolds in pg.ts)
-  if (!settleTimer) settleTimer = setInterval(() => { void rpc(env.INDEX, "global", "settleHolds", {}).catch((error) => console.error("hold settle failed", error)); }, 30_000);
+  // pay out holds whose 5-minute revert window closed (see settleHolds in pg.ts) + drop expired sessions (getSession already ignores them; uses sessions_exp_idx, max 1000/tick)
+  if (!settleTimer) settleTimer = setInterval(() => { void rpc(env.INDEX, "global", "settleHolds", {}).catch((error) => console.error("hold settle failed", error)); void rpc(env.INDEX, "global", "sessionCleanup", {}).catch((error) => console.error("session cleanup failed", error)); }, 30_000);
 }

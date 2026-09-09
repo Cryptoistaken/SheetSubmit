@@ -33,11 +33,12 @@
   backend/scripts/schema.ts # DB bootstrap/verify (bun scripts/schema.ts bootstrap|verify)
   test/                   # test fixture xlsx files (2fa.xlsx, cookie.xlsx, Page.xlsx)
   Pages/e2e/              # Playwright browser tests (auth.ts cookie-injection login, smoke.spec.ts) — `bun run test:e2e`, needs backend ALLOW_TEST_AUTH=1 + test DB, never prod; CI e2e job in .github/workflows/ci.yml
+  agent/                  # dev debugging tools (call.ts authed caller, health.ts backend+worker sweep) — need AGENT_TOKEN + BACKEND_URL env; never commit tokens
 ```
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 2.0.7; bump on any route change, surfaced by /api/health),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.9; bump on any route change, surfaced by /api/health),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   GET /api/worker/health (proxies worker.railway.internal:3000/health — proves worker connectivity from the public URL),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -50,6 +51,7 @@
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
   src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder
   src/lib/redis.ts        # optional standard node-redis client; fail-open read-through cache helpers using REDIS_URL
+  src/lib/agent.ts        # DEV-ONLY agent door: agentDoorOpen (ALLOW_AGENT_ACCESS=1 + AGENT_TOKEN), timing-safe token check, requireAgent (404s when closed)
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
   src/lib/pg.ts            # Postgres.js repository for users, files, pools, wallets, withdrawals and wallet_transactions (max 10 connections); SQL-side pool pagination, batched claims/removals, file-key projection, session cleanup and admin user lookup
                         # + STRICT ROUTING (classify): file preset feeds ONLY its own pool — combo→cookies_2fa, page→page (real 2fa required; wa-eligible = verified, cookie+2fa only = unverified, both claimable in page pool via verifiedOnly/unverifiedOnly), cookie→cookies_only; key-less or no-2fa live rows are invalid → pool_rejects (deduped per account, cleared on successful pooling), never cookies_only
@@ -72,6 +74,7 @@ src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → 
                       #   GET /wa/cache?uids= (meta-backed, eligible-only, 24h TTL)
 src/routes/bot.ts         # Telegram webhook and bot routes
 src/routes/testAuth.ts    # TEST-ONLY POST /api/test/login (mints ss_session for Playwright e2e; 404s unless ALLOW_TEST_AUTH=1 — never set on prod)
+src/routes/agent.ts     # DEV-ONLY /api/agent/* introspection (health, routes, stats, worker proxy, config presence flags — read-only, no secret values; 404s unless ALLOW_AGENT_ACCESS=1 + AGENT_TOKEN — never set on prod)
   railway.toml          # Railway deploy config (builder + startCommand + healthcheck ONLY — no buildCommand; Railpack auto-installs, packageManager=bun@1.4.0 in package.json is what pins bun over npm)
 ```
 
@@ -137,6 +140,7 @@ stores/__tests__/sheetStore.test.ts
 8. Backend API change flow: bump `API_VERSION` in `backend/src/index.ts` → run `bun run typecheck` in `backend/` → deploy through Railway → confirm via `GET /api/health`.
 9. **Commit & push after every completed code-change batch.** After finishing a set of modifications (typecheck + tests pass), immediately inspect `git status`/`git diff`, `git add` only the files changed for this task, commit with a concise message, and `git push` to the current upstream branch. Do not leave completed task changes uncommitted or unpushed. If unrelated work is present, leave it untouched and commit only this task's files. If commit or push fails, report the failure and resolve it before finishing when possible.
 10. **Keep this file fresh.** Any change that adds, removes, renames, or moves a route, file, DO op, store, or workflow → update the Codebase map + Auth flow above in the SAME commit, or the next agent works blind.
+11. **Agent door is dev-only.** `ALLOW_AGENT_ACCESS=1` + `AGENT_TOKEN` live only in dev Railway backend variables, never in git, never on prod. Seal before any prod release: unset `ALLOW_AGENT_ACCESS` (door 404s when closed).
 
 ## Capacity
 | Resource | Limit |

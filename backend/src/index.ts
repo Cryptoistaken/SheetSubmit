@@ -10,12 +10,14 @@ import { admin } from "./routes/admin";
 import { wa } from "./routes/wa";
 import { bot, ensureWebhook } from "./routes/bot";
 import { testAuth } from "./routes/testAuth";
+import { agent } from "./routes/agent";
+import { agentDoorOpen } from "./lib/agent";
 import { verifyTelegramIdToken } from "./lib/telegramOidc";
 import { signSession as signSessionFn } from "./lib/session";
 
 export const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any backend route change — lets health checks confirm a deploy landed
-export const API_VERSION = "2.0.8";
+export const API_VERSION = "2.0.9";
 app.onError((err, c) => { console.error(err); return c.json({ error: "Internal server error" }, 500); });
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
@@ -75,6 +77,8 @@ app.route("/api", wa);
   app.route("/", bot);
   // TEST-ONLY: POST /api/test/login — 404s unless ALLOW_TEST_AUTH=1 (never prod)
   app.route("/api/test", testAuth);
+  // DEV-ONLY agent door — 404s unless ALLOW_AGENT_ACCESS=1 + AGENT_TOKEN (never prod)
+  app.route("/api/agent", agent);
 app.get("/api/auth/me", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (!token) return c.json({ error: "not_authenticated" }, 401); if (!c.env.SESSION_SECRET) return c.json({ error: "Server configuration error" }, 500); let session: { uid: string } | null = null; try { session = await verifySession(token, c.env.SESSION_SECRET); } catch { return c.json({ error: "session_expired" }, 401); } if (!session) return c.json({ error: "session_expired" }, 401); try { const dbSession: any = await rpc(c.env.INDEX, "global", "getSession", { token }); if (!dbSession) return c.json({ error: "session_expired" }, 401); } catch { return c.json({ error: "session_expired" }, 401); } const user: any = await rpc(c.env.INDEX, "global", "user", { id: session.uid }); if (!user) return c.json({ error: "session_expired" }, 401); if (user.banned) return c.json({ error: "account_banned" }, 403); return c.json({ id: String(user.user_id), name: user.name || "", username: user.username || "", photoUrl: user.photo_url || null, phone: user.phone || null, isAdmin: isAdmin(c.env, session.uid) }); });
 app.post("/api/auth/logout", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (token) await rpc(c.env.INDEX, "global", "deleteSession", { token }); const secure = c.req.header("x-forwarded-proto") !== "http" ? " Secure;" : ""; return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": `ss_session=; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=0` } }); });
 app.post("/api/auth/device/claim", async (c) => {
@@ -101,6 +105,7 @@ app.post("/api/auth/telegram/verify", async (c) => {
 let webhookChecked = false;
 let settleTimer: ReturnType<typeof setInterval> | null = null;
 export function startBackgroundTasks(env: Env) {
+  if (agentDoorOpen(env)) console.warn("[agent] DEV DOOR OPEN — unset ALLOW_AGENT_ACCESS before prod");
   if (!webhookChecked) { webhookChecked = true; void ensureWebhook(env).catch((error) => console.error("webhook check failed", error)); }
   // pay out holds whose 5-minute revert window closed (see settleHolds in pg.ts) + drop expired sessions (getSession already ignores them; uses sessions_exp_idx, max 1000/tick)
   if (!settleTimer) settleTimer = setInterval(() => { void rpc(env.INDEX, "global", "settleHolds", {}).catch((error) => console.error("hold settle failed", error)); void rpc(env.INDEX, "global", "sessionCleanup", {}).catch((error) => console.error("session cleanup failed", error)); }, 30_000);

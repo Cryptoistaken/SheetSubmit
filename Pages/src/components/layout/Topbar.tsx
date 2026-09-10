@@ -30,6 +30,26 @@ function getAndroid(): AndroidBridge | null {
   }
 }
 
+function BdtIcon() {
+  return (
+    <span className="currency-dot" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>currency-bdt</title><path fill="currentColor" d="M18.09 10.5V9h-8.5V4.5A1.5 1.5 0 0 0 8.09 3a1.5 1.5 0 0 0-1.5 1.5A1.5 1.5 0 0 0 8.09 6v3h-3v1.5h3v6.2c0 2.36 1.91 4.27 4.25 4.3c2.34-.04 4.2-1.96 4.16-4.3c0-1.59-.75-3.09-2-4.08a4 4 0 0 0-.7-.47c-.22-.1-.46-.15-.7-.15c-.71 0-1.36.39-1.71 1c-.19.3-.29.65-.29 1c.01 1.1.9 2 2.01 2c.62 0 1.2-.31 1.58-.8c.21.47.31.98.31 1.5c.04 1.5-1.14 2.75-2.66 2.8c-1.53 0-2.76-1.27-2.75-2.8v-6.2z" /></svg>
+    </span>
+  );
+}
+
+const BDT_RATE = 120;
+
+type Currency = "USDC" | "BDT";
+
+function loadCurrency(): Currency {
+  try {
+    return localStorage.getItem("ss_currency") === "BDT" ? "BDT" : "USDC";
+  } catch {
+    return "USDC";
+  }
+}
+
 interface ConnState {
   cls: "ok" | "err" | "";
   text: string;
@@ -48,6 +68,7 @@ export default function Topbar() {
   const [photoLoaded, setPhotoLoaded] = useState(false);
   const [renameName, setRenameName] = useState("");
   const [balance, setBalance] = useState<number | null>(null);
+  const [currency, setCurrency] = useState<Currency>(loadCurrency);
   const renameRef = useModalA11y(renameOpen && !!file, () => setRenameOpen(false));
   const [isAndroid, setIsAndroid] = useState(() => !!getAndroid());
   const bubbleOn = useBubbleStore((s) => s.on);
@@ -96,7 +117,15 @@ export default function Topbar() {
   if (!user) return null;
 
   const ringColor = conn.cls === "ok" ? "var(--green)" : conn.cls === "err" ? "var(--red)" : "var(--text3)";
-  const balanceText = (balance ?? 0).toFixed(2);
+  const balanceUsd = balance ?? 0;
+  const balanceText = currency === "USDC" ? balanceUsd.toFixed(2) : Math.round(balanceUsd * BDT_RATE).toLocaleString();
+  const toggleCurrency = () => {
+    setCurrency((c) => {
+      const next = c === "USDC" ? "BDT" : "USDC";
+      try { localStorage.setItem("ss_currency", next); } catch {}
+      return next;
+    });
+  };
   const displayName = ((user.firstName ?? "") + " " + (user.lastName ?? "")).trim();
   const fileName = file
     ? file.name.length > 10
@@ -175,21 +204,25 @@ export default function Topbar() {
         {!isFilePage && <ThemeTogglerButton theme={theme} onToggle={toggle} />}
         <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, ...hideHome }}>
         <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-        <button className={`profile-btn${photoLoaded ? " loaded" : ""}`} title="User menu" aria-label={displayName ? `User menu for ${displayName}` : "User menu"}>
-          <span className="profile-currency" aria-label={`Balance ${balanceText}`}>
+        <div className={`profile-btn split${photoLoaded ? " loaded" : ""}`} role="group" aria-label="Account">
+        <button type="button" className="pill-balance" onClick={toggleCurrency} title={currency === "USDC" ? "Show BDT" : "Show USDC"} aria-label={currency === "USDC" ? `Balance ${balanceText} USDC — show BDT` : `Balance ${balanceText} BDT — show USDC`}>
+          <span className="profile-currency" aria-hidden="true">
             <span>{balanceText}</span>
-            <img src="/usdc.svg" alt="" width={14} height={14} />
+            {currency === "USDC" ? <img src="/usdc.svg" alt="" width={14} height={14} /> : <BdtIcon />}
           </span>
-          <span className="profile-pill-divider"></span>
+        </button>
+          <span className="profile-pill-divider" aria-hidden="true"></span>
+        <DropdownMenuTrigger asChild>
+        <button type="button" className="pill-avatar" title="User menu" aria-label={displayName ? `User menu for ${displayName}` : "User menu"}>
           <span className={`avatar-ring${photoLoaded ? " show" : ""}${conn.cls === "ok" && photoLoaded ? " pulse" : ""}`} style={{ background: ringColor, color: ringColor }}>
-             <Avatar className="size-full border-0 after:hidden">
-                {!photoBusted && user.photoUrl ? <AvatarImage src={user.photoUrl} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setPhotoLoaded(true)} onError={() => setPhotoBusted(true)} /> : null}
-                <AvatarFallback className="bg-transparent text-inherit">{(displayName || "?").slice(0, 1).toUpperCase()}</AvatarFallback>
-              </Avatar>
+              <Avatar className="size-full border-0 after:hidden">
+                 {!photoBusted && user.photoUrl ? <AvatarImage src={user.photoUrl} alt="" fetchPriority="high" loading="eager" decoding="async" onLoad={() => setPhotoLoaded(true)} onError={() => setPhotoBusted(true)} /> : null}
+                 <AvatarFallback className="bg-transparent text-inherit">{(displayName || "?").slice(0, 1).toUpperCase()}</AvatarFallback>
+               </Avatar>
           </span>
         </button>
         </DropdownMenuTrigger>
+        </div>
         {user.isAdmin ? (
           <span title="Verified" style={{ position: "absolute", right: 0, bottom: 0, width: 14, height: 14, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))", pointerEvents: "none" }}>
             <VerifiedIcon size={14} />

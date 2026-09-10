@@ -400,6 +400,66 @@ button, input, select, textarea {
 .profile-btn:active {
     transform: scale(0.97);
 }
+/* ── Split pill: same visuals, 2 inner buttons (balance toggle + avatar menu) ── */
+.profile-btn.split {
+    cursor: default;
+}
+.profile-btn.split:active {
+    transform: none;
+}
+.pill-balance {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    order: 1;
+    border-radius: 999px 0 0 999px;
+}
+.pill-balance:hover {
+    background: rgba(99,102,241,.08);
+}
+.pill-balance:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+}
+.pill-avatar {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    margin: 2px 2px 2px 0;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    order: 3;
+    border-radius: 50%;
+}
+.pill-avatar:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+}
+.pill-avatar .avatar-ring {
+    margin: 0;
+}
+.currency-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #2775ca;
+    color: #fff;
+    display: inline-grid;
+    place-items: center;
+    flex-shrink: 0;
+}
+.currency-dot svg {
+    width: 10px;
+    height: 10px;
+    display: block;
+}
 .avatar-ring {
     position: relative;
     display: none;

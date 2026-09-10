@@ -9,7 +9,7 @@ import { useToast } from "@/lib/toast";
 
 const METHODS = [{ id: "bKash", label: "bKash", icon: "/bKash.svg", placeholder: "BD mobile number" }, { id: "Nagad", label: "Nagad", icon: "/nagad.svg", placeholder: "BD mobile number" }, { id: "USDT", label: "USDT", icon: "/usdt.svg", placeholder: "BEP20 address" }, { id: "Binance", label: "Binance", icon: "/Binance.svg", placeholder: "Binance UID" }] as const;
 
-const BDT_RATE = 125;
+const BDT_RATE = 120;
 const ACCOUNT_RE: Record<string, RegExp> = {
   bKash: /^(?:\+?880|0)?1[3-9]\d{8}$/,
   Nagad: /^(?:\+?880|0)?1[3-9]\d{8}$/,

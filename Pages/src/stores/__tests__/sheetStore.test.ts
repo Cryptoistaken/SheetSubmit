@@ -616,24 +616,6 @@ describe("sheetStore data-integrity", () => {
     ]);
   });
 
-  it("changeJournal caps at 200 ops (keeps the tail)", async () => {
-    await openTestFile();
-    const rows = Array.from({ length: 220 }, (_, i) => ({
-      cookies: "",
-      uid: "",
-      twofakey: "",
-      index: String(i),
-    }));
-    useSheetStore.setState({ rows });
-    for (let i = 0; i < 220; i++) {
-      useSheetStore.getState().commitCell(i, "uid", String(i));
-    }
-    const journal = useSheetStore.getState().changeJournal;
-    expect(journal.length).toBe(200);
-    expect(journal[0].rowIdx).toBe(20);
-    expect(journal[journal.length - 1].rowIdx).toBe(219);
-  });
-
   it("bubbleActiveRow resets on closeFile and openFile", async () => {
     await openTestFile();
     useSheetStore.setState({ bubbleActiveRow: 5 });

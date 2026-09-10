@@ -2025,6 +2025,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       toast(`Merged 0 (skipped ${skipped})`);
       return;
     }
+    // Insert right after the last data row (not concat at the end): the grid
+    // is padded with empty rows and only renders the first GRID_PAGE, so
+    // appending past the padding hides merged accounts until Compact.
+    let lastDataIdx = -1;
+    s.rows.forEach((row, idx) => {
+      if (s.columns.some((c) => row[c.key])) lastDataIdx = idx;
+    });
     const room = MAX_GRID_ROWS - s.rows.length;
     if (room <= 0) {
       toast(`Row limit reached (${MAX_GRID_ROWS}) — merge skipped`);
@@ -2036,7 +2043,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       { type: "rows", prevRows: s.rows.map((r) => ({ ...r })) },
     ];
     if (undoStack.length > 100) undoStack.shift();
-    const rows = s.rows.concat(fitting);
+    const rows = s.rows.slice();
+    rows.splice(lastDataIdx + 1, 0, ...fitting);
     set({
       rows,
       undoStack,

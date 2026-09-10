@@ -31,7 +31,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     // Refused before, or no cookie has ever been issued → skip the /me call entirely.
-    if (loginRefused || (localStorage.getItem(HAD_SESSION) !== "1" && !window.Android?.startTelegramLogin)) {
+    // The Android floating-bubble mini window exposes only the clipboard bridge
+    // (no startTelegramLogin) but shares the app's CookieManager session, so any
+    // window.Android bridge — or a ?bubble=1 URL — must still attempt /me instead
+    // of bouncing straight to /login.
+    let isBubble = false;
+    try {
+      isBubble = new URLSearchParams(window.location.search).get("bubble") === "1";
+    } catch {
+      // ignore malformed query
+    }
+    const hasAndroidBridge =
+      typeof window !== "undefined" &&
+      !!(window as unknown as { Android?: unknown }).Android;
+    if (loginRefused || (localStorage.getItem(HAD_SESSION) !== "1" && !window.Android?.startTelegramLogin && !hasAndroidBridge && !isBubble)) {
       setLoading(false);
       return () => {
         active = false;

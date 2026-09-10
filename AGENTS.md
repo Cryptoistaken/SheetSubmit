@@ -94,7 +94,7 @@ components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx (top tabs Pool|Approva
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
                       #   SheetGrid row states: row._hold → amber tint + locked, row._approved → green tint + locked, row._dead/status=bad → red tint (tint vars --tint-hold/--tint-approved/--tint-dead in app.css; no text, dot classes d-yellow/d-taken/d-red)
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
-components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed
+components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed; ?bubble=1 login page polls /me so a main-app login carries the bubble window in automatically
 components/tools/SplitterTool.tsx   # xlsx split into N parts
 components/icons/FileTypeIcons.tsx, FacebookIcon.tsx
 components/profile/ProfileAvatar.tsx

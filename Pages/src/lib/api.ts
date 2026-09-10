@@ -267,7 +267,7 @@ export const api = {
   health: () => request<{ ok: boolean; ts: number; version: string }>("/health"),
   getWallet: () => request<{ uid: string; balance: number; withdrawals: Withdrawal[]; transactions: WalletTransaction[] }>("/wallet"),
   withdraw: (data: { amount: number; method: string; account: string }) => request<Withdrawal>("/wallet/withdraw", { method: "POST", body: JSON.stringify(data) }),
-  getWithdrawalRequests: (status = "PENDING") => request<Withdrawal[]>(`/wallet/requests?status=${encodeURIComponent(status)}`),
+  getWithdrawalRequests: (status = "") => request<Withdrawal[]>(status ? `/wallet/requests?status=${encodeURIComponent(status)}` : "/wallet/requests"),
   decideWithdrawal: (id: string, action: "approve" | "reject") => request<{ id: string; status: Withdrawal["status"] }>(`/wallet/requests/${encodeURIComponent(id)}/${action}`, { method: "POST" }),
   getPaymentMethods: () => request<Record<string, string>>("/wallet/methods"),
   setPaymentMethods: (methods: Record<string, string>) => request<{ ok: boolean }>("/wallet/methods", { method: "PUT", body: JSON.stringify({ methods }) }),

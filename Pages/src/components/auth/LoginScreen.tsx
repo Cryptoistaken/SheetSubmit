@@ -26,6 +26,39 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
 
   const isAndroidApp = typeof window.Android?.startTelegramLogin === "function";
 
+  // Bubble mini window (?bubble=1) shares the app's session cookie but may have
+  // loaded while logged out — poll /me so logging in via the main app carries
+  // this window in automatically instead of stranding it on the login widget.
+  const isBubbleNext = (() => {
+    try {
+      return new URLSearchParams(String(next ?? "").split("?")[1] ?? "").get("bubble") === "1";
+    } catch {
+      return false;
+    }
+  })();
+
+  useEffect(() => {
+    if (isAndroidApp || !isBubbleNext || claimedDoneRef.current) return;
+    let stop = false;
+    const poll = async () => {
+      try {
+        const r = await api.me();
+        if (!stop && r.user && !r.loginRequired && !r.expired) {
+          claimedDoneRef.current = true;
+          localStorage.setItem(HAD_SESSION, "1");
+          try { localStorage.setItem("ss_tg_done", String(Date.now())); } catch {}
+          setWaiting(true);
+          window.location.href = safeNext(next);
+        }
+      } catch {
+        // transient — the main-app login lands the shared cookie shortly
+      }
+    };
+    void poll();
+    const t = window.setInterval(() => { void poll(); }, 2500);
+    return () => { stop = true; window.clearInterval(t); };
+  }, [isAndroidApp, isBubbleNext, next]);
+
   useEffect(() => {
     let stop = false;
     api.telegramConfig().then((r) => { if (!stop && r.clientId) setTgClientId(r.clientId); }).catch(() => {});
@@ -142,6 +175,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
             <span>{tgLoading ? "Verifying…" : "Continue with Telegram"}</span>
           </button>
           {tgError && <p role="alert" className="login-hint" style={{ color: "var(--red)", marginTop: 8 }}>{tgError}</p>}
+          {isBubbleNext && !waiting && <p role="status" aria-live="polite" className="login-hint">Already logged in the app? This window continues automatically…</p>}
           {waiting && <p role="status" aria-live="polite" className="login-hint">Logged in! Opening your workspace…</p>}
         </div>
       </div>

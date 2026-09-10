@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
 import { useUndoRedo } from "@/hooks/useUndoRedo";
+import { api } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { parseSheetRows } from "@/lib/xlsx";
@@ -200,7 +201,6 @@ export default function SheetToolbar() {
     pendingMerge.current = merge;
     fileInputRef.current?.click();
   };
-
   const deleteDead = async () => {
     close();
     const s = useSheetStore.getState();
@@ -214,6 +214,40 @@ export default function SheetToolbar() {
       "Delete",
     );
     if (ok) useSheetStore.getState().deleteDeadRows();
+  };
+
+  const poolOn = file?.poolEnabled !== false;
+
+  const togglePool = async () => {
+    close();
+    const st = useSheetStore.getState();
+    const fid = st.fileId;
+    if (!fid || !st.file) return;
+    const next = !poolOn;
+    const ok = await confirm(
+      next ? "Enable pooling for this file? Eligible rows will feed the shared pool." : "Disable pooling? Its available rows leave the shared pool.",
+      next ? "Enable pool" : "Disable pool",
+    );
+    if (!ok) return;
+    try {
+      const updated = await api.updateFile(fid, { poolEnabled: next });
+      useSheetStore.setState({ file: updated });
+      if (next) {
+        // structural re-save re-fires the pool feed (persist() would no-op:
+        // flipping the switch alone leaves no dirty cells behind)
+        showToast("Pooling on — syncing…");
+        const cols = st.columns;
+        let lastData = -1;
+        st.rows.forEach((row, idx) => { if (cols.some((c) => row[c.key])) lastData = idx; });
+        const trimmed = st.rows.slice(0, Math.min(st.rows.length, Math.max(lastData + 51, 100)));
+        await api.persist(fid, { rows: trimmed, action: "pool-enable" });
+        showToast("Pooling on — rows fed to the pool");
+      } else {
+        showToast("Pooling off");
+      }
+    } catch {
+      showToast("Could not update pooling. Try again.");
+    }
   };
 
   return (
@@ -530,6 +564,23 @@ export default function SheetToolbar() {
           </svg>
           Delete Dead
         </button>
+        <div className="sheet-more-sep" role="separator"></div>
+        <div
+          className="sheet-more-col-item"
+          role="menuitemcheckbox"
+          aria-checked={poolOn}
+          tabIndex={0}
+          onClick={() => void togglePool()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              void togglePool();
+            }
+          }}
+        >
+          <span className={"col-toggle" + (poolOn ? " on" : "")}></span>
+          Pooling {poolOn ? "on" : "off"}
+        </div>
         <div className="sheet-more-sep" role="separator"></div>
         {columns.map((col) => (
           <div

@@ -38,7 +38,7 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 2.0.11; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.12; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   GET /api/worker/health (proxies worker.railway.internal:3000/health — proves worker connectivity from the public URL),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -87,12 +87,13 @@ index.css / app.css   # tailwind v4 + shadcn + geist + legacy styles
 vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000, manualChunks vendor-react|xlsx|vendor-ui|vendor-state|vendor
 server.js             # Bun static server + same-origin /api + /webhook proxy (identity encoding, cookie forward) for Railway Web
 components.json       # shadcn Nova, neutral, cssVariables, lucide
- pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/analysis,/tools (+/pools redirect, /tools/splitter, /tools/pool-lookup, /admin/user/:userId, /bubble-design); WalletView has user wallet and admin withdrawal-request tabs
+ pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/analysis,/tools (+/pools redirect, /tools/splitter, /tools/pool-lookup, /admin/user/:userId, /bubble-design); WalletView has user wallet and admin withdrawal-request tabs; LOVE_PASSWORD pools by default (both modal passwords feed the pool)
 pages/SheetPage.tsx   # /file/:id + /admin/user/:userId/file/:fileId
 pages/BubbleDesignPage.tsx   # /admin renders via HomePage + components/home/AdminView.tsx (no AdminPage file)
  components/layout/Topbar.tsx          # connection card + shadcn profile dropdown + animated theme toggle
 components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx (top tabs Pool|Approvals + password/pool/approval-status switches — all horizontally scrollable, never wrap; URL state ?view=&status=&hold= deep links; stat cards incl. invalid (missing/incomplete 2fa, from pool_rejects; hidden for cookies_only); taker card takes instantly, no confirm dialog; owners list: no "..." menu, click expands user files as list rows with real name+created date+open-in-browser button; approvals: shadcn AvatarGroup file icons per hold, no APPROVED seal, click expands inline drill-down owners→files with per-user/per-file download (server-filtered blob) + open file + Approve (PENDING/REJECTED) / Reject (PENDING/APPROVED) + Delete (hold-to-delete) + dead count toast after approve), ArchiveView.tsx, AdminView.tsx, AnalysisView.tsx, WalletView.tsx, Fab.tsx, EmptyState.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
+                      #   SheetToolbar ⋮ menu has a Pooling on/off switch (PUT /file/:id poolEnabled; enabling re-saves to re-feed, disabling removes available pool rows server-side)
                       #   SheetGrid row states: row._hold → amber tint + locked, row._approved → green tint + locked, row._dead/status=bad → red tint (tint vars --tint-hold/--tint-approved/--tint-dead in app.css; no text, dot classes d-yellow/d-taken/d-red)
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
 components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed; ?bubble=1 login page polls /me so a main-app login carries the bubble window in automatically

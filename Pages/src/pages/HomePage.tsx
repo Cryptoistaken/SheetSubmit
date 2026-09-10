@@ -50,6 +50,10 @@ import { AnalysisIcon, ArchiveIcon, CookieIcon, ObsidianIcon, PageIcon, Password
 
 type Tab = "files" | "archive" | "wallet" | "pools" | "admin" | "analysis" | "tools";
 
+// Built-in pool passwords — files under these feed the shared pools; the modal
+// only offers these two, so every file created here pools by default.
+export const LOVE_PASSWORD = "L0VE@12345";
+
 interface AndroidBridge {
   getBubbleFile?: () => string;
   disableBubble?: () => void;
@@ -319,7 +323,7 @@ export default function HomePage() {
     if (!pwModal) return;
     const type = pwModal.type;
     const columns = COLUMN_PRESETS[pwModal.preset];
-    const poolEnabled = password === "dgddigital";
+    const poolEnabled = password === "dgddigital" || password === LOVE_PASSWORD;
     setPwModal(null);
     const base = FILE_PRESET_NAMES[pwModal.preset];
     const current = files ?? (await api.getFiles());
@@ -359,7 +363,7 @@ export default function HomePage() {
     if (!uploadPending) return;
     setTypePick(null);
     const isLoveName = uploadPending.name.toLowerCase().includes("love");
-    setPwModal({ type: uploadPending.type, preset, choice: isLoveName ? "L0VE@12345" : "dgddigital", custom: "" });
+    setPwModal({ type: uploadPending.type, preset, choice: isLoveName ? LOVE_PASSWORD : "dgddigital", custom: "" });
   };
 
   const doUploadWithPassword = async (password: string) => {
@@ -370,7 +374,7 @@ export default function HomePage() {
     setPwModal(null);
     await uploadPending.cacheReady;
     try {
-      await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: password === "dgddigital", rows, dataCount, columns: COLUMN_PRESETS[preset] });
+      await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: password === "dgddigital" || password === LOVE_PASSWORD, rows, dataCount, columns: COLUMN_PRESETS[preset] });
     } catch {
       showToast("Could not import file. Check your file and try again.");
       return;
@@ -651,10 +655,11 @@ export default function HomePage() {
       <div className={`modal-overlay${pwModal ? " open" : ""}`} onClick={(e) => { if (e.target === e.currentTarget) { setPwModal(null); setUploadPending(null); } }}>
         <div ref={pwRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="pw-title" style={{ width: 340 }}>
           <div id="pw-title" className="modal-title">Pick a password</div>
+          <p style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>Files under these passwords feed the shared pools.</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginTop: 12 }}>
             {[
               { id: "dgddigital" },
-              { id: "L0VE@12345" },
+              { id: LOVE_PASSWORD },
             ].map((c) => (
               <button
                 key={c.id}

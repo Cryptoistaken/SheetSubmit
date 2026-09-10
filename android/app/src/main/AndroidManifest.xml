@@ -46,7 +46,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="app3974912127-login.tg.dev"
+                    android:host="app1524593167-login.tg.dev"
                     android:pathPrefix="/tglogin" />
             </intent-filter>
         </activity>

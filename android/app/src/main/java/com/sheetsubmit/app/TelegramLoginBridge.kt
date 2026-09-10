@@ -13,8 +13,8 @@ import org.telegram.login.TelegramLogin
 object TelegramLoginBridge {
     private const val TAG = "TelegramLogin"
     const val CLIENT_ID = "8667114953"
-    const val REDIRECT_URI = "https://app3974912127-login.tg.dev/tglogin"
-    const val HOST = "app3974912127-login.tg.dev"
+    const val REDIRECT_URI = "https://app1524593167-login.tg.dev/tglogin"
+    const val HOST = "app1524593167-login.tg.dev"
 
     @JvmStatic
     fun init() {

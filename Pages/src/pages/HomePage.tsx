@@ -423,15 +423,6 @@ export default function HomePage() {
           My Files
         </button>
         <button
-          className={`home-tab${tab === "archive" ? " active" : ""}`}
-          role="tab"
-          aria-selected={tab === "archive"}
-          onClick={() => goTab("/archive")}
-        >
-          <ArchiveIcon size={14} aria-hidden="true" />
-          Archive
-        </button>
-        <button
           className={`home-tab${tab === "wallet" ? " active" : ""}`}
           role="tab"
           aria-selected={tab === "wallet"}
@@ -440,17 +431,6 @@ export default function HomePage() {
           <WalletIcon size={14} aria-hidden="true" />
           Wallet
         </button>
-        {user?.isAdmin ? (
-          <button
-            className={`home-tab${tab === "pools" ? " active" : ""}`}
-            role="tab"
-            aria-selected={tab === "pools"}
-            onClick={() => goTab("/pools/dgddigital/cookies_only")}
-          >
-            <ReplitPoolsIcon size={14} aria-hidden="true" />
-            Pools
-          </button>
-        ) : null}
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "admin" ? " active" : ""}`}
@@ -464,13 +444,13 @@ export default function HomePage() {
         ) : null}
         {user?.isAdmin ? (
           <button
-            className={`home-tab${tab === "analysis" ? " active" : ""}`}
+            className={`home-tab${tab === "pools" ? " active" : ""}`}
             role="tab"
-            aria-selected={tab === "analysis"}
-            onClick={() => goTab("/analysis")}
+            aria-selected={tab === "pools"}
+            onClick={() => goTab("/pools/dgddigital/cookies_only")}
           >
-            <AnalysisIcon size={14} aria-hidden="true" />
-            Analysis
+            <ReplitPoolsIcon size={14} aria-hidden="true" />
+            Pools
           </button>
         ) : null}
         {user?.isAdmin ? (
@@ -482,6 +462,26 @@ export default function HomePage() {
           >
             <RabbitmqIcon size={14} aria-hidden="true" />
             Tools
+          </button>
+        ) : null}
+        <button
+          className={`home-tab${tab === "archive" ? " active" : ""}`}
+          role="tab"
+          aria-selected={tab === "archive"}
+          onClick={() => goTab("/archive")}
+        >
+          <ArchiveIcon size={14} aria-hidden="true" />
+          Archive
+        </button>
+        {user?.isAdmin ? (
+          <button
+            className={`home-tab${tab === "analysis" ? " active" : ""}`}
+            role="tab"
+            aria-selected={tab === "analysis"}
+            onClick={() => goTab("/analysis")}
+          >
+            <AnalysisIcon size={14} aria-hidden="true" />
+            Analysis
           </button>
         ) : null}
           </div>

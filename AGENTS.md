@@ -38,7 +38,7 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 2.0.9; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.10; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   GET /api/worker/health (proxies worker.railway.internal:3000/health — proves worker connectivity from the public URL),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -68,6 +68,7 @@ src/routes/pools.ts       # admin pool, hold, download and pricing routes
                       #   GET /:pwd/:pool/ledger → 410 gone (pool_ledger dropped; use download detail + wallet tx), GET /:pwd/:pool (PoolDetail, delegator=src_uid avail+claimed), /rows (paginated+verifiedOnly/unverifiedOnly, detail capped 5000), /verified-counts (SQL-side eligible count, no 5k starvation), /user-files (files carry name/createdAt/preset from file_index), /price GET+PUT (stored price 0..1000, admin validated), POST /:pwd/:pool/claim (→ downloadId+filename+unitPrice/total/status), POST /:pwd/:pool/hold (same + mode/pick, srcUids/srcFileIds, HOLD status, FIFO inserted_at/row_key, storedPrice)
 src/routes/admin.ts       # admin stats, users, files and moderation routes
                       #   GET /users/search (SQL ILIKE, limit 50 via adminUsersSearch op),
+                      #   GET /pooldiag?key= (cross-password account trace: pool_rows in any state + pool_rejects + downloads + source file names via diag op; feeds the Pool lookup card in AdminView),
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist,
                       #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id
 src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows), /fb/page-check, /fb/wa-check and WA cache routes

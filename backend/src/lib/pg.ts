@@ -212,6 +212,18 @@ async function poolOp(password: string, op: string, a: any) {
     if (bad.length) { const rp = pp === "combo" ? "cookies_2fa" : "page"; await tx`INSERT INTO pool_rejects(password,pool_id,row_key,ts) SELECT ${password},s.pool,s.k,s.ts FROM jsonb_to_recordset(${j(bad.map((k) => ({ pool: rp, k, ts: now })))}::jsonb) AS s(pool text,k text,ts bigint) ON CONFLICT (password,pool_id,row_key) DO NOTHING`; }
     return { added: put.length };
   });
+  if (op === "diag") {
+    // cross-password trace for one account key (uid or c_user): every pool row
+    // in any state, reject records, and past takes. Admin diagnostic — read-only.
+    const k = String(a.key || "").trim().slice(0, 64);
+    if (!k) throw new Error("key required");
+    const rows: any[] = await db`SELECT password,pool_id,state,src_uid,src_file_id,inserted_at::float8 AS inserted_at,claimed_by,hold_id FROM pool_rows WHERE row_key=${k} ORDER BY password,pool_id`;
+    const rejects: any[] = await db`SELECT password,pool_id,ts::float8 AS ts FROM pool_rejects WHERE row_key=${k} ORDER BY password,pool_id`;
+    const dls: any[] = await db`SELECT id,password,pool_id,status,claimed_by,claimed,ts::float8 AS ts FROM downloads WHERE keys ? ${k} ORDER BY ts DESC LIMIT 10`;
+    const fids = [...new Set(rows.map((r: any) => String(r.src_file_id || "")).filter(Boolean))];
+    const files: any[] = fids.length ? await db`SELECT file_id,owner_id,data->>'name' AS name FROM file_index WHERE file_id = ANY(${fids})` : [];
+    return { key: k, rows, rejects, downloads: dls, files: files.map((f: any) => ({ fileId: f.file_id, ownerId: f.owner_id, name: f.name })) };
+  }
   if (op === "counts") { const r: any[] = await db`SELECT pool_id,COUNT(*) n FROM pool_rows WHERE password=${password} AND state='available' GROUP BY pool_id`; return Object.fromEntries(pools.map((x) => [x, Number(r.find((y) => y.pool_id === x)?.n || 0)])); }
   if (op === "summary") { const r: any = (await db`SELECT COUNT(*) FILTER (WHERE state='available') available,COUNT(*) FILTER (WHERE state='claimed') claimed,COUNT(DISTINCT src_uid) users,(SELECT COUNT(*) FROM pool_rejects WHERE password=${password} AND pool_id=${p}) invalid FROM pool_rows WHERE password=${password} AND pool_id=${p}`)[0]; return { available: Number(r.available), claimed: Number(r.claimed), users: Number(r.users), invalid: Number(r.invalid) }; }
   if (op === "detail") return (await db`SELECT row_key,data,state,claimed_by,claimed_at::float8 AS claimed_at,src_uid,src_file_id,inserted_at::float8 AS inserted_at,hold_id FROM pool_rows WHERE password=${password} AND pool_id=${p} ORDER BY inserted_at,row_key LIMIT 5000`).map(rowOut);

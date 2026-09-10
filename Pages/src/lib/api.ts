@@ -226,6 +226,14 @@ export interface DownloadDetail {
   groups: DownloadDetailGroup[];
 }
 export interface PoolPrice { poolId: string; password: string | null; price: number }
+export interface PoolDiagRow { password: string; pool_id: string; state: string; src_uid: string | null; src_file_id: string | null; inserted_at: number; claimed_by: string | null; hold_id: string | null }
+export interface PoolDiag {
+  key: string;
+  rows: PoolDiagRow[];
+  rejects: { password: string; pool_id: string; ts: number }[];
+  downloads: { id: string; password: string; pool_id: string; status: string; claimed_by: string | null; claimed: number; ts: number }[];
+  files: { fileId: string; ownerId: string; name: string | null }[];
+}
 export interface Withdrawal {
   id: string;
   user_id: string;
@@ -318,6 +326,7 @@ export const api = {
   adminUndo: (fileId: string) => request<HistoryResult>(`/admin/file/${fileId}/undo`),
 
   adminDeleteUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}`, { method: "DELETE" }),
+  adminPoolDiag: (key: string) => request<PoolDiag>(`/admin/pooldiag?key=${encodeURIComponent(key)}`),
   adminBanUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}/ban`, { method: "POST" }),
   adminUnbanUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}/unban`, { method: "POST" }),
 

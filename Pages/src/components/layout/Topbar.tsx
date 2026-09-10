@@ -40,6 +40,14 @@ function BdtIcon() {
 
 const BDT_RATE = 120;
 
+// 0 → "0.00" (matches empty state), whole → grouped ("1,500"), fraction → 2 decimals ("1,500.50")
+const fmtBalance = (v: number) => {
+  const r = Math.round(v * 100) / 100;
+  if (r === 0) return "0.00";
+  if (Number.isInteger(r)) return r.toLocaleString("en-US");
+  return r.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 type Currency = "USDC" | "BDT";
 
 function loadCurrency(): Currency {
@@ -118,7 +126,7 @@ export default function Topbar() {
 
   const ringColor = conn.cls === "ok" ? "var(--green)" : conn.cls === "err" ? "var(--red)" : "var(--text3)";
   const balanceUsd = balance ?? 0;
-  const balanceText = currency === "USDC" ? balanceUsd.toFixed(2) : Math.round(balanceUsd * BDT_RATE).toLocaleString();
+  const balanceText = currency === "USDC" ? fmtBalance(balanceUsd) : fmtBalance(balanceUsd * BDT_RATE);
   const toggleCurrency = () => {
     setCurrency((c) => {
       const next = c === "USDC" ? "BDT" : "USDC";

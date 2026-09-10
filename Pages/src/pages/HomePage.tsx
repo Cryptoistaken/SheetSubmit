@@ -323,7 +323,6 @@ export default function HomePage() {
     if (!pwModal) return;
     const type = pwModal.type;
     const columns = COLUMN_PRESETS[pwModal.preset];
-    const poolEnabled = password === "dgddigital" || password === LOVE_PASSWORD;
     setPwModal(null);
     const base = FILE_PRESET_NAMES[pwModal.preset];
     const current = files ?? (await api.getFiles());
@@ -343,7 +342,7 @@ export default function HomePage() {
     }
     const id = genId();
     try {
-      await api.createFile({ id, name: finalName, type, preset: pwModal.preset, poolKind: pwModal.preset, password, poolEnabled, columns });
+      await api.createFile({ id, name: finalName, type, preset: pwModal.preset, poolKind: pwModal.preset, password, poolEnabled: true, columns });
     } catch {
       showToast("Could not create file. Check your connection.");
       return;
@@ -374,7 +373,7 @@ export default function HomePage() {
     setPwModal(null);
     await uploadPending.cacheReady;
     try {
-      await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: password === "dgddigital" || password === LOVE_PASSWORD, rows, dataCount, columns: COLUMN_PRESETS[preset] });
+      await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: true, rows, dataCount, columns: COLUMN_PRESETS[preset] });
     } catch {
       showToast("Could not import file. Check your file and try again.");
       return;

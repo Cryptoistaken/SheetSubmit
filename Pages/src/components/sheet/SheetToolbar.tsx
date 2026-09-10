@@ -230,17 +230,22 @@ export default function SheetToolbar() {
     );
     if (!ok) return;
     try {
-      const updated = await api.updateFile(fid, { poolEnabled: next });
+      const cols = st.columns;
+      let lastData = -1;
+      st.rows.forEach((row, idx) => { if (cols.some((c) => row[c.key])) lastData = idx; });
+      const trimmed = st.rows.slice(0, Math.min(st.rows.length, Math.max(lastData + 51, 100)));
+      // Admins can flip pooling on anyone's file: owner routes 404 for them
+      // (owned()), so use the admin routes in admin mode.
+      const updated = st.adminMode
+        ? await api.adminUpdateFile(fid, { poolEnabled: next })
+        : await api.updateFile(fid, { poolEnabled: next });
       useSheetStore.setState({ file: updated });
       if (next) {
         // structural re-save re-fires the pool feed (persist() would no-op:
         // flipping the switch alone leaves no dirty cells behind)
         showToast("Pooling on — syncing…");
-        const cols = st.columns;
-        let lastData = -1;
-        st.rows.forEach((row, idx) => { if (cols.some((c) => row[c.key])) lastData = idx; });
-        const trimmed = st.rows.slice(0, Math.min(st.rows.length, Math.max(lastData + 51, 100)));
-        await api.persist(fid, { rows: trimmed, action: "pool-enable" });
+        if (st.adminMode) await api.adminPersist(fid, { rows: trimmed, action: "pool-enable" });
+        else await api.persist(fid, { rows: trimmed, action: "pool-enable" });
         showToast("Pooling on — rows fed to the pool");
       } else {
         showToast("Pooling off");
@@ -565,23 +570,27 @@ export default function SheetToolbar() {
           Delete Dead
         </button>
         <div className="sheet-more-sep" role="separator"></div>
-        <div
-          className="sheet-more-col-item"
-          role="menuitemcheckbox"
-          aria-checked={poolOn}
-          tabIndex={0}
-          onClick={() => void togglePool()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              void togglePool();
-            }
-          }}
-        >
-          <span className={"col-toggle" + (poolOn ? " on" : "")}></span>
-          Pooling {poolOn ? "on" : "off"}
-        </div>
-        <div className="sheet-more-sep" role="separator"></div>
+        {user?.isAdmin ? (
+          <>
+            <div
+              className="sheet-more-col-item"
+              role="menuitemcheckbox"
+              aria-checked={poolOn}
+              tabIndex={0}
+              onClick={() => void togglePool()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  void togglePool();
+                }
+              }}
+            >
+              <span className={"col-toggle" + (poolOn ? " on" : "")}></span>
+              Pooling {poolOn ? "on" : "off"}
+            </div>
+            <div className="sheet-more-sep" role="separator"></div>
+          </>
+        ) : null}
         {columns.map((col) => (
           <div
             key={col.key}

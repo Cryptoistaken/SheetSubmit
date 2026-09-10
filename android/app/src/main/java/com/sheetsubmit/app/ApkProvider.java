@@ -26,7 +26,7 @@ import java.io.FileNotFoundException;
  */
 public class ApkProvider extends ContentProvider {
 
-    public static final String AUTHORITY = "org.brilliant.android.apk";
+    public static final String AUTHORITY = "com.sheetsubmit.app.apk";
     private static final String DIR = "apk";
 
     public static Uri uriFor(Context ctx, File file) {

@@ -8,7 +8,7 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId "org.brilliant.android"
+        applicationId "com.sheetsubmit.app"
         minSdk 26
         targetSdk 29
         def buildNumber = System.getenv("VERSION_CODE") ? Integer.parseInt(System.getenv("VERSION_CODE")) : 1

@@ -31,6 +31,7 @@ const AdminView = lazyRetry(() => import("@/components/home/AdminView"));
 const AnalysisView = lazyRetry(() => import("@/components/home/AnalysisView"));
 const ArchiveView = lazyRetry(() => import("@/components/home/ArchiveView"));
 const SplitterTool = lazyRetry(() => import("@/components/tools/SplitterTool"));
+const PoolLookupTool = lazyRetry(() => import("@/components/tools/PoolLookupTool"));
 const PoolsView = lazyRetry(() => import("@/components/home/PoolsView"));
 const WalletView = lazyRetry(() => import("@/components/home/WalletView"));
 import Fab from "@/components/home/Fab";
@@ -63,7 +64,7 @@ function getAndroid(): AndroidBridge | null {
   }
 }
 
-function ToolsList({ onOpenSplitter }: { onOpenSplitter: () => void }) {
+function ToolsList({ onOpenSplitter, onOpenPoolLookup }: { onOpenSplitter: () => void; onOpenPoolLookup: () => void }) {
   return (
     <div>
       <h2 style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 4 }}>Tools</h2>
@@ -83,6 +84,20 @@ function ToolsList({ onOpenSplitter }: { onOpenSplitter: () => void }) {
           <div className="file-card-name">Splitter</div>
           <div className="file-card-meta">Split xlsx into N parts</div>
           <span className="file-type-badge" style={{ background: "var(--blue-light)", color: "var(--blue)" }}>Xlsx</span>
+        </div>
+        <div
+          className="file-card"
+          role="button"
+          tabIndex={0}
+          onClick={onOpenPoolLookup}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenPoolLookup(); } }}
+        >
+          <div className="file-card-icon" style={{ background: "var(--green-bg)", color: "var(--green)" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
+          </div>
+          <div className="file-card-name">Pool lookup</div>
+          <div className="file-card-meta">Trace an account across pools</div>
+          <span className="file-type-badge" style={{ background: "var(--green-bg)", color: "var(--green)" }}>Pool</span>
         </div>
       </div>
     </div>
@@ -549,8 +564,12 @@ export default function HomePage() {
             <Suspense fallback={<PageSkeleton variant="splitter" />}>
               <SplitterTool />
             </Suspense>
+          ) : path === "/tools/pool-lookup" ? (
+            <Suspense fallback={<PageSkeleton variant="splitter" />}>
+              <PoolLookupTool />
+            </Suspense>
           ) : (
-            <ToolsList onOpenSplitter={() => navigate("/tools/splitter")} />
+            <ToolsList onOpenSplitter={() => navigate("/tools/splitter")} onOpenPoolLookup={() => navigate("/tools/pool-lookup")} />
           )}
         </div>
       ) : null}

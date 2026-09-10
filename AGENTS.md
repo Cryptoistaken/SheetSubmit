@@ -38,7 +38,7 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 2.0.10; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.11; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   GET /api/worker/health (proxies worker.railway.internal:3000/health — proves worker connectivity from the public URL),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -68,7 +68,7 @@ src/routes/pools.ts       # admin pool, hold, download and pricing routes
                       #   GET /:pwd/:pool/ledger → 410 gone (pool_ledger dropped; use download detail + wallet tx), GET /:pwd/:pool (PoolDetail, delegator=src_uid avail+claimed), /rows (paginated+verifiedOnly/unverifiedOnly, detail capped 5000), /verified-counts (SQL-side eligible count, no 5k starvation), /user-files (files carry name/createdAt/preset from file_index), /price GET+PUT (stored price 0..1000, admin validated), POST /:pwd/:pool/claim (→ downloadId+filename+unitPrice/total/status), POST /:pwd/:pool/hold (same + mode/pick, srcUids/srcFileIds, HOLD status, FIFO inserted_at/row_key, storedPrice)
 src/routes/admin.ts       # admin stats, users, files and moderation routes
                       #   GET /users/search (SQL ILIKE, limit 50 via adminUsersSearch op),
-                      #   GET /pooldiag?key= (cross-password account trace: pool_rows in any state + pool_rejects + downloads + source file names via diag op; feeds the Pool lookup card in AdminView),
+                      #   GET /pooldiag?key= (cross-password account trace: pool_rows in any state + pool_rejects + downloads + source files + live file-row locate with server-side classify; feeds the Pool lookup tool),
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist,
                       #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id
 src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows), /fb/page-check, /fb/wa-check and WA cache routes
@@ -87,7 +87,7 @@ index.css / app.css   # tailwind v4 + shadcn + geist + legacy styles
 vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000, manualChunks vendor-react|xlsx|vendor-ui|vendor-state|vendor
 server.js             # Bun static server + same-origin /api + /webhook proxy (identity encoding, cookie forward) for Railway Web
 components.json       # shadcn Nova, neutral, cssVariables, lucide
- pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/analysis,/tools (+/pools redirect, /tools/splitter, /admin/user/:userId, /bubble-design); WalletView has user wallet and admin withdrawal-request tabs
+ pages/HomePage.tsx    # /,/files,/archive,/wallet,/pools/:password/:poolId,/admin,/analysis,/tools (+/pools redirect, /tools/splitter, /tools/pool-lookup, /admin/user/:userId, /bubble-design); WalletView has user wallet and admin withdrawal-request tabs
 pages/SheetPage.tsx   # /file/:id + /admin/user/:userId/file/:fileId
 pages/BubbleDesignPage.tsx   # /admin renders via HomePage + components/home/AdminView.tsx (no AdminPage file)
  components/layout/Topbar.tsx          # connection card + shadcn profile dropdown + animated theme toggle
@@ -96,7 +96,8 @@ components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar
                       #   SheetGrid row states: row._hold → amber tint + locked, row._approved → green tint + locked, row._dead/status=bad → red tint (tint vars --tint-hold/--tint-approved/--tint-dead in app.css; no text, dot classes d-yellow/d-taken/d-red)
 components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
 components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed; ?bubble=1 login page polls /me so a main-app login carries the bubble window in automatically
-components/tools/SplitterTool.tsx   # xlsx split into N parts
+components/tools/SplitterTool.tsx   # xlsx split into N parts (/tools/splitter)
+components/tools/PoolLookupTool.tsx # trace a uid/c_user across all pools + live file rows (/tools/pool-lookup, admin-only tool calling GET /admin/pooldiag)
 components/icons/FileTypeIcons.tsx, FacebookIcon.tsx
 components/profile/ProfileAvatar.tsx
  components/ui/button.tsx, avatar.tsx, dialog.tsx, alert-dialog.tsx, dropdown-menu.tsx, theme-toggler.tsx, hold-to-delete-button.tsx, slide-to-confirm-button.tsx, ink-stamp.tsx, page-skeleton.tsx, search-input.tsx  # shadcn and reusable pool actions

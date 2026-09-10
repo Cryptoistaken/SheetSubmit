@@ -227,12 +227,18 @@ export interface DownloadDetail {
 }
 export interface PoolPrice { poolId: string; password: string | null; price: number }
 export interface PoolDiagRow { password: string; pool_id: string; state: string; src_uid: string | null; src_file_id: string | null; inserted_at: number; claimed_by: string | null; hold_id: string | null }
+export interface PoolDiagFound {
+  fileId: string; idx: number; ownerId: string; archived: boolean;
+  fileName: string | null; password: string; preset: string | null; poolEnabled: boolean;
+  uid: string; status: string; has2fa: boolean; wa: string; key: string; live: boolean; pool: string | null;
+}
 export interface PoolDiag {
   key: string;
   rows: PoolDiagRow[];
   rejects: { password: string; pool_id: string; ts: number }[];
   downloads: { id: string; password: string; pool_id: string; status: string; claimed_by: string | null; claimed: number; ts: number }[];
   files: { fileId: string; ownerId: string; name: string | null }[];
+  found: PoolDiagFound[];
 }
 export interface Withdrawal {
   id: string;

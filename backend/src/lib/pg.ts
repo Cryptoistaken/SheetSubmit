@@ -222,7 +222,21 @@ async function poolOp(password: string, op: string, a: any) {
     const dls: any[] = await db`SELECT id,password,pool_id,status,claimed_by,claimed,ts::float8 AS ts FROM downloads WHERE keys ? ${k} ORDER BY ts DESC LIMIT 10`;
     const fids = [...new Set(rows.map((r: any) => String(r.src_file_id || "")).filter(Boolean))];
     const files: any[] = fids.length ? await db`SELECT file_id,owner_id,data->>'name' AS name FROM file_index WHERE file_id = ANY(${fids})` : [];
-    return { key: k, rows, rejects, downloads: dls, files: files.map((f: any) => ({ fileId: f.file_id, ownerId: f.owner_id, name: f.name })) };
+    // locate the account in live files: exact row state + server-side classification,
+    // so "nowhere in pools" resolves to a concrete reason (pool off, not live, no key match…)
+    const fr: any[] = await db`SELECT r.file_id AS file_id,r.idx AS idx,r.data AS data,f.owner_id AS owner_id,f.archived AS archived,f.data AS fdata FROM file_rows r JOIN file_index f ON f.file_id=r.file_id WHERE r.data->>'uid'=${k} OR substring(r.data->>'cookies' from 'c_user=([0-9]+)')=${k} ORDER BY r.file_id,r.idx LIMIT 20`;
+    const found = fr.map((x: any) => {
+      const d = json(x.data) as Row, f = json(x.fdata) as any;
+      const pp = preset(f?.preset ?? f?.poolKind);
+      const kk = key(d);
+      return {
+        fileId: String(x.file_id), idx: Number(x.idx), ownerId: String(x.owner_id), archived: !!x.archived,
+        fileName: f?.name ?? null, password: String(f?.password ?? ""), preset: pp, poolEnabled: f?.poolEnabled !== false,
+        uid: String((d as any).uid ?? ""), status: String((d as any).status ?? ""), has2fa: real2fa(d),
+        wa: String((d as any).wa_status ?? (d as any).waStatus ?? ""), key: kk, live: liveRow(d), pool: classify(d, pp),
+      };
+    });
+    return { key: k, rows, rejects, downloads: dls, files: files.map((f: any) => ({ fileId: f.file_id, ownerId: f.owner_id, name: f.name })), found };
   }
   if (op === "counts") { const r: any[] = await db`SELECT pool_id,COUNT(*) n FROM pool_rows WHERE password=${password} AND state='available' GROUP BY pool_id`; return Object.fromEntries(pools.map((x) => [x, Number(r.find((y) => y.pool_id === x)?.n || 0)])); }
   if (op === "summary") { const r: any = (await db`SELECT COUNT(*) FILTER (WHERE state='available') available,COUNT(*) FILTER (WHERE state='claimed') claimed,COUNT(DISTINCT src_uid) users,(SELECT COUNT(*) FROM pool_rejects WHERE password=${password} AND pool_id=${p}) invalid FROM pool_rows WHERE password=${password} AND pool_id=${p}`)[0]; return { available: Number(r.available), claimed: Number(r.claimed), users: Number(r.users), invalid: Number(r.invalid) }; }

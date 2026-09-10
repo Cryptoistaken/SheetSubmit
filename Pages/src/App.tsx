@@ -145,6 +145,7 @@ const router = createBrowserRouter([
           { path: "analysis", element: <HomePage /> },
           { path: "tools", element: <HomePage /> },
           { path: "tools/splitter", element: <HomePage /> },
+          { path: "tools/pool-lookup", element: <HomePage /> },
           { path: "admin/user", element: <Navigate to="/admin" replace /> },
           { path: "admin/user/:userId", element: <HomePage /> },
           { path: "admin/user/:userId/file", element: <AdminFileFallback /> },

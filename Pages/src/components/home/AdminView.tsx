@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { api } from "@/lib/api";
-import type { PoolDiag } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,85 +19,6 @@ import { useModalA11y } from "@/hooks/useModalA11y";
 
 function userName(u: { name?: string; firstName?: string; lastName?: string; username?: string }): string {
   return u.name?.trim() || ((u.firstName ?? "") + " " + (u.lastName ?? "")).trim() || (u.username ? "@" + u.username : "") || "Unknown";
-}
-
-function PoolLookup() {
-  const [key, setKey] = useState("");
-  const [result, setResult] = useState<PoolDiag | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const run = async () => {
-    const k = key.trim();
-    if (!k || loading) return;
-    setLoading(true);
-    setError(null);
-    try {
-      setResult(await api.adminPoolDiag(k));
-    } catch {
-      setError("Lookup failed. Check your connection.");
-      setResult(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-  const fileName = (fid: string | null) =>
-    (fid && result?.files.find((f) => f.fileId === fid)?.name) || (fid ? "…" + fid.slice(-6) : "—");
-  const verdict = (() => {
-    if (!result) return null;
-    const live = result.rows.filter((r) => r.state === "available");
-    if (live.length) {
-      const r = live[0];
-      return `Available under ${r.password} / ${r.pool_id}${live.length > 1 ? ` (+${live.length - 1} more)` : ""} — every other password skips it while it is pooled here.`;
-    }
-    const taken = result.rows.filter((r) => r.state === "held" || r.state === "claimed");
-    if (taken.length) {
-      const r = taken[0];
-      return `Taken (${r.state}) under ${r.password} / ${r.pool_id} — correctly absent from available.`;
-    }
-    if (result.rows.length) return "Only dead husks remain — re-save the file to force a re-feed and it should re-pool.";
-    if (result.rejects.length) {
-      const r = result.rejects[0];
-      return `Marked invalid under ${r.password} / ${r.pool_id} — at feed time it had no real 2FA (or a No_2Fa skip).`;
-    }
-    if (result.downloads.length) {
-      const d = result.downloads[0];
-      return `Taken before (${d.status}) from ${d.password} / ${d.pool_id} — sold accounts never re-enter pools.`;
-    }
-    return "Nowhere: never fed (pool off?), the feed call failed, or the key mismatches (uid vs c_user). Re-save the file to force a feed.";
-  })();
-  return (
-    <div className="rounded-xl border bg-card p-4" style={{ marginTop: 12 }}>
-      <h2 className="text-sm font-semibold">Pool lookup</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Enter a uid or c_user to see where that account lives across all pools.</p>
-      <div className="mt-3 flex gap-2">
-        <input
-          className="modal-input"
-          style={{ flex: 1 }}
-          type="text"
-          aria-label="Account uid or c_user"
-          placeholder="uid or c_user…"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void run(); } }}
-        />
-        <button type="button" className="btn btn-sm" disabled={loading || !key.trim()} onClick={() => void run()}>
-          {loading ? "Looking…" : "Look up"}
-        </button>
-      </div>
-      {error ? <div role="alert" style={{ marginTop: 8, fontSize: 13, color: "var(--red)" }}>{error}</div> : null}
-      {verdict ? <div role="status" style={{ marginTop: 8, fontSize: 13, fontWeight: 600 }}>{verdict}</div> : null}
-      {result && result.rows.length ? (
-        <div className="mt-2 flex flex-col gap-1.5">
-          {result.rows.map((r, i) => (
-            <div key={i} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
-              <span className="font-mono text-xs">{r.password} / {r.pool_id}</span>
-              <span className="text-xs text-muted-foreground">{r.state} · {fileName(r.src_file_id)}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 export default function AdminView({ initialUserId, view = "grid" }: { initialUserId?: string; view?: "grid" | "list" }) {
@@ -506,7 +426,6 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
           <div className="admin-stat-label">Total Files</div>
         </div>
       </div>
-      <PoolLookup />
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16, marginBottom: 8 }}>
         <div style={{ fontSize: 12, color: "var(--text3)", fontWeight: 500 }}>{users === null ? <Skeleton className="h-4 w-20" /> : `${users.length} users`}</div>
         <SearchInput

@@ -462,6 +462,8 @@ export default function PoolsView() {
         .pool-switch::-webkit-scrollbar{display:none}
         .pool-switch button{padding:7px 14px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;min-height:36px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0}
         .pool-switch button.active{background:var(--bg);border-color:var(--border2);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+        .pool-switch.stretch{flex:1 1 260px;min-width:0}
+        .pool-switch.stretch button{flex:1 1 0;justify-content:center;min-width:0;padding-left:8px;padding-right:8px}
         .badge{font-size:11px;font-weight:600;letter-spacing:.02em;padding:2px 7px;border-radius:999px;border:1px solid var(--border);background:var(--bg3);color:var(--text2)}
         .card-list{display:flex;flex-direction:column;gap:8px}
         .pool-card{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--rl);background:var(--bg);cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s}
@@ -520,13 +522,13 @@ export default function PoolsView() {
       <div id="pools-panel-pool" role="tabpanel" aria-labelledby="tab-pool">
       {/* switches */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
-          <div className="pool-switch" style={{ background: "#eef2ff", borderColor: "#ddd6fe", margin: "0 auto" }}>
+          <div className="pool-switch stretch" style={{ background: "#eef2ff", borderColor: "#ddd6fe" }}>
             {PASSWORDS.map((p) => (
               <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>
             ))}
           </div>
           {meIsAdmin ? <Button variant="outline" size="sm" onClick={() => { const init: Record<string, string> = {}; POOL_TABS.forEach((t) => { const v = prices[t.id] ?? prices[Object.keys(prices)[0]] ?? null; init[t.id] = v != null ? usdToInput(v, priceCurrency) : ""; }); setPriceInputs(init); setPriceOpen(true); }}>{prices[cur] != null ? `price $${prices[cur]}` : "Unit price"}</Button> : null}
-          <div className="pool-switch" style={{ margin: "0 auto" }}>
+          <div className="pool-switch stretch">
             {POOL_TABS.map((t) => {
               const meta = POOL_META[t.id];
               const Icon = meta.Icon;

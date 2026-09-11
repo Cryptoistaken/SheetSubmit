@@ -38,7 +38,7 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 2.0.17; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.18; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   GET /api/worker/health (proxies worker.railway.internal:3000/health — proves worker connectivity from the public URL),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -50,7 +50,7 @@
  lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, WORKER_URL, CHECK_URL, ALLOW_TEST_AUTH, TELEGRAM_LOGIN_CLIENT_ID)
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
   src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder (SameSite=None on https for direct cross-origin calls, Lax on http)
-                      #   src/lib/__tests__/session.test.ts (sign/verify incl. tamper+expiry, cookie strings, isAdmin), sharedFeed.test.ts (poolRowKey/poolFeedSig), revertFinality.test.ts (revertDownload finality vs live DB, skipIf no DATABASE_URL), livePublish.test.ts (grouping/relay validation + guarded fan-out), routes/__tests__/live.test.ts (ticket SSE seam + guarded issue→stream→state) — `bun run test` in backend/
+                      #   src/lib/__tests__/session.test.ts (sign/verify incl. tamper+expiry, cookie strings, isAdmin), sharedFeed.test.ts (poolRowKey/poolFeedSig), revertFinality.test.ts (revertDownload finality vs live DB, skipIf no DATABASE_URL), fileDeletePool.test.ts (filePoolState scoping + removeFileRows keeps claimed/other files, skipIf no DATABASE_URL), livePublish.test.ts (grouping/relay validation + guarded fan-out), routes/__tests__/live.test.ts (ticket SSE seam + guarded issue→stream→state), routes/__tests__/applyHoldFlags.test.ts (dead+approved flag overlay) — `bun run test` in backend/
   src/lib/redis.ts        # optional standard node-redis client; fail-open read-through cache helpers using REDIS_URL; + live relay (publishLiveEvent, subscribeLiveEvents on ss:live with own sub connection)
   src/lib/live.ts         # live row-state domain: one-time stream tickets (60s TTL, single-use) + groupLiveStates (flat key rows → per-file maps, set flags only) + parseLiveEvent (worker relay validation, 500-key cap)
   src/lib/liveBus.ts      # in-process fan-out rooms per fileId (joinLive/publishLive)
@@ -60,11 +60,12 @@
   src/lib/pg.ts            # Postgres.js repository for users, files, pools, wallets, withdrawals and wallet_transactions (max 10 connections); SQL-side pool pagination, batched claims/removals, file-key projection, session cleanup and admin user lookup
                         # + STRICT ROUTING (classify): file preset feeds ONLY its own pool — combo→cookies_2fa, page→page (real 2fa required; wa-eligible = verified, cookie+2fa only = unverified, both claimable in page pool via verifiedOnly/unverifiedOnly), cookie→cookies_only; key-less or no-2fa live rows are invalid → pool_rejects (deduped per account, cleared on successful pooling), never cookies_only
                         # + LIVE STATES: liveStatesByDownload (per-file key flags for one download) + liveStatesByKeys (bare keys across passwords, cap 500) feed the row-state push fan-out (see routes/live.ts)
+                        # + DELETE OPS: filePoolState ({held, claimed} scoped by src_file_id) + removeFileRows (deletes available+held of one file, claimed stay) back the delete semantics in routes/files.ts; key-based heldCheck/removeAvailable stay for edit guards + pool-disable
   src/routes/files.ts      # files, archive and duplicate routes (500 rows/file strict, server-enforced; files per user uncapped)
-                      # + HOLD LOCK: held pool rows block owner deletes — files.delete (archive), persist (removed rows), archive.delete, archive/batch-delete return 409 via heldCheck op (pg.ts); sheetStore persist + HomePage delete surface the error toast
+                      # + DELETE SEMANTICS: on-hold files are free to archive/delete — archive + permanent delete wipe the file's available+held pool rows (removeFileRows op, scoped by src_file_id via filePoolState); only CLAIMED (sold) rows block permanent delete (409 claimedBlock — buyer owns them, settlement pays on them); edit paths (persist removed-rows, snapshot restore) still 409 on held via key-based heldCheck; sheetStore persist + HomePage delete surface the error toast
                       # + ROW-LOSS GUARDS: PUT /:id/persist takes optional base seq → 409 version conflict on stale (two-editor overwrite protection, shared.ts isPersistConflict); POST /:id/restore-snapshot restores rolling snapshots (up to 3 in meta KV filesnap:<id>, optional {index}, wiped with file, hold-locked like persist); purge writes a forensic tombstone (meta filetomb:<id>: name/owner/rowCount/logs) served by admin GET /file/:id/logs
                       # + decorateHoldState: file row reads (GET /:id/rows, /:id/full; admin.ts /file/:id/rows) overlay pool state → row._hold/_approved/_dead (SheetGrid tints rows; hold+approved rows locked client-side)
-                      #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup; archive removes the file's available pool rows (claimed/held stay), restore + batch-restore re-feed them via feedPools)
+                      #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup; restore + batch-restore re-feed via feedPools)
                       #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
 src/routes/live.ts       # live row-state pushes: POST /files/:id/live-ticket (session + owner-or-admin → one-time ticket), GET /files/:id/live (ticket SSE stream, no session; mounts before files router so /* auth never sees it), GET /files/:id/live-state (flag-only overlay for resync/polling); approve/reject/revert/hold/markDead publish via livePublish, worker deaths relayed on ss:live
 src/routes/pools.ts       # admin pool, hold, download and pricing routes
@@ -78,7 +79,8 @@ src/routes/admin.ts       # admin stats, users, files and moderation routes
                       #   GET /users/search (SQL ILIKE, limit 50 via adminUsersSearch op),
                       #   GET /pooldiag?key= (cross-password account trace: pool_rows in any state + pool_rejects + downloads + source files + live file-row locate with server-side classify; feeds the Pool lookup tool),
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist (feeds pools like the owner route),
-                      #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id
+                      #   DELETE /file/:id (admin archive) wipes the file's available+held pool rows like owner archive; admin archive-restore re-feeds pools like owner restore,
+                      #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore (re-feeds pools), DELETE /user/:id/archive/:fileId (claimed-block + pool wipe like owner purge), DELETE /user/:id (wipes all files + their available+held pool rows, claimed stay)
 src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows + live-publishes them), /fb/page-check, /fb/wa-check and WA cache routes
                       #   GET /wa/cache?uids= (meta-backed, eligible-only, 24h TTL)
 src/routes/bot.ts         # Telegram webhook and bot routes

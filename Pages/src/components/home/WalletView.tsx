@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { Copy, Check } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SlideToConfirmButton } from "@/components/ui/slide-to-confirm-button";
-import { HoldToDeleteButton } from "@/components/ui/hold-to-delete-button";
-import { useAuth } from "@/contexts/AuthContext";
-import { api, type Withdrawal, type WalletTransaction } from "@/lib/api";
+import { api, type WalletTransaction } from "@/lib/api";
 import { fmtMoney, loadBdtRate, useCurrency } from "@/lib/currency";
 import { useToast } from "@/lib/toast";
 
@@ -23,7 +21,7 @@ function copyText(text: string) {
   const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
 }
 
-const shortId = (id: string) => (id.length > 20 ? id.slice(0, 16) + "…" : id);
+export const shortId = (id: string) => (id.length > 20 ? id.slice(0, 16) + "…" : id);
 
 const POOL_LABEL: Record<string, string> = { cookies_only: "Cookies", cookies_2fa: "2FA", page: "Page" };
 const poolLabel = (id: unknown) => {
@@ -35,15 +33,15 @@ const rowsText = (n: unknown) => {
   if (!Number.isFinite(v)) return null;
   return `${v} ${v === 1 ? "row" : "rows"}`;
 };
-const maskAccount = (account: string) => {
+export const maskAccount = (account: string) => {
   const a = account.trim();
   if (!a) return "—";
   if (a.length > 12) return `${a.slice(0, 6)}…${a.slice(-4)}`;
   if (a.length > 4) return `••• ${a.slice(-4)}`;
   return a;
 };
-const txDate = (ts: number) => new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-const statusLabel = (s: string) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : s);
+export const txDate = (ts: number) => new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+export const statusLabel = (s: string) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : s);
 
 // Turns raw backend reasons ("Approved hold · 1 rows · page pool") into a
 // clean title + supporting detail. Handles old rows too.
@@ -75,7 +73,7 @@ function formatTx(tx: WalletTransaction): { title: string; detail: string | null
   return { title: pretty ? pretty.charAt(0).toUpperCase() + pretty.slice(1) : "Transaction", detail: null };
 }
 
-function CopyField({ label, value, copy, display, mono, className }: { label: string; value: string; copy?: string; display?: string; mono?: boolean; className?: string }) {
+export function CopyField({ label, value, copy, display, mono, className }: { label: string; value: string; copy?: string; display?: string; mono?: boolean; className?: string }) {
   const [copied, setCopied] = useState(false);
   return <button type="button" title="Tap to copy" onClick={() => { copyText(copy ?? value); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className={`group flex w-full cursor-pointer items-center justify-between gap-3 text-left transition-colors hover:text-foreground active:scale-[0.99] ${className ?? ""}`}><span className="shrink-0 text-muted-foreground capitalize">{label}</span><span className={`ml-4 inline-flex min-w-0 items-center gap-1.5 ${mono ? "font-mono" : ""}`}><span className="break-all">{display ?? value}</span>{copied ? <><span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">Copied</span><Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" /></> : <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-primary" />}</span></button>;
 }
@@ -148,16 +146,9 @@ function BalanceHistory({ items }: { items: WalletTransaction[] }) {
   </>;
 }
 
-function WithdrawalHistory({ items }: { items: Withdrawal[] }) {
-  const [currency] = useCurrency();
-  if (!items.length) return <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No withdrawals yet.</div>;
-  const badge = (s: string) => s === "APPROVED" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400" : s === "REJECTED" ? "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400" : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400";
-  return <div className="flex flex-col gap-2"><h2 className="text-sm font-semibold">Withdrawal history</h2>{items.map((w) => <div key={w.id} className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3"><div className="min-w-0"><div className="text-sm font-medium truncate">{w.method} · {maskAccount(w.account)}</div><div className="truncate text-xs text-muted-foreground">{txDate(w.created_at)}</div></div><div className="flex shrink-0 flex-col items-end gap-1"><div className="text-sm font-semibold">{fmtMoney(Number(w.amount), currency)}</div><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge(w.status)}`}>{statusLabel(w.status)}</span></div></div>)}</div>;
-}
-
 function UserWallet() {
   const showToast = useToast();
-  const [wallet, setWallet] = useState<{ balance: number; withdrawals: Withdrawal[]; transactions: WalletTransaction[] } | null>(null);
+  const [wallet, setWallet] = useState<{ balance: number; transactions: WalletTransaction[] } | null>(null);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("bKash");
   const [account, setAccount] = useState("");
@@ -188,42 +179,9 @@ function UserWallet() {
   const amountOk = Number.isFinite(value) && value > 0 && value <= wallet.balance;
   const accountOk = validAccount(method, account);
   const isBD = method === "bKash" || method === "Nagad";
-  return <div className="flex flex-col gap-6"><WalletBalance balance={wallet.balance}/><form onSubmit={submit} className="rounded-xl border bg-card p-6"><h2 className="text-sm font-semibold">Request a withdrawal</h2><p className="mt-1 text-sm text-muted-foreground">Requests are reviewed before payment is sent.</p><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="flex flex-col gap-2 text-sm font-medium"><span className="flex items-center justify-between">Amount<button type="button" className="text-xs font-semibold text-primary" onClick={() => setAmount(wallet.balance.toFixed(2))}>Max</button></span><input className="h-10 rounded-md border bg-background px-3 font-normal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />{isBD && value > 0 && <span className="text-xs font-normal text-muted-foreground">≈ ৳{Math.round(value * loadBdtRate()).toLocaleString()} <span className="opacity-70">(৳{loadBdtRate()}/$)</span></span>}</label><label className="flex flex-col gap-2 text-sm font-medium">Payout account<input className="h-10 rounded-md border bg-background px-3 font-normal" value={account} onChange={(e) => setAccount(e.target.value)} placeholder={METHODS.find((m) => m.id === method)?.placeholder ?? "Account"} /></label></div><div className="mt-4 flex flex-col gap-2 text-sm font-medium">Method<div className="flex gap-3">{METHODS.map((m) => <button key={m.id} type="button" onClick={() => setMethod(m.id)} className={`flex items-center justify-center rounded-lg border px-3 py-2.5 transition-colors ${method === m.id ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"}`}><img src={m.icon} alt={m.label} className="h-8 w-8" /></button>)}</div></div><label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none"><input type="checkbox" checked={saveAccount} onChange={(e) => setSaveAccount(e.target.checked)} className="h-3.5 w-3.5 rounded border-input" />Save account for {METHODS.find((m) => m.id === method)?.label ?? method}</label><div className="mt-4"><SlideToConfirmButton key={slideKey} label="Slide to withdraw" disabled={sending || !amountOk || !accountOk} onConfirm={() => void submit(new Event("submit") as any)} /></div></form><BalanceHistory items={wallet.transactions}/><WithdrawalHistory items={wallet.withdrawals}/></div>;
-}
-
-function RequestDialog({ request, onClose, onDone }: { request: Withdrawal | null; onClose: () => void; onDone: () => void }) {
-  const [currency] = useCurrency();
-  const showToast = useToast();
-  const [acting, setActing] = useState(false);
-  if (!request) return null;
-  const decide = async (action: "approve" | "reject") => { setActing(true); try { await api.decideWithdrawal(request.id, action); showToast(action === "approve" ? "Withdrawal approved" : "Rejected + refunded"); onDone(); onClose(); } catch { showToast("Update failed"); } finally { setActing(false); } };
-  return <Dialog open={!!request} onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent><DialogHeader><DialogTitle>Withdrawal request</DialogTitle><DialogDescription>{request.name || request.user_id} · {new Date(request.created_at).toLocaleString()}</DialogDescription></DialogHeader><div className="flex flex-col gap-2 text-sm"><CopyField label="Amount" value={fmtMoney(Number(request.amount), currency)} copy={Number(request.amount).toFixed(2)} /><CopyField label="Method" value={request.method} /><CopyField label="Account" value={request.account} /><div className="flex justify-between"><span className="text-muted-foreground">Status</span><span>{request.status}</span></div><CopyField label="Withdrawal ID" value={request.id} display={shortId(request.id)} mono className="border-t pt-2 text-xs text-muted-foreground" /></div>{request.status === "PENDING" ? <div className="flex flex-col gap-3 pt-2"><SlideToConfirmButton onConfirm={() => void decide("approve")} disabled={acting} label="Slide to approve"/><HoldToDeleteButton onConfirm={() => void decide("reject")} disabled={acting} label="Hold to reject"/></div> : null}</DialogContent></Dialog>;
-}
-
-type FilterStatus = "ALL" | "PENDING" | "APPROVED" | "REJECTED";
-
-function AdminRequests() {
-  const [currency] = useCurrency();
-  const showToast = useToast();
-  const [requests, setRequests] = useState<Withdrawal[] | null>(null);
-  const [selected, setSelected] = useState<Withdrawal | null>(null);
-  const [filter, setFilter] = useState<FilterStatus>("ALL");
-  const load = () => api.getWithdrawalRequests().then(setRequests).catch(() => showToast("Couldn't load requests"));
-  useEffect(() => { void load(); }, []);
-  const filtered = requests?.filter((r) => filter === "ALL" || r.status === filter) ?? [];
-  const counts = { ALL: requests?.length ?? 0, PENDING: requests?.filter((r) => r.status === "PENDING").length ?? 0, APPROVED: requests?.filter((r) => r.status === "APPROVED").length ?? 0, REJECTED: requests?.filter((r) => r.status === "REJECTED").length ?? 0 };
-  const filters: { key: FilterStatus; label: string }[] = [{ key: "ALL", label: "All" }, { key: "PENDING", label: "Pending" }, { key: "APPROVED", label: "Approved" }, { key: "REJECTED", label: "Rejected" }];
-  return <><div className="flex flex-col gap-2"><div><h2 className="text-sm font-semibold">Withdrawal requests</h2><p className="text-sm text-muted-foreground">Open a request to review and approve or reject it.</p></div><div className="flex flex-wrap gap-1.5">{filters.map((f) => <button type="button" key={f.key} onClick={() => setFilter(f.key)} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${filter === f.key ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}>{f.label}<span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none font-semibold">{counts[f.key]}</span></button>)}</div>{filtered.length ? filtered.map((request) => <button type="button" key={request.id} onClick={() => setSelected(request)} className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-muted"><div><div className="font-medium">{request.name || `User ${request.user_id.slice(-8)}`} · {fmtMoney(Number(request.amount), currency)}</div><div className="text-xs text-muted-foreground">{request.method} · {request.account} · {new Date(request.created_at).toLocaleString()}</div></div><span className="rounded-full bg-muted px-2 py-1 text-xs font-medium">{statusLabel(request.status)}</span></button>) : <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No {filter === "ALL" ? "" : filter.toLowerCase() + " "}withdrawal requests.</div>}</div><RequestDialog request={selected} onClose={() => setSelected(null)} onDone={() => void load()}/></>;
+  return <div className="flex flex-col gap-6"><WalletBalance balance={wallet.balance}/><form onSubmit={submit} className="rounded-xl border bg-card p-6"><h2 className="text-sm font-semibold">Request a withdrawal</h2><p className="mt-1 text-sm text-muted-foreground">Requests are reviewed before payment is sent.</p><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="flex flex-col gap-2 text-sm font-medium"><span className="flex items-center justify-between">Amount<button type="button" className="text-xs font-semibold text-primary" onClick={() => setAmount(wallet.balance.toFixed(2))}>Max</button></span><input className="h-10 rounded-md border bg-background px-3 font-normal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />{isBD && value > 0 && <span className="text-xs font-normal text-muted-foreground">≈ ৳{Math.round(value * loadBdtRate()).toLocaleString()} <span className="opacity-70">(৳{loadBdtRate()}/$)</span></span>}</label><label className="flex flex-col gap-2 text-sm font-medium">Payout account<input className="h-10 rounded-md border bg-background px-3 font-normal" value={account} onChange={(e) => setAccount(e.target.value)} placeholder={METHODS.find((m) => m.id === method)?.placeholder ?? "Account"} /></label></div><div className="mt-4 flex flex-col gap-2 text-sm font-medium">Method<div className="flex gap-3">{METHODS.map((m) => <button key={m.id} type="button" onClick={() => setMethod(m.id)} className={`flex items-center justify-center rounded-lg border px-3 py-2.5 transition-colors ${method === m.id ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"}`}><img src={m.icon} alt={m.label} className="h-8 w-8" /></button>)}</div></div><label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none"><input type="checkbox" checked={saveAccount} onChange={(e) => setSaveAccount(e.target.checked)} className="h-3.5 w-3.5 rounded border-input" />Save account for {METHODS.find((m) => m.id === method)?.label ?? method}</label><div className="mt-4"><SlideToConfirmButton key={slideKey} label="Slide to withdraw" disabled={sending || !amountOk || !accountOk} onConfirm={() => void submit(new Event("submit") as any)} /></div></form><BalanceHistory items={wallet.transactions}/></div>;
 }
 
 export default function WalletView() {
-  const { user } = useAuth();
-  const isAdmin = user?.isAdmin;
-  const [tab, setTab] = useState<"wallet" | "requests">("wallet");
-
-  if (!isAdmin) {
-    return <div className="flex flex-col gap-6"><UserWallet /></div>;
-  }
-
-  return <div className="flex flex-col gap-6"><div className="flex justify-center"><div className="pool-switch" role="tablist" aria-label="Wallet sections"><button type="button" className={tab === "wallet" ? "active" : ""} role="tab" aria-selected={tab === "wallet"} onClick={() => setTab("wallet")}>My wallet</button><button type="button" className={tab === "requests" ? "active" : ""} role="tab" aria-selected={tab === "requests"} onClick={() => setTab("requests")}>Withdrawal</button></div></div>{tab === "wallet" ? <UserWallet/> : <AdminRequests/>}</div>;
+  return <div className="flex flex-col gap-6"><UserWallet /></div>;
 }

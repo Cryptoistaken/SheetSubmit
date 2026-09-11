@@ -258,8 +258,8 @@ export default function ApprovalsView() {
         }
       `}</style>
 
-      {/* status filter + refresh */}
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 16, position: "relative" }}>
+      {/* status filter */}
+      <div style={{ display: "flex", marginBottom: 10 }}>
         <div
           className="pool-switch"
           style={{ margin: "0 auto" }}
@@ -278,7 +278,9 @@ export default function ApprovalsView() {
             <button key={s} role="tab" data-status={s} aria-selected={apprFilter === s} className={apprFilter === s ? "active" : ""} onClick={() => setApprFilter(s)}>{s[0] + s.slice(1).toLowerCase()} <span className="badge" style={{ marginLeft: 2 }}>{apprCounts[s]}</span></button>
           ))}
         </div>
-        <button type="button" aria-label="Refresh" title="Refresh" onClick={() => { void refreshAll(); }} style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", width: 36, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--border)", borderRadius: "var(--r)", background: "var(--bg)", color: "var(--text2)", cursor: "pointer" }}>
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+        <button type="button" aria-label="Refresh" title="Refresh" onClick={() => { void refreshAll(); }} style={{ width: 36, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--border)", borderRadius: "var(--r)", background: "var(--bg)", color: "var(--text2)", cursor: "pointer" }}>
           <RefreshCw size={16} className={holdsLoading ? "spin" : ""} aria-hidden />
         </button>
       </div>

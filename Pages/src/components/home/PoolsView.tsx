@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ExternalLink, MoreVertical, RefreshCw } from "lucide-react";
+import { ExternalLink, MoreVertical } from "lucide-react";
 import { api } from "@/lib/api";
 import type { PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
 import type { PoolLivePatch } from "@/lib/poolLive";
@@ -307,13 +307,6 @@ export default function PoolsView() {
           .taker-cell{min-width:0}
         }
       `}</style>
-
-      {/* refresh */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-        <button type="button" aria-label="Refresh" title="Refresh" onClick={() => { void refreshAll(); }} style={{ width: 36, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--border)", borderRadius: "var(--r)", background: "var(--bg)", color: "var(--text2)", cursor: "pointer" }}>
-          <RefreshCw size={16} aria-hidden />
-        </button>
-      </div>
 
       <div id="pools-panel-pool">
       {/* switches */}

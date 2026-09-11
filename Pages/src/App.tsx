@@ -144,6 +144,7 @@ const router = createBrowserRouter([
           { path: "files", element: <HomePage /> },
           { path: "archive", element: <HomePage /> },
           { path: "wallet", element: <HomePage /> },
+          { path: "withdrawals", element: <HomePage /> },
           { path: "pools", element: <Navigate to="/pools/dgddigital/cookies_only" replace /> },
           { path: "pools/:password/:poolId", element: <HomePage /> },
           { path: "approvals", element: <HomePage /> },

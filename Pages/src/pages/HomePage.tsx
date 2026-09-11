@@ -36,6 +36,7 @@ const PoolLookupTool = lazyRetry(() => import("@/components/tools/PoolLookupTool
 const PoolsView = lazyRetry(() => import("@/components/home/PoolsView"));
 const SettingsView = lazyRetry(() => import("@/components/home/SettingsView"));
 const WalletView = lazyRetry(() => import("@/components/home/WalletView"));
+const WithdrawalsView = lazyRetry(() => import("@/components/home/WithdrawalsView"));
 import Fab from "@/components/home/Fab";
 import FileGrid from "@/components/home/FileGrid";
 import PageSkeleton from "@/components/ui/page-skeleton";
@@ -50,7 +51,7 @@ import { downloadXlsx, genId, hydrateWaCache, importXlsx } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
 import { AnalysisIcon, ApprovalsIcon, ArchiveIcon, CookieIcon, ObsidianIcon, PageIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, TwoFaIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
 
-type Tab = "files" | "archive" | "wallet" | "pools" | "approvals" | "settings" | "admin" | "analysis" | "tools";
+type Tab = "files" | "archive" | "wallet" | "withdrawals" | "pools" | "approvals" | "settings" | "admin" | "analysis" | "tools";
 
 // Built-in pool passwords — files under these feed the shared pools; the modal
 // only offers these two, so every file created here pools by default.
@@ -138,6 +139,8 @@ export default function HomePage() {
           ? "archive"
           : path === "/wallet"
             ? "wallet"
+            : path === "/withdrawals"
+              ? "withdrawals"
             : "files";
 
   const [files, setFiles] = useState<SheetFile[] | null>(null);
@@ -435,6 +438,15 @@ export default function HomePage() {
           <WalletIcon size={14} aria-hidden="true" />
           Wallet
         </button>
+        <button
+          className={`home-tab${tab === "withdrawals" ? " active" : ""}`}
+          role="tab"
+          aria-selected={tab === "withdrawals"}
+          onClick={() => goTab("/withdrawals")}
+        >
+          <img src="/withdrawal-icon.svg" alt="" aria-hidden="true" width={15.4} height={15.4} />
+          Withdrawals
+        </button>
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "admin" ? " active" : ""}`}
@@ -475,7 +487,7 @@ export default function HomePage() {
             aria-selected={tab === "settings"}
             onClick={() => goTab("/settings")}
           >
-            <img src="/settings-icon.svg" alt="" aria-hidden="true" width={14} height={14} />
+            <img src="/settings-icon.svg" alt="" aria-hidden="true" width={15.4} height={15.4} />
             Settings
           </button>
         ) : null}
@@ -560,6 +572,12 @@ export default function HomePage() {
       {tab === "wallet" ? (
         <div className="home-pane" id="homePaneWallet" style={{ padding: "32px 24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
           <Suspense fallback={<PageSkeleton variant="files" />}><WalletView /></Suspense>
+        </div>
+      ) : null}
+
+      {tab === "withdrawals" ? (
+        <div className="home-pane" id="homePaneWithdrawals" style={{ padding: "32px 24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
+          <Suspense fallback={<PageSkeleton variant="files" />}><WithdrawalsView /></Suspense>
         </div>
       ) : null}
 

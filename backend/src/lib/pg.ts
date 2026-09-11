@@ -167,7 +167,7 @@ async function fileOp(id: string, op: string, a: any) {
     const next = Number(meta.seq) + 1; await tx`UPDATE file_meta SET data=${j(file)},seq=${next} WHERE file_id=${id}`;
     await tx`DELETE FROM file_rows WHERE file_id=${id}`;
     if (rows.length) await bulkInsert(tx, id, rows);
-    await tx`INSERT INTO file_logs(file_id,ts,action,seq) VALUES(${id},${Date.now()},"restore",${next})`; await tx`DELETE FROM file_logs WHERE file_id=${id} AND id NOT IN (SELECT id FROM file_logs WHERE file_id=${id} ORDER BY id DESC LIMIT 200)`;
+    await tx`INSERT INTO file_logs(file_id,ts,action,seq) VALUES(${id},${Date.now()},${"restore"},${next})`; await tx`DELETE FROM file_logs WHERE file_id=${id} AND id NOT IN (SELECT id FROM file_logs WHERE file_id=${id} ORDER BY id DESC LIMIT 200)`;
     return { ok: true, seq: next, rows, file, restoredSeq: Number(prev.seq ?? 0), snapshots: snaps.length };
   });
   if (op !== "save" && op !== "append") throw new Error(`unknown operation: ${op}`);

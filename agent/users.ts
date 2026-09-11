@@ -40,7 +40,7 @@ function flag(name: string): string | undefined {
   const v = argv[i + 1];
   return v && !v.startsWith("--") ? v : undefined;
 }
-const has = (name: string) => argv.includes(`--${name}`);
+const has = (name: string) => argv.includes("--" + name.replace(/^--+/, ""));
 const UID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 const base = (flag("base") || Bun.env.BACKEND_URL || "").trim().replace(/\/+$/, "");

@@ -81,10 +81,10 @@ async function main() {
   const owner = await login(ownerUid, "Agent QA RowLoss");
   ownerSession = owner;
   const admin = await login(adminUid, "Agent QA RowLoss Admin");
-  const me = await api("/auth/me", { session: admin });
+  const me = await api("/api/auth/me", { session: admin });
   if (me.status !== 200 || !me.body?.isAdmin) throw new Error(`${adminUid} is not admin on this backend (dev ADMIN_IDS?)`);
 
-  const mk = (u: string, two = true) => ({ cookies: `datr=x${u}; c_user=${u}; xs=t`, twofakey: two ? "AAAA AAAA AAA" : "", uid: u });
+  const mk = (u: string, two = true) => ({ cookies: `datr=x${u}; c_user=${u}; xs=t`, twofakey: two ? "AAAA AAAA AAA" : "", uid: u, status: "" });
   const run = Date.now().toString().slice(-9);
 
   // A. stale base → 409

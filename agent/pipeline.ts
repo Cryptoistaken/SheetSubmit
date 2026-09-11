@@ -47,7 +47,7 @@ function flag(name: string): string | undefined {
   const v = argv[i + 1];
   return v && !v.startsWith("--") ? v : undefined;
 }
-const has = (name: string) => argv.includes(`--${name}`);
+const has = (name: string) => argv.includes("--" + name.replace(/^--+/, ""));
 const UID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 const PWD = "dgddigital";
@@ -168,11 +168,11 @@ async function main() {
 
   // 1. mint users
   ownerSession = await testLogin(ownerUid, "Agent QA Owner");
-  const ownerMe = await api<any>("/auth/me", { session: ownerSession });
+  const ownerMe = await api<any>("/api/auth/me", { session: ownerSession });
   if (ownerMe.status !== 200) throw new Error(`owner me failed: ${ownerMe.status}`);
   pass(`owner minted uid=${ownerMe.body.id} isAdmin=${ownerMe.body.isAdmin}`);
   adminSession = await testLogin(adminUid, "Agent QA Admin");
-  const adminMe = await api<any>("/auth/me", { session: adminSession });
+  const adminMe = await api<any>("/api/auth/me", { session: adminSession });
   if (adminMe.status !== 200 || !adminMe.body?.isAdmin) {
     throw new Error(`admin check failed for ${adminUid} (isAdmin=${adminMe.body?.isAdmin}) — uid must be in the DEV backend's ADMIN_IDS`);
   }

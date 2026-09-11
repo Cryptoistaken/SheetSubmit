@@ -84,7 +84,7 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
         </div>
       ) : null}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className={sheet ? undefined : "lg:hidden"}>
+      <header className={sheet ? undefined : "home-topbar"}>
         <div className="topbar" aria-hidden="true">
           <div className="topbar-l">
             <Skeleton className="h-5 w-5 rounded-sm" />
@@ -117,8 +117,9 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
 function Layout() {
   const { pathname } = useLocation();
   const variant = skeletonForPath(pathname);
-  // Sheet pages keep the Topbar on every size; home sections use the desktop
-  // sidebar at lg:+ (Topbar + tab bar stay mobile-only there).
+  // Sheet pages keep the full Topbar on every size; home sections pair the
+  // desktop sidebar at lg:+ with a slim right-aligned Topbar (profile /
+  // balance / theme, logo cluster hidden in CSS). The tab bar stays mobile-only.
   const isFilePage =
     pathname.startsWith("/file/") ||
     /\/admin\/user\/[^/]+\/file\/[^/]+/.test(pathname);
@@ -136,7 +137,7 @@ function Layout() {
         </header>
       ) : (
         <>
-          <header className="lg:hidden">
+          <header className="home-topbar">
             <Topbar />
           </header>
           <Sidebar />

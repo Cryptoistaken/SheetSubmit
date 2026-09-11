@@ -6,11 +6,9 @@ import { useLocation, useNavigate } from "react-router";
 import { AnalysisIcon, ApprovalsIcon, ArchiveIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
 import { BdtIcon } from "@/components/layout/Topbar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ThemeTogglerButton } from "@/components/ui/theme-toggler";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { loadBdtRate, useCurrency } from "@/lib/currency";
-import { useTheme } from "@/lib/theme";
 import { useToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -85,7 +83,6 @@ function NavButton({ active, collapsed, label, onClick, children }: { active: bo
 // Layout never mounts this there.
 export default function Sidebar() {
   const { user } = useAuth();
-  const { theme, toggle } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const showToast = useToast();
@@ -142,10 +139,12 @@ export default function Sidebar() {
 
   return (
     <aside
-      onMouseEnter={() => { if (collapsed) setHoverOpen(true); }}
       onMouseLeave={() => setHoverOpen(false)}
       className={cn("hidden shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background transition-[width] duration-200 ease-out motion-reduce:transition-none lg:flex", effCollapsed ? "w-16" : "w-60")}
     >
+      {/* Hover auto-expand covers everything except the footer trigger block
+          below it — the footer is hover-dead (click only), the rest expands. */}
+      <div onMouseEnter={() => { if (collapsed) setHoverOpen(true); }} className="flex min-h-0 flex-1 flex-col">
       <div className={cn("flex items-center gap-2 border-b border-border px-3 py-3", effCollapsed && "justify-center px-0")}>
         <button type="button" onClick={() => navigate("/")} title="Sheet Submit — home" aria-label="Sheet Submit — home" className="grid size-8 shrink-0 place-items-center rounded-md hover:bg-muted">
           <img src="/logo.svg" className="size-5" alt="" aria-hidden="true" />
@@ -220,8 +219,9 @@ export default function Sidebar() {
           </>
         )}
       </nav>
+      </div>
 
-      <div className={cn("flex items-center gap-1 border-t border-border p-2", effCollapsed ? "flex-col justify-center" : "flex-row justify-between")}>
+      <div className={cn("flex items-center border-t border-border p-2", effCollapsed ? "justify-center" : "justify-start")}>
         <button
           type="button"
           onClick={toggleCollapse}
@@ -235,7 +235,6 @@ export default function Sidebar() {
             <path d="M6.25 7.25v9.5" className={cn("transition-transform duration-200 ease-out motion-reduce:transition-none", effCollapsed && "translate-x-[10.5px]")} />
           </svg>
         </button>
-        <ThemeTogglerButton theme={theme} onToggle={toggle} />
       </div>
     </aside>
   );

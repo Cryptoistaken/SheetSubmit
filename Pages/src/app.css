@@ -595,6 +595,11 @@ button, input, select, textarea {
 @media (min-width: 1024px) {
     #homeTabBar .home-tabs[role="tablist"] { display: none; }
     #homeTabBar.skeleton-bar { display: none; }
+    /* Home pages keep a slim right-aligned utility bar (profile / balance /
+       theme) next to the sidebar — only the logo cluster hides on desktop.
+       (Safe: the home header never renders file-page title/back controls.) */
+    .home-topbar .topbar { justify-content: flex-end; }
+    .home-topbar .topbar-l { display: none; }
 }
 
 /* ── Home panes ── */

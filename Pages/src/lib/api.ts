@@ -271,6 +271,10 @@ export const api = {
     request<{ ticket: string }>(`/files/${encodeURIComponent(id)}/live-ticket`, { method: "POST" }),
   getLiveState: (id: string) =>
     request<{ states: Record<string, { hold?: boolean; approved?: boolean; dead?: boolean }> }>(`/files/${encodeURIComponent(id)}/live-state`),
+  requestPoolLiveTicket: (password: string, pool: string) =>
+    request<{ ticket: string }>(`/pools/${encodeURIComponent(password)}/${encodeURIComponent(pool)}/live-ticket`, { method: "POST" }),
+  getPoolLiveState: (password: string, pool: string) =>
+    request<unknown>(`/pools/${encodeURIComponent(password)}/${encodeURIComponent(pool)}/live-state`),
   persist: (id: string, data: PersistPayload, opts?: { keepalive?: boolean }) =>
     request<{ ok: boolean; seq?: number; file?: SheetFile }>(`/files/${id}/persist`, { method: "PUT", body: JSON.stringify(data) }, opts),
   append: (id: string, data: AppendPayload, opts?: { keepalive?: boolean }) =>

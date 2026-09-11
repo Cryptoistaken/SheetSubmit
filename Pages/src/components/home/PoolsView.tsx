@@ -3,6 +3,8 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { Download, ExternalLink, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import type { DownloadDetail, HoldRecord, PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
+import type { PoolLivePatch } from "@/lib/poolLive";
+import { usePoolLive } from "@/hooks/usePoolLive";
 import { BDT_RATE, fmtMoney, inputToUsd, usdToInput, useCurrency, type Currency } from "@/lib/currency";
 import { useToast } from "@/lib/toast";
 import { useProfileCache } from "@/stores/profileCache";
@@ -215,6 +217,39 @@ export default function PoolsView() {
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
   useEffect(() => { setSelectedUids([]); setSelectedFileIds([]); setApprSel([]); }, [cur, curPwd]);
+
+  // Live pool counts: patch badges + totals + verified split + users[]
+  // in place on every push — never a full load(). Keyed on (curPwd, cur).
+  const applyPoolPatch = useCallback((patch: PoolLivePatch) => {
+    if (patch.badges) {
+      const avail = new Map(patch.badges.map((b) => [b.id, b.available]));
+      setPools((prev) => (prev ? prev.map((p) => {
+        if ((p as unknown as Record<string, unknown>).password !== undefined
+          && (p as unknown as Record<string, unknown>).password !== curPwd) return p;
+        return avail.has(p.id) ? { ...p, available: avail.get(p.id) ?? p.available } : p;
+      }) : prev));
+    }
+    if (patch.totals || patch.usersList) {
+      setDetail((prev) => {
+        if (!prev || prev.password !== curPwd || prev.pool.id !== cur) return prev;
+        return {
+          ...prev,
+          totals: { ...prev.totals, ...(patch.totals ?? {}) },
+          users: patch.usersList ?? prev.users,
+        };
+      });
+      if (patch.usersList) {
+        try { useProfileCache.getState().setProfiles(patch.usersList as unknown[]); } catch {}
+      }
+    }
+    if (patch.verified && cur === "page") {
+      const v = patch.verified;
+      setVerified((prev) => (prev
+        ? { ...prev, verified: v.verified, unverified: v.unverified, totalAvailable: v.totalAvailable }
+        : { pool: cur, verified: v.verified, unverified: v.unverified, totalAvailable: v.totalAvailable, truncated: false, scanCap: 0 }));
+    }
+  }, [cur, curPwd]);
+  usePoolLive(curPwd, cur, detail !== null, applyPoolPatch);
 
   const poolCounts: Record<string, number> = {};
   if (pools) pools.filter((p) => (p as unknown as Record<string, unknown>)["password"] === curPwd || !(p as unknown as Record<string, unknown>)["password"]).forEach((p) => { poolCounts[p.id] = p.available; });

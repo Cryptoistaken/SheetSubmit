@@ -28,11 +28,14 @@ export interface LiveTimer {
 
 export interface LiveClientOpts {
   base: string;
-  fileId: string;
+  fileId?: string;
   getTicket: () => Promise<string>;
-  onStates: (states: LiveStates) => void;
+  onStates?: (states: LiveStates) => void;
+  onEvent?: (msg: unknown) => void;
   createSource?: (url: string) => LiveSource;
   pollStates?: () => Promise<LiveStates | null>;
+  pollEvent?: () => Promise<unknown | null>;
+  buildUrl?: (ticket: string) => string;
   schedule?: (fn: () => void, ms: number) => LiveTimer;
   maxFailures?: number;
 }
@@ -50,8 +53,11 @@ export function createLiveClient(opts: LiveClientOpts): LiveClient {
     fileId,
     getTicket,
     onStates,
+    onEvent,
     createSource = (url: string) => new EventSource(url) as unknown as LiveSource,
     pollStates,
+    pollEvent,
+    buildUrl = (ticket: string) => `${base}/api/files/${fileId}/live?ticket=${encodeURIComponent(ticket)}`,
     schedule = (fn: () => void, ms: number) => {
       const t = setTimeout(fn, ms);
       return { cancel: () => clearTimeout(t) };
@@ -79,17 +85,34 @@ export function createLiveClient(opts: LiveClientOpts): LiveClient {
     } catch {
       return;
     }
+    if (onEvent) {
+      try {
+        onEvent(msg);
+      } catch {}
+    }
+    if (!onStates) return;
     const states = (msg as { states?: unknown })?.states;
     if (states && typeof states === "object") onStates(states as LiveStates);
   };
 
   const pollNow = () => {
-    if (closed || !pollStates) return;
-    void pollStates().then(
-      (states) => {
-        if (closed) return;
-        if (states) onStates(states);
-        later(pollNow, POLL_MS);
+    if (closed || (!pollStates && !pollEvent)) return;
+    const run = pollEvent
+      ? pollEvent().then((msg) => {
+          if (closed) return;
+          if (msg != null && onEvent) {
+            try {
+              onEvent(msg);
+            } catch {}
+          }
+        })
+      : pollStates!().then((states) => {
+          if (closed) return;
+          if (states && onStates) onStates(states);
+        });
+    void run.then(
+      () => {
+        if (!closed) later(pollNow, POLL_MS);
       },
       () => {
         if (!closed) later(pollNow, POLL_MS);
@@ -132,7 +155,7 @@ export function createLiveClient(opts: LiveClientOpts): LiveClient {
         ticket = t;
         let next: LiveSource;
         try {
-          next = createSource(`${base}/api/files/${fileId}/live?ticket=${encodeURIComponent(ticket)}`);
+          next = createSource(buildUrl(ticket));
         } catch {
           failed();
           return;

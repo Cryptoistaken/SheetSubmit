@@ -24,6 +24,31 @@ export function consumeLiveTicket(ticket: string, opts?: { now?: number }): stri
   return rec.fileId;
 }
 
+// One-time tickets gating the pool-count stream
+// (GET /pools/:password/:pool/live). Same 60s TTL single-use shape as file
+// tickets, keyed by "password:pool" so a ticket never crosses pools.
+const poolTickets = new Map<string, { poolKey: string; exp: number }>();
+
+/** Room name for a pool's count pushes — prefixed so it never collides with fileId rooms. */
+export const poolRoom = (password: string, pool: string) => `pool:${password}:${pool}`;
+
+export function mintPoolLiveTicket(poolKey: string, opts?: { now?: number }): string {
+  const now = opts?.now ?? Date.now();
+  if (poolTickets.size > 1000) for (const [k, v] of poolTickets) if (v.exp <= now) poolTickets.delete(k);
+  const ticket = crypto.randomUUID().replaceAll("-", "");
+  poolTickets.set(ticket, { poolKey, exp: now + TICKET_TTL_MS });
+  return ticket;
+}
+
+/** Returns the ticket's poolKey on first valid use, else null. */
+export function consumePoolLiveTicket(ticket: string, opts?: { now?: number }): string | null {
+  const rec = poolTickets.get(ticket);
+  if (!rec) return null;
+  poolTickets.delete(ticket);
+  if (rec.exp <= (opts?.now ?? Date.now())) return null;
+  return rec.poolKey;
+}
+
 export interface LiveRowState {
   src_file_id: string | null | undefined;
   row_key: string;

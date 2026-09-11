@@ -2,6 +2,7 @@ import postgres from "postgres";
 import type { Row, SheetFile } from "./shared";
 import { isPersistConflict, FILE_ROW_LIMIT, FILE_SNAPSHOT_LIMIT, pushSnapshot } from "./shared";
 import { groupLiveStates } from "./live";
+import { publishPoolCounts } from "./livePublish";
 import type { FileSnapshot } from "./shared";
 import { redisDel, redisDelPrefix, redisJsonGet, redisJsonGetMany, redisJsonSet } from "./redis";
 
@@ -472,7 +473,12 @@ const INDEX_WRITE_OPS = new Set(["ensureUser", "register", "archive", "batchArch
 
 export async function repository(namespace: "index" | "files" | "pools", name: string, op: string, args: Record<string, unknown>) {
   const out = await (namespace === "index" ? indexOp(op, args) : namespace === "files" ? fileOp(name, op, args) : poolOp(name, op, args));
-  if (namespace === "pools" && POOL_WRITE_OPS.has(op)) await redisDelPrefix("ss:rpc:pools:");
-  else if (namespace === "index" && INDEX_WRITE_OPS.has(op)) await redisDelPrefix("ss:rpc:index:");
+  // ponytail: live pool counts fan out AFTER the write commits, fire-and-void
+  // (fail-open bridge) so API latency is unaffected — single-replica deploy
+  // (no numReplicas in railway.toml), so in-process rooms only, no relay.
+  if (namespace === "pools" && POOL_WRITE_OPS.has(op)) {
+    await redisDelPrefix("ss:rpc:pools:");
+    void publishPoolCounts(name === "global" ? undefined : name, typeof args.pool === "string" ? args.pool : undefined);
+  } else if (namespace === "index" && INDEX_WRITE_OPS.has(op)) await redisDelPrefix("ss:rpc:index:");
   return out;
 }

@@ -21,9 +21,14 @@ export function joinLive(fileId: string, sink: Sink): () => void {
 }
 
 export function publishLive(fileId: string, states: LiveStates): void {
-  const sinks = rooms.get(fileId);
+  publishRoom(fileId, { states });
+}
+
+/** Raw fan-out to any room (pool-count rooms carry their own envelope). */
+export function publishRoom(room: string, payload: unknown): void {
+  const sinks = rooms.get(room);
   if (!sinks || !sinks.size) return;
-  const msg = JSON.stringify({ states });
+  const msg = JSON.stringify(payload);
   for (const sink of [...sinks]) {
     try {
       sink(msg);

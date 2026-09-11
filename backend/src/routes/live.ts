@@ -3,8 +3,9 @@ import type { Env, Row, SheetFile } from "../lib/shared";
 import { poolRowKey } from "../lib/shared";
 import { isAdmin, requireAuth } from "../lib/session";
 import { rpc } from "../lib/do";
-import { consumeLiveTicket, mintLiveTicket } from "../lib/live";
+import { consumeLiveTicket, consumePoolLiveTicket, mintLiveTicket, mintPoolLiveTicket, poolRoom } from "../lib/live";
 import { joinLive } from "../lib/liveBus";
+import { poolCountsSnapshot } from "../lib/livePublish";
 import { decorateHoldState } from "./files";
 
 // Live row-state pushes (slice 1: transport). The stream carries no session —
@@ -59,6 +60,42 @@ live.get("/files/:id/live", async (c) => {
   const ticket = c.req.query("ticket") || "";
   const fileId = ticket ? consumeLiveTicket(ticket) : null;
   if (!fileId || fileId !== id) return c.json({ error: "invalid ticket" }, 401);
+  return streamRoom(c, id);
+});
+
+// Live pool counts (admin-only ticket, ticket-authed stream — same shape as
+// the file stream above, rooms keyed pool:{password}:{poolId}).
+const POOL_IDS = ["cookies_only", "cookies_2fa", "page"] as const;
+
+live.post("/pools/:password/:pool/live-ticket", requireAuth, async (c) => {
+  if (!isAdmin(c.env, c.get("uid"))) return c.json({ error: "admin access required" }, 403);
+  const pwd = c.req.param("password"), pid = c.req.param("pool") || "";
+  if (!pwd || pwd.length > 64 || !(POOL_IDS as readonly string[]).includes(pid)) return c.json({ error: "invalid pool" }, 400);
+  return c.json({ ticket: mintPoolLiveTicket(`${pwd}:${pid}`) });
+});
+
+live.get("/pools/:password/:pool/live", async (c) => {
+  const pwd = c.req.param("password"), pid = c.req.param("pool") || "";
+  const ticket = c.req.query("ticket") || "";
+  const key = ticket ? consumePoolLiveTicket(ticket) : null;
+  if (!key || key !== `${pwd}:${pid}`) return c.json({ error: "invalid ticket" }, 401);
+  return streamRoom(c, poolRoom(pwd, pid));
+});
+
+// Counts snapshot for the 15s poll fallback (same shape the stream pushes,
+// so the client patches in place). Heals worker-side drift: wa/page sweeps
+// write pool_rows directly and only move the page verified split.
+live.get("/pools/:password/:pool/live-state", requireAuth, async (c) => {
+  if (!isAdmin(c.env, c.get("uid"))) return c.json({ error: "admin access required" }, 403);
+  const pwd = c.req.param("password"), pid = c.req.param("pool") || "";
+  if (!pwd || pwd.length > 64 || !(POOL_IDS as readonly string[]).includes(pid)) return c.json({ error: "invalid pool" }, 400);
+  const snap = await poolCountsSnapshot(pwd, pid).catch(() => null);
+  if (!snap) return c.json({ error: "pool not found" }, 404);
+  return c.json(snap);
+});
+
+// Shared ticket-stream transport: :connected + 25s :ping over a room fan-out.
+function streamRoom(c: any, room: string) {
   const enc = new TextEncoder();
   let leave: () => void = () => {};
   let beat: ReturnType<typeof setInterval> | null = null;
@@ -71,7 +108,7 @@ live.get("/files/:id/live", async (c) => {
           // closed stream — cancel() unsubscribes
         }
       };
-      leave = joinLive(fileId, send);
+      leave = joinLive(room, send);
       try {
         controller.enqueue(enc.encode(`:connected\n\n`));
       } catch {}
@@ -102,4 +139,4 @@ live.get("/files/:id/live", async (c) => {
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
-});
+}

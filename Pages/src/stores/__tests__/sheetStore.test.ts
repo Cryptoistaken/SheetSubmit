@@ -1149,6 +1149,50 @@ describe("page ledger — auto vs manual + review regressions", () => {
     expect(useSheetStore.getState().rows[0].wa_status).toBe("eligible");
   });
 
+  it("applyUpload replace hydrates cached eligibility without live checks", async () => {
+    await openTestFile();
+    useSheetStore.setState({ columns: pageCols as never });
+    _lsStore.set("ss_autoCheck", "false");
+    harness.waCache = { "700": { status: "eligible", banReason: null, error: null, pageName: "Cached", linkedNumber: "123", ts: Date.now() } } as unknown as Record<string, unknown>;
+    harness.pageCheckCalls = []; harness.waCheckCalls = []; harness.getWaCacheCalls = []; harness.persistCalls = [];
+    useSheetStore.getState().applyUpload("replace", [{ cookies: "c_user=700;", uid: "700", twofakey: "JBSWY3DPEHPK3PXP" }]);
+    // rows land immediately with blank wa_status (no blocking on network)
+    expect(useSheetStore.getState().rows[0].wa_status).toBeFalsy();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(harness.getWaCacheCalls.length).toBe(1);
+    expect(harness.pageCheckCalls.length).toBe(0);
+    expect(harness.waCheckCalls.length).toBe(0);
+    expect(useSheetStore.getState().rows[0].wa_status).toBe("eligible");
+    expect(useSheetStore.getState().rows[0].wa_page_name).toBe("Cached");
+    expect(useSheetStore.getState().rows[0].wa_linked_number).toBe("123");
+    // debounced persist carries the eligibility to the server copy (pool feed)
+    await new Promise((r) => setTimeout(r, 400));
+    const last = harness.persistCalls[harness.persistCalls.length - 1];
+    expect(last.payload.rows[0].wa_status).toBe("eligible");
+  });
+
+  it("applyUpload append hydrates cached ineligible without live checks", async () => {
+    await openTestFile();
+    useSheetStore.setState({
+      rows: [{ cookies: "c_user=701;", uid: "701", twofakey: "JBSWY3DPEHPK3PXP" }],
+      columns: pageCols as never,
+    });
+    _lsStore.set("ss_autoCheck", "false");
+    harness.waCache = { "702": { status: "ineligible", banReason: "banned", error: null, pageName: null, linkedNumber: null, ts: Date.now() } } as unknown as Record<string, unknown>;
+    harness.pageCheckCalls = []; harness.waCheckCalls = []; harness.getWaCacheCalls = [];
+    useSheetStore.getState().applyUpload("append", [{ cookies: "c_user=702;", uid: "702", twofakey: "JBSWY3DPEHPK3PXP" }]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(harness.getWaCacheCalls.length).toBe(1);
+    expect(harness.pageCheckCalls.length).toBe(0);
+    expect(harness.waCheckCalls.length).toBe(0);
+    const rows = useSheetStore.getState().rows;
+    const appended = rows.find((r) => r.uid === "702");
+    expect(appended?.wa_status).toBe("ineligible");
+    expect(appended?.wa_ban_reason).toBe("banned");
+    // untouched row keeps blank status (no cache entry)
+    expect(rows.find((r) => r.uid === "701")?.wa_status).toBeFalsy();
+  });
+
   it("same cuser rows in same sweep do not double WA", async () => {
     await openTestFile();
     _lsStore.set("ss_waCheck", "true");

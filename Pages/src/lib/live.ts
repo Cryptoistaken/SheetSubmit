@@ -101,6 +101,15 @@ export function createLiveClient(opts: LiveClientOpts): LiveClient {
     if (closed || polling) return;
     attempts++;
     if (attempts < maxFailures) {
+      // Kill the broken source first: a left-open EventSource auto-retries
+      // the same (single-use, now dead) ticket after ~3s, overlapping the
+      // manual reconnect below with a ghost connection.
+      if (source) {
+        try {
+          source.close();
+        } catch {}
+        source = null;
+      }
       later(connect, backoffMs(attempts));
     } else {
       polling = true;

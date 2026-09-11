@@ -16,6 +16,7 @@ import { toast } from "@/lib/toast";
 import { mirrorPending, snapshotFile, applyMirror, idbGet, idbDel, mirrorKey, snapKey } from "@/lib/idb";
 import type { JournalMirror, FileSnapshot } from "@/lib/idb";
 import { vibrate } from "@/lib/utils";
+import { hydrateWaCache } from "@/lib/xlsx";
 import { poolRowKey } from "@/lib/live";
 import { IS_DESKTOP } from "@/lib/device";
 import { getCachedTOTP } from "@/features/filetypes/totp";
@@ -2332,6 +2333,62 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (incoming.some((r) => r.cookies || r.uid)) {
       get().maybeAutoCheck(null, "cookies");
     }
+    // Cache-only WA hydration for re-uploaded rows: the new-file path hydrates
+    // before createFile, but in-sheet uploads land with blank wa_status until a
+    // live page-check runs (green instead of blue). Fill cached eligibility
+    // instantly — no live checks here, maybeAutoCheck above handles those.
+    const hydrateFileId = s.fileId;
+    const hydrateSnap = incoming.map((r) => ({ ...r }));
+    void (async () => {
+      await hydrateWaCache(hydrateSnap);
+      if (!hydrateFileId || get().fileId !== hydrateFileId) return;
+      const hits = new Map<string, Row>();
+      hydrateSnap.forEach((row) => {
+        if (row.wa_status !== "eligible" && row.wa_status !== "ineligible") return;
+        let uid = row.uid ?? null;
+        if (!uid && row.cookies) {
+          const m = row.cookies.match(/c_user=(\d+)/);
+          if (m) uid = m[1];
+        }
+        if (uid && !hits.has(uid)) hits.set(uid, row);
+      });
+      if (!hits.size) return;
+      const cur = get();
+      if (cur.fileId !== hydrateFileId) return;
+      const WA_FIELDS = ["wa_status", "wa_ban_reason", "wa_page_name", "wa_linked_number"] as const;
+      let touched = false;
+      const finalRows = cur.rows.map((row) => {
+        let uid = row.uid ?? null;
+        if (!uid && row.cookies) {
+          const m = row.cookies.match(/c_user=(\d+)/);
+          if (m) uid = m[1];
+        }
+        const hit = uid ? hits.get(uid) : undefined;
+        if (!hit) return row;
+        if (
+          row.wa_status === hit.wa_status &&
+          row.wa_ban_reason === hit.wa_ban_reason &&
+          row.wa_page_name === hit.wa_page_name &&
+          row.wa_linked_number === hit.wa_linked_number
+        ) return row;
+        touched = true;
+        return { ...row, wa_status: hit.wa_status, wa_ban_reason: hit.wa_ban_reason, wa_page_name: hit.wa_page_name, wa_linked_number: hit.wa_linked_number };
+      });
+      if (!touched) return;
+      const changed: { rowIdx: number; cols: Record<string, string> }[] = [];
+      finalRows.forEach((row, i) => {
+        if (row === cur.rows[i]) return;
+        const cols: Record<string, string> = {};
+        for (const k of WA_FIELDS) {
+          const nv = (row as Record<string, unknown>)[k];
+          cols[k] = nv == null ? "" : String(nv);
+        }
+        changed.push({ rowIdx: i, cols });
+      });
+      const changeJournal = mergeJournal(get().changeJournal, changed);
+      set({ rows: finalRows, changeJournal: changeJournal.slice(-MAX_JOURNAL), isDirty: true, ...recomputeMarks(finalRows, get().crossDups, get().columns) });
+      get().persist();
+    })();
   },
 
   removeEmptyRows: () => {

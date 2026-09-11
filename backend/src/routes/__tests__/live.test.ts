@@ -63,6 +63,16 @@ describe("GET /api/files/:id/live", () => {
     const res = await req(`/api/files/${TID}/live?ticket=${t}`);
     expect(res.status).toBe(401);
   });
+
+  it("keeps the CORS headers on the stream (raw Response drops them)", async () => {
+    const t = mintLiveTicket(TID);
+    const res = await req(`/api/files/${TID}/live?ticket=${t}`, {
+      headers: { Origin: "https://sheetsubmit.pages.dev" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://sheetsubmit.pages.dev");
+    await res.body?.cancel();
+  });
 });
 
 describe("POST /api/files/:id/live-ticket", () => {

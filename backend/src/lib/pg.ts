@@ -220,6 +220,16 @@ async function poolOp(password: string, op: string, a: any) {
   // one bulk INSERT via jsonb_to_recordset, one bulk UPDATE for re-fed available
   // rows, one batched pool_rejects upsert. Response stays { added }.
   if (op === "add") return db.begin(async (tx: any) => {
+    // feed/archive race: feeds are fire-and-forget while the archive wipe is
+    // awaited, so a feed INSERT landing after the wipe would resurrect pool
+    // rows for an archived file — refuse the feed and mop up available husks.
+    if (a.srcFileId) {
+      const f: any = (await tx`SELECT archived FROM file_index WHERE file_id=${String(a.srcFileId)}`)[0];
+      if (f && f.archived) {
+        await tx`DELETE FROM pool_rows WHERE password=${password} AND src_file_id=${String(a.srcFileId)} AND state='available'`;
+        return { added: 0, blocked: 0 };
+      }
+    }
     const pp = preset(a.preset ?? a.poolKind ?? a.filePreset ?? a.file?.preset ?? a.file?.poolKind);
     const cand = new Map<string, { pool: Pool; data: Row }>(); // last classifiable row wins per key (was: insert then refresh)
     const rej = new Map<string, boolean>(); // sequential net effect of the old per-row reject DELETE/INSERT
@@ -244,6 +254,26 @@ async function poolOp(password: string, op: string, a: any) {
         console.log(`[pool] blocked ${denied.length} already-sold/dead account(s) from ${password}/${pp} feed`);
       }
     }
+    // re-uploaded rows instantly count as verified again: fill blank
+    // wa_status from the per-owner WA cache (wa:{srcUid}:{cuser}, fresh +
+    // eligible only) — never overwrite an explicit value already on the row.
+    if (srcUid && cand.size) {
+      const need = [...cand].filter(([, v]) => !String((v.data as any)?.wa_status ?? (v.data as any)?.waStatus ?? "").trim());
+      if (need.length) {
+        const mkeys = [...new Set(need.map(([k]) => `wa:${srcUid}:${k}`))];
+        const mrows: any[] = await tx`SELECT k,v FROM meta WHERE k IN ${tx(mkeys)}`;
+        const mc = new Map(mrows.map((r: any) => [String(r.k), json(r.v)]));
+        for (const [k, v] of need) {
+          const ce: any = mc.get(`wa:${srcUid}:${k}`);
+          if (!ce || ce.status !== "eligible" || (ce.ts && now - Number(ce.ts) > 86400000)) continue;
+          const d = v.data as any;
+          d.wa_status = "eligible";
+          if (ce.banReason != null) d.wa_ban_reason = ce.banReason;
+          if (ce.pageName != null) d.wa_page_name = ce.pageName;
+          if (ce.linkedNumber != null) d.wa_linked_number = ce.linkedNumber;
+        }
+      }
+    }
     if (keys.length) await tx`SELECT pg_advisory_xact_lock(x.h) FROM (SELECT DISTINCT hashtext(u.k) AS h FROM unnest(${keys}::text[]) AS u(k)) x ORDER BY x.h`;
     if (keys.length && srcFileId && pp) {
       const byPool = new Map<string, string[]>();
@@ -254,7 +284,7 @@ async function poolOp(password: string, op: string, a: any) {
     if (keys.length) {
       await tx`DELETE FROM pool_rows WHERE row_key = ANY(${keys}) AND state='dead'`;
       await tx`DELETE FROM pool_rejects WHERE row_key = ANY(${keys})`;
-      const same: any[] = await tx`SELECT pool_id,row_key,state FROM pool_rows WHERE password=${password} AND row_key = ANY(${keys})`;
+      const same: any[] = await tx`SELECT pool_id,row_key,state,data FROM pool_rows WHERE password=${password} AND row_key = ANY(${keys})`;
       const busy: any[] = await tx`SELECT DISTINCT row_key FROM pool_rows WHERE row_key = ANY(${keys}) AND state IN ('available','held','claimed')`;
       const mine = new Map(same.map((r: any) => [`${r.pool_id} ${r.row_key}`, r.state]));
       const blocked = new Set(busy.map((r: any) => String(r.row_key)));
@@ -262,6 +292,21 @@ async function poolOp(password: string, op: string, a: any) {
         const st = mine.get(`${v.pool} ${k}`);
         if (st) { if (st === "available") touch.push({ pool: v.pool, k, d: v.data }); continue; } // held/claimed stay frozen
         if (!blocked.has(k)) put.push({ pool: v.pool, k, d: v.data }); // available/held/claimed anywhere blocks
+      }
+      // re-feed must not blank known eligibility: a touch whose incoming row
+      // lost wa_status keeps the stored eligible flags instead.
+      if (touch.length) {
+        const stored = new Map(same.map((r: any) => [`${r.pool_id} ${r.row_key}`, json(r.data)]));
+        for (const t of touch) {
+          const d = t.d as any;
+          if (String(d?.wa_status ?? d?.waStatus ?? "").trim()) continue;
+          const sd: any = stored.get(`${t.pool} ${t.k}`);
+          if (String(sd?.wa_status ?? sd?.waStatus ?? "").toLowerCase() !== "eligible") continue;
+          d.wa_status = "eligible";
+          if (d.wa_ban_reason == null && sd.wa_ban_reason != null) d.wa_ban_reason = sd.wa_ban_reason;
+          if (d.wa_page_name == null && sd.wa_page_name != null) d.wa_page_name = sd.wa_page_name;
+          if (d.wa_linked_number == null && sd.wa_linked_number != null) d.wa_linked_number = sd.wa_linked_number;
+        }
       }
       if (put.length) await tx`INSERT INTO pool_rows(password,pool_id,row_key,data,src_uid,src_file_id,inserted_at) SELECT ${password},s.pool,s.k,s.d,${srcUid},${srcFileId},${now} FROM jsonb_to_recordset(${j(put.map((r) => ({ pool: r.pool, k: r.k, d: r.d })))}::jsonb) AS s(pool text,k text,d jsonb)`;
       if (touch.length) await tx`UPDATE pool_rows p SET data=s.d FROM jsonb_to_recordset(${j(touch.map((r) => ({ pool: r.pool, k: r.k, d: r.d })))}::jsonb) AS s(pool text,k text,d jsonb) WHERE p.password=${password} AND p.pool_id=s.pool AND p.row_key=s.k AND p.state='available'`;
@@ -297,8 +342,8 @@ async function poolOp(password: string, op: string, a: any) {
     return { key: k, rows, rejects, blocked, downloads: dls, files: files.map((f: any) => ({ fileId: f.file_id, ownerId: f.owner_id, name: f.name })), found };
   }
   if (op === "counts") { const r: any[] = await db`SELECT pool_id,COUNT(*) n FROM pool_rows WHERE password=${password} AND state='available' GROUP BY pool_id`; return Object.fromEntries(pools.map((x) => [x, Number(r.find((y) => y.pool_id === x)?.n || 0)])); }
-  if (op === "summary") { const r: any = (await db`SELECT COUNT(*) FILTER (WHERE state='available') available,COUNT(*) FILTER (WHERE state='claimed') claimed,COUNT(DISTINCT src_uid) users,(SELECT COUNT(*) FROM pool_rejects WHERE password=${password} AND pool_id=${p}) invalid FROM pool_rows WHERE password=${password} AND pool_id=${p}`)[0]; return { available: Number(r.available), claimed: Number(r.claimed), users: Number(r.users), invalid: Number(r.invalid) }; }
-  if (op === "detail") return (await db`SELECT row_key,data,state,claimed_by,claimed_at::float8 AS claimed_at,src_uid,src_file_id,inserted_at::float8 AS inserted_at,hold_id FROM pool_rows WHERE password=${password} AND pool_id=${p} ORDER BY inserted_at,row_key LIMIT 5000`).map(rowOut);
+  if (op === "summary") { const r: any = (await db`SELECT COUNT(*) FILTER (WHERE state='available') available,COUNT(*) FILTER (WHERE state='claimed') claimed,COUNT(DISTINCT src_uid) users,(SELECT COUNT(*) FROM pool_rejects WHERE password=${password} AND pool_id=${p}) invalid FROM pool_rows WHERE password=${password} AND pool_id=${p} AND (src_file_id IS NULL OR EXISTS (SELECT 1 FROM file_index WHERE file_id=pool_rows.src_file_id AND archived=false))`)[0]; return { available: Number(r.available), claimed: Number(r.claimed), users: Number(r.users), invalid: Number(r.invalid) }; }
+  if (op === "detail") return (await db`SELECT row_key,data,state,claimed_by,claimed_at::float8 AS claimed_at,src_uid,src_file_id,inserted_at::float8 AS inserted_at,hold_id FROM pool_rows WHERE password=${password} AND pool_id=${p} AND (src_file_id IS NULL OR EXISTS (SELECT 1 FROM file_index WHERE file_id=pool_rows.src_file_id AND archived=false)) ORDER BY inserted_at,row_key LIMIT 5000`).map(rowOut);
   if (op === "rows") {
     if (!pools.includes(p as Pool)) throw new Error("invalid pool");
     if (a.verifiedOnly && a.unverifiedOnly) throw new Error("verifiedOnly and unverifiedOnly are mutually exclusive");
@@ -307,13 +352,13 @@ async function poolOp(password: string, op: string, a: any) {
     const user = String(a.userId || ""), file = String(a.fileId || "");
     const eligibleFilter = a.verifiedOnly ? db`AND lower(COALESCE(data->>'wa_status', data->>'waStatus', '')) = 'eligible'` : a.unverifiedOnly ? db`AND lower(COALESCE(data->>'wa_status', data->>'waStatus', '')) <> 'eligible'` : db``;
     const sourceFilter = db`${user ? db`AND src_uid=${user}` : db``} ${file ? db`AND src_file_id=${file}` : db``}`;
-    const where = db`FROM pool_rows WHERE password=${password} AND pool_id=${p} AND state='available' ${sourceFilter} ${eligibleFilter}`;
+    const where = db`FROM pool_rows WHERE password=${password} AND pool_id=${p} AND state='available' AND (src_file_id IS NULL OR EXISTS (SELECT 1 FROM file_index WHERE file_id=pool_rows.src_file_id AND archived=false)) ${sourceFilter} ${eligibleFilter}`;
     const totalRow: any = (await db`SELECT COUNT(*) AS total ${where}`)[0];
     const rows = await db`SELECT row_key,data,state,claimed_by,claimed_at::float8 AS claimed_at,src_uid,src_file_id,inserted_at::float8 AS inserted_at,hold_id ${where} ORDER BY inserted_at,row_key LIMIT ${limit} OFFSET ${offset}`;
     return { total: Number(totalRow.total), rows: rows.map(rowOut), offset, limit };
   }
-  if (op === "userFiles") { const rows: any[] = await db`SELECT src_uid,src_file_id,state,COUNT(*) n FROM pool_rows WHERE password=${password} AND pool_id=${p} AND src_uid IS NOT NULL AND state<>'dead' AND (src_file_id IS NULL OR EXISTS (SELECT 1 FROM file_index WHERE file_id=pool_rows.src_file_id)) GROUP BY src_uid,src_file_id,state`; const fids = [...new Set(rows.map((r: any) => r.src_file_id).filter(Boolean))] as string[]; const metas: any[] = fids.length ? await db`SELECT file_id,data->>'name' AS name,COALESCE((data->>'createdAt')::float8,0) AS created_at,COALESCE(data->>'preset',data->>'poolKind') AS preset FROM file_index WHERE file_id IN ${db(fids)}` : []; const fm = new Map(metas.map((m: any) => [m.file_id, m])); const users = new Map<string, any>(); let noSrcAvail = 0; for (const r of rows) { if (r.state === "available" && !r.src_uid) noSrcAvail += Number(r.n); const u = users.get(r.src_uid) || { userId: r.src_uid, files: [], totalAvailable: 0, totalClaimed: 0 }; const m = r.src_file_id ? fm.get(r.src_file_id) : null; const f = u.files.find((x: any) => x.fileId === (r.src_file_id || "_unknown")) || { fileId: r.src_file_id || "_unknown", name: m?.name || null, createdAt: m ? Number(m.created_at) || 0 : 0, preset: m?.preset || null, available: 0, claimed: 0 }; f[r.state] = Number(r.n); if (!u.files.includes(f)) u.files.push(f); u.totalAvailable += r.state === "available" ? Number(r.n) : 0; u.totalClaimed += r.state === "claimed" ? Number(r.n) : 0; users.set(r.src_uid, u); } return { users: [...users.values()], noSrcAvail }; }
-  if (op === "verifiedCounts") { const total: any = (await db`SELECT COUNT(*) n, COUNT(*) FILTER (WHERE LOWER(COALESCE(data->>'wa_status', data->>'waStatus', '')) = 'eligible') v FROM pool_rows WHERE password=${password} AND pool_id=${p} AND state='available'`)[0]; const totalN = Number(total.n), verified = Number(total.v); return { pool: p, verified, unverified: totalN - verified, totalAvailable: totalN, ...(p === "page" ? { totalCookies2faAvailable: totalN, unverifiedScanned: totalN } : {}), truncated: false, scanCap: totalN }; }
+  if (op === "userFiles") { const rows: any[] = await db`SELECT src_uid,src_file_id,state,COUNT(*) n FROM pool_rows WHERE password=${password} AND pool_id=${p} AND src_uid IS NOT NULL AND state<>'dead' AND (src_file_id IS NULL OR EXISTS (SELECT 1 FROM file_index WHERE file_id=pool_rows.src_file_id AND archived=false)) GROUP BY src_uid,src_file_id,state`; const fids = [...new Set(rows.map((r: any) => r.src_file_id).filter(Boolean))] as string[]; const metas: any[] = fids.length ? await db`SELECT file_id,data->>'name' AS name,COALESCE((data->>'createdAt')::float8,0) AS created_at,COALESCE(data->>'preset',data->>'poolKind') AS preset FROM file_index WHERE file_id IN ${db(fids)} AND archived=false` : []; const fm = new Map(metas.map((m: any) => [m.file_id, m])); const users = new Map<string, any>(); let noSrcAvail = 0; for (const r of rows) { if (r.state === "available" && !r.src_uid) noSrcAvail += Number(r.n); const u = users.get(r.src_uid) || { userId: r.src_uid, files: [], totalAvailable: 0, totalClaimed: 0 }; const m = r.src_file_id ? fm.get(r.src_file_id) : null; const f = u.files.find((x: any) => x.fileId === (r.src_file_id || "_unknown")) || { fileId: r.src_file_id || "_unknown", name: m?.name || null, createdAt: m ? Number(m.created_at) || 0 : 0, preset: m?.preset || null, available: 0, claimed: 0 }; f[r.state] = Number(r.n); if (!u.files.includes(f)) u.files.push(f); u.totalAvailable += r.state === "available" ? Number(r.n) : 0; u.totalClaimed += r.state === "claimed" ? Number(r.n) : 0; users.set(r.src_uid, u); } return { users: [...users.values()], noSrcAvail }; }
+  if (op === "verifiedCounts") { const total: any = (await db`SELECT COUNT(*) n, COUNT(*) FILTER (WHERE LOWER(COALESCE(data->>'wa_status', data->>'waStatus', '')) = 'eligible') v FROM pool_rows WHERE password=${password} AND pool_id=${p} AND state='available' AND (src_file_id IS NULL OR EXISTS (SELECT 1 FROM file_index WHERE file_id=pool_rows.src_file_id AND archived=false))`)[0]; const totalN = Number(total.n), verified = Number(total.v); return { pool: p, verified, unverified: totalN - verified, totalAvailable: totalN, ...(p === "page" ? { totalCookies2faAvailable: totalN, unverifiedScanned: totalN } : {}), truncated: false, scanCap: totalN }; }
   if (op === "downloads" || op === "holds") { const where = op === "holds" ? a.status ? db`AND status=${String(a.status).toUpperCase()}` : db`AND status IN ('HOLD','APPROVED')` : db``; const rows = await db`SELECT * FROM downloads WHERE password=${password} ${where} ORDER BY ts DESC LIMIT 50`; const out = rows.map(downloadShape); return op === "holds" ? { holds: out, downloads: out } : { downloads: out }; }
   if (op === "download" || op === "downloadDetail") { const r: any = (await db`SELECT * FROM downloads WHERE password=${password} AND id=${a.id}`)[0]; if (!r) return null; const out = downloadShape(r); if (op === "download") return out;     const keys = (json(r.keys) || []) as string[]; if (!keys.length) return { ...out, groups: [] }; const grouped: any[] = await db`SELECT src_uid AS "srcUid",src_file_id AS "srcFileId",COUNT(*)::int AS count FROM pool_rows WHERE password=${password} AND pool_id=${r.pool_id} AND row_key IN ${db(keys)} GROUP BY src_uid,src_file_id`; const groups: any[] = grouped.map((g: any) => ({ srcUid: g.srcUid ?? null, srcFileId: g.srcFileId ?? null, count: Number(g.count) })); const missing = keys.length - groups.reduce((s: number, g: any) => s + g.count, 0); if (missing > 0) groups.push({ srcUid: null, srcFileId: null, count: missing }); const fids = [...new Set(groups.map((g: any) => g.srcFileId).filter(Boolean))] as string[]; const metas: any[] = fids.length ? await db`SELECT file_id,data->>'name' AS name,COALESCE((data->>'createdAt')::float8,0) AS created_at,COALESCE(data->>'preset',data->>'poolKind') AS preset FROM file_index WHERE file_id IN ${db(fids)}` : []; const fm = new Map(metas.map((m: any) => [m.file_id, m])); for (const g of groups) { const m: any = g.srcFileId ? fm.get(g.srcFileId) : null; if (m) { g.filename = m.name || null; g.createdAt = Number(m.created_at) || 0; g.preset = m.preset || null; } } return { ...out, groups }; }
   if (op === "downloadDelete") { const r: any = (await db`SELECT status,reverted FROM downloads WHERE password=${password} AND id=${a.id}`)[0]; if (!r) throw new Error("not found"); if (!r.reverted && !["REVERTED", "REJECTED"].includes(r.status)) throw new Error("active record cannot be deleted"); await db`DELETE FROM downloads WHERE password=${password} AND id=${a.id}`; return { ok: true }; }
@@ -321,7 +366,7 @@ async function poolOp(password: string, op: string, a: any) {
   if (op === "holdsAll" || op === "downloadsAll") { const where = op === "holdsAll" ? (a.status ? db`WHERE status=${String(a.status).toUpperCase()}` : db`WHERE status IN ('HOLD','APPROVED')`) : db``; const rows: any[] = await db`SELECT * FROM downloads ${where} ORDER BY ts DESC LIMIT 50`; const out = rows.map((r: any) => ({ ...downloadShape(r), password: r.password })); return op === "holdsAll" ? { holds: out, downloads: out } : { downloads: out }; }
   if (op === "downloadAny") { const r: any = (await db`SELECT * FROM downloads WHERE id=${String(a.id || "")}`)[0]; if (!r) return null; return { ...downloadShape(r), password: r.password }; }
   if (op === "summaryAll") { const rows: any[] = await db`SELECT COALESCE(p.password, r.password) password,COALESCE(p.pool_id, r.pool_id) pool,COALESCE(p.available, 0) available,COALESCE(p.claimed, 0) claimed,COALESCE(p.users, 0) users,COALESCE(r.invalid, 0) invalid FROM (SELECT password,pool_id,COUNT(*) FILTER (WHERE state='available') available,COUNT(*) FILTER (WHERE state='claimed') claimed,COUNT(DISTINCT src_uid) users FROM pool_rows GROUP BY password,pool_id) p FULL OUTER JOIN (SELECT password,pool_id,COUNT(*) invalid FROM pool_rejects GROUP BY password,pool_id) r ON r.password=p.password AND r.pool_id=p.pool_id`; return rows.map((x: any) => ({ password: x.password, pool: x.pool, available: Number(x.available), claimed: Number(x.claimed), users: Number(x.users), invalid: Number(x.invalid) })); }
-  if (op === "poolUsers") { const rows: any[] = await db`SELECT src_uid,COUNT(*) FILTER (WHERE state='available') available,COUNT(*) FILTER (WHERE state='claimed') claimed FROM pool_rows WHERE password=${password} AND pool_id=${p} AND NULLIF(BTRIM(src_uid), '') IS NOT NULL GROUP BY src_uid`; return rows.map((r: any) => ({ userId: r.src_uid, displayName: r.src_uid, username: null, photoUrl: null, firstName: null, lastName: null, isAdmin: false, available: Number(r.available), claimed: Number(r.claimed) })); }
+  if (op === "poolUsers") { const rows: any[] = await db`SELECT src_uid,COUNT(*) FILTER (WHERE state='available') available,COUNT(*) FILTER (WHERE state='claimed') claimed FROM pool_rows WHERE password=${password} AND pool_id=${p} AND NULLIF(BTRIM(src_uid), '') IS NOT NULL AND (src_file_id IS NULL OR EXISTS (SELECT 1 FROM file_index WHERE file_id=pool_rows.src_file_id AND archived=false)) GROUP BY src_uid`; return rows.map((r: any) => ({ userId: r.src_uid, displayName: r.src_uid, username: null, photoUrl: null, firstName: null, lastName: null, isAdmin: false, available: Number(r.available), claimed: Number(r.claimed) })); }
   if (op === "claim" || op === "hold") return allocate(password, op, p, a);
   if (["holdApprove", "holdReject", "revertDownload"].includes(op)) return transition(password, op, a);
   if (op === "removeAvailable") { const keys = [...new Set((a.keys || []).map(String).filter(Boolean))] as string[]; if (!keys.length) return { ok: true }; await db`DELETE FROM pool_rows WHERE password=${password} AND pool_id=${a.pool} AND row_key = ANY(${keys}) AND state='available' AND src_file_id=${a.srcFileId ?? ""}`; return { ok: true }; }

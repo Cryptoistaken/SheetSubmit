@@ -128,6 +128,22 @@ describe("createLiveClient", () => {
     s.client.close();
   });
 
+  it("closes the broken source before reconnecting (no ghost connection)", async () => {
+    const s = setup();
+    await tick();
+    s.sources[0].onerror!({});
+    // the dead source must die now — otherwise its native ~3s auto-retry
+    // (same single-use ticket) overlaps the manual reconnect below
+    expect(s.sources[0].closed).toBe(true);
+    expect(s.pending().map((t) => t.ms)).toEqual([1000]);
+    s.runAll();
+    await tick();
+    expect(s.tickets).toEqual(["T1", "T2"]);
+    expect(s.sources.length).toBe(2);
+    expect(s.sources.filter((x) => !x.closed).length).toBe(1);
+    s.client.close();
+  });
+
   it("a clean open resets the backoff", async () => {
     const s = setup();
     await tick();

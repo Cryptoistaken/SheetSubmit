@@ -93,12 +93,13 @@ live.get("/files/:id/live", async (c) => {
       leave();
     },
   });
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
+  // ponytail: c.body (not raw Response) — a raw Response drops the CORS
+  // headers the /api/* middleware set via c.header(), so cross-origin
+  // EventSource streams failed with no ACAO and reconnected forever.
+  return c.body(stream, 200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
   });
 });

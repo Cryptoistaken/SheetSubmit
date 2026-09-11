@@ -555,6 +555,11 @@ export default function PoolsView() {
 
       {view === "pool" ? (
       <div id="pools-panel-pool" role="tabpanel" aria-labelledby="tab-pool">
+      {meIsAdmin ? (
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+        <Button variant="outline" size="sm" onClick={() => { const init: Record<string, string> = {}; POOL_TABS.forEach((t) => { const v = prices[t.id] ?? prices[Object.keys(prices)[0]] ?? null; init[t.id] = v != null ? usdToInput(v, priceCurrency) : ""; }); setPriceInputs(init); setPriceOpen(true); }}>{prices[cur] != null ? `price ${fmtMoney(prices[cur]!, priceCurrency)}` : "Unit price"}</Button>
+      </div>
+      ) : null}
       {/* switches */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
           <div className="pool-switch stretch" style={{ background: "#eef2ff", borderColor: "#ddd6fe" }}>
@@ -562,7 +567,6 @@ export default function PoolsView() {
               <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>
             ))}
           </div>
-          {meIsAdmin ? <Button variant="outline" size="sm" onClick={() => { const init: Record<string, string> = {}; POOL_TABS.forEach((t) => { const v = prices[t.id] ?? prices[Object.keys(prices)[0]] ?? null; init[t.id] = v != null ? usdToInput(v, priceCurrency) : ""; }); setPriceInputs(init); setPriceOpen(true); }}>{prices[cur] != null ? `price ${fmtMoney(prices[cur]!, priceCurrency)}` : "Unit price"}</Button> : null}
           <div className="pool-switch stretch">
             {POOL_TABS.map((t) => {
               const meta = POOL_META[t.id];

@@ -342,6 +342,12 @@ async function transition(password: string, op: string, a: any) {
     const unit = Number(d.unit_price ?? price(d.pool_id));
     if (op === "revertDownload") {
       if (d.status === "REVERTED") return { ok: true, id: d.id, status: "REVERTED" };
+      // Finality — same rule as approve/reject flips: a settled hold, two
+      // actions, or a closed 5-minute window means the decision stands and
+      // owners keep settled payouts. Without this, Delete on an old approved
+      // hold clawed back money and freed rows at any age.
+      const racts = Number(d.action_count || 0), rfirstAt = Number(d.first_action_at || 0);
+      if (d.settled || racts >= 2 || (racts >= 1 && now >= rfirstAt + REVERT_WINDOW)) throw new Error("decision is final — revert window closed");
       if (!["HOLD", "CLAIMED", "APPROVED"].includes(d.status)) throw new Error("not revertable");
       if (!keys.length) { await tx`UPDATE downloads SET reverted=true,status='REVERTED' WHERE password=${password} AND id=${d.id}`; return { ok: true, reverted: 0, id: d.id, status: "REVERTED" }; }
       const revertedRows: any[] = d.status === "HOLD"

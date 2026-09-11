@@ -786,7 +786,7 @@ export default function PoolsView() {
                       <button type="button" className="btn btn-primary" disabled={st === "APPROVED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doApprove(h.id); }} style={{ minHeight: 36, fontWeight: 700 }}>{st === "APPROVED" ? "Approved" : "Approve"}</button>
                       <button type="button" className="btn" disabled={st === "REJECTED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doReturn(h.id); }} style={{ minHeight: 36 }}>{st === "REJECTED" ? "Rejected" : "Reject"}</button>
                         <button type="button" className="btn" disabled={dlBusyId === h.id} onClick={(e) => { e.stopPropagation(); void doDownloadHold(h); }} style={{ minHeight: 36 }}><Download size={14} aria-hidden /> All</button>
-                        {st !== "PENDING" ? <HoldToDeleteButton onConfirm={() => void doDeleteHold(h.id)} disabled={holdActing === h.id} label="Delete" /> : null}
+                        {st !== "PENDING" ? <HoldToDeleteButton onConfirm={() => void doDeleteHold(h.id)} disabled={locked || holdActing === h.id} label="Delete" /> : null}
                       </div>
                       {apprLoading === h.id ? <Skeleton className="h-16 w-full" /> : !det || ownerUids.length === 0 ? (
                         <div style={{ fontSize: 12, color: "var(--text3)", padding: "6px 2px" }}>{det ? "No owner breakdown for this approval" : "Could not load details"}</div>

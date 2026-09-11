@@ -1,9 +1,10 @@
 import { afterAll, describe, expect, it } from "bun:test";
 
 // delete-time pool ops: filePoolState (counts scoped to ONE file via
-// src_file_id) + removeFileRows (wipes available+held of ONE file, keeps
-// claimed rows and other files' rows). Runs against a REAL database —
-// skipped without DATABASE_URL (CI provides Postgres).
+// src_file_id) + removeFileRows (wipes EVERYTHING sourced from one file,
+// any state) + userFiles (hides rows whose file is gone from file_index).
+// Runs against a REAL database — skipped without DATABASE_URL (CI provides
+// Postgres).
 import type { repository as repoFn } from "../pg";
 
 const hasDb = !!process.env.DATABASE_URL;
@@ -14,20 +15,23 @@ const repository: typeof repoFn = mod
 
 const PWD = "filedelpool";
 const run = Date.now().toString(36);
-const F1 = `fdel-${run}-f1`, F2 = `fdel-${run}-f2`;
-const A = `k-${run}-avail`, H = `k-${run}-held`, C = `k-${run}-sold`, X = `k-${run}-x`;
+const F1 = `fdel-${run}-f1`, F2 = `fdel-${run}-f2`, GHOST = `fdel-${run}-gone`;
+const A = `k-${run}-avail`, H = `k-${run}-held`, C = `k-${run}-sold`, X = `k-${run}-x`, G = `k-${run}-ghost`;
 
 async function seed() {
   const { default: postgres } = await import("postgres");
   const sql = postgres(process.env.DATABASE_URL as string, { max: 1 });
   const now = Date.now();
   try {
+    await sql`INSERT INTO users(user_id) VALUES('u1-${run}') ON CONFLICT(user_id) DO NOTHING`;
+    await sql`INSERT INTO file_index(file_id,owner_id,data) VALUES(${F1},${`u1-${run}`},${{} as any}) ON CONFLICT(file_id) DO NOTHING`;
     await sql`INSERT INTO pool_rows(password,pool_id,row_key,data,state,src_uid,src_file_id,inserted_at,hold_id) VALUES
-      (${PWD},'cookies_2fa',${A},${{} as any},'available','u1',${F1},${now},NULL),
-      (${PWD},'cookies_2fa',${H},${{} as any},'held','u1',${F1},${now},${`hh-${run}`}),
-      (${PWD},'cookies_2fa',${C},${{} as any},'claimed','u1',${F1},${now},${`hh-${run}`}),
+      (${PWD},'cookies_2fa',${A},${{} as any},'available',${`u1-${run}`},${F1},${now},NULL),
+      (${PWD},'cookies_2fa',${H},${{} as any},'held',${`u1-${run}`},${F1},${now},${`hh-${run}`}),
+      (${PWD},'cookies_2fa',${C},${{} as any},'claimed',${`u1-${run}`},${F1},${now},${`hh-${run}`}),
       (${PWD},'page',${X},${{} as any},'held','u2',${F2},${now},${`hh2-${run}`}),
-      (${PWD},'page',${A},${{} as any},'held','u2',${F2},${now},${`hh2-${run}`})`;
+      (${PWD},'page',${A},${{} as any},'held','u2',${F2},${now},${`hh2-${run}`}),
+      (${PWD},'cookies_2fa',${G},${{} as any},'claimed',${`u1-${run}`},${GHOST},${now},${`hhg-${run}`})`;
   } finally {
     await sql.end();
   }
@@ -38,6 +42,8 @@ async function cleanup() {
   const sql = postgres(process.env.DATABASE_URL as string, { max: 1 });
   try {
     await sql`DELETE FROM pool_rows WHERE password=${PWD}`;
+    await sql`DELETE FROM file_index WHERE file_id IN (${F1},${F2},${GHOST})`;
+    await sql`DELETE FROM users WHERE user_id=${`u1-${run}`}`;
   } finally {
     await sql.end();
   }
@@ -57,16 +63,28 @@ describe.skipIf(!hasDb)("file delete pool ops", () => {
     expect(s0).toEqual({ held: 0, claimed: 0 });
   }, 30_000);
 
-  it("removeFileRows wipes available+held, keeps claimed and other files", async () => {
+  it("removeFileRows wipes everything sourced from the file, keeps other files", async () => {
     await cleanup();
     await seed();
     const r = (await repository("pools", PWD, "removeFileRows", { srcFileId: F1 })) as { removed: number };
-    expect(r.removed).toBe(2);
+    expect(r.removed).toBe(3);
     const s1 = (await repository("pools", PWD, "filePoolState", { srcFileId: F1 })) as { held: number; claimed: number };
-    expect(s1).toEqual({ held: 0, claimed: 1 });
+    expect(s1).toEqual({ held: 0, claimed: 0 });
     const s2 = (await repository("pools", PWD, "filePoolState", { srcFileId: F2 })) as { held: number; claimed: number };
     expect(s2).toEqual({ held: 2, claimed: 0 });
     const r0 = (await repository("pools", PWD, "removeFileRows", { srcFileId: "" })) as { removed: number };
     expect(r0.removed).toBe(0);
+  }, 30_000);
+
+  it("userFiles hides rows whose file is gone from the index", async () => {
+    await cleanup();
+    await seed();
+    const out = (await repository("pools", PWD, "userFiles", { pool: "cookies_2fa" })) as {
+      users: { userId: string; files: { fileId: string; available: number; claimed: number }[] }[];
+    };
+    const u1 = out.users.find((u) => u.userId === `u1-${run}`);
+    expect(u1).toBeDefined();
+    expect(u1!.files.map((f) => f.fileId).sort()).toEqual([F1]);
+    expect(u1!.files[0]).toMatchObject({ available: 1, claimed: 1 });
   }, 30_000);
 });

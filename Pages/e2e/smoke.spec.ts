@@ -17,8 +17,9 @@ test("create file via API, open it, grid renders", async ({ page }) => {
       rows: [{ uid: "100001", cookies: "c_user=100001; xs=abc" }],
     },
   });
-  expect(created.ok()).toBeTruthy();
-  const file = (await created.json()) as { id: string };
+  const body = await created.text();
+  expect(created.ok(), `create file failed: ${created.status()} ${body.slice(0, 500)}`).toBeTruthy();
+  const file = JSON.parse(body) as { id: string };
   await page.goto(`/file/${file.id}`);
   await expect(page.locator("table.grid")).toBeVisible();
 });

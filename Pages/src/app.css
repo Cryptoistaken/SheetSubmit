@@ -336,6 +336,33 @@ button, input, select, textarea {
     font-weight: 600;
     letter-spacing: -0.02em;
 }
+/* Desktop home header breadcrumb (route filepath) — mobile shows the brand instead */
+.topbar-crumb {
+    display: none;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text2);
+}
+.topbar-crumb-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.topbar-crumb-item + .topbar-crumb-item {
+    margin-left: 6px;
+}
+.topbar-crumb-sep {
+    color: var(--text3);
+}
+.topbar-crumb-current {
+    color: var(--text);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .sheet-title-btn {
     display: none;
     align-items: center;
@@ -595,11 +622,12 @@ button, input, select, textarea {
 @media (min-width: 1024px) {
     #homeTabBar .home-tabs[role="tablist"] { display: none; }
     #homeTabBar.skeleton-bar { display: none; }
-    /* Home pages keep a slim right-aligned utility bar (profile / balance /
-       theme) next to the sidebar — only the logo cluster hides on desktop.
+    /* Home header on desktop: brand hides, route breadcrumb takes the left,
+       profile / balance / theme keep the right.
        (Safe: the home header never renders file-page title/back controls.) */
-    .home-topbar .topbar { justify-content: flex-end; }
-    .home-topbar .topbar-l { display: none; }
+    .home-topbar .topbar-logo,
+    .home-topbar .home-top-title { display: none; }
+    .home-topbar .topbar-crumb { display: inline-flex; }
 }
 
 /* ── Home panes ── */

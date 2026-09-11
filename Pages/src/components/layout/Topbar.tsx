@@ -52,6 +52,32 @@ interface ConnState {
   text: string;
 }
 
+// Desktop home header shows this route breadcrumb on the left (section +
+// filepath for sub-pages). Sheet pages never render it — they keep the file
+// title button instead.
+function homeCrumbs(pathname: string): string[] {
+  if (pathname.startsWith("/pools/")) {
+    const parts = pathname.split("/").slice(2).filter(Boolean);
+    return ["Pools", ...parts];
+  }
+  if (pathname === "/pools") return ["Pools"];
+  if (pathname.startsWith("/approvals")) return ["Approvals"];
+  if (pathname.startsWith("/settings")) return ["Settings"];
+  if (pathname.startsWith("/tools/splitter")) return ["Tools", "Splitter"];
+  if (pathname.startsWith("/tools/pool-lookup")) return ["Tools", "Pool lookup"];
+  if (pathname.startsWith("/tools")) return ["Tools"];
+  if (pathname.startsWith("/analysis")) return ["Analysis"];
+  if (pathname.startsWith("/admin/user/")) {
+    const id = pathname.split("/")[3] ?? "";
+    return ["Admin", id.length > 16 ? id.slice(0, 16) + "…" : id];
+  }
+  if (pathname.startsWith("/admin")) return ["Admin"];
+  if (pathname === "/archive") return ["Archive"];
+  if (pathname === "/wallet") return ["Wallet"];
+  if (pathname === "/withdrawals") return ["Withdrawals"];
+  return ["My Files"];
+}
+
 export default function Topbar() {
   const { user } = useAuth();
   const { theme, toggle } = useTheme();
@@ -90,6 +116,7 @@ export default function Topbar() {
     location.pathname.startsWith("/file/") ||
     /\/admin\/user\/[^/]+\/file\/[^/]+/.test(location.pathname);
   const hideHome = isFilePage ? { display: "none" as const } : undefined;
+  const crumbs = isFilePage ? [] : homeCrumbs(location.pathname);
 
   const connStatus = useConnStore((s) => s.status);
   useEffect(() => {
@@ -167,6 +194,20 @@ export default function Topbar() {
         <span className="home-top-title" style={hideHome}>
           Sheet Submit
         </span>
+        {crumbs.length > 0 && (
+          <nav aria-label="Breadcrumb" className="topbar-crumb">
+            {crumbs.map((c, i) => (
+              <span key={`${i}-${c}`} className="topbar-crumb-item">
+                {i > 0 ? <span aria-hidden="true" className="topbar-crumb-sep">/</span> : null}
+                {i === crumbs.length - 1 ? (
+                  <span aria-current="page" className="topbar-crumb-current">{c}</span>
+                ) : (
+                  <span>{c}</span>
+                )}
+              </span>
+            ))}
+          </nav>
+        )}
         <button
           title="Back"
           aria-label="Back"

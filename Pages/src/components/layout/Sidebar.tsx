@@ -1,26 +1,12 @@
-import { LogOutIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 import { AnalysisIcon, ApprovalsIcon, ArchiveIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
-import { BdtIcon } from "@/components/layout/Topbar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
-import { api } from "@/lib/api";
-import { loadBdtRate, useCurrency } from "@/lib/currency";
-import { useToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 const COLLAPSE_KEY = "ss_sidebar_collapsed";
-
-// 0 → "0.00", whole → grouped ("1,500"), fraction → 2 decimals (mirrors Topbar)
-const fmtBalance = (v: number) => {
-  const r = Math.round(v * 100) / 100;
-  if (r === 0) return "0.00";
-  if (Number.isInteger(r)) return r.toLocaleString("en-US");
-  return r.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
 
 interface NavItem {
   key: string;
@@ -85,9 +71,6 @@ export default function Sidebar() {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const showToast = useToast();
-  const [currency, setCurrency] = useCurrency();
-  const [balance, setBalance] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(COLLAPSE_KEY) === "1";
@@ -98,16 +81,6 @@ export default function Sidebar() {
   // Hovering a collapsed sidebar temporarily expands it; leaving collapses back.
   const [hoverOpen, setHoverOpen] = useState(false);
   const effCollapsed = collapsed && !hoverOpen;
-
-  // Same 60s sessionStorage-cached wallet read as Topbar (only one of them is
-  // mounted at a time on desktop home, so no double fetch in practice).
-  useEffect(() => {
-    let cancelled = false;
-    const last = Number(sessionStorage.getItem("ss_wallet_ts") || 0);
-    if (Date.now() - last < 60000) return;
-    api.getWallet().then((w) => { if (!cancelled) { setBalance(w.balance); sessionStorage.setItem("ss_wallet_ts", String(Date.now())); } }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [location.pathname]);
 
   if (!user) return null;
 
@@ -124,17 +97,6 @@ export default function Sidebar() {
       return next;
     });
   };
-  const logout = () => {
-    api
-      .logout()
-      .then(() => { localStorage.removeItem("ss_had_session"); localStorage.removeItem("ss_auth_user"); sessionStorage.removeItem("ss_wallet_ts"); window.location.href = "/login"; })
-      .catch(() => showToast("Could not log out. Try again."));
-  };
-
-  const displayName = ((user.firstName ?? "") + " " + (user.lastName ?? "")).trim() || "Account";
-  const sub = user.username ? `@${user.username}` : (user.phone || "");
-  const balanceUsd = balance ?? 0;
-  const balanceText = currency === "USD" ? fmtBalance(balanceUsd) : fmtBalance(balanceUsd * loadBdtRate());
   const adminItems = NAV_ADMIN.filter((i) => !i.adminOnly || user.isAdmin);
 
   return (
@@ -153,49 +115,6 @@ export default function Sidebar() {
           <button type="button" onClick={() => navigate("/")} className="min-w-0 flex-1 truncate text-left text-sm font-semibold tracking-tight">
             Sheet Submit
           </button>
-        )}
-      </div>
-
-      <div className="border-b border-border p-2">
-        {effCollapsed ? (
-          <div className="flex justify-center py-1" title={displayName}>
-            <Avatar className="size-8">
-              {user.photoUrl ? <AvatarImage src={user.photoUrl} alt="" /> : null}
-              <AvatarFallback>{displayName.slice(0, 1).toUpperCase()}</AvatarFallback>
-            </Avatar>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 px-2 py-1.5">
-              <Avatar className="size-8 shrink-0">
-                {user.photoUrl ? <AvatarImage src={user.photoUrl} alt="" /> : null}
-                <AvatarFallback>{displayName.slice(0, 1).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-semibold">{displayName}</span>
-                {sub ? <span className="block truncate text-xs text-muted-foreground">{sub}</span> : null}
-              </span>
-              <button
-                type="button"
-                onClick={logout}
-                aria-label="Log out"
-                title="Log out"
-                className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-destructive"
-              >
-                <LogOutIcon className="size-4" aria-hidden="true" />
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => setCurrency(currency === "USD" ? "BDT" : "USD")}
-              title={currency === "USD" ? "Balance — show BDT" : "Balance — show USDC"}
-              className="mt-0.5 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-bold hover:bg-muted"
-            >
-              {currency === "USD" ? <img src="/usdc.svg" alt="" width={14} height={14} /> : <BdtIcon />}
-              <span>{balanceText}</span>
-              <span className="text-muted-foreground">{currency === "USD" ? "USDC" : "BDT"}</span>
-            </button>
-          </>
         )}
       </div>
 

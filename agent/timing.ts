@@ -1,6 +1,6 @@
 // agent/timing.ts — read-only latency + payload sweep of the hot APIs, twice each:
-// once direct to the backend, once via the front (Cloudflare) URL. The delta
-// is Cloudflare + extra-hop overhead. No writes.
+// once direct to the backend, once via the front URL. The delta
+// is front + extra-hop overhead. No writes.
 // Secrets from agent/.env (gitignored): BACKEND_URL, FRONT_URL (defaults to
 // the Pages site), AGENT_TOKEN, SS_SESSION (short-lived TEST session only).
 // Usage: bun agent/timing.ts

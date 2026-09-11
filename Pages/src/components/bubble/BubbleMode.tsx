@@ -169,14 +169,10 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
             finish();
             return;
           }
-          const st2 = useSheetStore.getState();
-          const row = st2.rows[st2.bubbleActiveRow];
-          if (!row?.cookies) {
-            toast("Paste cookie first");
-            finish();
-          } else {
-            void st2.bubbleSaveKey(t).finally(finish);
-          }
+          // 2FA-first order: a key is accepted even when the active row has no
+          // cookie yet (it waits key-only for its cookie). The store decides
+          // placement and toasts ("Need cookie" if the row already has a key).
+          void useSheetStore.getState().bubbleSaveKey(t).finally(finish);
         } else {
           toast("No cookie or key");
           finish();

@@ -7,8 +7,10 @@ import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { parseSheetRows } from "@/lib/xlsx";
 import { useSheetStore } from "@/stores/sheetStore";
+import { MAX_GRID_ROWS } from "@/stores/sheetStore";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Row } from "@/lib/types";
+import { isDataRow, replaceCapMessage } from "@/lib/types";
 import { isPageFile as isPageFileHelper } from "@/features/filetypes";
 
 const DownloadOverlay = lazy(() => import("./DownloadOverlay"));
@@ -101,10 +103,15 @@ export default function SheetToolbar() {
         useSheetStore.getState().mergeRows(rows);
         return;
       }
-      const empty = s.rows.every((r) => s.columns.every((c) => !r[c.key]));
+      const empty = !s.rows.some((r) => isDataRow(r, s.columns));
       if (empty) {
+        // Strict per-file cap (server enforces it too): refuse, never truncate.
+        const capMsg = replaceCapMessage(rows.length, MAX_GRID_ROWS);
+        if (capMsg) {
+          showToast(capMsg);
+          return;
+        }
         useSheetStore.getState().applyUpload("replace", rows);
-        showToast("Replaced with " + rows.length + " rows");
         return;
       }
       setUploadRows(rows);
@@ -214,6 +221,27 @@ export default function SheetToolbar() {
       "Delete",
     );
     if (ok) useSheetStore.getState().deleteDeadRows();
+  };
+
+  const restoreSnapshot = async () => {
+    close();
+    const st = useSheetStore.getState();
+    if (!st.fileId) return;
+    const ok = await confirm(
+      "Restore the last saved version? Rows added or changed since that save will be replaced (your current state stays in Undo).",
+      "Restore",
+    );
+    if (!ok) return;
+    try {
+      const res = st.adminMode
+        ? await api.adminRestoreSnapshot(st.fileId)
+        : await api.restoreSnapshot(st.fileId);
+      useSheetStore.getState().applyRestore(res.rows ?? [], res.seq ?? st.lastSeq, res.file ?? st.file);
+      showToast("Restored last save — previous state kept in Undo");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(msg.includes("no snapshot") ? "No earlier save to restore yet" : "Could not restore. Try again.");
+    }
   };
 
   const poolOn = file?.poolEnabled !== false;
@@ -568,6 +596,21 @@ export default function SheetToolbar() {
             <line x1="14" y1="11" x2="14" y2="17" />
           </svg>
           Delete Dead
+        </button>
+        <button role="menuitem" className="sheet-more-item" onClick={() => void restoreSnapshot()}>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+          </svg>
+          Restore last save
         </button>
         <div className="sheet-more-sep" role="separator"></div>
         {user?.isAdmin ? (

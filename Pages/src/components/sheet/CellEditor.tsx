@@ -54,6 +54,12 @@ export default function CellEditor() {
       value={draft}
       onChange={(e) => useSheetStore.getState().setDraft(e.target.value)}
       onKeyDown={onKeyDown}
+      onBlur={() => {
+        // Commit on blur like the grid inline editor does — tapping toolbar
+        // buttons, overlays, or other apps must not abandon a pasted value.
+        // (Escape cancels first and clears the selection, so this no-ops.)
+        useSheetStore.getState().commitQuickEdit();
+      }}
     />
   );
 }

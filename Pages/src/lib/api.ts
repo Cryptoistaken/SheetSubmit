@@ -48,27 +48,6 @@ export function normalizeUser(raw: any): User {
   } as User;
 }
 
-async function requestBlob(path: string): Promise<Blob> {
-  let res: Response;
-  try {
-    res = await fetch(BASE + path, { credentials: "include" }).then(markConn);
-  } catch (e) {
-    useConnStore.setState({ status: "err" });
-    throw e;
-  }
-  if (!res.ok) {
-    let detail = "";
-    try {
-      const body = await res.json();
-      detail = body?.error ?? JSON.stringify(body);
-    } catch {
-      detail = await res.text().catch(() => "");
-    }
-    throw new Error(`${res.status} ${res.statusText}${detail ? ` — ${detail}` : ""}`);
-  }
-  return res.blob();
-}
-
 async function request<T>(path: string, init?: RequestInit, opts?: { keepalive?: boolean; timeoutMs?: number }): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(new Error("timeout")), opts?.timeoutMs ?? 30000);
@@ -105,9 +84,7 @@ interface PersistPayload {
   rows?: Row[];
   dataCount?: number;
   action?: string;
-  logs?: unknown[];
-  undo?: unknown[];
-  redo?: unknown[];
+  base?: number;
   userId?: string;
 }
 
@@ -267,7 +244,7 @@ export interface WalletTransaction {
 export const api = {
   getFiles: () => request<SheetFile[]>("/files"),
   getFileFull: (id: string) =>
-    request<{ file: SheetFile; rows: Row[]; logs: unknown[]; undo: unknown[]; redo: unknown[]; seq?: number }>(`/files/${id}/full`),
+    request<{ file: SheetFile; rows: Row[]; logs?: unknown[]; undo?: unknown[]; redo?: unknown[]; seq?: number }>(`/files/${id}/full`),
   createFile: (data: { id: string; name: string; type: FileType; preset?: string; poolKind?: string; password?: string; poolEnabled?: boolean; rows?: Row[]; dataCount?: number; columns?: ColumnDef[] }) =>
     request<SheetFile>("/files", { method: "POST", body: JSON.stringify(data) }),
   updateFile: (id: string, data: Record<string, unknown>) =>
@@ -321,13 +298,17 @@ export const api = {
     request<{ ok: boolean }>(`/admin/user/${userId}/archive/${fileId}/restore`, { method: "POST" }),
   adminDeleteArchived: (userId: string, fileId: string) =>
     request<{ ok: boolean }>(`/admin/user/${userId}/archive/${fileId}`, { method: "DELETE" }),
-  adminFile: (fileId: string) => request<SheetFile>(`/admin/file/${fileId}`),
+  adminFile: (fileId: string) => request<SheetFile & { seq?: number }>(`/admin/file/${fileId}`),
   adminUpdateFile: (fileId: string, data: Record<string, unknown>) =>
     request<SheetFile>(`/admin/file/${fileId}`, { method: "PUT", body: JSON.stringify(data) }),
   adminDeleteFile: (fileId: string) => request<{ ok: boolean }>(`/admin/file/${fileId}`, { method: "DELETE" }),
   adminFileRows: (fileId: string) => request<Row[]>(`/admin/file/${fileId}/rows`),
   adminPersist: (fileId: string, data: PersistPayload) =>
     request<{ ok: boolean }>(`/admin/file/${fileId}/persist`, { method: "PUT", body: JSON.stringify(data) }),
+  restoreSnapshot: (fileId: string, index?: number) =>
+    request<{ ok: boolean; seq: number; rows: Row[]; file: SheetFile }>(`/files/${fileId}/restore-snapshot`, { method: "POST", body: JSON.stringify(index === undefined ? {} : { index }) }),
+  adminRestoreSnapshot: (fileId: string, index?: number) =>
+    request<{ ok: boolean; seq: number; rows: Row[]; file: SheetFile }>(`/admin/file/${fileId}/restore-snapshot`, { method: "POST", body: JSON.stringify(index === undefined ? {} : { index }) }),
   adminFileLogs: (fileId: string) => request<unknown[]>(`/admin/file/${fileId}/logs`),
   adminUndo: (fileId: string) => request<HistoryResult>(`/admin/file/${fileId}/undo`),
 
@@ -415,13 +396,13 @@ export const api = {
     return request<VerifiedCounts>(`/pools/${enc(password)}/${enc(poolId)}/verified-counts`);
   },
   getDownloadDetail: (id: string) => request<DownloadDetail>(`/pools/downloads/${encodeURIComponent(id)}/detail`),
-  getDownloadBlob: (id: string, opts?: { srcUid?: string; srcFileId?: string; name?: string }) => {
+  getDownloadJson: (id: string, opts?: { srcUid?: string; srcFileId?: string; name?: string }) => {
     const q = new URLSearchParams();
     if (opts?.srcUid) q.set("srcUid", opts.srcUid);
     if (opts?.srcFileId) q.set("srcFileId", opts.srcFileId);
     if (opts?.name) q.set("name", sanitizeDownloadName(opts.name));
     const qs = q.toString() ? `?${q}` : "";
-    return requestBlob(`/pools/downloads/${encodeURIComponent(id)}${qs}`);
+    return request<{ rows: Row[]; filename: string }>(`/pools/downloads/${encodeURIComponent(id)}${qs}`);
   },
   revertDownload: (id: string) => request<{ ok: boolean; reverted: number }>(`/pools/downloads/${encodeURIComponent(id)}/revert`, { method: "POST" }),
   deleteDownload: (id: string) => request<{ ok: boolean }>(`/pools/downloads/${encodeURIComponent(id)}`, { method: "DELETE" }),

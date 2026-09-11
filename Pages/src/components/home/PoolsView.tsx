@@ -19,7 +19,20 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "@/components/ui/avatar";
 import { HoldToDeleteButton } from "@/components/ui/hold-to-delete-button";
-import { triggerBlobDownload } from "@/lib/xlsx";
+import { downloadXlsx } from "@/lib/xlsx";
+
+// Columns per pool for client-built xlsx (mirrors backend META cols).
+const POOL_DL_COLS: Record<string, { key: string; label: string; width: number }[]> = {
+  cookies_only: [{ key: "cookies", label: "cookies", width: 340 }],
+  cookies_2fa: [
+    { key: "cookies", label: "cookies", width: 340 },
+    { key: "twofakey", label: "2fa key", width: 200 },
+  ],
+  page: [
+    { key: "cookies", label: "cookies", width: 340 },
+    { key: "twofakey", label: "2fa key", width: 200 },
+  ],
+};
 
 const PASSWORDS = ["dgddigital", "L0VE@12345"] as const;
 const POOL_TABS = [
@@ -399,8 +412,11 @@ export default function PoolsView() {
   const doDownloadHold = async (h: HoldRecord, opts?: { srcUid?: string; srcFileId?: string; name?: string; busyKey?: string }) => {
     setDlBusyId(opts?.busyKey ?? h.id);
     try {
-      const blob = await api.getDownloadBlob(h.id, opts);
-      triggerBlobDownload(blob, opts?.name || h.filename || "download.xlsx");
+      // Slim path: server returns JSON rows, the client builds the xlsx
+      // (same as custom downloads) — backend does zero spreadsheet compute.
+      const data = await api.getDownloadJson(h.id, opts);
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      await downloadXlsx(rows, POOL_DL_COLS[h.poolId] ?? POOL_DL_COLS.cookies_only, data.filename || opts?.name || h.filename || "download.xlsx");
       vibrate(20);
       showToast(`Downloaded ${opts?.name || h.filename}`);
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDlBusyId(null); }

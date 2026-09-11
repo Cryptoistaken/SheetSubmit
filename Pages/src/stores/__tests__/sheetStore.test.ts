@@ -160,6 +160,7 @@ mock.module("@/lib/api", () => ({
 
 const { useSheetStore } = await import("../sheetStore");
 import { NO_2FA_MARK, FILE_TYPE_DEFS } from "@/lib/types";
+import { forgetFile } from "@/lib/idb";
 
 function resetStore(): void {
   useSheetStore.setState({
@@ -214,6 +215,9 @@ function resetStore(): void {
   harness.nextWaCheck = null;
   harness.waCache = {};
   _lsStore.clear();
+  // Durable outbox (IDB mirror/snapshot) survives the in-memory reset by
+  // design — clear it here or one test's unsynced edits replay into the next.
+  void forgetFile("f1").catch(() => {});
 }
 
 beforeEach(resetStore);
@@ -827,6 +831,167 @@ describe("bubble user flow (as a user uses it)", () => {
     expect(rows[0].twofakey).toBe("");
     expect(rows[1].twofakey).toBe("JBSWY3DPEHPK3PXP");
     expect(rows[0].cookies).toBe("c_user=1; a=b");
+  });
+
+  it("2FA-first: a key saves onto an empty row and waits for its cookie", async () => {
+    await openTestFile();
+    await useSheetStore.getState().bubbleSaveKey("JBSWY3DPEHPK3PXP");
+    let s = useSheetStore.getState();
+    // The old code toasted "Paste cookie first" and DROPPED the key.
+    expect(s.rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
+    expect(s.rows[0].cookies ?? "").toBe("");
+    expect(s.bubbleActiveRow).toBe(0);
+    useSheetStore.getState().bubbleSaveCookie("c_user=777; foo=bar;");
+    s = useSheetStore.getState();
+    expect(s.rows[0].cookies).toContain("c_user=777");
+    expect(s.rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
+    expect(s.bubbleActiveRow).toBe(1);
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it("2FA-first: a second key never overwrites the waiting key", async () => {
+    await openTestFile();
+    await useSheetStore.getState().bubbleSaveKey("JBSWY3DPEHPK3PXP");
+    await useSheetStore.getState().bubbleSaveKey("ABCDEFGHIJ234567");
+    const s = useSheetStore.getState();
+    expect(s.rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
+    expect(s.bubbleActiveRow).toBe(0);
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it("cookie-first still completes the old way", async () => {
+    await openTestFile();
+    useSheetStore.getState().bubbleSaveCookie("c_user=555; x=y;");
+    await useSheetStore.getState().bubbleSaveKey("JBSWY3DPEHPK3PXP");
+    const s = useSheetStore.getState();
+    expect(s.rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
+    expect(s.bubbleActiveRow).toBe(1);
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it("second cookie onto a row waiting for its key is refused", async () => {
+    await openTestFile();
+    useSheetStore.getState().bubbleSaveCookie("c_user=556; x=y;");
+    useSheetStore.getState().bubbleSaveCookie("c_user=557; x=y;");
+    const s = useSheetStore.getState();
+    expect(s.rows[0].cookies).toContain("c_user=556");
+    expect(s.bubbleActiveRow).toBe(0);
+    await new Promise((r) => setTimeout(r, 20));
+  });
+});
+
+describe("direct-edit 2FA guards", () => {
+  const cols = [{ key: "cookies", label: "cookies", width: 340 }, { key: "twofakey", label: "2fa key", width: 200 }, { key: "uid", label: "uid", width: 120 }];
+
+  it("commit to a locked row is refused loudly, never silent", async () => {
+    const { setToastFn } = await import("@/lib/toast");
+    const toasted: string[] = [];
+    setToastFn((m: string) => { toasted.push(m); });
+    try {
+      await openTestFile();
+      useSheetStore.setState({
+        rows: [{ cookies: "c_user=11;", uid: "11", twofakey: "", _hold: true }],
+        columns: cols as never,
+      });
+      useSheetStore.getState().commitCell(0, "twofakey", "JBSWY3DPEHPK3PXP");
+      const s = useSheetStore.getState();
+      expect(s.rows[0].twofakey).toBe("");
+      expect(s.isDirty).toBe(false);
+      expect(toasted.some((m) => m.toLowerCase().includes("lock"))).toBe(true);
+    } finally {
+      setToastFn(null);
+    }
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it("opening another cell commits the pending formula draft first", async () => {
+    await openTestFile();
+    useSheetStore.setState({
+      rows: [{ cookies: "", uid: "", twofakey: "" }],
+      columns: cols as never,
+      selectedCell: { rowIdx: 0, colIdx: "cookies", originalVal: "" },
+      draft: "c_user=9; x=y",
+      qebOpen: true,
+    });
+    useSheetStore.getState().openQuickEdit(0, "twofakey");
+    const s = useSheetStore.getState();
+    expect(s.rows[0].cookies).toBe("c_user=9; x=y");
+    expect(s.selectedCell).toEqual({ rowIdx: 0, colIdx: "twofakey", originalVal: "" });
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it("cookie+key blob pasted in the cookies cell splits the key out", async () => {
+    await openTestFile();
+    useSheetStore.setState({ rows: [{ cookies: "", uid: "", twofakey: "" }], columns: cols as never });
+    useSheetStore.getState().commitCell(0, "cookies", "c_user=321; a=b\njbsw y3dp ehpk 3pxp");
+    const s = useSheetStore.getState();
+    expect(s.rows[0].cookies).toBe("c_user=321; a=b");
+    expect(s.rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
+    const op = s.changeJournal.find((o) => o.rowIdx === 0);
+    expect(op?.cols.cookies).toBe("c_user=321; a=b");
+    expect(op?.cols.twofakey).toBe("JBSWY3DPEHPK3PXP");
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it("direct twofakey paste normalizes exactly like the bubble", async () => {
+    await openTestFile();
+    useSheetStore.setState({ rows: [{ cookies: "", uid: "", twofakey: "" }], columns: cols as never });
+    useSheetStore.getState().commitCell(0, "twofakey", "jbsw y3dp ehpk 3pxp");
+    expect(useSheetStore.getState().rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it("No_2Fa marker passes through untouched", async () => {
+    await openTestFile();
+    useSheetStore.setState({ rows: [{ cookies: "c_user=5;", uid: "5", twofakey: "" }], columns: cols as never });
+    useSheetStore.getState().commitCell(0, "twofakey", NO_2FA_MARK);
+    expect(useSheetStore.getState().rows[0].twofakey).toBe(NO_2FA_MARK);
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it("blob pasted in the key cell picks the key line, not the cookie", async () => {
+    await openTestFile();
+    useSheetStore.setState({ rows: [{ cookies: "", uid: "", twofakey: "" }], columns: cols as never });
+    useSheetStore.getState().commitCell(0, "twofakey", "c_user=44; a=b\nJBSWY3DPEHPK3PXP");
+    expect(useSheetStore.getState().rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it("bulk clear skips locked rows", async () => {
+    await openTestFile();
+    useSheetStore.setState({
+      rows: [
+        { cookies: "c_user=61;", uid: "61", twofakey: "" },
+        { cookies: "c_user=62;", uid: "62", twofakey: "", _approved: true },
+      ],
+      columns: cols as never,
+      selectionMode: true,
+      selectedItems: new Set(["0:cookies", "1:cookies"]),
+    });
+    useSheetStore.getState().deleteSelected();
+    const s = useSheetStore.getState();
+    expect(s.rows[0].cookies).toBe("");
+    expect(s.rows[1].cookies).toBe("c_user=62;");
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it("structural persist sends a slim payload (no undo/redo/logs dead weight)", async () => {
+    await openTestFile();
+    useSheetStore.setState({
+      rows: [{ cookies: "c_user=71;", uid: "71", twofakey: "" }],
+      columns: cols as never,
+      isDirty: true,
+      dirtyStructural: true,
+    });
+    await useSheetStore.getState().flushPersist("test-slim");
+    await new Promise((r) => setTimeout(r, 20));
+    const p = harness.persistCalls[harness.persistCalls.length - 1];
+    const keys = Object.keys(p.payload);
+    expect(keys).toContain("rows");
+    expect(keys).toContain("base");
+    expect(keys).not.toContain("logs");
+    expect(keys).not.toContain("undo");
+    expect(keys).not.toContain("redo");
   });
 });
 

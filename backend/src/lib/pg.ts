@@ -1,5 +1,7 @@
 import postgres from "postgres";
 import type { Row, SheetFile } from "./shared";
+import { isPersistConflict, FILE_ROW_LIMIT, FILE_SNAPSHOT_LIMIT, pushSnapshot } from "./shared";
+import type { FileSnapshot } from "./shared";
 import { redisDel, redisJsonGet, redisJsonGetMany, redisJsonSet } from "./redis";
 
 const db = postgres(Bun.env.DATABASE_URL || "", {
@@ -124,7 +126,7 @@ async function deviceOp(kind: string, a: any) {
 }
 
 async function fileOp(id: string, op: string, a: any) {
-  if (op === "init") return db.begin(async (tx: any) => { await tx`INSERT INTO file_meta(file_id,data,seq) VALUES(${id},${j(a.file)},0) ON CONFLICT(file_id) DO UPDATE SET data=EXCLUDED.data,seq=0`; await tx`DELETE FROM file_rows WHERE file_id=${id}`; await tx`DELETE FROM file_logs WHERE file_id=${id}`; if ((a.rows || []).length) await bulkInsert(tx, id, a.rows); return { ok: true }; });
+  if (op === "init") return db.begin(async (tx: any) => { if ((a.rows || []).length > FILE_ROW_LIMIT) throw new Error("too many rows (max 500 per file)"); await tx`INSERT INTO file_meta(file_id,data,seq) VALUES(${id},${j(a.file)},0) ON CONFLICT(file_id) DO UPDATE SET data=EXCLUDED.data,seq=0`; await tx`DELETE FROM file_rows WHERE file_id=${id}`; await tx`DELETE FROM file_logs WHERE file_id=${id}`; if ((a.rows || []).length) await bulkInsert(tx, id, a.rows); return { ok: true }; });
   if (op === "meta") { const r: any = (await db`SELECT data FROM file_meta WHERE file_id=${id}`)[0]; return r?.data ?? null; }
   if (op === "seq") { const r: any = (await db`SELECT seq FROM file_meta WHERE file_id=${id}`)[0]; return { seq: Number(r?.seq || 0) }; }
   const readRows = async (q: any = db) => (await q`SELECT data FROM file_rows WHERE file_id=${id} ORDER BY idx`).map((r: any) => json(r.data) as Row);
@@ -132,16 +134,58 @@ async function fileOp(id: string, op: string, a: any) {
   if (op === "full") { const r: any = (await db`SELECT seq FROM file_meta WHERE file_id=${id}`)[0]; return { rows: await readRows(), seq: Number(r?.seq || 0) }; }
   if (op === "counts") return counts(await readRows());
   if (["keys", "dupKeys", "projection"].includes(op)) { const limit = Math.min(10000, Math.max(1, Number(a.limit) || 10000)); const krows: any[] = await db`SELECT idx AS i,COALESCE(NULLIF(data->>'uid',''),substring(data->>'cookies' from 'c_user=([0-9]+)')) AS k FROM file_rows WHERE file_id=${id} AND COALESCE(NULLIF(data->>'uid',''),substring(data->>'cookies' from 'c_user=([0-9]+)')) IS NOT NULL ORDER BY idx LIMIT ${limit}`; return krows.map((r: any) => ({ k: String(r.k), i: Number(r.i) })); }
-  if (op === "wipe") return db.begin(async (tx: any) => { const rows = (await tx`SELECT data FROM file_rows WHERE file_id=${id}`).map((r: any) => json(r.data)); await tx`DELETE FROM file_rows WHERE file_id=${id}`; await tx`DELETE FROM file_logs WHERE file_id=${id}`; await tx`DELETE FROM file_meta WHERE file_id=${id}`; return { ok: true, rows }; });
+  if (op === "wipe") return db.begin(async (tx: any) => {
+    const rows = (await tx`SELECT data FROM file_rows WHERE file_id=${id}`).map((r: any) => json(r.data));
+    // forensics tombstone (Fix #8): file_logs cascades away with file_index, so
+    // the last log trail is preserved in meta KV before anything is deleted.
+    const m: any = (await tx`SELECT data,seq FROM file_meta WHERE file_id=${id}`)[0];
+    const logs: any[] = await tx`SELECT ts::float8 AS ts,action,seq FROM file_logs WHERE file_id=${id} ORDER BY id DESC LIMIT 200`;
+    const md = m ? json(m.data) : null;
+    await tx`INSERT INTO meta(k,v) VALUES(${`filetomb:${id}`},${j({ id, name: md?.name ?? null, ownerUid: a.uid ? String(a.uid) : null, purgedAt: Date.now(), rowCount: rows.length, seq: m ? Number(m.seq) : 0, logs })}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`;
+    await tx`DELETE FROM file_rows WHERE file_id=${id}`; await tx`DELETE FROM file_logs WHERE file_id=${id}`; await tx`DELETE FROM file_meta WHERE file_id=${id}`; await tx`DELETE FROM meta WHERE k=${`filesnap:${id}`}`; return { ok: true, rows };
+  });
+  if (op === "tombGet") { const r: any = (await db`SELECT v FROM meta WHERE k=${`filetomb:${id}`}`)[0]; return r ? json(r.v) : null; }
   if (op === "getLogs") return db`SELECT id,ts::float8 AS ts,action,seq FROM file_logs WHERE file_id=${id} ORDER BY id DESC LIMIT 200`;
+  const snapKey = `filesnap:${id}`;
+  // snapshot list, newest-first; tolerates the legacy single-{rows} shape.
+  const readSnaps = async (q: any = db): Promise<FileSnapshot[]> => {
+    const r: any = (await q`SELECT v FROM meta WHERE k=${snapKey}`)[0];
+    const v = r ? json(r.v) : null;
+    if (!v) return [];
+    const list = Array.isArray(v.snaps) ? v.snaps : Array.isArray(v.rows) ? [{ rows: v.rows, seq: Number(v.seq ?? 0), ts: Number(v.ts ?? 0) }] : [];
+    return list.filter((s: any) => s && Array.isArray(s.rows)).map((s: any) => ({ rows: s.rows as Row[], seq: Number(s.seq ?? 0), ts: Number(s.ts ?? 0) }));
+  };
+  if (op === "snapGet") { const snaps = await readSnaps(); const s = snaps[0]; return s ? { ...s, count: snaps.length } : null; }
+  if (op === "snapRestore") return db.begin(async (tx: any) => {
+    const meta: any = (await tx`SELECT data,seq FROM file_meta WHERE file_id=${id} FOR UPDATE`)[0]; if (!meta) throw new Error("file not found");
+    const snaps = await readSnaps(tx);
+    const idx = Number.isInteger(a.index) ? Math.max(0, a.index as number) : 0;
+    const prev = snaps[idx];
+    if (!prev) throw new Error("no snapshot");
+    const rows: Row[] = prev.rows;
+    const file = meta.data; if (file) { Object.assign(file, counts(rows)); file.rowCount = rows.length; file.updatedAt = Date.now(); file.lastAction = "restored"; }
+    const next = Number(meta.seq) + 1; await tx`UPDATE file_meta SET data=${j(file)},seq=${next} WHERE file_id=${id}`;
+    await tx`DELETE FROM file_rows WHERE file_id=${id}`;
+    if (rows.length) await bulkInsert(tx, id, rows);
+    await tx`INSERT INTO file_logs(file_id,ts,action,seq) VALUES(${id},${Date.now()},"restore",${next})`; await tx`DELETE FROM file_logs WHERE file_id=${id} AND id NOT IN (SELECT id FROM file_logs WHERE file_id=${id} ORDER BY id DESC LIMIT 200)`;
+    return { ok: true, seq: next, rows, file, restoredSeq: Number(prev.seq ?? 0), snapshots: snaps.length };
+  });
   if (op !== "save" && op !== "append") throw new Error(`unknown operation: ${op}`);
   return db.begin(async (tx: any) => {
     const meta: any = (await tx`SELECT data,seq FROM file_meta WHERE file_id=${id} FOR UPDATE`)[0]; if (!meta) throw new Error("file not found"); const current = Number(meta.seq);
     // meta-only save (rename): skip the full row read + DELETE + re-INSERT entirely
     if (op === "save" && !Array.isArray(a.rows)) { const mfile = a.file || meta.data; const mnext = current + 1; await tx`UPDATE file_meta SET data=${j(mfile)},seq=${mnext} WHERE file_id=${id}`; await tx`INSERT INTO file_logs(file_id,ts,action,seq) VALUES(${id},${Date.now()},${String(a.action || "edit")},${mnext})`; await tx`DELETE FROM file_logs WHERE file_id=${id} AND id NOT IN (SELECT id FROM file_logs WHERE file_id=${id} ORDER BY id DESC LIMIT 200)`; return { ok: true, seq: mnext }; }
     let rows: Row[] = (await tx`SELECT data FROM file_rows WHERE file_id=${id} ORDER BY idx`).map((r: any) => json(r.data));
+    if (op === "save" && Array.isArray(a.rows)) {
+      // structural save: refuse to overwrite a newer seq (two editors), enforce
+      // the per-file row cap, and roll the pre-write state into snapshots first.
+      if (a.rows.length > FILE_ROW_LIMIT) throw new Error("too many rows (max 500 per file)");
+      if (isPersistConflict(a.base, current)) throw new Error("version conflict");
+      const prev = await readSnaps(tx);
+      await tx`INSERT INTO meta(k,v) VALUES(${`filesnap:${id}`},${j({ snaps: pushSnapshot(prev, { rows, seq: current, ts: Date.now() }, FILE_SNAPSHOT_LIMIT) })}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`;
+    }
     const origLen = rows.length, touched = new Map<number, Row>();
-    if (op === "append") { if (!Number.isInteger(a.base) || a.base !== current) throw new Error("version conflict"); if (!Array.isArray(a.ops) || a.ops.length > 10000) throw new Error("invalid append payload"); for (const x of a.ops) { if (!x || !Number.isInteger(x.rowIdx) || x.rowIdx < 0 || x.rowIdx > 100000 || !x.cols || Array.isArray(x.cols)) throw new Error("invalid op"); while (rows.length <= x.rowIdx) rows.push({}); rows[x.rowIdx] = { ...rows[x.rowIdx], ...x.cols }; if (x.rowIdx < origLen) touched.set(x.rowIdx, rows[x.rowIdx]); } }
+    if (op === "append") { if (!Number.isInteger(a.base) || a.base !== current) throw new Error("version conflict"); if (!Array.isArray(a.ops) || a.ops.length > 10000) throw new Error("invalid append payload"); for (const x of a.ops) { if (!x || !Number.isInteger(x.rowIdx) || x.rowIdx < 0 || x.rowIdx >= FILE_ROW_LIMIT || !x.cols || Array.isArray(x.cols)) throw new Error("invalid op"); while (rows.length <= x.rowIdx) rows.push({}); rows[x.rowIdx] = { ...rows[x.rowIdx], ...x.cols }; if (x.rowIdx < origLen) touched.set(x.rowIdx, rows[x.rowIdx]); } }
     else if (Array.isArray(a.rows)) rows = a.rows;
     const file = a.file || meta.data; if (file) { Object.assign(file, counts(rows)); file.rowCount = rows.length; file.updatedAt = Date.now(); file.lastAction = String(a.action || (op === "append" ? "append" : "edit")); if (a.dataCount !== undefined) file.dataCount = a.dataCount; }
     const next = current + 1; await tx`UPDATE file_meta SET data=${j(file)},seq=${next} WHERE file_id=${id}`;

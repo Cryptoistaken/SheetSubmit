@@ -5,7 +5,7 @@ import { cookie, signSession } from "../lib/session";
 
 // TEST-ONLY auth backdoor for automated e2e (Playwright). Guarded by
 // ALLOW_TEST_AUTH=1 — never set it on Railway prod or any public env.
-// Lets tests mint a real ss_session cookie without Telegram OIDC/Turnstile.
+// Lets tests mint a real ss_session cookie without Telegram OIDC.
 export const testAuth = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 
 testAuth.post("/login", async (c) => {

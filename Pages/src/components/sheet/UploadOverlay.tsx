@@ -1,7 +1,10 @@
 import { useModalA11y } from "@/hooks/useModalA11y";
 import { useSheetStore } from "@/stores/sheetStore";
+import { MAX_GRID_ROWS } from "@/stores/sheetStore";
 import { useConfirm } from "@/lib/confirm";
+import { useToast } from "@/lib/toast";
 import type { Row } from "@/lib/types";
+import { isDataRow, replaceCapMessage } from "@/lib/types";
 
 export default function UploadOverlay({
   rows,
@@ -13,9 +16,10 @@ export default function UploadOverlay({
   const applyUpload = useSheetStore((s) => s.applyUpload);
   const columns = useSheetStore((s) => s.columns);
   const currentCount = useSheetStore(
-    (s) => s.rows.filter((r) => columns.some((c) => r[c.key])).length,
+    (s) => s.rows.filter((r) => isDataRow(r, columns)).length,
   );
   const confirm = useConfirm();
+  const showToast = useToast();
   const modalRef = useModalA11y(!!rows, onClose);
 
   if (!rows) return null;
@@ -48,6 +52,12 @@ export default function UploadOverlay({
           className="btn"
           style={{ width: "100%", justifyContent: "flex-start", marginBottom: 8 }}
           onClick={async () => {
+            // Strict per-file cap (server enforces it too): refuse, never truncate.
+            const capMsg = replaceCapMessage(n, MAX_GRID_ROWS);
+            if (capMsg) {
+              showToast(capMsg);
+              return;
+            }
             const ok = await confirm(
               "Replace ALL " +
                 n +

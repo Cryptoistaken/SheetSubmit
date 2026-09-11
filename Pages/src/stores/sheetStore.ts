@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { api, type AppendOp, type AppendPayload } from "@/lib/api";
 import {
   fileColumns,
+  isDataRow,
   isNo2FAMark,
   NO_2FA_MARK,
   type ColumnDef,
@@ -12,6 +13,8 @@ import {
 } from "@/lib/types";
 import { getFileBehavior, isPageFile } from "@/features/filetypes";
 import { toast } from "@/lib/toast";
+import { mirrorPending, snapshotFile, applyMirror, idbGet, idbDel, mirrorKey, snapKey } from "@/lib/idb";
+import type { JournalMirror, FileSnapshot } from "@/lib/idb";
 import { vibrate } from "@/lib/utils";
 import { IS_DESKTOP } from "@/lib/device";
 import { getCachedTOTP } from "@/features/filetypes/totp";
@@ -386,6 +389,7 @@ export interface SheetState {
   maybeAutoCheck: (rowIdx: number | null | undefined, colKey: string) => void;
   _pageSweepCore?: (mode: "auto-page" | "manual-page" | "manual-wa", filter?: (row: Row, idx: number) => boolean, excludeIdx?: number | null) => Promise<void>;
   restoreVersion: (v: number) => Promise<boolean>;
+  applyRestore: (rows: Row[], seq: number, file?: SheetFile | null) => void;
   mergeRows: (incoming: Row[]) => void;
   applyUpload: (mode: "replace" | "append", incoming: Row[]) => void;
   removeEmptyRows: () => void;
@@ -488,7 +492,11 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         // ignore malformed saved columns
       }
       const rows: Row[] = [...(full.rows ?? [])];
-      while (rows.length < 100) rows.push(makeEmptyRow(columns));
+      void snapshotFile(id, full.rows ?? [], full.seq ?? 0, f).catch(() => {});
+      const resumed = await resumeLocal(id, rows);
+      if (seq !== openSeq) return;
+      const finalRows = resumed ? resumed.rows : rows;
+      while (finalRows.length < 100) finalRows.push(makeEmptyRow(columns));
       const undoStack = (full.undo ?? []) as UndoEntry[];
       const redoStack = (full.redo ?? []) as UndoEntry[];
       const apiLogs = full.logs ?? [];
@@ -496,7 +504,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         status: "ready",
         fileId: id,
         file: f,
-        rows,
+        rows: finalRows,
         columns,
         visibleCols,
         undoStack,
@@ -505,14 +513,14 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         logBase: apiLogs.length,
         undoBase: undoStack.length,
         redoBase: redoStack.length,
-        isDirty: false,
-        changeJournal: [],
+        isDirty: !!resumed,
+        changeJournal: resumed?.journal ?? [],
         lastSeq: full.seq ?? 0,
-        dirtyStructural: false,
+        dirtyStructural: resumed?.structural ?? false,
         selectedCell: null,
         draft: "",
         qebOpen: false,
-      inlineEdit: false,
+        inlineEdit: false,
         selectionMode: false,
         selectedItems: new Set(),
         selRows: new Set(),
@@ -522,10 +530,63 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         checkRunning: false,
         pendingAutoCheck: false,
         bubbleActiveRow: -1,
-        ...recomputeMarks(rows, crossDups, columns),
+        ...recomputeMarks(finalRows, crossDups, columns),
       });
+      if (resumed) void get().flushPersist();
     } catch {
-      set({ status: "error" });
+      // Offline / server down: open the last snapshot with queued edits.
+      // Quiet by design — a transient toast only, never a blocking banner.
+      try {
+        const snap = await idbGet<FileSnapshot>(snapKey(id));
+        const sf = snap?.file as SheetFile | undefined;
+        if (!snap || !sf?.id || seq !== openSeq) throw new Error("no snapshot");
+        const columns = fileColumns(sf);
+        let visibleCols = new Set<string>(columns.map((c) => c.key));
+        try {
+          const saved = localStorage.getItem(`ss_cols_${id}`);
+          if (saved) visibleCols = new Set<string>(JSON.parse(saved) as string[]);
+        } catch {
+          // ignore malformed saved columns
+        }
+        const resumed = await resumeLocal(id, [...(snap.rows ?? [])]);
+        const finalRows = resumed ? resumed.rows : [...(snap.rows ?? [])];
+        while (finalRows.length < 100) finalRows.push(makeEmptyRow(columns));
+        set({
+          status: "ready",
+          fileId: id,
+          file: sf,
+          rows: finalRows,
+          columns,
+          visibleCols,
+          undoStack: [],
+          redoStack: [],
+          apiLogs: [],
+          logBase: 0,
+          undoBase: 0,
+          redoBase: 0,
+          isDirty: !!resumed,
+          changeJournal: resumed?.journal ?? [],
+          lastSeq: snap.seq,
+          dirtyStructural: resumed?.structural ?? false,
+          selectedCell: null,
+          draft: "",
+          qebOpen: false,
+          inlineEdit: false,
+          selectionMode: false,
+          selectedItems: new Set(),
+          selRows: new Set(),
+          selCols: new Set(),
+          invalidCells: new Set(),
+          crossDups: {},
+          checkRunning: false,
+          pendingAutoCheck: false,
+          bubbleActiveRow: -1,
+          ...recomputeMarks(finalRows, {}, columns),
+        });
+        toast("Offline — showing last saved copy");
+      } catch {
+        set({ status: "error" });
+      }
     }
   },
 
@@ -603,7 +664,11 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         // ignore malformed saved columns
       }
       const rows: Row[] = [...(rowsRes ?? [])];
-      while (rows.length < 100) rows.push(makeEmptyRow(columns));
+      void snapshotFile(id, rowsRes ?? [], f.seq ?? 0, f).catch(() => {});
+      const resumed = await resumeLocal(id, rows);
+      if (seq !== openSeq) return;
+      const finalRows = resumed ? resumed.rows : rows;
+      while (finalRows.length < 100) finalRows.push(makeEmptyRow(columns));
       const undoStack = (undoData?.undo ?? []) as UndoEntry[];
       const redoStack = (undoData?.redo ?? []) as UndoEntry[];
       const apiLogs = logsRes ?? [];
@@ -611,7 +676,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         status: "ready",
         fileId: id,
         file: f,
-        rows,
+        rows: finalRows,
         columns,
         visibleCols,
         undoStack,
@@ -620,10 +685,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         logBase: apiLogs.length,
         undoBase: undoStack.length,
         redoBase: redoStack.length,
-        isDirty: false,
-        changeJournal: [],
-        lastSeq: 0,
-        dirtyStructural: false,
+        isDirty: !!resumed,
+        changeJournal: resumed?.journal ?? [],
+        lastSeq: f.seq ?? 0,
+        dirtyStructural: resumed?.structural ?? false,
         selectedCell: null,
         draft: "",
         qebOpen: false,
@@ -637,8 +702,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         checkRunning: false,
         pendingAutoCheck: false,
         bubbleActiveRow: -1,
-        ...recomputeMarks(rows, {}, columns),
+        ...recomputeMarks(finalRows, {}, columns),
       });
+      if (resumed) void get().flushPersist();
     } catch {
       set({ status: "error" });
     }
@@ -671,9 +737,37 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const s = get();
     const row = s.rows[rowIdx];
     if (!row) return;
-    if (row._taken || row._hold || row._approved) return;
+    if (row._taken || row._hold || row._approved) {
+      // Locked rows reject edits — say so loudly instead of dropping silently
+      // (users thought pasted keys "vanished").
+      toast(row._hold || row._approved ? "Row is on hold — edits locked" : "Row already taken — edits locked");
+      return;
+    }
+    if (colKey === "twofakey" && value && value !== NO_2FA_MARK) {
+      // Normalize like the bubble does (spaces/dashes out, uppercase) so
+      // direct pastes dedup and pool-match exactly like bubble entries. A
+      // multi-line paste keeps the first non-cookie line (cookie-first blobs
+      // belong in the cookies cell, which splits them — see below).
+      const lines = value.split("\n").map((l) => l.trim()).filter(Boolean);
+      const candidate = lines.find((l) => !/c_user=\d+/.test(l)) ?? lines[0] ?? "";
+      value = candidate.replace(/[\s\-]/g, "").toUpperCase();
+    }
+    let extraKey = "";
+    if (colKey === "cookies" && !row.twofakey && value.includes("\n")) {
+      // "cookie + key" blob pasted into the cookie cell: split the key line
+      // into the 2FA cell instead of trapping it invisibly in cookies.
+      const lines = value.split("\n").map((l) => l.trim()).filter(Boolean);
+      if (lines.length >= 2) {
+        const cookieLine = lines.find((l) => /c_user=\d+/.test(l));
+        const keyLine = lines.find((l) => l !== cookieLine && /^[A-Z2-7]{10,}$/.test(l.replace(/[\s\-]/g, "").toUpperCase()));
+        if (cookieLine && keyLine) {
+          value = cookieLine;
+          extraKey = keyLine.replace(/[\s\-]/g, "").toUpperCase();
+        }
+      }
+    }
     const prevVal = row[colKey] ?? "";
-    if (value === prevVal) return;
+    if (value === prevVal && !extraKey) return;
     if (colKey === "cookies" && isPageFile(s.file)) {
       const newCUser = extractCUser(value);
       if (newCUser) resetLedgerEntry(s.fileId, newCUser);
@@ -681,6 +775,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const prevRow = { ...row };
     const newRows = s.rows.slice();
     newRows[rowIdx] = { ...row, [colKey]: value };
+    if (extraKey) newRows[rowIdx] = { ...newRows[rowIdx], twofakey: extraKey };
     const behavior = getFileBehavior(s.file?.type ?? "fb_cookie");
     const newInvalid = new Set(s.invalidCells);
     if (behavior?.onCellChange) {
@@ -734,6 +829,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     });
     get().maybeAutoCheck(rowIdx, colKey);
     get().persist();
+    if (extraKey) toast("Split key into 2FA cell");
     if (
       colKey === "twofakey" &&
       value &&
@@ -761,6 +857,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       if (persistTimerFileId !== get().fileId) return;
       void get().flushPersist(action);
     }, action ? 0 : 300);
+    // Durable outbox mirror (save-raw-first): every mutation lands in IndexedDB
+    // synchronously, so a killed app / dead network loses nothing. Full rows
+    // only when a structural change is pending (bounded: 500/file).
+    if (fileId) {
+      const st = get();
+      void mirrorPending(fileId, st.changeJournal, st.dirtyStructural, st.dirtyStructural ? st.rows : undefined, st.lastSeq).catch(() => {});
+    }
   },
 
   flushPersist: async (action, viaUnload) => {
@@ -771,7 +874,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       let dataCount = 0;
       let lastData = -1;
       s.rows.forEach((row, idx) => {
-        const hasData = columns.some((c) => row[c.key]);
+        const hasData = isDataRow(row, columns);
         if (hasData) {
           dataCount++;
           lastData = idx;
@@ -781,19 +884,17 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         if (!s.isDirty) return;
         const keepCount = Math.min(s.rows.length, Math.max(lastData + 51, 100));
         const trimmed = s.rows.slice(0, keepCount);
+        // Slim payload: server only reads rows/base/action/dataCount/userId.
+        // ( undo/redo/logs used to ride along — dead weight on every save.)
         const payload: {
           rows: Row[];
-          logs: unknown[];
-          undo: UndoEntry[];
-          redo: UndoEntry[];
+          base: number;
           dataCount: number;
           action?: string;
           userId?: string;
         } = {
           rows: trimmed,
-          logs: s.apiLogs,
-          undo: s.undoStack,
-          redo: s.redoStack,
+          base: s.lastSeq,
           dataCount,
         };
         if (action) payload.action = action;
@@ -808,6 +909,57 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           }
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e);
+          if (errMsg.startsWith("409") && errMsg.includes("version conflict")) {
+            // Another writer saved first. Reload their version, stash ours in
+            // Undo (restorable), re-apply unsent cell edits on top, and continue
+            // with the fresh base — never silently overwrite their rows.
+            try {
+              let freshRows: Row[] | null = null;
+              let freshSeq: number | null = null;
+              let freshFile = null;
+              if (s.adminMode) {
+                const f = await api.adminFile(s.fileId);
+                if (!f?.id) return;
+                freshFile = f;
+                freshRows = await api.adminFileRows(s.fileId);
+                freshSeq = f.seq ?? null;
+              } else {
+                const fresh = await api.getFileFull(s.fileId);
+                if (!fresh.file?.id) return;
+                freshFile = fresh.file;
+                freshRows = fresh.rows ?? [];
+                freshSeq = fresh.seq ?? null;
+              }
+              const cur = get();
+              if (cur.fileId !== s.fileId) return;
+              const undoStack: UndoEntry[] = [...cur.undoStack, { type: "rows", prevRows: s.rows.map((r) => ({ ...r })) }];
+              if (undoStack.length > 100) undoStack.shift();
+              const rows: Row[] = [...(freshRows ?? [])];
+              while (rows.length < 100) rows.push(makeEmptyRow(fileColumns(cur.file)));
+              const liveJournal = get().changeJournal.length ? get().changeJournal : s.changeJournal;
+              liveJournal.forEach((op) => {
+                const row = rows[op.rowIdx];
+                if (!row) return;
+                rows[op.rowIdx] = { ...row, ...op.cols };
+              });
+              set({
+                file: (freshFile ?? cur.file) as SheetFile,
+                rows,
+                undoStack,
+                redoStack: [],
+                changeJournal: liveJournal,
+                lastSeq: freshSeq ?? s.lastSeq,
+                isDirty: liveJournal.length > 0,
+                dirtyStructural: false,
+                ...recomputeMarks(rows, cur.crossDups, cur.columns),
+              });
+              syncMirror(s.fileId);
+              toast("Someone else saved first — reloaded their version. Yours is kept in Undo; latest cell edits re-applied.");
+            } catch {
+              toast("Sync conflict — will retry");
+            }
+            return;
+          }
           if (errMsg.startsWith("409")) {
             // Server refused the structural save (e.g. deleted rows are ON HOLD
             // and locked). Keep local dirty state and tell the owner why.
@@ -828,6 +980,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
             undoBase: cur.undoStack.length,
             redoBase: cur.redoStack.length,
           });
+          void snapshotFile(s.fileId, trimmed, resp?.seq ?? s.lastSeq).catch(() => {});
+          syncMirror(s.fileId);
           trimMemoryRows();
         } else if (cur.fileId === s.fileId && resp) {
           // Newer edits landed while the structural persist was in flight. The
@@ -858,6 +1012,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
               undoBase: cur.undoStack.length,
               redoBase: cur.redoStack.length,
             });
+            void snapshotFile(s.fileId, cur.rows, resp.seq).catch(() => {});
+            syncMirror(s.fileId);
             trimMemoryRows();
           }
         } catch (e) {
@@ -887,6 +1043,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
                 isDirty: true,
                 ...recomputeMarks(rows, cur.crossDups, cur.columns),
               });
+              syncMirror(s.fileId);
             } catch {
               toast("Sync conflict — will retry");
             }
@@ -1003,6 +1160,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   },
 
   openQuickEdit: (rowIdx, colKey) => {
+    // Commit any pending draft first — grid call sites do this, but toolbar
+    // and overlay actions can leave one behind; never silently abandon it.
+    const sc = get().selectedCell;
+    if (sc && (sc.rowIdx !== rowIdx || sc.colIdx !== colKey)) get().commitQuickEdit();
     const row = get().rows[rowIdx];
     if (!row) return;
     if (row._taken || row._hold || row._approved) return;
@@ -1015,6 +1176,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   },
 
   openInlineEdit: (rowIdx, colKey) => {
+    const sc = get().selectedCell;
+    if (sc && (sc.rowIdx !== rowIdx || sc.colIdx !== colKey)) get().commitQuickEdit();
     const row = get().rows[rowIdx];
     if (!row) return;
     if (row._taken || row._hold || row._approved) return;
@@ -1290,12 +1453,18 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const rows = s.rows.slice();
     const newInvalid = new Set(s.invalidCells);
     const deltas: CellDelta[] = [];
+    let locked = 0;
     s.selectedItems.forEach((key) => {
       const parts = key.split(":");
       const rowIdx = Number(parts[0]);
       const colKey = parts[1];
       const row = rows[rowIdx];
       if (!row) return;
+      // Locked rows are never cleared — same rule as commitCell.
+      if (row._taken || row._hold || row._approved) {
+        locked++;
+        return;
+      }
       const prevVal = row[colKey] ?? "";
       if (prevVal !== "") deltas.push({ rowIdx, colKey, prevVal });
       rows[rowIdx] = { ...row, [colKey]: "" };
@@ -1326,7 +1495,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     });
     get().exitSelectionMode();
     get().persist();
-    toast("Cleared");
+    toast(locked ? `Cleared (skipped ${locked} locked)` : "Cleared");
   },
 
   copySelected: async () => {
@@ -2003,6 +2172,29 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     return false;
   },
 
+  applyRestore: (rows, seq, file) => {
+    const s = get();
+    const cols = fileColumns(file ?? s.file);
+    const padded = [...rows];
+    while (padded.length < 100) padded.push(makeEmptyRow(cols));
+    const undoStack: UndoEntry[] = [
+      ...s.undoStack,
+      { type: "rows", prevRows: s.rows.map((r) => ({ ...r })) },
+    ];
+    if (undoStack.length > 100) undoStack.shift();
+    set({
+      file: file ?? s.file,
+      rows: padded,
+      undoStack,
+      redoStack: [],
+      isDirty: false,
+      changeJournal: [],
+      lastSeq: seq,
+      dirtyStructural: false,
+      ...recomputeMarks(padded, s.crossDups, s.columns),
+    });
+  },
+
   mergeRows: (incoming) => {
     const s = get();
     const existing = new Set<string>();
@@ -2030,7 +2222,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     // appending past the padding hides merged accounts until Compact.
     let lastDataIdx = -1;
     s.rows.forEach((row, idx) => {
-      if (s.columns.some((c) => row[c.key])) lastDataIdx = idx;
+      if (isDataRow(row, s.columns)) lastDataIdx = idx;
     });
     const room = MAX_GRID_ROWS - s.rows.length;
     if (room <= 0) {
@@ -2066,7 +2258,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const s = get();
     let lastDataIdx = -1;
     s.rows.forEach((row, idx) => {
-      if (s.columns.some((c) => row[c.key])) lastDataIdx = idx;
+      if (isDataRow(row, s.columns)) lastDataIdx = idx;
     });
     const undoStack: UndoEntry[] = [
       ...s.undoStack,
@@ -2119,7 +2311,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const columns = s.columns;
     let lastDataIdx = -1;
     s.rows.forEach((row, idx) => {
-      if (columns.some((c) => row[c.key])) lastDataIdx = idx;
+      if (isDataRow(row, columns)) lastDataIdx = idx;
     });
     if (lastDataIdx < 0) {
       toast("Nothing to compact. No rows found.");
@@ -2127,7 +2319,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     }
     const used = s.rows.slice(0, lastDataIdx + 1);
     const tail = s.rows.slice(lastDataIdx + 1);
-    const cleaned = used.filter((row) => columns.some((c) => row[c.key]));
+    const cleaned = used.filter((row) => isDataRow(row, columns));
     const removed = used.length - cleaned.length;
     if (removed === 0) {
       toast("Sheet already compact");
@@ -2249,10 +2441,11 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     }
     const isCookieOnly = !fileColumns(s.file).some((c) => c.key === "twofakey");
     const idx = get().bubbleGetActiveRow();
-    if (!isCookieOnly && s.rows[idx].cookies) {
-      // Row already has a cookie — this paste was NOT saved (it's a cookie,
-      // not a 2FA key). Keep it short: the bubble popup has no room for a
-      // long toast.
+    if (!isCookieOnly && s.rows[idx].cookies && !s.rows[idx].twofakey) {
+      // Row already has a cookie and still needs its key — this second cookie
+      // paste was NOT saved (it's a cookie, not a 2FA key). Key-only rows DO
+      // accept cookies (2FA-first order). Keep it short: the bubble popup has
+      // no room for a long toast.
       toast("Need 2FA");
       return;
     }
@@ -2311,11 +2504,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       return;
     }
     const idx = get().bubbleGetActiveRow();
-    if (!s.rows[idx].cookies) {
-      toast("Paste cookie first");
-      return;
-    }
     if (s.rows[idx].twofakey) {
+      // Row already has a key — a different key paste belongs to another row,
+      // which still needs its cookie first.
       toast("Need cookie");
       return;
     }
@@ -2435,6 +2626,39 @@ async function refreshCrossDups(fileId: string | null) {
   }
 }
 
+// ── Durable outbox (IDB-first) helpers ──
+
+// Reconcile the IDB mirror with live state after an ack: rewrite when edits
+// remain, delete when clean. Decided from live state at ack time so an
+// in-flight presist() mirror write (issued earlier) can never resurrect
+// already-acked intent — IDB applies same-connection writes in order.
+function syncMirror(fileId: string) {
+  const st = useSheetStore.getState();
+  if (st.fileId !== fileId) return;
+  if (st.isDirty || st.changeJournal.length || st.dirtyStructural) {
+    void mirrorPending(fileId, st.changeJournal, st.dirtyStructural, st.dirtyStructural ? st.rows : undefined, st.lastSeq).catch(() => {});
+  } else {
+    void idbDel(mirrorKey(fileId)).catch(() => {});
+  }
+}
+
+// Replay a leftover mirror onto freshly loaded server rows (boot / reopen).
+// Returns null when nothing pending.
+async function resumeLocal(
+  id: string,
+  serverRows: Row[],
+): Promise<{ rows: Row[]; journal: AppendOp[]; structural: boolean } | null> {
+  try {
+    const mirror = await idbGet<JournalMirror>(mirrorKey(id));
+    if (!mirror || (!mirror.structural && !mirror.journal.length)) return null;
+    const resumed = applyMirror(serverRows, mirror);
+    if (!resumed.dirty) return null;
+    return { rows: resumed.rows as Row[], journal: resumed.journal as AppendOp[], structural: mirror.structural };
+  } catch {
+    return null;
+  }
+}
+
 // ── Bubble (Android mini-window) helpers ──
 
 function trimMemoryRows() {
@@ -2445,12 +2669,12 @@ function trimMemoryRows() {
     if (prev.isDirty) return {};
     let lastData = -1;
     prev.rows.forEach((row, i) => {
-      if (columns.some((c) => row[c.key])) lastData = i;
+      if (isDataRow(row, columns)) lastData = i;
     });
     const keep = Math.min(prev.rows.length, Math.max(lastData + 51, 100));
     if (prev.rows.length <= keep) return {};
     const tail = prev.rows.slice(keep);
-    const tailEmpty = tail.every((r) => columns.every((c) => !r[c.key]));
+    const tailEmpty = tail.every((r) => !isDataRow(r, columns));
     if (!tailEmpty) return {};
     return { rows: prev.rows.slice(0, keep) };
   });

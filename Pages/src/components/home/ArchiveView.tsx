@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { api } from "@/lib/api";
+import { forgetFile } from "@/lib/idb";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import type { ArchiveFile } from "@/lib/types";
@@ -71,6 +72,8 @@ export default function ArchiveView({
       showToast("Could not delete file. Try again.");
       return;
     }
+    // Drop durable local state too (outbox mirror + snapshot) — server purged.
+    void forgetFile(id).catch(() => {});
     showToast("Permanently deleted");
     setSelected((prev) => {
       const next = new Set(prev);

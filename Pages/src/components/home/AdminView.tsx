@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { api } from "@/lib/api";
+import { forgetFile } from "@/lib/idb";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -234,6 +235,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       showToast("Could not delete file. Try again.");
       return;
     }
+    void forgetFile(fileId).catch(() => {});
     showToast("Permanently deleted");
     await reloadDetail(detailUser.id);
     void loadList();

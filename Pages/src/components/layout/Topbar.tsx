@@ -69,6 +69,7 @@ export default function Topbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const file = useSheetStore((s) => s.file);
+  const unsynced = useSheetStore((s) => (s.isDirty || s.dirtyStructural ? s.changeJournal.length + (s.dirtyStructural ? 1 : 0) : 0));
 
   const [conn, setConn] = useState<ConnState>({ cls: "", text: "Connecting..." });
   const [renameOpen, setRenameOpen] = useState(false);
@@ -210,6 +211,9 @@ export default function Topbar() {
       <div className="topbar-r">
         {isFilePage && <SheetToolbar />}
         {!isFilePage && <ThemeTogglerButton theme={theme} onToggle={toggle} />}
+        {isFilePage && unsynced > 0 ? (
+          <span className="sync-dot" title={`${unsynced} unsynced change${unsynced === 1 ? "" : "s"} — syncs automatically`} aria-label={`${unsynced} unsynced changes`}>●{unsynced}</span>
+        ) : null}
         <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, ...hideHome }}>
         <DropdownMenu>
         <div className={`profile-btn split${photoLoaded ? " loaded" : ""}`} role="group" aria-label="Account">

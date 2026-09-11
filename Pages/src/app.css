@@ -397,6 +397,18 @@ button, input, select, textarea {
     flex-shrink: 0;
     order: 2;
 }
+/* ── Quiet unsynced-changes dot (durable outbox): tiny, non-blocking, no banner ── */
+.sync-dot {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text3);
+    white-space: nowrap;
+    flex-shrink: 0;
+    user-select: none;
+}
 .profile-btn:active {
     transform: scale(0.97);
 }

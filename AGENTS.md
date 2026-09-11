@@ -33,12 +33,12 @@
   backend/scripts/schema.ts # DB bootstrap/verify (bun scripts/schema.ts bootstrap|verify)
   test/                   # test fixture xlsx files (2fa.xlsx, cookie.xlsx, Page.xlsx)
   Pages/e2e/              # Playwright browser tests (auth.ts cookie-injection login, smoke.spec.ts) — `bun run test:e2e`, needs backend ALLOW_TEST_AUTH=1 + test DB, never prod; CI e2e job in .github/workflows/ci.yml
-  agent/                  # dev debugging tools (call.ts authed caller, health.ts backend+worker sweep, timing.ts dual-origin latency sweep) — secrets from gitignored agent/.env (AGENT_TOKEN + BACKEND_URL + FRONT_URL + SS_SESSION), real env overrides; never commit tokens
+  agent/                  # dev debugging tools (call.ts authed caller, health.ts backend+worker sweep, timing.ts dual-origin latency sweep, users.ts TEST-user mint/verify/delete via POST /api/test/login (needs ALLOW_TEST_AUTH=1, aborts on closed door — never prod), pipeline.ts end-to-end run on behalf of minted users: upload→pool→price→hold→approve→wallet (+optional --with-routing suite, --wait-settle); needs --admin-uid in dev ADMIN_IDS, rowloss.ts API row-loss regression (stale-base 409, uid/status round-trip, snapshot index restore, 500-cap refusal, purge tombstone)) — secrets from gitignored agent/.env (AGENT_TOKEN + BACKEND_URL + FRONT_URL + SS_SESSION), real env overrides; never commit tokens
 ```
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 2.0.14; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.15; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   GET /api/worker/health (proxies worker.railway.internal:3000/health — proves worker connectivity from the public URL),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -55,8 +55,9 @@
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
   src/lib/pg.ts            # Postgres.js repository for users, files, pools, wallets, withdrawals and wallet_transactions (max 10 connections); SQL-side pool pagination, batched claims/removals, file-key projection, session cleanup and admin user lookup
                         # + STRICT ROUTING (classify): file preset feeds ONLY its own pool — combo→cookies_2fa, page→page (real 2fa required; wa-eligible = verified, cookie+2fa only = unverified, both claimable in page pool via verifiedOnly/unverifiedOnly), cookie→cookies_only; key-less or no-2fa live rows are invalid → pool_rejects (deduped per account, cleared on successful pooling), never cookies_only
- src/routes/files.ts      # files, archive and duplicate routes
+ src/routes/files.ts      # files, archive and duplicate routes (500 rows/file strict, server-enforced; files per user uncapped)
                       # + HOLD LOCK: held pool rows block owner deletes — files.delete (archive), persist (removed rows), archive.delete, archive/batch-delete return 409 via heldCheck op (pg.ts); sheetStore persist + HomePage delete surface the error toast
+                      # + ROW-LOSS GUARDS: PUT /:id/persist takes optional base seq → 409 version conflict on stale (two-editor overwrite protection, shared.ts isPersistConflict); POST /:id/restore-snapshot restores rolling snapshots (up to 3 in meta KV filesnap:<id>, optional {index}, wiped with file, hold-locked like persist); purge writes a forensic tombstone (meta filetomb:<id>: name/owner/rowCount/logs) served by admin GET /file/:id/logs
                       # + decorateHoldState: file row reads (GET /:id/rows, /:id/full; admin.ts /file/:id/rows) overlay pool state → row._hold/_approved/_dead (SheetGrid tints rows; hold+approved rows locked client-side)
                       #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup; archive removes the file's available pool rows (claimed/held stay), restore + batch-restore re-feed them via feedPools)
                       #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
@@ -67,6 +68,7 @@ src/routes/pools.ts       # admin pool, hold, download and pricing routes
                       #   GET /downloads/:id (xlsx blob, any approval state; ?srcUid=&srcFileId=&name= → filtered per-user/per-file download via downloadRows op), GET /downloads/:id/detail (groups enriched with file name/createdAt/preset)
                       #   GET /:pwd/:pool/ledger → 410 gone (pool_ledger dropped; use download detail + wallet tx), GET /:pwd/:pool (PoolDetail, delegator=src_uid avail+claimed), /rows (paginated+verifiedOnly/unverifiedOnly, detail capped 5000), /verified-counts (SQL-side eligible count, no 5k starvation), /user-files (files carry name/createdAt/preset from file_index), /price GET+PUT (stored price 0..1000, admin validated), POST /:pwd/:pool/claim (→ downloadId+filename+unitPrice/total/status), POST /:pwd/:pool/hold (same + mode/pick, srcUids/srcFileIds, HOLD status, FIFO inserted_at/row_key, storedPrice)
 src/routes/admin.ts       # admin stats, users, files and moderation routes
+                      #   PUT /file/:id/persist takes optional base seq (same 409 guard) + same removed-held 409 as owner persist (no admin exemption); POST /file/:id/restore-snapshot (same hold-lock rule as owner restore); GET /file/:id now includes seq (feeds admin sheet base)
                       #   GET /users/search (SQL ILIKE, limit 50 via adminUsersSearch op),
                       #   GET /pooldiag?key= (cross-password account trace: pool_rows in any state + pool_rejects + downloads + source files + live file-row locate with server-side classify; feeds the Pool lookup tool),
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist (feeds pools like the owner route),
@@ -94,8 +96,9 @@ pages/BubbleDesignPage.tsx   # /admin renders via HomePage + components/home/Adm
 components/home/FileGrid.tsx, FileCard.tsx, PoolsView.tsx (top tabs Pool|Approvals + password/pool/approval-status switches — all horizontally scrollable, never wrap; URL state ?view=&status=&hold= deep links; stat cards incl. invalid (missing/incomplete 2fa, from pool_rejects; hidden for cookies_only); taker card takes instantly, no confirm dialog; owners list: no "..." menu, click expands user files as list rows with real name+created date+open-in-browser button; approvals: shadcn AvatarGroup file icons per hold, no APPROVED seal, click expands inline drill-down owners→files with per-user/per-file download (server-filtered blob) + open file + Approve (PENDING/REJECTED) / Reject (PENDING/APPROVED) + Delete (hold-to-delete) + dead count toast after approve), ArchiveView.tsx, AdminView.tsx, AnalysisView.tsx, WalletView.tsx, Fab.tsx, EmptyState.tsx
 components/sheet/SheetGrid.tsx, SheetToolbar.tsx, QuickEditBar.tsx, SelectionBar.tsx, CellEditor.tsx, UploadOverlay.tsx, DownloadOverlay.tsx, CustomDownloadOverlay.tsx, WaCheckOverlay.tsx
                       #   SheetToolbar ⋮ menu has an admin-only Pooling on/off switch (PUT /file/:id poolEnabled, owner or admin route; enabling re-saves to re-feed, disabling removes available pool rows server-side)
+                      #   SheetToolbar ⋮ menu has Restore last save (POST restore-snapshot, confirm; previous state kept in client Undo); replace-upload over MAX_GRID_ROWS (500) confirms with truncation warning (types.ts replaceCapMessage); emptiness rule is types.ts isDataRow (columns ∪ uid ∪ status)
                       #   SheetGrid row states: row._hold → amber tint + locked, row._approved → green tint + locked, row._dead/status=bad → red tint (tint vars --tint-hold/--tint-approved/--tint-dead in app.css; no text, dot classes d-yellow/d-taken/d-red)
-components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android
+components/bubble/BubbleMode.tsx   # ?bubble=1&file=ID + window.Android; 2FA-first manual entry (key accepted before cookie; cookie-first still works)
 components/auth/LoginScreen.tsx      # official Telegram Login OIDC (web widget + Turnstile, profile+phone+write scopes) or Android native SDK bridge; legacy bot login removed; ?bubble=1 login page polls /me so a main-app login carries the bubble window in automatically
 components/tools/SplitterTool.tsx   # xlsx split into N parts (/tools/splitter)
 components/tools/PoolLookupTool.tsx # trace a uid/c_user across all pools + live file rows (/tools/pool-lookup, admin-only tool calling GET /admin/pooldiag)
@@ -103,7 +106,7 @@ components/icons/FileTypeIcons.tsx, FacebookIcon.tsx
 components/profile/ProfileAvatar.tsx
  components/ui/button.tsx, avatar.tsx, dialog.tsx, alert-dialog.tsx, dropdown-menu.tsx, theme-toggler.tsx, hold-to-delete-button.tsx, slide-to-confirm-button.tsx, ink-stamp.tsx, page-skeleton.tsx, search-input.tsx  # shadcn and reusable pool actions
 contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, retry 3×1.5s
-stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection; _taken/_hold/_approved rows reject cell edits (commitCell, openQuickEdit, openInlineEdit)
+stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection; _taken/_hold/_approved rows reject cell edits (commitCell, openQuickEdit, openInlineEdit); flushPersist sends base seq (409 version conflict → reload server version + stash ours in Undo + re-apply journal); applyRestore for snapshot restore; direct-edit guards: locked-row toast (never silent), formula blur-commit, open-cell draft commit, twofakey normalize + cookie/key blob split, bulk-clear skips locked
 stores/bubbleStore.ts     # {on, pickMode}
 stores/profileCache.ts    # profile cache (fed from /me + admin users)
 hooks/useUndoRedo.ts, usePersist.ts (beforeunload→flushPersist), useModalA11y.ts
@@ -117,7 +120,7 @@ public/config.js          # injected at runtime: window.APP_CONFIG={apiBase:""}
 public/sw.js              # service worker (chunk-error reload)
 functions/api/[[path]].ts # Pages Functions proxy → BACKEND_URL
 functions/webhook/[[path]].ts
-lib/__tests__/customDownload.test.ts, split.test.ts
+lib/__tests__/customDownload.test.ts, split.test.ts, rowguard.test.ts (isDataRow/replaceCapMessage/isPersistConflict + destructive call-site guards)
 stores/__tests__/sheetStore.test.ts
 ```
 

@@ -97,6 +97,24 @@ export function fileColumns(f?: { columns?: ColumnDef[]; preset?: string; poolKi
   return fileTypeDef(f?.type).columns;
 }
 
+/** A row counts as user data when any grid column has a value, OR when it
+ * carries an account identity (`uid`) or a check verdict (`status`).
+ * Padding rows from makeEmptyRow have neither, so they still trim cleanly.
+ * Centralizes the emptiness rule so persist/compact/trim can never disagree
+ * about which rows are safe to drop. */
+export function isDataRow(row: Row, columns: { key: string }[]): boolean {
+  if (!row) return false;
+  for (const c of columns) if (row[c.key]) return true;
+  return Boolean(row.uid || row.status);
+}
+
+/** Refusal notice for replace-style uploads over the per-file row cap
+ * (strict: the server rejects them too). Returns null when everything fits. */
+export function replaceCapMessage(n: number, cap: number): string | null {
+  if (!Number.isFinite(n) || n <= cap) return null;
+  return `File has ${n} rows — max ${cap} per file. Split it into smaller files and upload them separately.`;
+}
+
 /** Marker the bubble writes into the 2fa cell when the user long-press-skips
  * 2FA ("set empty by the bubble action"). Display-only — never exported. */
 export const NO_2FA_MARK = "No_2Fa";

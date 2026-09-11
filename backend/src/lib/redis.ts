@@ -44,7 +44,9 @@ export async function publishLiveEvent(msg: unknown) {
   } catch {}
 }
 
-let sub: ReturnType<typeof createClient> | null = null;
+// any: node-redis generic instantiations differ between createClient call
+// sites — the relay only needs connect/subscribe/quit and stays fail-open
+let sub: any = null;
 export async function subscribeLiveEvents(onMsg: (msg: string) => void): Promise<void> {
   if (!url || sub) return;
   try {

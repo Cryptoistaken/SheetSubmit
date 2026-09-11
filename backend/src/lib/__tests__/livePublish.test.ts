@@ -47,7 +47,7 @@ describe("parseLiveEvent (worker → backend relay)", () => {
   });
 
   it("caps at 500 keys", () => {
-    expect(parseLiveEvent({ type: "dead-keys", keys: Array.from({ length: 501 }, (_, i) => String(10000 + i)) }).length).toBe(500);
+    expect((parseLiveEvent({ type: "dead-keys", keys: Array.from({ length: 501 }, (_, i) => String(10000 + i)) }) ?? []).length).toBe(500);
   });
 
   it("rejects anything else", () => {

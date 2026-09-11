@@ -30,7 +30,12 @@ export const useProfileCache = create<State>((set, get) => ({
     for (const u of list as unknown as { id?: string; userId?: string; firstName?: string; lastName?: string; username?: string; photoUrl?: string | null; phone?: string | null; isAdmin?: boolean; name?: string; displayName?: string }[]) {
       const id = (u.id ?? (u as unknown as { userId?: string }).userId) as string;
       if (!id) continue;
-      const name = (u.name as string) || (u.displayName as string) || `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || (u.username ? `@${u.username}` : id);
+      const incomingName = (u.name as string) || (u.displayName as string) || `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || (u.username ? `@${u.username}` : id);
+      // ponytail: identity-less stubs (pool users with no joined profile carry the
+      // raw uid as displayName) must never clobber a cached real name.
+      const hasIdentity = (incomingName && incomingName !== id) || !!u.username || !!u.photoUrl || !!u.firstName || !!u.lastName;
+      if (!hasIdentity && map[id]) continue;
+      const name = incomingName;
       map[id] = { id, name, username: u.username ?? map[id]?.username ?? null, photoUrl: u.photoUrl ?? map[id]?.photoUrl ?? null, phone: u.phone ?? map[id]?.phone ?? null, firstName: u.firstName ?? map[id]?.firstName ?? null, lastName: u.lastName ?? map[id]?.lastName ?? null, isAdmin: (u as { isAdmin?: boolean }).isAdmin ?? map[id]?.isAdmin };
     }
     set({ profiles: map });
@@ -41,10 +46,10 @@ export const useProfileCache = create<State>((set, get) => ({
     if (isFetching) return;
     set({ isFetching: true });
     try {
-      const users = (await api.adminUsers()) as unknown as { id: string; firstName?: string; lastName?: string; username?: string; photoUrl?: string | null; phone?: string | null; isAdmin?: boolean }[];
+      const users = (await api.adminUsers()) as unknown as { id: string; name?: string; firstName?: string; lastName?: string; username?: string; photoUrl?: string | null; phone?: string | null; isAdmin?: boolean }[];
       const map: Record<string, CachedProfile> = {};
       for (const u of users) {
-        const name = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || (u.username ? `@${u.username}` : u.id);
+        const name = (u.name ?? "").trim() || `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || (u.username ? `@${u.username}` : u.id);
         map[u.id] = { id: u.id, name, username: u.username ?? null, photoUrl: u.photoUrl ?? null, phone: u.phone ?? null, firstName: u.firstName ?? null, lastName: u.lastName ?? null, isAdmin: u.isAdmin };
       }
       set({ profiles: map, fetchedAt: Date.now() });

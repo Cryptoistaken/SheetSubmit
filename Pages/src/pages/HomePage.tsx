@@ -29,10 +29,12 @@ function ViewSwitch({ view, setViewMode }: { view: "grid" | "list"; setViewMode:
 
 const AdminView = lazyRetry(() => import("@/components/home/AdminView"));
 const AnalysisView = lazyRetry(() => import("@/components/home/AnalysisView"));
+const ApprovalsView = lazyRetry(() => import("@/components/home/ApprovalsView"));
 const ArchiveView = lazyRetry(() => import("@/components/home/ArchiveView"));
 const SplitterTool = lazyRetry(() => import("@/components/tools/SplitterTool"));
 const PoolLookupTool = lazyRetry(() => import("@/components/tools/PoolLookupTool"));
 const PoolsView = lazyRetry(() => import("@/components/home/PoolsView"));
+const SettingsView = lazyRetry(() => import("@/components/home/SettingsView"));
 const WalletView = lazyRetry(() => import("@/components/home/WalletView"));
 import Fab from "@/components/home/Fab";
 import FileGrid from "@/components/home/FileGrid";
@@ -46,9 +48,9 @@ import { COLUMN_PRESETS, fileTypeDef, FILE_PRESET_NAMES } from "@/lib/types";
 import type { FilePreset, FileType, SheetFile } from "@/lib/types";
 import { downloadXlsx, genId, hydrateWaCache, importXlsx } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
-import { AnalysisIcon, ArchiveIcon, CookieIcon, ObsidianIcon, PageIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, TwoFaIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
+import { AnalysisIcon, ApprovalsIcon, ArchiveIcon, CookieIcon, ObsidianIcon, PageIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, TwoFaIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
 
-type Tab = "files" | "archive" | "wallet" | "pools" | "admin" | "analysis" | "tools";
+type Tab = "files" | "archive" | "wallet" | "pools" | "approvals" | "settings" | "admin" | "analysis" | "tools";
 
 // Built-in pool passwords — files under these feed the shared pools; the modal
 // only offers these two, so every file created here pools by default.
@@ -122,6 +124,10 @@ export default function HomePage() {
   const path = location.pathname;
   const tab: Tab = path.startsWith("/pools")
     ? "pools"
+    : path.startsWith("/approvals")
+      ? "approvals"
+      : path.startsWith("/settings")
+        ? "settings"
     : path.startsWith("/tools")
       ? "tools"
       : path.startsWith("/analysis")
@@ -168,7 +174,7 @@ export default function HomePage() {
   }, [showToast]);
 
   useEffect(() => {
-    if ((tab === "admin" || tab === "analysis" || tab === "tools" || tab === "pools") && !user?.isAdmin) {
+    if ((tab === "admin" || tab === "analysis" || tab === "tools" || tab === "pools" || tab === "approvals" || tab === "settings") && !user?.isAdmin) {
       navigate("/", { replace: true });
     }
   }, [tab, user, navigate]);
@@ -453,6 +459,28 @@ export default function HomePage() {
         ) : null}
         {user?.isAdmin ? (
           <button
+            className={`home-tab${tab === "approvals" ? " active" : ""}`}
+            role="tab"
+            aria-selected={tab === "approvals"}
+            onClick={() => goTab("/approvals")}
+          >
+            <ApprovalsIcon size={14} aria-hidden="true" />
+            Approvals
+          </button>
+        ) : null}
+        {user?.isAdmin ? (
+          <button
+            className={`home-tab${tab === "settings" ? " active" : ""}`}
+            role="tab"
+            aria-selected={tab === "settings"}
+            onClick={() => goTab("/settings")}
+          >
+            <img src="/settings-icon.svg" alt="" aria-hidden="true" width={14} height={14} />
+            Settings
+          </button>
+        ) : null}
+        {user?.isAdmin ? (
+          <button
             className={`home-tab${tab === "tools" ? " active" : ""}`}
             role="tab"
             aria-selected={tab === "tools"}
@@ -539,6 +567,22 @@ export default function HomePage() {
         <div className="home-pane" id="homePanePools" style={{ padding: "24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
           <Suspense fallback={<PageSkeleton variant="pools" />}>
             <PoolsView />
+          </Suspense>
+        </div>
+      ) : null}
+
+      {tab === "approvals" && user?.isAdmin ? (
+        <div className="home-pane" id="homePaneApprovals" style={{ padding: "24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
+          <Suspense fallback={<PageSkeleton variant="pools" />}>
+            <ApprovalsView />
+          </Suspense>
+        </div>
+      ) : null}
+
+      {tab === "settings" && user?.isAdmin ? (
+        <div className="home-pane" id="homePaneSettings" style={{ padding: "24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
+          <Suspense fallback={<PageSkeleton variant="pools" />}>
+            <SettingsView />
           </Suspense>
         </div>
       ) : null}

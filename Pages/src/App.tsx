@@ -41,6 +41,8 @@ function skeletonForPath(pathname: string): DetailedSkeletonVariant {
   if (pathname.includes("/file/")) return "sheet";
   if (pathname.startsWith("/archive")) return "archive";
   if (pathname.startsWith("/pools")) return "pools";
+  if (pathname.startsWith("/approvals")) return "pools";
+  if (pathname.startsWith("/settings")) return "pools";
   if (pathname.startsWith("/admin/user/")) return "admin-detail";
   if (pathname.startsWith("/admin")) return "admin";
   if (pathname.startsWith("/analysis")) return "admin";
@@ -52,12 +54,15 @@ function skeletonForPath(pathname: string): DetailedSkeletonVariant {
 
 function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
   const sheet = variant === "sheet";
-  const paneStyle = variant === "pools"
+  // /approvals and /settings map to the "pools" variant in skeletonForPath, so the pools
+  // branch below covers /pools, /approvals and /settings (same style + pane).
+  const poolsLike = variant === "pools";
+  const paneStyle = poolsLike
     ? { padding: "24px", maxWidth: 960 }
     : variant === "tools" || variant === "splitter"
       ? { padding: "32px 24px", maxWidth: 960 }
       : undefined;
-  const paneId = variant === "pools"
+  const paneId = poolsLike
     ? "homePanePools"
     : variant === "tools" || variant === "splitter"
       ? "homePaneTools"
@@ -141,6 +146,8 @@ const router = createBrowserRouter([
           { path: "wallet", element: <HomePage /> },
           { path: "pools", element: <Navigate to="/pools/dgddigital/cookies_only" replace /> },
           { path: "pools/:password/:poolId", element: <HomePage /> },
+          { path: "approvals", element: <HomePage /> },
+          { path: "settings", element: <HomePage /> },
           { path: "admin", element: <HomePage /> },
           { path: "analysis", element: <HomePage /> },
           { path: "tools", element: <HomePage /> },

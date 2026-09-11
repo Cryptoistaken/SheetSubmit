@@ -7,7 +7,7 @@ import SheetToolbar from "@/components/sheet/SheetToolbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModalA11y } from "@/hooks/useModalA11y";
 import { api, useConnStore } from "@/lib/api";
-import { BDT_RATE, useCurrency } from "@/lib/currency";
+import { loadBdtRate, useCurrency } from "@/lib/currency";
 import { useTheme } from "@/lib/theme";
 import { useToast } from "@/lib/toast";
 import { useBubbleStore } from "@/stores/bubbleStore";
@@ -116,7 +116,7 @@ export default function Topbar() {
 
   const ringColor = conn.cls === "ok" ? "var(--green)" : conn.cls === "err" ? "var(--red)" : "var(--text3)";
   const balanceUsd = balance ?? 0;
-  const balanceText = currency === "USD" ? fmtBalance(balanceUsd) : fmtBalance(balanceUsd * BDT_RATE);
+  const balanceText = currency === "USD" ? fmtBalance(balanceUsd) : fmtBalance(balanceUsd * loadBdtRate());
   const toggleCurrency = () => setCurrency(currency === "USD" ? "BDT" : "USD");
   const displayName = ((user.firstName ?? "") + " " + (user.lastName ?? "")).trim();
   const fileName = file

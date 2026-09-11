@@ -45,7 +45,7 @@ pools.get("/holds", async (c) => {
   if (status && status.length > 32) return c.json({ error: "invalid status" }, 400);
   const r: any = await rpc(c.env.POOLS, "global", "holdsAll", { status: status || null }).catch((e: any) => { console.error("holds fetch failed", e?.message ?? e); return { holds: [] }; });
   const all = (r.holds || r.downloads || []).map((d: any) => ({ ...dlMeta(d), held: d.claimed ?? d.held ?? 0 }));
-  // if status filter provided, already filtered in SQL; if no filter, keep only HOLDs (SQL returns HOLDs)
+  // if status filter provided, already filtered in SQL; if no filter, SQL returns HOLD+APPROVED
   return c.json(all.slice(0, 50));
 });
 pools.post("/holds/:id/approve", async (c) => {

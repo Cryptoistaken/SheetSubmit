@@ -3,7 +3,10 @@ import { describe, expect, it } from "bun:test";
 // Shared display currency (Pages/src/lib/currency.ts): USD stored, BDT shown
 // at a fixed display rate. Covers the admin's headline case: typing 7.3 BDT
 // stores ≈$0.0608 and renders back as ৳7.30.
-import { BDT_RATE, fmtMoney, inputToUsd, usdToInput } from "../currency";
+import { BDT_RATE, fmtMoney, inputToUsd, loadBdtRate, saveBdtRate, usdToInput } from "../currency";
+
+// bun test has no DOM localStorage — rate persistence tests only run where it exists.
+const hasLS = typeof localStorage !== "undefined";
 
 describe("fmtMoney", () => {
   it("formats USD like the balance pill (whole grouped, fraction 2dp)", () => {
@@ -38,5 +41,28 @@ describe("usdToInput / inputToUsd", () => {
   it("rejects non-numeric input (empty is 0 — callers guard blank fields)", () => {
     expect(inputToUsd("abc", "USD")).toBeNaN();
     expect(inputToUsd("", "BDT")).toBe(0);
+  });
+});
+
+describe.skipIf(!hasLS)("loadBdtRate / saveBdtRate", () => {
+  it("defaults to BDT_RATE and round-trips a custom rate", () => {
+    localStorage.removeItem("ss_bdt_rate");
+    expect(loadBdtRate()).toBe(BDT_RATE);
+    saveBdtRate(150);
+    expect(loadBdtRate()).toBe(150);
+    expect(fmtMoney(1, "BDT")).toBe("৳150");
+    expect(inputToUsd("150", "BDT")).toBeCloseTo(1, 4);
+    localStorage.removeItem("ss_bdt_rate");
+    expect(loadBdtRate()).toBe(BDT_RATE);
+  });
+
+  it("ignores invalid rates", () => {
+    saveBdtRate(NaN);
+    saveBdtRate(0);
+    saveBdtRate(-5);
+    expect(loadBdtRate()).toBe(BDT_RATE);
+    localStorage.setItem("ss_bdt_rate", "junk");
+    expect(loadBdtRate()).toBe(BDT_RATE);
+    localStorage.removeItem("ss_bdt_rate");
   });
 });

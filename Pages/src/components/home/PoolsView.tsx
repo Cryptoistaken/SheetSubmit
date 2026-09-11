@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router";
-import { Download, ExternalLink, MoreVertical, RefreshCw } from "lucide-react";
+import { useNavigate, useParams } from "react-router";
+import { ExternalLink, MoreVertical, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
-import type { DownloadDetail, HoldRecord, PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
+import type { PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
 import type { PoolLivePatch } from "@/lib/poolLive";
 import { usePoolLive } from "@/hooks/usePoolLive";
-import { BDT_RATE, fmtMoney, inputToUsd, usdToInput, useCurrency, type Currency } from "@/lib/currency";
+import { fmtMoney, useCurrency } from "@/lib/currency";
 import { useToast } from "@/lib/toast";
 import { useProfileCache } from "@/stores/profileCache";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,26 +17,7 @@ import EmptyState from "./EmptyState";
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import SearchInput from "@/components/ui/search-input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "@/components/ui/avatar";
-import { HoldToDeleteButton } from "@/components/ui/hold-to-delete-button";
-import { downloadXlsx } from "@/lib/xlsx";
-
-// Columns per pool for client-built xlsx (mirrors backend META cols).
-const POOL_DL_COLS: Record<string, { key: string; label: string; width: number }[]> = {
-  cookies_only: [{ key: "cookies", label: "cookies", width: 340 }],
-  cookies_2fa: [
-    { key: "cookies", label: "cookies", width: 340 },
-    { key: "twofakey", label: "2fa key", width: 200 },
-  ],
-  page: [
-    { key: "cookies", label: "cookies", width: 340 },
-    { key: "twofakey", label: "2fa key", width: 200 },
-  ],
-};
 
 const PASSWORDS = ["dgddigital", "L0VE@12345"] as const;
 const POOL_TABS = [
@@ -68,35 +49,14 @@ function displayName(u: PoolDetail["users"][number]) {
   return { line1: "#" + u.userId, line2: "" };
 }
 
-const REVERT_MS = 300_000; // must match REVERT_WINDOW in backend pg.ts
-type PriceCurrency = Currency;
-const mmss = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
-// window state: null = not yet actioned, >0 = ms left to flip once, 0 = locked
-const revertLeft = (h: HoldRecord, now: number) => { const acts = h.actionCount ?? 0; if (acts === 0) return null; const left = h.firstActionAt ? h.firstActionAt + REVERT_MS - now : 0; return left > 0 ? left : 0; };
-
 export default function PoolsView() {
   const params = useParams<{ password: string; poolId: string }>();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const showToast = useToast();
   const curPwd = PASSWORDS.includes(params.password as never) ? params.password! : "dgddigital";
   const cur = (POOL_TABS.find((t) => t.id === params.poolId)?.id as PoolId) || "cookies_only";
   const { user: me } = useAuth();
   const meIsAdmin = Boolean(me?.isAdmin);
-  const ownerFallback = (uid: string) => (cachedProfiles[uid]?.name || uid).trim().charAt(0).toUpperCase();
-
-  const view = searchParams.get("view") === "approvals" ? "approvals" : "pool";
-  const apprFilter = (["PENDING", "APPROVED", "REJECTED"].includes((searchParams.get("status") ?? "").toUpperCase())
-    ? (searchParams.get("status")!.toUpperCase() as "PENDING" | "APPROVED" | "REJECTED")
-    : "PENDING");
-  const holdParam = searchParams.get("hold");
-  const updateParams = (patch: Record<string, string | null>) => {
-    const next = new URLSearchParams(searchParams);
-    Object.entries(patch).forEach(([k, v]) => { if (v == null) next.delete(k); else next.set(k, v); });
-    setSearchParams(next);
-  };
-  const setView = (v: "pool" | "approvals") => updateParams({ view: v === "approvals" ? "approvals" : null });
-  const setApprFilter = (s: "PENDING" | "APPROVED" | "REJECTED") => { setApprSel([]); updateParams({ status: s === "PENDING" ? null : s.toLowerCase(), hold: null }); };
 
   const [pools, setPools] = useState<PoolSummary[] | null>(null);
   const [detail, setDetail] = useState<PoolDetail | null>(null);
@@ -115,59 +75,11 @@ export default function PoolsView() {
   const [holdMode, setHoldMode] = useState<"fifo" | "pick">("fifo");
   const [selectedUids, setSelectedUids] = useState<string[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
-  const [holds, setHolds] = useState<HoldRecord[] | null>(null);
-  const [holdsLoading, setHoldsLoading] = useState(false);
-  const [holdActing, setHoldActing] = useState<string | null>(null);
-  const [apprOpenId, setApprOpenId] = useState<string | null>(null);
-  const [apprUserOpen, setApprUserOpen] = useState<string | null>(null);
-  const [apprDetails, setApprDetails] = useState<Record<string, DownloadDetail | null>>({});
-  const [apprLoading, setApprLoading] = useState<string | null>(null);
-  const [dlBusyId, setDlBusyId] = useState<string | null>(null);
-  const [apprSel, setApprSel] = useState<string[]>([]);
-  const [bulkBusy, setBulkBusy] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [holdsError, setHoldsError] = useState(false);
-  const [nowTick, setNowTick] = useState(Date.now());
-  void nowTick;
-  useEffect(() => {
-    if (view !== "approvals") return;
-    const t = setInterval(() => setNowTick(Date.now()), 5000);
-    return () => clearInterval(t);
-  }, [view]);
 
-  // price
+  // prices (read-only here — editing lives on the Settings page)
   const [prices, setPrices] = useState<Record<string, number | null>>({});
-  const [priceOpen, setPriceOpen] = useState(false);
-  const [priceInputs, setPriceInputs] = useState<Record<string, string>>({});
-  const [priceSaving, setPriceSaving] = useState(false);
-  const [priceConfirm, setPriceConfirm] = useState(false);
-  const [priceCurrency, setPriceCurrency] = useCurrency();
-  // inputs are entered in the selected currency; stored/saved values are always USD
-  const switchPriceCurrency = (c: PriceCurrency) => {
-    const prev = priceCurrency;
-    if (prev !== c && priceOpen) {
-      setPriceInputs((p) => {
-        const next: Record<string, string> = {};
-        POOL_TABS.forEach((t) => {
-          const raw = p[t.id] ?? "";
-          if (raw.trim() === "" || !Number.isFinite(Number(raw))) { next[t.id] = raw; return; }
-          const usd = inputToUsd(raw, prev);
-          next[t.id] = Number.isFinite(usd) ? usdToInput(usd, c) : raw;
-        });
-        return next;
-      });
-    }
-    setPriceCurrency(c);
-  };
-
-  const loadHolds = useCallback(async () => {
-    setHoldsLoading(true);
-    try {
-      const list = await api.getHolds() as unknown as HoldRecord[];
-      setHolds(Array.isArray(list) ? list : []);
-      setHoldsError(false);
-    } catch { setHoldsError(true); } finally { setHoldsLoading(false); }
-  }, []);
+  const [priceCurrency] = useCurrency();
 
   const loadPrices = useCallback(async () => {
     const allPrices: Record<string, number | null> = {};
@@ -193,21 +105,15 @@ export default function PoolsView() {
     } catch { setLoadFailed(true); showToast("Couldn't load pools"); }
   }, [cur, curPwd, showToast]);
 
-  const refreshAll = useCallback(async () => { await Promise.all([load(), loadHolds(), loadPrices()]); }, [load, loadHolds, loadPrices]);
+  const refreshAll = useCallback(async () => { await Promise.all([load(), loadPrices()]); }, [load, loadPrices]);
 
-  useEffect(() => { load(); loadHolds(); loadPrices(); }, [load, loadHolds, loadPrices]);
+  useEffect(() => { load(); loadPrices(); }, [load, loadPrices]);
 
   useEffect(() => {
-    const onFocus = () => { loadHolds(); loadPrices(); };
+    const onFocus = () => { loadPrices(); };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [loadHolds, loadPrices]);
-
-  useEffect(() => {
-    if (!holdParam || !holds) return;
-    const h = holds.find((x) => x.id === holdParam);
-    if (h && apprOpenId !== h.id) toggleApproval(h);
-  }, [holdParam, holds, apprOpenId]);
+  }, [loadPrices]);
 
   useEffect(() => {
     if (cur !== "page") { setVerified(null); return; }
@@ -217,7 +123,7 @@ export default function PoolsView() {
   }, [cur, curPwd]);
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
-  useEffect(() => { setSelectedUids([]); setSelectedFileIds([]); setApprSel([]); }, [cur, curPwd]);
+  useEffect(() => { setSelectedUids([]); setSelectedFileIds([]); }, [cur, curPwd]);
 
   // Live pool counts: patch badges + totals + verified split + users[]
   // in place on every push — never a full load(). Keyed on (curPwd, cur).
@@ -257,10 +163,6 @@ export default function PoolsView() {
 
   const poolMeta = POOL_TABS.find((t) => t.id === cur) ?? POOL_TABS[0];
   const totals = detail?.totals ?? { available: 0, claimed: 0, users: 0 };
-  const holdStatus = (h: HoldRecord) => { const s = String(h.status || "").toUpperCase(); return s === "HOLD" ? "PENDING" : s; };
-  const apprCounts: Record<"PENDING" | "APPROVED" | "REJECTED", number> = { PENDING: 0, APPROVED: 0, REJECTED: 0 };
-  (holds ?? []).forEach((h) => { const s = holdStatus(h); if (s === "PENDING" || s === "APPROVED" || s === "REJECTED") apprCounts[s]++; });
-  const apprShown = (holds ?? []).filter((h) => holdStatus(h) === apprFilter);
   const takeN = customQty ? Number(customQty) || 0 : poolQty === "all" ? (cur === "page" && verified ? verified.verified : totals.available) : poolQty as number;
   const pickAvail = useMemo(() => {
     if (selectedFileIds.length) {
@@ -279,9 +181,7 @@ export default function PoolsView() {
   }) : [];
 
   const go = (pwd: string, pid: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.delete("hold");
-    navigate({ pathname: `/pools/${pwd}/${pid}`, search: next.toString() });
+    navigate(`/pools/${pwd}/${pid}`);
   };
 
   const toggleExpand = async (userId: string) => {
@@ -339,7 +239,7 @@ export default function PoolsView() {
       showToast(`Held ${held} from ${poolMeta.label} — ON HOLD`);
       const holdId = (res as unknown as { holdId?: string; downloadId?: string }).holdId ?? (res as unknown as { downloadId?: string }).downloadId;
       await refreshAll();
-      if (holdId) updateParams({ view: "approvals", status: null, hold: holdId });
+      if (holdId) navigate(`/approvals?hold=${encodeURIComponent(holdId)}`);
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDownloading(false); }
   };
 
@@ -358,129 +258,6 @@ export default function PoolsView() {
       showToast(`Held ${held} from ${displayName(u).line1} — ON HOLD`);
       await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDownloading(false); }
-  };
-
-  const doBulk = async (action: "approve" | "return") => {
-    if (!apprSel.length) return;
-    setBulkBusy(true);
-    try {
-      const results = await Promise.allSettled(apprSel.map((id) => (action === "approve" ? api.approveHold(id) : api.returnHold(id))));
-      const ok = results.filter((r) => r.status === "fulfilled").length;
-      const fail = results.length - ok;
-      vibrate(20);
-      if (fail) showToast(`${action === "approve" ? "Approved" : "Returned"} ${ok}/${results.length} (${fail} failed)`);
-      else showToast(`${action === "approve" ? "Approved" : "Returned"} ${ok} hold${ok > 1 ? "s" : ""}`);
-      setApprSel([]);
-      await refreshAll();
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); await loadHolds(); } finally { setBulkBusy(false); }
-  };
-
-  const doApprove = async (id: string) => {
-    setHoldActing(id);
-    try {
-      const res = await api.approveHold(id);
-      vibrate(20);
-      const dead = Number((res as unknown as { dead?: number }).dead || 0);
-      const n = Number((res as unknown as { approved?: number }).approved || 0);
-      showToast(dead ? `Approved ${n} — ${dead} dead, not paid` : "Approved — pays in 5 min");
-      await refreshAll();
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
-  };
-  const doReturn = async (id: string) => {
-    setHoldActing(id);
-    try {
-      await api.returnHold(id);
-      vibrate(20);
-      showToast("Rejected — rows returned");
-      await refreshAll();
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
-  };
-  const doDeleteHold = async (id: string) => {
-    setHoldActing(id);
-    try {
-      const hold = holds?.find((item) => item.id === id)
-      if (String(hold?.status || "").toUpperCase() === "APPROVED") {
-        try {
-          await api.revertDownload(id)
-        } catch (e) { showToast("Return failed: " + String(e instanceof Error ? e.message : e)); return; }
-        try {
-          await api.deleteDownload(id)
-        } catch {
-          showToast("Returned (delete failed)");
-          await refreshAll();
-          return;
-        }
-        showToast("Approval deleted")
-      } else {
-        await api.rejectHold(id)
-        showToast("Rejected — rows returned")
-      }
-      await refreshAll()
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
-  };
-
-  const toggleApproval = (h: HoldRecord) => {
-    if (apprOpenId === h.id) { setApprOpenId(null); return; }
-    setApprOpenId(h.id);
-    setApprUserOpen(null);
-    if (!apprDetails[h.id]) {
-      setApprLoading(h.id);
-      api.getDownloadDetail(h.id).then((v) => setApprDetails((p) => ({ ...p, [h.id]: v }))).catch(() => setApprDetails((p) => ({ ...p, [h.id]: null }))).finally(() => setApprLoading(null));
-    }
-  };
-
-  const doDownloadHold = async (h: HoldRecord, opts?: { srcUid?: string; srcFileId?: string; name?: string; busyKey?: string }) => {
-    setDlBusyId(opts?.busyKey ?? h.id);
-    try {
-      // Slim path: server returns JSON rows, the client builds the xlsx
-      // (same as custom downloads) — backend does zero spreadsheet compute.
-      const data = await api.getDownloadJson(h.id, opts);
-      const rows = Array.isArray(data.rows) ? data.rows : [];
-      await downloadXlsx(rows, POOL_DL_COLS[h.poolId] ?? POOL_DL_COLS.cookies_only, data.filename || opts?.name || h.filename || "download.xlsx");
-      vibrate(20);
-
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDlBusyId(null); }
-  };
-
-  const validatePrices = (): string[] => {
-    const errors: string[] = [];
-    const max = priceCurrency === "USD" ? 1000 : 1000 * BDT_RATE;
-    POOL_TABS.forEach((t) => {
-      const raw = priceInputs[t.id] ?? "";
-      const v = Number(raw);
-      if (!raw.trim() || !Number.isFinite(v) || v < 0 || v > max) errors.push(`${POOL_META[t.id].label}: 0-${max.toLocaleString("en-US")}${priceCurrency === "BDT" ? "৳" : ""}`);
-    });
-    return errors;
-  };
-
-  const hasPriceChanges = POOL_TABS.some((t) => {
-    const raw = priceInputs[t.id] ?? "";
-    if (raw.trim() === "") return false;
-    const v = inputToUsd(raw, priceCurrency);
-    const old = prices[t.id];
-    return Number.isFinite(v) && (old == null || Math.abs(v - old) > 1e-9);
-  });
-
-  const openPriceConfirm = () => {
-    const errors = validatePrices();
-    if (errors.length) { showToast(`Invalid: ${errors.join(", ")}`); return; }
-    if (!hasPriceChanges) { showToast("No changes to save"); return; }
-    setPriceConfirm(true);
-  };
-
-  const savePrice = async () => {
-    setPriceSaving(true);
-    try {
-      const updated: Record<string, number | null> = {};
-      await Promise.all(POOL_TABS.map(async (t) => {
-        const v = inputToUsd(priceInputs[t.id] ?? "0", priceCurrency);
-        try { const res = await api.setPoolPrice(curPwd, t.id, v); updated[t.id] = res.price; } catch { updated[t.id] = prices[t.id] ?? null; }
-      }));
-      setPrices(updated);
-      setPriceConfirm(false);
-      setPriceOpen(false);
-      showToast("Prices saved");
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)) } finally { setPriceSaving(false) }
   };
 
   if (detail === null) {
@@ -531,36 +308,14 @@ export default function PoolsView() {
         }
       `}</style>
 
-      {/* top-level view tabs */}
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 16, position: "relative" }}>
-        <div
-          className="pool-switch"
-          style={{ margin: "0 auto" }}
-          role="tablist"
-          aria-label="Pools page sections"
-          onKeyDown={(e) => {
-            if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-            e.preventDefault();
-            const next = view === "pool" ? "approvals" : "pool";
-            setView(next);
-            e.currentTarget.querySelector<HTMLButtonElement>(`button[data-view="${next}"]`)?.focus();
-          }}
-        >
-          <button role="tab" data-view="pool" id="tab-pool" aria-selected={view === "pool"} aria-controls="pools-panel-pool" className={view === "pool" ? "active" : ""} onClick={() => setView("pool")}>Pool</button>
-          <button role="tab" data-view="approvals" id="tab-approvals" aria-selected={view === "approvals"} aria-controls="pools-panel-approvals" className={view === "approvals" ? "active" : ""} onClick={() => setView("approvals")}>Approvals{apprCounts.PENDING ? <span className="badge" style={{ marginLeft: 6 }}>{apprCounts.PENDING}</span> : null}</button>
-        </div>
-        <button type="button" aria-label="Refresh" title="Refresh" onClick={() => { void refreshAll(); }} style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", width: 36, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--border)", borderRadius: "var(--r)", background: "var(--bg)", color: "var(--text2)", cursor: "pointer" }}>
-          <RefreshCw size={16} className={holdsLoading ? "spin" : ""} aria-hidden />
+      {/* refresh */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+        <button type="button" aria-label="Refresh" title="Refresh" onClick={() => { void refreshAll(); }} style={{ width: 36, height: 36, display: "grid", placeItems: "center", border: "1px solid var(--border)", borderRadius: "var(--r)", background: "var(--bg)", color: "var(--text2)", cursor: "pointer" }}>
+          <RefreshCw size={16} aria-hidden />
         </button>
       </div>
 
-      {view === "pool" ? (
-      <div id="pools-panel-pool" role="tabpanel" aria-labelledby="tab-pool">
-      {meIsAdmin ? (
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
-        <Button variant="outline" size="sm" onClick={() => { const init: Record<string, string> = {}; POOL_TABS.forEach((t) => { const v = prices[t.id] ?? prices[Object.keys(prices)[0]] ?? null; init[t.id] = v != null ? usdToInput(v, priceCurrency) : ""; }); setPriceInputs(init); setPriceOpen(true); }}>{prices[cur] != null ? `price ${fmtMoney(prices[cur]!, priceCurrency)}` : "Unit price"}</Button>
-      </div>
-      ) : null}
+      <div id="pools-panel-pool">
       {/* switches */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
           <div className="pool-switch stretch" style={{ background: "#eef2ff", borderColor: "#ddd6fe" }}>
@@ -737,201 +492,7 @@ export default function PoolsView() {
           );
         })}
       </div>
-      </div>) : (
-      <section id="pools-panel-approvals" role="tabpanel" aria-labelledby="tab-approvals">
-        <div style={{ display: "flex", marginBottom: 10 }}>
-          <div className="pool-switch" style={{ margin: "0 auto" }}>
-            {(["PENDING", "APPROVED", "REJECTED"] as const).map((s) => (
-              <button key={s} className={apprFilter === s ? "active" : ""} onClick={() => setApprFilter(s)}>{s[0] + s.slice(1).toLowerCase()} <span className="badge" style={{ marginLeft: 2 }}>{apprCounts[s]}</span></button>
-            ))}
-          </div>
-        </div>
-        {holdsLoading ? <Skeleton className="h-20 w-full" /> : holdsError ? (
-          <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>
-            Could not load approvals. <button type="button" className="btn" style={{ marginLeft: 8 }} onClick={() => { void loadHolds(); }}>Retry</button>
-          </div>
-        ) : !holds || apprShown.length === 0 ? (
-          <div style={{ fontSize: 13, color: "var(--text3)", padding: 24, textAlign: "center", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)" }}>No {apprFilter.toLowerCase()} approvals</div>
-        ) : (
-          <>
-          {apprSel.length ? (
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg3)" }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text2)", marginRight: "auto" }}>{apprSel.length} selected</span>
-              <button type="button" className="btn btn-primary" disabled={bulkBusy || apprFilter === "APPROVED"} onClick={() => void doBulk("approve")} style={{ minHeight: 36, fontWeight: 700 }}>Approve</button>
-              <button type="button" className="btn" disabled={bulkBusy || apprFilter === "REJECTED"} onClick={() => void doBulk("return")} style={{ minHeight: 36 }}>Return</button>
-              <button type="button" className="btn btn-ghost" disabled={bulkBusy} onClick={() => setApprSel([])} style={{ minHeight: 36 }}>Clear</button>
-            </div>
-          ) : null}
-          <div className="card-list">
-            {apprShown.map((h) => {
-              const st = holdStatus(h);
-              const dt = h.at ?? (h as unknown as { ts?: number }).ts;
-              const d = dt ? new Date(dt) : null;
-              const dateStr = d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
-              const timeStr = d ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
-              const poolLabel = POOL_META[h.poolId]?.label ?? h.poolId;
-              const qty = (h as unknown as { held?: number; claimed?: number }).held ?? h.claimed ?? 0;
-              const price = prices[h.poolId];
-              const open = apprOpenId === h.id;
-              const det = apprDetails[h.id];
-              const fileIds = [...new Set(((h.srcFileIds ?? []) as (string | null)[]).filter(Boolean) as string[])];
-              const ownerUids = det ? [...new Set(det.groups.map((g) => g.srcUid).filter(Boolean) as string[])] : ((h.srcUids ?? []).filter(Boolean) as string[]);
-              const baseName = (h.filename || "approval").replace(/\.xlsx$/i, "");
-              const left = revertLeft(h, nowTick);
-              const locked = !!h.settled || (h.actionCount ?? 0) >= 2 || left === 0;
-              return (
-                <div key={h.id} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                  <div className={`pool-card ${open ? "expanded" : ""}`} onClick={() => toggleApproval(h)} aria-expanded={open}>
-                    <input type="checkbox" aria-label={`Select ${h.filename}`} checked={apprSel.includes(h.id)} onChange={() => setApprSel((prev) => prev.includes(h.id) ? prev.filter((x) => x !== h.id) : [...prev, h.id])} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, flexShrink: 0 }} />
-                    {fileIds.length ? (
-                      <AvatarGroup className="shrink-0" aria-label={`${fileIds.length} file${fileIds.length > 1 ? "s" : ""} in this approval`}>
-                        {fileIds.slice(0, 3).map((fid) => (
-                          <Avatar key={fid} className="size-7 bg-(--bg3) text-(--text2)">
-                            <AvatarFallback><PoolTypeIcon poolId={h.poolId} size={13} /></AvatarFallback>
-                          </Avatar>
-                        ))}
-                        {fileIds.length > 3 ? <AvatarGroupCount>+{fileIds.length - 3}</AvatarGroupCount> : null}
-                      </AvatarGroup>
-                    ) : (
-                      <span title={poolLabel} style={{ flexShrink: 0, display: "inline-flex", color: "var(--text3)" }}><PoolTypeIcon poolId={h.poolId} size={16} /></span>
-                    )}
-                    {(h.srcUids ?? []).length ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, paddingLeft: 6 }} aria-label={`${(h.srcUids ?? []).length} owner${(h.srcUids ?? []).length > 1 ? "s" : ""}`}>
-                        {(h.srcUids ?? []).slice(0, 3).map((uid) => (
-                          <span key={uid} style={{ marginLeft: -6, border: "2px solid var(--bg)", borderRadius: "50%", display: "inline-flex", lineHeight: 0 }}><ProfileAvatar photoUrl={cachedProfiles[uid]?.photoUrl} fallback={ownerFallback(uid)} className="size-6 bg-(--bg3) text-(--text2)" /></span>
-                        ))}
-                        {(h.srcUids ?? []).length > 3 ? <span style={{ marginLeft: 4, fontSize: 10, color: "var(--text3)", fontWeight: 600 }}>+{(h.srcUids ?? []).length - 3}</span> : null}
-                      </span>
-                    ) : null}
-                    <span className="badge" style={{ background: st === "PENDING" ? "#fef3c7" : st === "APPROVED" ? "#dcfce7" : "var(--bg3)", color: st === "PENDING" ? "#92400e" : st === "APPROVED" ? "#166534" : "var(--text3)", borderColor: st === "PENDING" ? "#fde68a" : st === "APPROVED" ? "#bbf7d0" : "var(--border)" }}>{st}</span>
-                    <div className="pool-card-info" style={{ gap: 4 }}>
-                      <div className="pool-card-name" title={h.filename}>{h.filename} · {poolLabel}</div>
-                      <div className="pool-card-sub"><span title={d ? d.toISOString() : ""}>{dateStr} {timeStr}</span><span>·</span><span>{qty} qty</span><span>·</span><span>{h.mode ?? "—"}</span><span>·</span><span>{price != null ? fmtMoney(qty * price, priceCurrency) : "—"}</span></div>
-                    </div>
-                    <span className={`expand-icon ${open ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0, display: "inline-flex" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden><path d="M9 18l6-6-6-6" /></svg></span>
-                  </div>
-                  {open && (
-                    <div className="file-row" style={{ padding: "6px 0 10px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      <span style={{ fontSize: 12, color: "var(--text3)", marginRight: "auto" }}>{qty} rows{price != null ? ` · ${fmtMoney(qty * price, priceCurrency)}` : ""}</span>
-                      {left != null ? <span style={{ fontSize: 12, fontWeight: 600, color: locked ? "var(--text3)" : "var(--text2)" }}>{locked ? "Decision final" : `Revertable ${mmss(left)}`}</span> : null}
-                      <button type="button" className="btn btn-primary" disabled={st === "APPROVED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doApprove(h.id); }} style={{ minHeight: 36, fontWeight: 700 }}>{st === "APPROVED" ? "Approved" : "Approve"}</button>
-                      <button type="button" className="btn" disabled={st === "REJECTED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doReturn(h.id); }} style={{ minHeight: 36 }}>{st === "REJECTED" ? "Rejected" : "Reject"}</button>
-                        <button type="button" className="btn" disabled={dlBusyId === h.id} onClick={(e) => { e.stopPropagation(); void doDownloadHold(h); }} style={{ minHeight: 36 }}><Download size={14} aria-hidden /> All</button>
-                        {st !== "PENDING" ? <HoldToDeleteButton onConfirm={() => void doDeleteHold(h.id)} disabled={locked || holdActing === h.id} label="Delete" /> : null}
-                      </div>
-                      {apprLoading === h.id ? <Skeleton className="h-16 w-full" /> : !det || ownerUids.length === 0 ? (
-                        <div style={{ fontSize: 12, color: "var(--text3)", padding: "6px 2px" }}>{det ? "No owner breakdown for this approval" : "Could not load details"}</div>
-                      ) : (
-                        <div className="card-list">
-                          {ownerUids.map((uid) => {
-                            const groups = det.groups.filter((g) => g.srcUid === uid);
-                            const rows = groups.reduce((sum, g) => sum + g.count, 0);
-                            const profile = cachedProfiles[uid];
-                            const label = profile?.name || "#" + uid.slice(-6);
-                            const userOpen = apprUserOpen === uid;
-                            return (
-                              <div key={uid} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                                <div className={`pool-card ${userOpen ? "expanded" : ""}`} style={{ padding: "8px 12px" }} onClick={() => setApprUserOpen(userOpen ? null : uid)} aria-expanded={userOpen}>
-                                  <span className={`expand-icon ${userOpen ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0, display: "inline-flex" }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden><path d="M9 18l6-6-6-6" /></svg></span>
-                                  <ProfileAvatar photoUrl={profile?.photoUrl} fallback={label.charAt(0).toUpperCase()} className="size-8 bg-(--bg3) text-(--text2)" verified={profile?.isAdmin} />
-                                  <div className="pool-card-info">
-                                    <div className="pool-card-name">{label}</div>
-                                    <div className="pool-card-sub">{rows} rows · {groups.length} file{groups.length !== 1 ? "s" : ""}{price != null ? ` · ${fmtMoney(rows * price, priceCurrency)}` : ""}</div>
-                                  </div>
-                                  <div className="pool-card-actions" onClick={(e) => e.stopPropagation()}>
-                                    <button type="button" className="btn" title={`Download all of ${label}'s rows in this approval`} aria-label={`Download ${label}'s rows`} disabled={dlBusyId === `${h.id}:u:${uid}`} onClick={() => void doDownloadHold(h, { srcUid: uid, name: `${baseName} - ${label}.xlsx`, busyKey: `${h.id}:u:${uid}` })}><Download size={14} aria-hidden /></button>
-                                  </div>
-                                </div>
-                                {userOpen && (
-                                  <div className="files-list" style={{ padding: "4px 0 6px 36px" }}>
-                                    {groups.map((g) => {
-                                      const fname = g.filename || (g.srcFileId ? `#${g.srcFileId.slice(-8)}` : "Unknown file");
-                                      return (
-                                        <div key={g.srcFileId ?? "unknown"} className="file-card list-row" style={{ cursor: "default" }}>
-                                          <div className="file-card-icon"><FileTypeIcon file={{ preset: g.preset ?? undefined, name: g.filename ?? undefined }} size={16} /></div>
-                                          <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div className="file-card-name" dir="auto" title={g.filename ?? undefined}>{fname}</div>
-                                            <div className="file-card-meta">{g.createdAt ? new Date(g.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"} · {g.count} rows{price != null ? ` · ${fmtMoney(g.count * price, priceCurrency)}` : ""}</div>
-                                          </div>
-                                          <div className="file-card-actions">
-                                            <button type="button" className="file-card-btn" title="Download this file's rows" aria-label={`Download ${fname}`} disabled={!g.srcFileId || dlBusyId === `${h.id}:f:${g.srcFileId}`} onClick={(e) => { e.stopPropagation(); void doDownloadHold(h, { srcUid: uid, srcFileId: g.srcFileId!, name: `${baseName} - ${g.filename || (g.srcFileId ?? "file").slice(-8)}.xlsx`, busyKey: `${h.id}:f:${g.srcFileId}` }); }}><Download size={14} aria-hidden /></button>
-                                            {g.srcFileId ? (
-                                              <button type="button" className="file-card-btn" title="Open file in browser" aria-label={`Open ${fname} in browser`} onClick={(e) => { e.stopPropagation(); navigate(`/admin/user/${uid}/file/${g.srcFileId}`); }}><ExternalLink size={14} aria-hidden /></button>
-                                            ) : null}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          </>
-          )}
-      </section>
-      )}
-
-      {/* price dialog */}
-      <Dialog open={priceOpen} onOpenChange={setPriceOpen}>
-         <DialogContent>
-          <DialogHeader><DialogTitle>Unit price</DialogTitle><DialogDescription>{priceCurrency === "USD" ? `Set price per row for each pool (${curPwd}) — 0 to 1000` : `Enter BDT per row — auto-converts to USD (৳${BDT_RATE} = $1)`}</DialogDescription></DialogHeader>
-          <div className="pool-switch" style={{ alignSelf: "flex-start" }} role="group" aria-label="Price entry currency">
-            <button type="button" className={priceCurrency === "USD" ? "active" : ""} aria-pressed={priceCurrency === "USD"} onClick={() => switchPriceCurrency("USD")}>USD</button>
-            <button type="button" className={priceCurrency === "BDT" ? "active" : ""} aria-pressed={priceCurrency === "BDT"} onClick={() => switchPriceCurrency("BDT")}>BDT</button>
-          </div>
-          <div className="flex flex-col gap-3">
-            {POOL_TABS.map((t) => {
-              const meta = POOL_META[t.id];
-              const raw = priceInputs[t.id] ?? "";
-              const typed = Number(raw);
-              const typedOk = raw.trim() !== "" && Number.isFinite(typed);
-              const other = typedOk ? (priceCurrency === "USD" ? fmtMoney(typed, "BDT") : fmtMoney(inputToUsd(raw, "BDT"), "USD")) : null;
-              return <label key={t.id} className="flex flex-col gap-1.5"><span className="text-sm font-medium flex items-center gap-2"><meta.Icon size={14} />{meta.label}{prices[t.id] != null ? <span className="text-muted-foreground text-xs font-normal">· {fmtMoney(prices[t.id]!, priceCurrency)}</span> : null}</span><input aria-label={`${meta.label} price in ${priceCurrency}`} type="number" min={0} max={priceCurrency === "USD" ? 1000 : 1000 * BDT_RATE} step={0.01} value={priceInputs[t.id] ?? ""} onChange={(e) => setPriceInputs((p) => ({ ...p, [t.id]: e.target.value }))} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />{other ? <span className="text-xs text-muted-foreground">≈ {other}</span> : null}</label>;
-            })}
-          </div>
-          <DialogFooter><Button variant="ghost" onClick={() => setPriceOpen(false)}>Cancel</Button><Button disabled={!hasPriceChanges} onClick={openPriceConfirm}>Save all</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* price confirm dialog */}
-      <AlertDialog open={priceConfirm} onOpenChange={setPriceConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirm price change</AlertDialogTitle>
-            <AlertDialogDescription>Review changes before saving.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex flex-col gap-2 text-sm">
-            {POOL_TABS.map((t) => {
-              const meta = POOL_META[t.id];
-              const oldP = prices[t.id];
-              const newP = inputToUsd(priceInputs[t.id] ?? "0", priceCurrency);
-              if (oldP == null || !Number.isFinite(newP) || Math.abs(oldP - newP) <= 1e-9) return null;
-              return (
-                <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
-                  <span className="flex items-center gap-2 font-medium"><meta.Icon size={14} />{meta.label}</span>
-                  <span className="text-muted-foreground">{oldP != null ? fmtMoney(oldP, priceCurrency) : "—"}</span>
-                  <span>→</span>
-                  <span className="font-medium">{fmtMoney(newP, priceCurrency)}</span>
-                </div>
-              );
-            })}
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction disabled={priceSaving} onClick={savePrice}>{priceSaving ? "Saving…" : "OK"}</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </div>
       </div>
   );
 }

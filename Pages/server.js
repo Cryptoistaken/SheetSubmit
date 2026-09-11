@@ -33,7 +33,11 @@ async function proxyRequest(req, url) {
   }
   const headers = new Headers(req.headers);
   headers.delete("host");
-  headers.set("x-forwarded-proto", "https");
+  // Forward the real client protocol (Railway edge already sets
+  // x-forwarded-proto; fall back to our own scheme). Hardcoding https here
+  // made the backend mint Secure cookies over plain-http traffic (local dev,
+  // e2e), which browsers store but won't reliably send back.
+  headers.set("x-forwarded-proto", req.headers.get("x-forwarded-proto") || new URL(req.url).protocol.replace(/:$/, ""));
   headers.set("x-forwarded-host", req.headers.get("host") || "");
   // Ask the backend for an uncompressed body. Bun's fetch decompresses the body
   // but leaves the upstream `content-encoding` header in place — forwarding that

@@ -66,14 +66,15 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - name: Install Playwright system deps
-        run: bunx --cwd Pages playwright install --with-deps chromium
       - name: Install backend deps
         working-directory: backend
         run: bun install --frozen-lockfile
       - name: Install web deps
         working-directory: Pages
         run: bun install --frozen-lockfile
+      - name: Install Playwright system deps
+        working-directory: Pages
+        run: bunx playwright install --with-deps chromium
       - name: Bootstrap test DB schema
         working-directory: backend
         run: bun scripts/schema.ts bootstrap

@@ -25,7 +25,6 @@ interface LogPopupState {
   label: string;
   crossInfo: CrossDupEntry[];
   wa: { status: string; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null } | null;
-  taken?: { at: number; pool?: string } | null;
   x: number;
   y: number;
 }
@@ -200,7 +199,7 @@ export default function SheetGrid() {
       const rowIdx = Number(td.dataset.row);
       const colKey = td.dataset.col ?? "";
       const row = useSheetStore.getState().rows[rowIdx] as Record<string, unknown> | undefined;
-      if (row && ((row as Record<string, unknown>)._taken || (row as Record<string, unknown>)._hold || (row as Record<string, unknown>)._approved)) return;
+      if (row && ((row as Record<string, unknown>)._hold || (row as Record<string, unknown>)._approved)) return;
       if (useSheetStore.getState().isDesktop) {
         if (e.ctrlKey || e.metaKey) {
           useSheetStore.getState().toggleSelection("cell", rowIdx, colKey);
@@ -278,16 +277,13 @@ export default function SheetGrid() {
           holdTimer.current = null;
           holdActive.current = true;
           const result = useSheetStore.getState().onDotHold(rowIdx);
-          const row = useSheetStore.getState().rows[rowIdx] as Record<string, unknown> | undefined;
-          const taken = row && (row as Record<string, unknown>)._taken ? { at: (row as Record<string, unknown>)._takenAt as number, pool: (row as Record<string, unknown>)._pool as string | undefined } : null;
-          if (result || taken) {
+          if (result) {
             const rect = dot.getBoundingClientRect();
             setLogPopup({
               logs: result?.logs ?? [],
               label: result?.label ?? String(rowIdx + 1),
               crossInfo: result?.crossInfo ?? [],
               wa: result?.wa ?? null,
-              taken,
               x: Math.max(4, rect.right - 340),
               y: rect.bottom + 4,
             });
@@ -301,7 +297,7 @@ export default function SheetGrid() {
       const rowIdx = Number(td.dataset.row);
       const colKey = td.dataset.col ?? "";
       const row = useSheetStore.getState().rows[rowIdx] as Record<string, unknown> | undefined;
-      if (row && ((row as Record<string, unknown>)._taken || (row as Record<string, unknown>)._hold || (row as Record<string, unknown>)._approved)) return;
+      if (row && ((row as Record<string, unknown>)._hold || (row as Record<string, unknown>)._approved)) return;
       holdTimer.current = setTimeout(() => {
         holdTimer.current = null;
         holdActive.current = true;
@@ -319,16 +315,13 @@ export default function SheetGrid() {
         holdActive.current = true;
         vibrate(15);
         const result = useSheetStore.getState().onDotHold(rowIdx);
-        const row = useSheetStore.getState().rows[rowIdx] as Record<string, unknown> | undefined;
-        const taken = row && (row as Record<string, unknown>)._taken ? { at: (row as Record<string, unknown>)._takenAt as number, pool: (row as Record<string, unknown>)._pool as string | undefined } : null;
-        if (result || taken) {
+        if (result) {
           const rect = dot.getBoundingClientRect();
           setLogPopup({
             logs: result?.logs ?? [],
             label: result?.label ?? String(rowIdx + 1),
             crossInfo: result?.crossInfo ?? [],
             wa: result?.wa ?? null,
-            taken,
             x: Math.max(4, rect.right - 340),
             y: rect.bottom + 4,
           });
@@ -445,11 +438,6 @@ export default function SheetGrid() {
             padding: 10,
           }}
         >
-          {logPopup.taken ? (
-            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--blue)", marginBottom: 6, padding: "6px 8px", background: "var(--blue-light)", borderRadius: 6 }}>
-              Taken ✓ — claimed{logPopup.taken.pool ? ` from ${logPopup.taken.pool}` : ""}{logPopup.taken.at ? ` on ${new Date(logPopup.taken.at).toLocaleDateString()}` : ""} • permanently blocked
-            </div>
-          ) : null}
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
             {logPopup.label} — {logPopup.logs.length} API call
             {logPopup.logs.length > 1 ? "s" : ""}
@@ -626,26 +614,23 @@ const GridRow = memo(function GridRow({
   );
 
   const flags = (row ?? {}) as Record<string, unknown>;
-  const taken = !!flags._taken;
   const hold = !!flags._hold;
   const approved = !!flags._approved;
   const deadRow = !!flags._dead;
   const status = row?.status ?? "";
-  const dotClass = hold
-    ? "d-yellow"
-    : approved
-      ? "d-taken"
-      : deadRow || status === "bad"
-        ? "d-red"
-        : isDupRow
-          ? "d-yellow"
-          : row?.wa_status === "eligible"
-            ? "d-blue"
-            : status === "good" || status === "done"
-              ? "d-green"
-              : status === "pending"
-                ? "d-spin d-yellow"
-                : "";
+  // Dot always means account status — hold/approved never recolor it.
+  const dotClass =
+    deadRow || status === "bad"
+      ? "d-red"
+      : isDupRow
+        ? "d-yellow"
+        : row?.wa_status === "eligible"
+          ? "d-blue"
+          : status === "good" || status === "done"
+            ? "d-green"
+            : status === "pending"
+              ? "d-spin d-yellow"
+              : "";
   const statusLabel = hold
     ? "On hold by admin"
     : approved
@@ -661,10 +646,21 @@ const GridRow = memo(function GridRow({
               : status === "pending"
                 ? "Checking…"
                 : "";
-  const rowState = hold ? "row-hold" : approved ? "row-approved" : deadRow ? "row-dead" : taken ? "row-taken" : "";
+  const rowState = hold ? "row-hold" : approved ? "row-approved" : "";
+  // Status class drives the hold/approved fill color (same priority as the dot).
+  const stCls =
+    deadRow || status === "bad"
+      ? "st-dead"
+      : isDupRow
+        ? "st-dup"
+        : row?.wa_status === "eligible"
+          ? "st-eligible"
+          : status === "good" || status === "done"
+            ? "st-alive"
+            : "";
 
   return (
-    <tr className={`${isRowSel ? "row-selected " : ""}${rowState}`} role="row">
+    <tr className={`${isRowSel ? "row-selected " : ""}${rowState}${stCls ? " " + stCls : ""}`} role="row">
       <th
         className={"rh" + (isRowSel ? " row-sel" : "")}
         data-row={rowIdx}
@@ -732,22 +728,20 @@ const GridCell = memo(function GridCell({
   const styles = parseStyles(row ?? ({} as never))[colKey];
 
   const flags = (row ?? {}) as Record<string, unknown>;
-  const taken = !!flags._taken;
-  const hold = !!flags._hold;
-  const approved = !!flags._approved;
-  const deadRow = !!flags._dead;
-  const locked = taken || hold || approved;
-  const tint = hold ? "var(--tint-hold)" : approved ? "var(--tint-approved)" : deadRow ? "var(--tint-dead)" : null;
+  const locked = !!flags._hold || !!flags._approved;
+  // Cross-file duplicate: duplicated identity cells (uid/cookies) carry color.
+  const xdup =
+    (colKey === "uid" || colKey === "cookies") &&
+    useSheetStore((s) => s.crossDupRows.has(rowIdx));
   return (
     <td
       className={
         "dc" +
         (sel ? " ms-sel" : "") +
         (dup ? " cell-dup" : "") +
+        (xdup ? " cell-xdup" : "") +
         (invalid ? " cell-invalid" : "") +
-        (active ? " cell-editing" : "") +
-        (taken ? " cell-taken" : "") +
-        (tint ? " cell-state" : "")
+        (active ? " cell-editing" : "")
       }
       data-row={rowIdx}
       data-col={colKey}
@@ -757,8 +751,8 @@ const GridCell = memo(function GridCell({
       tabIndex={locked ? -1 : active ? 0 : -1}
       aria-label={value + (dup ? " (duplicate)" : "")}
       style={{
-        backgroundColor: tint ?? (taken ? "#0070f3" : styles?.bg || undefined),
-        color: taken ? (active ? "#fff" : "rgba(255,255,255,0.72)") : styles?.color || undefined,
+        backgroundColor: styles?.bg || undefined,
+        color: styles?.color || undefined,
         fontWeight: styles?.bold ? 700 : undefined,
         pointerEvents: locked ? "none" as const : undefined,
       }}

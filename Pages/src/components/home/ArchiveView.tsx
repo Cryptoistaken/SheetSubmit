@@ -51,10 +51,9 @@ export default function ArchiveView({
     try {
       await api.restoreFile(id);
     } catch {
-      showToast("Could not restore file. Try again.");
+      showToast("Restore failed");
       return;
     }
-    showToast("File restored");
     setSelected((prev) => {
       const next = new Set(prev);
       next.delete(id);
@@ -69,12 +68,11 @@ export default function ArchiveView({
     try {
       await api.permanentDelete(id);
     } catch {
-      showToast("Could not delete file. Try again.");
+      showToast("Delete failed");
       return;
     }
     // Drop durable local state too (outbox mirror + snapshot) — server purged.
     void forgetFile(id).catch(() => {});
-    showToast("Permanently deleted");
     setSelected((prev) => {
       const next = new Set(prev);
       next.delete(id);
@@ -115,7 +113,7 @@ export default function ArchiveView({
     });
     setSelected(new Set());
     load();
-    showToast(failed ? "Could not restore some files. Try again." : plural(done) + " restored");
+    if (failed) showToast("Some restores failed");
   };
 
   const deleteSelected = async () => {
@@ -128,7 +126,7 @@ export default function ArchiveView({
     const { done, failed } = await runBatched(ids, 20, async (b) => (await api.batchDelete(b)).deleted);
     setSelected(new Set());
     load();
-    showToast(failed ? "Could not delete some files. Try again." : plural(done) + " permanently deleted");
+    if (failed) showToast("Some deletes failed");
   };
 
   if (archived === null) {

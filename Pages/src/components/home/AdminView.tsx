@@ -51,7 +51,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       useProfileCache.getState().setProfiles(u as unknown[]);
     } catch {
       setListError("Could not load users.");
-      showToast("Could not load users. Try again.");
+      showToast("Couldn't load users");
     }
   }, [showToast]);
 
@@ -65,7 +65,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       useProfileCache.getState().setProfiles([u as unknown]);
     } catch {
       setDetailError("Could not load user.");
-      showToast("Could not load user. Try again.");
+      showToast("Couldn't load user");
     } finally {
       setDetailLoading(false);
     }
@@ -107,7 +107,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
         try {
           setUsers(await api.adminSearchUsers(query));
         } catch {
-          showToast("Could not search users. Try again.");
+          showToast("Search failed");
           void loadList();
         }
       } else {
@@ -123,10 +123,9 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     try {
       await api.adminDeleteUser(detailUser.id);
     } catch {
-      showToast("Could not delete user. Try again.");
+      showToast("Delete failed");
       return;
     }
-    showToast("User deleted");
     showList();
   };
 
@@ -137,11 +136,10 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     try {
       await api.adminBanUser(detailUser.id);
     } catch {
-      showToast("Could not ban user. Try again.");
+      showToast("Ban failed");
       return;
     }
     setDetailUser({ ...detailUser, banned: true });
-    showToast("User banned");
     void loadList();
   };
 
@@ -152,11 +150,10 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     try {
       await api.adminUnbanUser(detailUser.id);
     } catch {
-      showToast("Could not unban user. Try again.");
+      showToast("Unban failed");
       return;
     }
     setDetailUser({ ...detailUser, banned: false });
-    showToast("User unbanned");
     void loadList();
   };
 
@@ -166,10 +163,9 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     try {
       await api.adminDeleteFile(fileId);
     } catch {
-      showToast("Could not archive file. Try again.");
+      showToast("Archive failed");
       return;
     }
-    showToast("File archived");
     if (detailUser) await reloadDetail(detailUser.id);
     void loadList();
   };
@@ -177,14 +173,13 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   const downloadFile = async (file: SheetFile) => {
     const rows = await api.adminFileRows(file.id);
     if (!rows || !rows.length) {
-      showToast("No data to download. Check file contents.");
+      showToast("No data to download");
       return;
     }
     try {
       await downloadXlsx(rows, fileTypeDef(file.type).columns, file.name);
-      showToast("Downloaded");
     } catch {
-      showToast("Could not download file. Check your connection.");
+      showToast("Download failed");
     }
   };
 
@@ -196,18 +191,17 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   const commitRename = async () => {
     const name = renameName.trim();
     if (!name) {
-      showToast("Name is required. Enter a file name.");
+      showToast("Enter a file name");
       return;
     }
     if (!renameFileId) return;
     try {
       await api.adminUpdateFile(renameFileId, { name });
     } catch {
-      showToast("Could not rename file. Try again.");
+      showToast("Couldn't rename");
       return;
     }
     setRenameFileId(null);
-    showToast("Renamed");
     if (detailUser) await reloadDetail(detailUser.id);
     void loadList();
   };
@@ -217,10 +211,9 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     try {
       await api.adminRestoreArchived(detailUser.id, fileId);
     } catch {
-      showToast("Could not restore file. Try again.");
+      showToast("Restore failed");
       return;
     }
-    showToast("File restored");
     await reloadDetail(detailUser.id);
     void loadList();
   };
@@ -232,11 +225,10 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     try {
       await api.adminDeleteArchived(detailUser.id, fileId);
     } catch {
-      showToast("Could not delete file. Try again.");
+      showToast("Delete failed");
       return;
     }
     void forgetFile(fileId).catch(() => {});
-    showToast("Permanently deleted");
     await reloadDetail(detailUser.id);
     void loadList();
   };

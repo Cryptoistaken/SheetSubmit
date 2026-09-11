@@ -155,7 +155,7 @@ export default function HomePage() {
       setDupCounts(cd.counts ?? {});
     } catch {
       setFiles([]);
-      showToast("Could not load files. Check your connection.");
+      showToast("Couldn't load files");
     }
   }, [showToast]);
 
@@ -163,7 +163,7 @@ export default function HomePage() {
     try {
       setFiles(await api.getFiles());
     } catch {
-      showToast("Could not load files. Check your connection.");
+      showToast("Couldn't load files");
     }
   }, [showToast]);
 
@@ -193,7 +193,7 @@ export default function HomePage() {
     const f = files?.find((x) => x.id === id);
     if (!f) return;
     if (f.type !== "fb_cookie") {
-      showToast("Only Facebook files work in the bubble");
+      showToast("Bubble: Facebook only");
       return;
     }
     try {
@@ -202,7 +202,6 @@ export default function HomePage() {
       // bridge may be gone
     }
     useBubbleStore.setState({ on: true, pickMode: false });
-    showToast("Floating bubble on - " + f.name);
   };
 
   const downloadFile = async (f: SheetFile) => {
@@ -210,18 +209,17 @@ export default function HomePage() {
     try {
       rows = await api.getRows(f.id);
     } catch {
-      showToast("Could not fetch rows. Check your connection.");
+      showToast("Couldn't fetch rows");
       return;
     }
     if (!rows || !rows.length) {
-      showToast("No rows to download. Add content first.");
+      showToast("Add content first");
       return;
     }
     try {
       await downloadXlsx(rows, f.columns ?? fileTypeDef(f.type).columns, f.name);
-      showToast("Downloaded");
     } catch {
-      showToast("Could not download file. Check your connection.");
+      showToast("Download failed");
     }
   };
 
@@ -234,7 +232,7 @@ export default function HomePage() {
         if (android.getBubbleFile?.() === f.id) {
           android.disableBubble?.();
           useBubbleStore.getState().setOn(false);
-          showToast("Floating bubble disabled - file archived");
+          showToast("Bubble file archived");
         }
       } catch {
         // bridge may be gone
@@ -271,7 +269,7 @@ export default function HomePage() {
     try {
       await api.updateFile(renameFileId, { name });
     } catch {
-      showToast("Could not rename file. Try again.");
+      showToast("Couldn't rename");
       return;
     }
     closeRename();
@@ -344,7 +342,7 @@ export default function HomePage() {
     try {
       await api.createFile({ id, name: finalName, type, preset: pwModal.preset, poolKind: pwModal.preset, password, poolEnabled: true, columns });
     } catch {
-      showToast("Could not create file. Check your connection.");
+      showToast("Couldn't create file");
       return;
     }
     showToast(fileTypeDef(type).label + " file created");
@@ -375,7 +373,7 @@ export default function HomePage() {
     try {
       await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: true, rows, dataCount, columns: COLUMN_PRESETS[preset] });
     } catch {
-      showToast("Could not import file. Check your file and try again.");
+      showToast("Couldn't import file");
       return;
     }
     showToast("Imported " + dataCount + " rows");
@@ -395,7 +393,7 @@ export default function HomePage() {
         pageHint: result.name.toLowerCase().includes("page"),
       });
     } catch {
-      showToast("Could not import file. Check your file and try again.");
+      showToast("Couldn't import file");
     }
   };
 

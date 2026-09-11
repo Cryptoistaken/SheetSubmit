@@ -94,13 +94,13 @@ function UserWallet() {
   const [savedMethods, setSavedMethods] = useState<Record<string, string>>({});
   const [saveAccount, setSaveAccount] = useState(true);
   const [slideKey, setSlideKey] = useState(0);
-  const load = () => api.getWallet().then(setWallet).catch(() => showToast("Could not load wallet. Check your connection."));
+  const load = () => api.getWallet().then(setWallet).catch(() => showToast("Couldn't load wallet"));
   useEffect(() => { void load(); api.getPaymentMethods().then(setSavedMethods).catch(() => {}); }, []);
   useEffect(() => { setAccount(savedMethods[method] ?? ""); }, [method, savedMethods]);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const value = Number(amount);
-    if (!Number.isFinite(value) || value <= 0 || value > (wallet?.balance ?? 0) || !validAccount(method, account)) { showToast(value > (wallet?.balance ?? 0) ? "Amount exceeds your available balance." : "Enter a valid amount and payout account."); return; }
+    if (!Number.isFinite(value) || value <= 0 || value > (wallet?.balance ?? 0) || !validAccount(method, account)) { showToast(value > (wallet?.balance ?? 0) ? "Amount too high" : "Check amount + account"); return; }
     setSending(true);
     try {
       await api.withdraw({ amount: value, method, account: account.trim() });
@@ -110,7 +110,7 @@ function UserWallet() {
         setSavedMethods(updated);
       }
       setAmount(""); setAccount(""); showToast("Withdrawal request sent"); await load();
-    } catch (error) { showToast(String(error).includes("insufficient") ? "Insufficient balance." : "Could not send withdrawal request."); } finally { setSending(false); setSlideKey((k) => k + 1); }
+    } catch (error) { showToast(String(error).includes("insufficient") ? "Insufficient balance." : "Send failed — retry"); } finally { setSending(false); setSlideKey((k) => k + 1); }
   };
   if (!wallet) return <div className="p-6 text-sm text-muted-foreground">Loading wallet…</div>;
   const value = Number(amount);
@@ -124,7 +124,7 @@ function RequestDialog({ request, onClose, onDone }: { request: Withdrawal | nul
   const showToast = useToast();
   const [acting, setActing] = useState(false);
   if (!request) return null;
-  const decide = async (action: "approve" | "reject") => { setActing(true); try { await api.decideWithdrawal(request.id, action); showToast(action === "approve" ? "Withdrawal approved" : "Withdrawal rejected and refunded"); onDone(); onClose(); } catch { showToast("Could not update withdrawal request."); } finally { setActing(false); } };
+  const decide = async (action: "approve" | "reject") => { setActing(true); try { await api.decideWithdrawal(request.id, action); showToast(action === "approve" ? "Withdrawal approved" : "Rejected + refunded"); onDone(); onClose(); } catch { showToast("Update failed"); } finally { setActing(false); } };
   return <Dialog open={!!request} onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent><DialogHeader><DialogTitle>Withdrawal request</DialogTitle><DialogDescription>{request.name || request.user_id} · {new Date(request.created_at).toLocaleString()}</DialogDescription></DialogHeader><div className="flex flex-col gap-2 text-sm"><CopyField label="Amount" value={`$${Number(request.amount).toFixed(2)}`} copy={Number(request.amount).toFixed(2)} /><CopyField label="Method" value={request.method} /><CopyField label="Account" value={request.account} /><div className="flex justify-between"><span className="text-muted-foreground">Status</span><span>{request.status}</span></div><CopyField label="Withdrawal ID" value={request.id} display={shortId(request.id)} mono className="border-t pt-2 text-xs text-muted-foreground" /></div>{request.status === "PENDING" ? <div className="flex flex-col gap-3 pt-2"><SlideToConfirmButton onConfirm={() => void decide("approve")} disabled={acting} label="Slide to approve"/><HoldToDeleteButton onConfirm={() => void decide("reject")} disabled={acting} label="Hold to reject"/></div> : null}</DialogContent></Dialog>;
 }
 
@@ -135,7 +135,7 @@ function AdminRequests() {
   const [requests, setRequests] = useState<Withdrawal[] | null>(null);
   const [selected, setSelected] = useState<Withdrawal | null>(null);
   const [filter, setFilter] = useState<FilterStatus>("ALL");
-  const load = () => api.getWithdrawalRequests().then(setRequests).catch(() => showToast("Could not load withdrawal requests."));
+  const load = () => api.getWithdrawalRequests().then(setRequests).catch(() => showToast("Couldn't load requests"));
   useEffect(() => { void load(); }, []);
   const filtered = requests?.filter((r) => filter === "ALL" || r.status === filter) ?? [];
   const counts = { ALL: requests?.length ?? 0, PENDING: requests?.filter((r) => r.status === "PENDING").length ?? 0, APPROVED: requests?.filter((r) => r.status === "APPROVED").length ?? 0, REJECTED: requests?.filter((r) => r.status === "REJECTED").length ?? 0 };

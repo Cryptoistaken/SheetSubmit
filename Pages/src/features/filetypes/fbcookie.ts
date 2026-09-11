@@ -26,7 +26,7 @@ export function createFbCookieBehavior() {
       const cellKey = ctx.rowIdx + ":" + ctx.colKey;
       if (!validation.valid) {
         ctx.invalidCells.add(cellKey);
-        toast("Invalid: " + validation.msg);
+        toast(("Invalid: " + validation.msg).slice(0, 30));
       } else {
         ctx.invalidCells.delete(cellKey);
       }
@@ -48,7 +48,7 @@ export function createFbCookieBehavior() {
       if (ctx.colKey === "uid" && ctx.value && row.cookies) {
         const extracted = _extractCUser(row.cookies);
         if (extracted && extracted !== ctx.value.trim()) {
-          toast("UID doesn't match c_user in cookies");
+          toast("UID doesn't match cookie");
         }
       }
     },

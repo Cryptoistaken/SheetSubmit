@@ -34,8 +34,7 @@ export default function CustomDownloadOverlay({
       timer.current = null; skip.current = k;
       setSel((p) => { const s = new Set(p ?? []); s.add(k); return s; });
       try { navigator.vibrate?.(30); } catch {}
-      showToast("Multi-select");
-    }, 500);
+      }, 500);
   };
   const toggle = (k: string) => setSel((p) => { if (!p) return p; const s = new Set(p); s.has(k) ? s.delete(k) : s.add(k); return s; });
   const handleClose = () => { setSel(null); onClose(); };
@@ -49,7 +48,7 @@ export default function CustomDownloadOverlay({
       if (!o) continue;
       try { const ok = await downloadCustomRows(rows, fileName, pw, o.filter, o.suffix); if (ok) n++; } catch {}
     }
-    showToast(n ? `Downloaded ${n} files` : "No data to download");
+    if (!n) showToast("No data to download");
     handleClose();
   };
 
@@ -118,7 +117,7 @@ export default function CustomDownloadOverlay({
                   if (inMulti) { toggle(o.key); return; }
                   try {
                     const ok = await downloadCustomRows(rows, fileName, pw, o.filter, o.suffix);
-                    showToast(ok ? "Downloaded" : "No data to download");
+                    if (!ok) showToast("No data to download");
                   } catch {
                     showToast("Download failed");
                   }

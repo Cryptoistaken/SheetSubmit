@@ -50,7 +50,16 @@ files.put("/:id", async (c) => { const file = await owned(c, c.req.param("id"));
  files.delete("/:id", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); let oldRows: Row[]; try { oldRows = await rpc(c.env.FILES, file.id, "rows") as Row[]; } catch { return c.json({ error: "could not read file rows, refusing to delete" }, 503); } let held: number; try { held = await heldInRows(c, file, oldRows); } catch { return c.json({ error: "could not verify hold state, refusing to delete" }, 503); } if (held) return c.json(heldBlock(held), 409); file.deletedAt = Date.now(); file.lastAction = "archived"; await rpc(c.env.INDEX, "global", "archive", { id: file.id, archived: true, file }); if (file.password) await removePoolRows(c.env, file.password, oldRows, c.get("uid"), file); return c.json({ ok: true }); });
 files.get("/:id/rows", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const rows = await rpc(c.env.FILES, file.id, "rows") as Row[]; return c.json(await decorateHoldState(c.env, file.password, rows)); });
  files.get("/:id/full", async (c) => { const file = await owned(c, c.req.param("id")); if (!file) return c.json({ error: "file not found" }, 404); const full = await rpc(c.env.FILES, file.id, "full") as { rows: Row[]; seq: number }; return c.json({ file, rows: await decorateHoldState(c.env, file.password, full.rows), seq: full.seq ?? 0 }); });
-/** Overlay pool state onto rows so the owner's sheet colors them: _hold (amber), _approved (green), _dead (red). */
+/** Overlay flags for one row: dead rides along with hold/approved (a dead row
+ * inside an approved hold keeps its red color AND the approved line — just
+ * unpaid). Hold wins over approved when a key sits in both. */
+export function applyHoldFlags(row: Row, s: { hold?: boolean; approved?: boolean; dead?: boolean } | undefined): void {
+  if (!s) return;
+  if (s.dead) (row as any)._dead = true;
+  if (s.hold) (row as any)._hold = true;
+  else if (s.approved) (row as any)._approved = true;
+}
+/** Overlay pool state onto rows so the owner's sheet colors them. */
 export async function decorateHoldState(env: Env, password: string | undefined, rows: Row[]): Promise<Row[]> {
   if (!password || !rows.length) return rows;
   const keys = [...new Set(rows.map((r) => poolId(r)).filter(Boolean))] as string[];
@@ -58,11 +67,7 @@ export async function decorateHoldState(env: Env, password: string | undefined, 
   const r: any = await rpc(env.POOLS, password, "holdState", { keys }).catch(() => null);
   const map = r?.map ?? {};
   for (const row of rows) {
-    const s = map[poolId(row)] as { hold?: boolean; approved?: boolean; dead?: boolean } | undefined;
-    if (!s) continue;
-    if (s.dead) (row as any)._dead = true;
-    else if (s.hold) (row as any)._hold = true;
-    else if (s.approved) (row as any)._approved = true;
+    applyHoldFlags(row, map[poolId(row)] as { hold?: boolean; approved?: boolean; dead?: boolean } | undefined);
   }
   return rows;
 }

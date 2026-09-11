@@ -45,7 +45,7 @@ describe("replaceCapMessage", () => {
     const msg = replaceCapMessage(600, 500);
     expect(msg).not.toBeNull();
     expect(msg!).toContain("500");
-    expect(msg!).toContain("Split");
+    expect(msg!.toLowerCase()).toContain("split");
   });
 });
 

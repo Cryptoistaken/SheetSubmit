@@ -739,10 +739,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const s = get();
     const row = s.rows[rowIdx];
     if (!row) return;
-    if (row._taken || row._hold || row._approved) {
+    if (row._hold || row._approved) {
       // Locked rows reject edits — say so loudly instead of dropping silently
       // (users thought pasted keys "vanished").
-      toast(row._hold || row._approved ? "Row is on hold — edits locked" : "Row already taken — edits locked");
+      toast("Row is on hold — edits locked");
       return;
     }
     if (colKey === "twofakey" && value && value !== NO_2FA_MARK) {
@@ -770,6 +770,18 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     }
     const prevVal = row[colKey] ?? "";
     if (value === prevVal && !extraKey) return;
+    // Same-file duplicates can never pool — block them at entry instead of
+    // writing a row the grid would immediately flag orange. (Cross-file
+    // duplicates are only known after the server scan, so they flag instead.)
+    const dupHit = (key: string, val: string): boolean => {
+      const v = val.trim();
+      if (!v || isNo2FAMark(key, v)) return false;
+      return s.rows.some((r, i) => i !== rowIdx && ((r[key] ?? "").trim() === v));
+    };
+    if (dupHit(colKey, value) || (extraKey ? dupHit("twofakey", extraKey) : false)) {
+      toast("Duplicate in this file");
+      return;
+    }
     if (colKey === "cookies" && isPageFile(s.file)) {
       const newCUser = extractCUser(value);
       if (newCUser) resetLedgerEntry(s.fileId, newCUser);
@@ -817,7 +829,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     ];
     if (changeJournal.length > MAX_JOURNAL) {
       // journal overflow: force a flush first instead of silently dropping oldest ops
-      toast("Syncing changes… journal full, flushing");
+      toast("Journal full — syncing");
       void get().flushPersist();
     }
     set({
@@ -831,7 +843,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     });
     get().maybeAutoCheck(rowIdx, colKey);
     get().persist();
-    if (extraKey) toast("Split key into 2FA cell");
     if (
       colKey === "twofakey" &&
       value &&
@@ -843,7 +854,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           if (!r) return;
           if (get().fileId !== s.fileId) return;
           navigator.clipboard.writeText(r.code).catch(() => {});
-          toast("TOTP copied");
         })
         .catch(() => {});
     }
@@ -956,7 +966,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
                 ...recomputeMarks(rows, cur.crossDups, cur.columns),
               });
               syncMirror(s.fileId);
-              toast("Someone else saved first — reloaded their version. Yours is kept in Undo; latest cell edits re-applied.");
+              toast("Reloaded — yours in Undo");
             } catch {
               toast("Sync conflict — will retry");
             }
@@ -965,10 +975,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           if (errMsg.startsWith("409")) {
             // Server refused the structural save (e.g. deleted rows are ON HOLD
             // and locked). Keep local dirty state and tell the owner why.
-            toast(errMsg.split("—").slice(1).join("—").trim() || "Change rejected — rows on hold are locked");
+            toast(errMsg.split("—").slice(1).join("—").trim() || "Rows on hold — locked");
             return;
           }
-          toast("Sync failed — will retry: " + errMsg.slice(0, 120));
+          toast("Sync failed — retrying");
           return;
         }
         const cur = get();
@@ -1050,7 +1060,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
               toast("Sync conflict — will retry");
             }
           } else {
-            toast("Sync failed — will retry: " + errMsg.slice(0, 120));
+            toast("Sync failed — retrying");
           }
         }
       }
@@ -1107,7 +1117,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       ...recomputeMarks(rows, s.crossDups, s.columns),
     });
     get().persist();
-    toast("Undo");
   },
 
   redo: () => {
@@ -1158,7 +1167,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       ...recomputeMarks(rows, s.crossDups, s.columns),
     });
     get().persist();
-    toast("Redo");
   },
 
   openQuickEdit: (rowIdx, colKey) => {
@@ -1168,7 +1176,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (sc && (sc.rowIdx !== rowIdx || sc.colIdx !== colKey)) get().commitQuickEdit();
     const row = get().rows[rowIdx];
     if (!row) return;
-    if (row._taken || row._hold || row._approved) return;
+    if (row._hold || row._approved) return;
     set({
       selectedCell: { rowIdx, colIdx: colKey, originalVal: row[colKey] ?? "" },
       draft: row[colKey] ?? "",
@@ -1182,7 +1190,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (sc && (sc.rowIdx !== rowIdx || sc.colIdx !== colKey)) get().commitQuickEdit();
     const row = get().rows[rowIdx];
     if (!row) return;
-    if (row._taken || row._hold || row._approved) return;
+    if (row._hold || row._approved) return;
     set({
       selectedCell: { rowIdx, colIdx: colKey, originalVal: row[colKey] ?? "" },
       draft: row[colKey] ?? "",
@@ -1236,7 +1244,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     try {
       text = await navigator.clipboard.readText();
     } catch {
-      toast("Could not read clipboard. Check permissions and try again.");
+      toast("Allow clipboard access");
       return;
     }
     if (!text) return;
@@ -1463,7 +1471,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       const row = rows[rowIdx];
       if (!row) return;
       // Locked rows are never cleared — same rule as commitCell.
-      if (row._taken || row._hold || row._approved) {
+      if (row._hold || row._approved) {
         locked++;
         return;
       }
@@ -1497,7 +1505,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     });
     get().exitSelectionMode();
     get().persist();
-    toast(locked ? `Cleared (skipped ${locked} locked)` : "Cleared");
+    if (locked) toast(`Skipped ${locked} locked`);
   },
 
   copySelected: async () => {
@@ -1531,12 +1539,12 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     });
     const text = lines.join("\n");
     if (!text) {
-      toast("No cells to copy. Select cells first.");
+      toast("Select cells first");
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
-      toast(`Copied ${s.selectedItems.size} cells`);
+
       get().exitSelectionMode();
     } catch {
       toast("Could not copy. Try again.");
@@ -1547,7 +1555,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const s = get();
     const room = MAX_GRID_ROWS - s.rows.length;
     if (room <= 0) {
-      toast(`Row limit reached (${MAX_GRID_ROWS})`);
+      toast(`Row limit (${MAX_GRID_ROWS})`);
       return;
     }
     const n = Math.min(GRID_PAGE, room);
@@ -1556,7 +1564,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     );
     set({ rows, isDirty: true, dirtyStructural: true, structuralVersion: ++structuralCounter });
     get().persist();
-    toast(n < GRID_PAGE ? `Row limit reached (${MAX_GRID_ROWS})` : `${n} rows added`);
+    if (n < GRID_PAGE) toast(`Row limit (${MAX_GRID_ROWS})`);
   },
 
   doubleTap: async (rowIdx, colKey) => {
@@ -1568,18 +1576,16 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       try {
         text = await navigator.clipboard.readText();
       } catch {
-        toast("Could not read clipboard. Check permissions and try again.");
+        toast("Allow clipboard access");
         return;
       }
       if (!text) return;
       vibrate();
       get().commitCell(rowIdx, colKey, text);
-      toast("Pasted");
     } else {
       try {
         await navigator.clipboard.writeText(val);
         vibrate();
-        toast("Copied");
       } catch {
         toast("Could not copy. Try again.");
       }
@@ -1601,7 +1607,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         .writeText(text)
         .then(() => {
           vibrate();
-          toast("Row copied");
         })
         .catch(() => {
           toast("Could not copy. Try again.");
@@ -1611,7 +1616,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       try {
         text = await navigator.clipboard.readText();
       } catch {
-        toast("Could not read clipboard. Check permissions and try again.");
+        toast("Allow clipboard access");
         return;
       }
       if (!text) return;
@@ -1622,7 +1627,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           cells.push({ rowIdx, colKey: v.key, value: parts[i] });
         }
       });
-      applyCells(cells, "Row pasted");
+      applyCells(cells);
     }
   },
 
@@ -1639,7 +1644,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         .writeText(text)
         .then(() => {
           vibrate();
-          toast(`Copied ${vals.length} cells`);
+    
         })
         .catch(() => {
           toast("Could not copy. Try again.");
@@ -1649,7 +1654,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       try {
         text = await navigator.clipboard.readText();
       } catch {
-        toast("Could not read clipboard. Check permissions and try again.");
+        toast("Allow clipboard access");
         return;
       }
       if (!text) return;
@@ -1658,7 +1663,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       parts.forEach((val, i) => {
         if (s.rows[i]) cells.push({ rowIdx: i, colKey, value: val });
       });
-      applyCells(cells, `Pasted ${parts.length} cells`);
+      applyCells(cells);
     }
   },
 
@@ -1721,11 +1726,11 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const s = get();
     if (s.checkRunning) return;
     if (s.hasDuplicates) {
-      toast("Resolve duplicate values first");
+      toast("Resolve duplicates first");
       return;
     }
     if (s.invalidCells.size > 0) {
-      toast("Fix invalid cell values first");
+      toast("Fix invalid cells first");
       return;
     }
     const behavior = getFileBehavior(s.file?.type ?? "fb_cookie");
@@ -1772,13 +1777,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
             if (result.valid > 0) parts.push(result.valid + " alive");
             if (result.dead > 0) parts.push(result.dead + " dead");
             if (result.uncertain > 0) parts.push(result.uncertain + " uncertain");
-            toast("Check: " + (parts.join(" \u00b7 ") || "0 checked"));
+
           } else {
             const parts: string[] = [];
             if (result.valid > 0) parts.push(result.valid + " valid");
             if (result.dead > 0) parts.push(result.dead + " dead");
             if (result.uncertain > 0) parts.push(result.uncertain + " uncertain");
-            toast("Check done " + (parts.join(", ") || "0 checked"));
+
           }
         };
         if (get().pendingAutoCheck) {
@@ -1842,7 +1847,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       });
       const changeJournal = mergeJournal(get().changeJournal, changed);
       if (changeJournal.length > MAX_JOURNAL) {
-        toast("Too many unsynced edits — syncing now, please wait");
+        toast("Syncing…");
         void get().flushPersist();
       }
       set({
@@ -2004,7 +2009,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         });
         if (changed.length === 0) return;
         const changeJournal = mergeJournal(get().changeJournal, changed);
-        if (changeJournal.length > MAX_JOURNAL) toast("Too many unsynced edits — syncing now");
+        if (changeJournal.length > MAX_JOURNAL) toast("Syncing…");
         set({ rows: finalRows, changeJournal: changeJournal.slice(-MAX_JOURNAL), isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
         get().persist();
         return;
@@ -2150,7 +2155,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     });
     if (changed.length === 0) return;
     const changeJournal = mergeJournal(get().changeJournal, changed);
-    if (changeJournal.length > MAX_JOURNAL) toast("Too many unsynced edits — syncing now");
+    if (changeJournal.length > MAX_JOURNAL) toast("Syncing…");
     set({ rows: finalRows, changeJournal: changeJournal.slice(-MAX_JOURNAL), isDirty: true, ...recomputeMarks(finalRows, cur.crossDups, cur.columns) });
     get().persist();
   },
@@ -2170,7 +2175,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   },
 
   restoreVersion: async () => {
-    toast("Version history removed");
+    toast("No version history");
     return false;
   },
 
@@ -2228,7 +2233,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     });
     const room = MAX_GRID_ROWS - s.rows.length;
     if (room <= 0) {
-      toast(`Row limit reached (${MAX_GRID_ROWS}) — merge skipped`);
+      toast(`Row limit (${MAX_GRID_ROWS})`);
       return;
     }
     const fitting = added.slice(0, room);
@@ -2253,7 +2258,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (fitting.some((r) => r.cookies || r.uid)) {
       get().maybeAutoCheck(null, "cookies");
     }
-    toast(fitting.length < added.length ? `Merged ${fitting.length} (skipped ${skipped}, limit ${MAX_GRID_ROWS})` : `Merged ${fitting.length} (skipped ${skipped})`);
+    if (skipped || fitting.length < added.length) toast(`Merged ${fitting.length} (${skipped} skipped)`);
   },
 
   // Live row-state pushes (socket/poll): patch overlay flags by pool key.
@@ -2305,7 +2310,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         ...recomputeMarks(rows, s.crossDups, s.columns),
       });
       get().persist("replace");
-      toast(incoming.length > capped.length ? `Replaced with ${capped.length} rows (limit ${MAX_GRID_ROWS})` : `Replaced with ${incoming.length} rows`);
+      if (incoming.length > capped.length) toast(`Limit: ${capped.length} rows`);
     } else {
       const rows = s.rows.slice();
       const room = MAX_GRID_ROWS - rows.length;
@@ -2321,7 +2326,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         ...recomputeMarks(rows, s.crossDups, s.columns),
       });
       get().persist("append");
-      toast(fitting.length < incoming.length ? `Appended ${fitting.length} rows (limit ${MAX_GRID_ROWS})` : `Appended ${incoming.length} rows`);
+      if (fitting.length < incoming.length) toast(`Limit: ${fitting.length} rows`);
     }
     void refreshCrossDups(s.fileId);
     if (incoming.some((r) => r.cookies || r.uid)) {
@@ -2337,7 +2342,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       if (isDataRow(row, columns)) lastDataIdx = idx;
     });
     if (lastDataIdx < 0) {
-      toast("Nothing to compact. No rows found.");
+      toast("Nothing to compact");
       return;
     }
     const used = s.rows.slice(0, lastDataIdx + 1);
@@ -2345,7 +2350,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const cleaned = used.filter((row) => isDataRow(row, columns));
     const removed = used.length - cleaned.length;
     if (removed === 0) {
-      toast("Sheet already compact");
+      toast("Already compact");
       return;
     }    const undoStack: UndoEntry[] = [
       ...s.undoStack,
@@ -2370,7 +2375,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       selCols: new Set(),
     });
     get().persist("clean");
-    toast(`Compacted - ${removed} row${removed === 1 ? "" : "s"} removed`);
+
   },
 
   deleteDeadRows: () => {
@@ -2380,7 +2385,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       if (row.status === "bad") deadIdx.push(idx);
     });
     if (!deadIdx.length) {
-      toast("No dead rows found");
+      toast("No dead rows");
       return;
     }
     const undoStack: UndoEntry[] = [
@@ -2407,7 +2412,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       selCols: new Set(),
     });
     get().persist("clean");
-    toast(`Deleted ${deadIdx.length} dead row${deadIdx.length === 1 ? "" : "s"}`);
+
   },
 
   bubbleGetActiveRow: () => {
@@ -2448,7 +2453,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       rows = rows.concat(makeEmptyRow(s.columns));
     }
     if (idx >= rows.length) {
-      toast(`Row limit reached (${MAX_GRID_ROWS})`);
+      toast(`Row limit (${MAX_GRID_ROWS})`);
       idx = rows.length - 1;
     }
     set({ bubbleActiveRow: idx, rows });
@@ -2510,7 +2515,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       return;
     }
     const complete = !!rows[idx].twofakey;
-    toast(complete ? "Row " + (idx + 1) + " done" : "Paste 2FA key");
+    if (!complete) toast("Paste 2FA key");
     set({
       rows,
       isDirty: true,
@@ -2563,7 +2568,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     }
     vibrate(15);
     const complete = !!rows[idx].cookies;
-    toast(complete ? "Row " + (idx + 1) + " done" : "Paste cookie");
+    if (!complete) toast("Paste cookie");
     set({
       rows,
       isDirty: true,
@@ -2580,7 +2585,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           if (!r) return;
           if (useSheetStore.getState().fileId !== s.fileId) return;
           navigator.clipboard.writeText(r.code).catch(() => {});
-          toast("Code copied");
         })
         .catch(() => {});
     }
@@ -2611,7 +2615,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       });
       get().persist("bubble");
       vibrate(15);
-      toast("2FA skipped");
       // Advance only when the row is complete (cookie + marker). A marked row
       // with no cookie yet stays active so the next cookie paste lands on it.
       if (row.cookies && row.cookies.trim()) {
@@ -2648,7 +2651,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const undoStack = [...s.undoStack, { rowIdx, colKey: "_cellStyles", prevVal } as CellDelta];
     if (undoStack.length > 100) undoStack.shift();
     const changeJournal = mergeJournal(get().changeJournal, [{ rowIdx, cols: { _cellStyles: json } as Record<string, string> }]);
-    if (changeJournal.length > MAX_JOURNAL) toast("Too many unsynced edits — syncing now");
+    if (changeJournal.length > MAX_JOURNAL) toast("Syncing…");
     set({ rows: newRows, isDirty: true, changeJournal: changeJournal.slice(-MAX_JOURNAL), undoStack, redoStack: [] });
     get().persist();
   },
@@ -2765,7 +2768,6 @@ function bubbleKeyIndex(rows: Row[]): Map<string, number> {
 
 function applyCells(
   cells: Array<{ rowIdx: number; colKey: string; value: string }>,
-  toastMsg: string,
 ): void {
   if (!cells.length) return;
   const s = useSheetStore.getState();
@@ -2774,11 +2776,23 @@ function applyCells(
   const newInvalid = new Set(s.invalidCells);
   const deltas: CellDelta[] = [];
   let changed = false;
+  let skipped = 0;
   let lastKey: string | null = null;
   let pastedCookie = false;
   for (const cell of cells) {
     const row = rows[cell.rowIdx];
     if (!row) continue;
+    // Same rules as single-cell commit: locked rows are never written and
+    // same-file duplicates are blocked at entry (counted, not silent).
+    if (row._hold || row._approved) {
+      skipped++;
+      continue;
+    }
+    const dupV = (cell.value ?? "").trim();
+    if (dupV && !isNo2FAMark(cell.colKey, dupV) && rows.some((r, i) => i !== cell.rowIdx && ((r[cell.colKey] ?? "").trim() === dupV))) {
+      skipped++;
+      continue;
+    }
     const prevVal = row[cell.colKey] ?? "";
     if (prevVal === cell.value) continue;
     rows[cell.rowIdx] = { ...row, [cell.colKey]: cell.value };
@@ -2826,7 +2840,7 @@ function applyCells(
   if (pastedCookie) {
     useSheetStore.getState().maybeAutoCheck(null, "cookies");
   }
-  toast(toastMsg);
+  if (skipped) toast(`Skipped ${skipped} cells`);
   if (lastKey && !s.isDesktop) {
     void getCachedTOTP(lastKey)
       .then((r) => {

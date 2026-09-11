@@ -22,9 +22,9 @@
     --blue-light: rgba(0, 112, 243, 0.08);
     --red: var(--destructive);
     --red-bg: rgba(238, 0, 0, 0.08);
-    --green: #16a34a;
-    --green-dark: #15803d;
-    --green-bg: rgba(22, 163, 74, 0.08);
+    --green: #229342;
+    --green-dark: #1b7635;
+    --green-bg: rgba(34, 147, 66, 0.08);
     --cyan: #00b4d8;
     --yellow: #f5a623;
     --yellow-dark: #a16207;
@@ -36,22 +36,27 @@
     --fb-bg: #eef2ff;
     --tg-blue: #1090e5;
 
+    /* Account status colors (spreadsheet row states) */
+    --alive: #229342;
+    --dead: #e33b2e;
+
     /* Indicator gradients — light theme (dark overrides below) */
     --grad-rows: linear-gradient(#525252 0%, #000000 100%);
-    --grad-live: linear-gradient(#4ade80 0%, #16a34a 100%);
+    --grad-live: linear-gradient(color-mix(in srgb, #229342 55%, white) 0%, #229342 100%);
     --grad-page: linear-gradient(oklch(0.640619 0.197547 260) 0%, oklch(0.5772 0.2324 260) 100%);
     --grad-dead: linear-gradient(#f87171 0%, #ee0000 100%);
     --grad-dup: linear-gradient(#fde047 0%, #eab308 100%);
     --grad-cross: linear-gradient(#fdba74 0%, #f6821f 100%);
 
-    /* Pool row states — hold (amber) / approved (green) / dead (red) soft tints */
+    /* Pool row states — legacy soft tints (pool rows now show dot-only color;
+       hold/approved wear solid account colors, see grid rules below) */
     --tint-hold: rgba(245, 158, 11, 0.18);
-    --tint-approved: rgba(22, 163, 74, 0.16);
-    --tint-dead: rgba(238, 0, 0, 0.12);
+    --tint-approved: rgba(34, 147, 66, 0.16);
+    --tint-dead: rgba(227, 59, 46, 0.12);
 
-    /* Selection highlight */
-    --sel-bg: rgba(0, 112, 243, 0.08);
-    --sel-border: rgba(0, 112, 243, 0.4);
+    /* Selection highlight — monochrome (no blue) */
+    --sel-bg: rgba(0, 0, 0, 0.07);
+    --sel-border: rgba(0, 0, 0, 0.45);
     --sel-outline: var(--ring);
 
     /* Focus ring — alias to shadcn --ring */
@@ -95,15 +100,17 @@
     --border2: var(--input);
     --blue-light: rgba(0, 112, 243, 0.15);
     --red-bg: rgba(238, 0, 0, 0.15);
-    --green-bg: rgba(22, 163, 74, 0.15);
+    --green-bg: rgba(34, 147, 66, 0.15);
     --yellow-bg: rgba(245, 166, 35, 0.15);
     --fb-bg: rgba(99, 102, 241, 0.15);
-    --sel-bg: rgba(0, 112, 243, 0.15);
-    --sel-border: rgba(0, 112, 243, 0.5);
+    --alive: #229342;
+    --dead: #e33b2e;
+    --sel-bg: rgba(255, 255, 255, 0.12);
+    --sel-border: rgba(255, 255, 255, 0.5);
     --grad-rows: #ededed;
-    --grad-live: #22c55e;
+    --grad-live: #229342;
     --grad-page: #3b82f6;
-    --grad-dead: #ef4444;
+    --grad-dead: #e33b2e;
     --grad-dup: #facc15;
     --grad-cross: #fb923c;
     --tint-hold: rgba(245, 158, 11, 0.22);
@@ -1628,27 +1635,31 @@ table.grid td.dot-cell:hover {
 .row-dot.d-blue { background: var(--grad-page); }
 .row-dot.d-green { background: var(--grad-live); }
 .row-dot.d-yellow { background: var(--yellow); }
-.row-dot.d-red { background: var(--red); }
+.row-dot.d-red { background: var(--dead); }
 
 .row-dot.d-spin {
     background: var(--blue);
     animation: pulse 1s ease-in-out infinite;
     will-change: opacity;
 }
-.row-dot.d-taken { background: var(--blue); box-shadow: 0 0 0 2px rgba(255,255,255,0.85), 0 0 0 4px var(--blue); }
 
-/* taken row lock — blue cell + white text + whole-row cut */
-tr.row-taken { position: relative; }
-tr.row-taken td.dc.cell-taken { background: var(--blue) !important; color: rgba(255,255,255,0.72) !important; border-color: var(--blue) !important; }
-tr.row-taken td.dc.cell-taken.cell-editing { color: #fff !important; }
-tr.row-taken::after { content: ''; position: absolute; left: 36px; right: 36px; top: 50%; height: 1.25px; background: rgba(255,255,255,0.45); pointer-events: none; z-index: 1; }
-
-/* pool row states — tint + cut line (hold amber / approved green / dead red tint only) */
-tr.row-hold, tr.row-approved { position: relative; }
-tr.row-hold td.dc { background: var(--tint-hold) !important; }
-tr.row-approved td.dc { background: var(--tint-approved) !important; }
-tr.row-dead td.dc { background: var(--tint-dead) !important; }
-tr.row-hold::after, tr.row-approved::after { content: ''; position: absolute; left: 36px; right: 36px; top: 50%; height: 1.25px; background: var(--text); opacity: 0.35; pointer-events: none; z-index: 1; }
+/* Spreadsheet row states — pool rows show dot-only color. Pending (hold)
+   wears the account color on data cells (number + dot cells stay default).
+   Approved wears data + number cells in the account color plus a per-cell
+   black cut across data cells only (never the number/dot cells). Row text
+   follows the theme on every row. Dots always mean account status. */
+tr.row-hold.st-alive td.dc { background: var(--alive) !important; border-color: var(--alive) !important; color: var(--text) !important; }
+tr.row-hold.st-eligible td.dc { background: var(--blue) !important; border-color: var(--blue) !important; color: var(--text) !important; }
+tr.row-hold.st-dead td.dc { background: var(--dead) !important; border-color: var(--dead) !important; color: var(--text) !important; }
+tr.row-hold.st-dup td.dc { background: #ffa000 !important; border-color: #ffa000 !important; color: var(--text) !important; }
+tr.row-approved.st-alive td.dc, tr.row-approved.st-alive th.rh { background: var(--alive) !important; border-color: var(--alive) !important; color: var(--text) !important; }
+tr.row-approved.st-eligible td.dc, tr.row-approved.st-eligible th.rh { background: var(--blue) !important; border-color: var(--blue) !important; color: var(--text) !important; }
+tr.row-approved.st-dead td.dc, tr.row-approved.st-dead th.rh { background: var(--dead) !important; border-color: var(--dead) !important; color: var(--text) !important; }
+tr.row-approved.st-dup td.dc, tr.row-approved.st-dup th.rh { background: #ffa000 !important; border-color: #ffa000 !important; color: var(--text) !important; }
+tr.row-approved td.dc { position: relative; }
+tr.row-approved td.dc::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1.25px; background: #000; pointer-events: none; z-index: 1; }
+/* cross-file duplicate: duplicated identity cells carry color + normal dot */
+.cell-xdup { background: var(--yellow) !important; border-color: var(--yellow) !important; color: var(--text) !important; }
 
 /* file card long-press no text select */
 .file-card, .file-card-name { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
@@ -1686,13 +1697,13 @@ td.dc.ms-sel {
 
 th.ch.col-sel {
     background: var(--sel-bg) !important;
-    color: var(--blue) !important;
+    color: var(--text) !important;
     font-weight: 600 !important;
 }
 
 th.rh.row-sel {
     background: var(--sel-bg) !important;
-    color: var(--blue) !important;
+    color: var(--text) !important;
     font-weight: 600 !important;
 }
 
@@ -1810,7 +1821,7 @@ th.rh:hover {
 .qeb-icon-btn.copied{color:var(--blue) !important;background:var(--blue-light) !important}
 
 .cell-editing {
-    box-shadow: inset 0 0 0 2px var(--blue) !important;
+    box-shadow: inset 0 0 0 2px var(--text) !important;
 }
 .cell-dup { background: rgba(255, 160, 0, 0.15) !important; border-color: #ffa000 !important; }
 .cell-invalid { background: rgba(255, 68, 68, 0.1) !important; border-color: #ff4444 !important; }

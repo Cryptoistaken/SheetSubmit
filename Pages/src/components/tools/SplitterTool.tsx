@@ -46,9 +46,8 @@ export default function SplitterTool() {
       setRows(res.rows);
       setCols(fileTypeDef(res.type).columns);
       setName(res.name);
-      showToast(`Loaded ${res.rows.length} rows`);
     } catch (e) {
-      showToast((e as Error).message || "Could not parse file. Check the file and try again.");
+      showToast((e as Error).message || "Couldn't parse file");
       setRows(null); setCols(null); setName("");
     } finally { setLoading(false); }
   };
@@ -69,15 +68,15 @@ export default function SplitterTool() {
       setCols(c);
       setName(file.name);
     } catch (e) {
-      showToast((e as Error).message || "Could not load file. Try again.");
+      showToast((e as Error).message || "Couldn't load file");
       setRows(null); setCols(null);
     } finally { setLoading(false); }
   };
 
   const doSplit = async () => {
-    if (!rows || !cols || !name) { showToast("Load a file first. Upload an .xlsx or choose an existing file."); return; }
+    if (!rows || !cols || !name) { showToast("Load a file first"); return; }
     const parts = effectiveN;
-    if (!Number.isFinite(parts) || parts < 1 || parts > 100) { showToast("Choose between 2 and 100 parts."); return; }
+    if (!Number.isFinite(parts) || parts < 1 || parts > 100) { showToast("Use 1–100 parts"); return; }
     if (parts === 1) { showToast("Choose at least 2 parts."); return; }
     const dlCols = source === "existing" ? cols.filter((c) => c.key !== "uid") : cols;
     const dataRows = rows.filter((r) => dlCols.some((c) => r[c.key]));
@@ -94,7 +93,7 @@ export default function SplitterTool() {
       }
       showToast(`Downloaded ${chunks.length} files`);
     } catch {
-      showToast("Could not download files. Try again.");
+      showToast("Download failed");
     }
   };
 

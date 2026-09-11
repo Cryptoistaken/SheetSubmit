@@ -37,7 +37,6 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
       const page = idxs.filter((i) => after[i]?.wa_status === "eligible").length;
       setDoneCounts({ page, noPage: idxs.length - page });
       setPhase("done");
-      showToast(`WA Check done: ${page} page · ${idxs.length - page} no page`);
     } catch {
       showToast("WA Check failed");
       setPhase("idle");

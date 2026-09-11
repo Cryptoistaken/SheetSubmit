@@ -158,7 +158,7 @@ export default function Topbar() {
       if (st.adminMode) await api.adminUpdateFile(file.id, { name });
       else await api.updateFile(file.id, { name });
     } catch {
-      showToast("Could not rename file. Try again.");
+      showToast("Couldn't rename");
       return;
     }
     useSheetStore.setState((s) => (s.file ? { file: { ...s.file, name } } : {}));
@@ -255,7 +255,6 @@ export default function Topbar() {
                 } else {
                   try { getAndroid()?.disableBubble?.(); } catch {}
                   useBubbleStore.getState().setOn(false);
-                  showToast("Floating bubble off");
                 }
               }}>
                 <span>{bubbleOn ? "Turn floating bubble off" : "Turn floating bubble on"}</span>

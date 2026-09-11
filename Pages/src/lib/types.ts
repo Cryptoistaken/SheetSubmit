@@ -46,7 +46,7 @@ export const FILE_PRESET_NAMES: Record<FilePreset, string> = {
 };
 
 /** A grid row — cookie cells are plain string keys.
- * Augmentations: _pool?: string; _taken?: boolean; _takenAt?: number; wa_status?: string */
+ * Augmentations: _hold?: boolean; _approved?: boolean; _dead?: boolean; wa_status?: string */
 export type Row = Record<string, any>;
 
 export const FILE_TYPE_DEFS: Record<FileType, FileTypeDef> = {
@@ -112,7 +112,7 @@ export function isDataRow(row: Row, columns: { key: string }[]): boolean {
  * (strict: the server rejects them too). Returns null when everything fits. */
 export function replaceCapMessage(n: number, cap: number): string | null {
   if (!Number.isFinite(n) || n <= cap) return null;
-  return `File has ${n} rows — max ${cap} per file. Split it into smaller files and upload them separately.`;
+  return `Too many rows — split (max ${cap})`;
 }
 
 /** Marker the bubble writes into the 2fa cell when the user long-press-skips

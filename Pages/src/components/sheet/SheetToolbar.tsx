@@ -116,7 +116,7 @@ export default function SheetToolbar() {
       }
       setUploadRows(rows);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Could not read file. Check the file and try again.");
+      showToast(err instanceof Error ? err.message : "Couldn't read file");
     }
   };
 
@@ -180,7 +180,7 @@ export default function SheetToolbar() {
     close();
     const s = useSheetStore.getState();
     if (!s.rows.length) {
-      showToast("No rows to copy. Add content first.");
+      showToast("Add content first");
       return;
     }
     const cols = s.columns;
@@ -194,12 +194,11 @@ export default function SheetToolbar() {
       }
     }
     if (!hasData) {
-      showToast("No rows to copy. Add content first.");
+      showToast("Add content first");
       return;
     }
     navigator.clipboard
       .writeText(lines.join("\n"))
-      .then(() => showToast(`Copied ${lines.length - 1} rows`))
       .catch(() => showToast("Could not copy. Try again."));
   };
 
@@ -213,7 +212,7 @@ export default function SheetToolbar() {
     const s = useSheetStore.getState();
     const dead = s.rows.filter((r) => r.status === "bad").length;
     if (!dead) {
-      showToast("No dead rows found");
+      showToast("No dead rows");
       return;
     }
     const ok = await confirm(
@@ -237,7 +236,7 @@ export default function SheetToolbar() {
         ? await api.adminRestoreSnapshot(st.fileId)
         : await api.restoreSnapshot(st.fileId);
       useSheetStore.getState().applyRestore(res.rows ?? [], res.seq ?? st.lastSeq, res.file ?? st.file);
-      showToast("Restored last save — previous state kept in Undo");
+      showToast("Restored (Undo kept)");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       showToast(msg.includes("no snapshot") ? "No earlier save to restore yet" : "Could not restore. Try again.");
@@ -271,15 +270,15 @@ export default function SheetToolbar() {
       if (next) {
         // structural re-save re-fires the pool feed (persist() would no-op:
         // flipping the switch alone leaves no dirty cells behind)
-        showToast("Pooling on — syncing…");
+        
         if (st.adminMode) await api.adminPersist(fid, { rows: trimmed, action: "pool-enable" });
         else await api.persist(fid, { rows: trimmed, action: "pool-enable" });
-        showToast("Pooling on — rows fed to the pool");
+        showToast("Pooling on");
       } else {
-        showToast("Pooling off");
+        
       }
     } catch {
-      showToast("Could not update pooling. Try again.");
+      showToast("Pooling failed");
     }
   };
 

@@ -203,7 +203,7 @@ export default function PoolsView() {
       setDetail(d);
       try { useProfileCache.getState().setProfiles(d.users as unknown[]); } catch {}
       setUserFiles((uf as { users: never[] }).users ?? []);
-    } catch { setLoadFailed(true); showToast("Could not load pools. Check your connection."); }
+    } catch { setLoadFailed(true); showToast("Couldn't load pools"); }
   }, [cur, curPwd, showToast]);
 
   const refreshAll = useCallback(async () => { await Promise.all([load(), loadHolds(), loadPrices()]); }, [load, loadHolds, loadPrices]);
@@ -302,11 +302,11 @@ export default function PoolsView() {
 
   const doHoldConfirm = async () => {
     const n = customQty ? Number(customQty) : poolQty === "all" ? (cur === "page" && verified ? verified.verified : totals.available) : (poolQty as number);
-    if (cur === "page" && verified && verified.verified === 0) return showToast("No verified rows available to claim");
+    if (cur === "page" && verified && verified.verified === 0) return showToast("No verified rows");
     if (!totals.available) return showToast("No rows available to claim");
     if (!Number.isInteger(n) || n < 1) return showToast("Enter at least 1 row");
     if (holdMode === "pick" && selectedUids.length === 0 && selectedFileIds.length === 0) { showToast("Pick at least 1 user"); return; }
-    if (holdMode === "pick" && pickAvail === 0) { showToast("Selected owners have no available rows"); return; }
+    if (holdMode === "pick" && pickAvail === 0) { showToast("Owners have no rows"); return; }
     setDownloading(true);
     try {
       const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: holdMode };
@@ -325,8 +325,8 @@ export default function PoolsView() {
 
   const doUserHold = async (u: PoolDetail["users"][number]) => {
     const n = customQty ? Number(customQty) : poolQty === "all" ? u.available : (poolQty as number);
-    if (cur === "page" && verified && verified.verified === 0) return showToast("No verified rows available to claim");
-    if (!Number.isInteger(n) || n < 1) return showToast("Set a quantity in the taker card first");
+    if (cur === "page" && verified && verified.verified === 0) return showToast("No verified rows");
+    if (!Number.isInteger(n) || n < 1) return showToast("Set a quantity first");
     setDownloading(true);
     try {
       const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: "fifo", srcUids: [u.userId] };
@@ -348,7 +348,7 @@ export default function PoolsView() {
       const ok = results.filter((r) => r.status === "fulfilled").length;
       const fail = results.length - ok;
       vibrate(20);
-      if (fail) showToast(`${action === "approve" ? "Approved" : "Returned"} ${ok}/${results.length} — ${fail} failed, retry them`);
+      if (fail) showToast(`${action === "approve" ? "Approved" : "Returned"} ${ok}/${results.length} (${fail} failed)`);
       else showToast(`${action === "approve" ? "Approved" : "Returned"} ${ok} hold${ok > 1 ? "s" : ""}`);
       setApprSel([]);
       await refreshAll();
@@ -362,7 +362,7 @@ export default function PoolsView() {
       vibrate(20);
       const dead = Number((res as unknown as { dead?: number }).dead || 0);
       const n = Number((res as unknown as { approved?: number }).approved || 0);
-      showToast(dead ? `Approved ${n} — ${dead} dead, not paid` : "Approved — owners paid when the 5-minute window closes");
+      showToast(dead ? `Approved ${n} — ${dead} dead, not paid` : "Approved — pays in 5 min");
       await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
@@ -371,7 +371,7 @@ export default function PoolsView() {
     try {
       await api.returnHold(id);
       vibrate(20);
-      showToast("Rejected — rows returned; owners paid nothing if it stays rejected");
+      showToast("Rejected — rows returned");
       await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
@@ -382,15 +382,15 @@ export default function PoolsView() {
       if (String(hold?.status || "").toUpperCase() === "APPROVED") {
         try {
           await api.revertDownload(id)
-        } catch (e) { showToast("Could not return rows: " + String(e instanceof Error ? e.message : e)); return; }
+        } catch (e) { showToast("Return failed: " + String(e instanceof Error ? e.message : e)); return; }
         try {
           await api.deleteDownload(id)
         } catch {
-          showToast("Rows returned — record kept (delete failed, retry Delete)");
+          showToast("Returned (delete failed)");
           await refreshAll();
           return;
         }
-        showToast("Approval deleted — rows returned")
+        showToast("Approval deleted")
       } else {
         await api.rejectHold(id)
         showToast("Rejected — rows returned")
@@ -418,7 +418,7 @@ export default function PoolsView() {
       const rows = Array.isArray(data.rows) ? data.rows : [];
       await downloadXlsx(rows, POOL_DL_COLS[h.poolId] ?? POOL_DL_COLS.cookies_only, data.filename || opts?.name || h.filename || "download.xlsx");
       vibrate(20);
-      showToast(`Downloaded ${opts?.name || h.filename}`);
+
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDlBusyId(null); }
   };
 

@@ -650,14 +650,32 @@ describe("sheetStore data-integrity", () => {
     expect(s.dupRows).toEqual(new Set());
     expect(s.hasDuplicates).toBe(false);
 
-    // Recreate the duplicate.
-    useSheetStore.getState().commitCell(0, "uid", "111");
-    s = useSheetStore.getState();
-    expect(s.dupCells).toEqual(new Set(["0:uid", "1:uid"]));
-    expect(s.dupRows).toEqual(new Set([0, 1]));
-    expect(s.hasDuplicates).toBe(true);
+    // Recreating the duplicate is refused at entry (blocked, not flagged).
+    const { setToastFn } = await import("@/lib/toast");
+    const toasted: string[] = [];
+    setToastFn((m: string) => { toasted.push(m); });
+    try {
+      useSheetStore.getState().commitCell(0, "uid", "111");
+      s = useSheetStore.getState();
+      expect(s.rows[0].uid).toBe("333");
+      expect(s.dupCells).toEqual(new Set());
+      expect(toasted).toContain("Duplicate in this file");
+    } finally {
+      setToastFn(null);
+    }
 
-    // Break it from row 1's side: the stale partner mark must be cleared.
+    // A pre-existing duplicate (server rows, undo) still re-marks, and
+    // breaking it from row 1's side clears the stale partner mark.
+    useSheetStore.setState({
+      rows: [
+        { cookies: "", uid: "111", twofakey: "" },
+        { cookies: "", uid: "111", twofakey: "" },
+        { cookies: "", uid: "222", twofakey: "" },
+      ],
+      dupCells: new Set(["0:uid", "1:uid"]),
+      dupRows: new Set([0, 1]),
+      hasDuplicates: true,
+    });
     useSheetStore.getState().commitCell(1, "uid", "444");
     s = useSheetStore.getState();
     expect(s.dupCells).toEqual(new Set());
@@ -1290,5 +1308,78 @@ describe("undo / redo / selection / rows", () => {
     expect(st().changeJournal).toEqual([]);
     st().undo();
     expect(st().rows[0].cookies).toBe("c_user=9;");
+  });
+});
+describe("paste-duplicate block", () => {
+  const cols = [{ key: "cookies", label: "cookies", width: 340 }, { key: "twofakey", label: "2fa key", width: 200 }, { key: "uid", label: "uid", width: 120 }];
+
+  it("rejects a uid already present in another row", async () => {
+    const { setToastFn } = await import("@/lib/toast");
+    const toasted: string[] = [];
+    setToastFn((m: string) => { toasted.push(m); });
+    try {
+      await openTestFile();
+      useSheetStore.setState({
+        columns: cols as never,
+        rows: [
+          { cookies: "c_user=11;", uid: "11", twofakey: "" },
+          { cookies: "c_user=22;", uid: "22", twofakey: "" },
+        ],
+      });
+      useSheetStore.getState().commitCell(0, "uid", "22");
+      const s = useSheetStore.getState();
+      expect(s.rows[0].uid).toBe("11");
+      expect(s.isDirty).toBe(false);
+      expect(toasted).toContain("Duplicate in this file");
+    } finally {
+      setToastFn(null);
+    }
+  });
+
+  it("accepts a uid no other row has", async () => {
+    await openTestFile();
+    useSheetStore.setState({
+      columns: cols as never,
+      rows: [
+        { cookies: "c_user=11;", uid: "11", twofakey: "" },
+        { cookies: "c_user=22;", uid: "22", twofakey: "" },
+      ],
+    });
+    useSheetStore.getState().commitCell(0, "uid", "33");
+    expect(useSheetStore.getState().rows[0].uid).toBe("33");
+  });
+
+  it("accepts clearing a row out of a pre-existing duplicate", async () => {
+    await openTestFile();
+    useSheetStore.setState({
+      columns: cols as never,
+      rows: [
+        { cookies: "c_user=22;", uid: "22", twofakey: "" },
+        { cookies: "c_user=22;", uid: "22", twofakey: "" },
+      ],
+    });
+    useSheetStore.getState().commitCell(0, "uid", "23");
+    expect(useSheetStore.getState().rows[0].uid).toBe("23");
+  });
+
+  it("rejects a 2fa key already present in another row", async () => {
+    const { setToastFn } = await import("@/lib/toast");
+    const toasted: string[] = [];
+    setToastFn((m: string) => { toasted.push(m); });
+    try {
+      await openTestFile();
+      useSheetStore.setState({
+        columns: cols as never,
+        rows: [
+          { cookies: "c_user=11;", uid: "11", twofakey: "KEYAAA" },
+          { cookies: "c_user=22;", uid: "22", twofakey: "KEYBBB" },
+        ],
+      });
+      useSheetStore.getState().commitCell(0, "twofakey", "KEYBBB");
+      expect(useSheetStore.getState().rows[0].twofakey).toBe("KEYAAA");
+      expect(toasted).toContain("Duplicate in this file");
+    } finally {
+      setToastFn(null);
+    }
   });
 });

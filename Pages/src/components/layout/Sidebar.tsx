@@ -1,9 +1,10 @@
-import { ChevronsLeft, ChevronsRight, LogOutIcon } from "lucide-react";
+import { LogOutIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 import { AnalysisIcon, ApprovalsIcon, ArchiveIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
+import { BdtIcon } from "@/components/layout/Topbar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeTogglerButton } from "@/components/ui/theme-toggler";
 import { useAuth } from "@/contexts/AuthContext";
@@ -97,6 +98,9 @@ export default function Sidebar() {
       return false;
     }
   });
+  // Hovering a collapsed sidebar temporarily expands it; leaving collapses back.
+  const [hoverOpen, setHoverOpen] = useState(false);
+  const effCollapsed = collapsed && !hoverOpen;
 
   // Same 60s sessionStorage-cached wallet read as Topbar (only one of them is
   // mounted at a time on desktop home, so no double fetch in practice).
@@ -112,6 +116,7 @@ export default function Sidebar() {
 
   const tab = tabForPath(location.pathname);
   const toggleCollapse = () => {
+    setHoverOpen(false);
     setCollapsed((c) => {
       const next = !c;
       try {
@@ -130,48 +135,85 @@ export default function Sidebar() {
   };
 
   const displayName = ((user.firstName ?? "") + " " + (user.lastName ?? "")).trim() || "Account";
+  const sub = user.username ? `@${user.username}` : (user.phone || "");
   const balanceUsd = balance ?? 0;
   const balanceText = currency === "USD" ? fmtBalance(balanceUsd) : fmtBalance(balanceUsd * loadBdtRate());
   const adminItems = NAV_ADMIN.filter((i) => !i.adminOnly || user.isAdmin);
-  const CollapseIcon = collapsed ? ChevronsRight : ChevronsLeft;
 
   return (
-    <aside className={cn("hidden shrink-0 flex-col border-r border-border bg-background lg:flex", collapsed ? "w-16" : "w-60")}>
-      <div className={cn("flex items-center gap-2 border-b border-border px-3 py-3", collapsed && "flex-col px-0")}>
+    <aside
+      onMouseEnter={() => { if (collapsed) setHoverOpen(true); }}
+      onMouseLeave={() => setHoverOpen(false)}
+      className={cn("hidden shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background transition-[width] duration-200 ease-out motion-reduce:transition-none lg:flex", effCollapsed ? "w-16" : "w-60")}
+    >
+      <div className={cn("flex items-center gap-2 border-b border-border px-3 py-3", effCollapsed && "justify-center px-0")}>
         <button type="button" onClick={() => navigate("/")} title="Sheet Submit — home" aria-label="Sheet Submit — home" className="grid size-8 shrink-0 place-items-center rounded-md hover:bg-muted">
           <img src="/logo.svg" className="size-5" alt="" aria-hidden="true" />
         </button>
-        {!collapsed && (
+        {!effCollapsed && (
           <button type="button" onClick={() => navigate("/")} className="min-w-0 flex-1 truncate text-left text-sm font-semibold tracking-tight">
             Sheet Submit
           </button>
         )}
-        <button
-          type="button"
-          onClick={toggleCollapse}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <CollapseIcon className="size-4" aria-hidden="true" />
-        </button>
+      </div>
+
+      <div className="border-b border-border p-2">
+        {effCollapsed ? (
+          <div className="flex justify-center py-1" title={displayName}>
+            <Avatar className="size-8">
+              {user.photoUrl ? <AvatarImage src={user.photoUrl} alt="" /> : null}
+              <AvatarFallback>{displayName.slice(0, 1).toUpperCase()}</AvatarFallback>
+            </Avatar>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 px-2 py-1.5">
+              <Avatar className="size-8 shrink-0">
+                {user.photoUrl ? <AvatarImage src={user.photoUrl} alt="" /> : null}
+                <AvatarFallback>{displayName.slice(0, 1).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-semibold">{displayName}</span>
+                {sub ? <span className="block truncate text-xs text-muted-foreground">{sub}</span> : null}
+              </span>
+              <button
+                type="button"
+                onClick={logout}
+                aria-label="Log out"
+                title="Log out"
+                className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-destructive"
+              >
+                <LogOutIcon className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCurrency(currency === "USD" ? "BDT" : "USD")}
+              title={currency === "USD" ? "Balance — show BDT" : "Balance — show USDC"}
+              className="mt-0.5 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-bold hover:bg-muted"
+            >
+              {currency === "USD" ? <img src="/usdc.svg" alt="" width={14} height={14} /> : <BdtIcon />}
+              <span>{balanceText}</span>
+              <span className="text-muted-foreground">{currency === "USD" ? "USDC" : "BDT"}</span>
+            </button>
+          </>
+        )}
       </div>
 
       <nav aria-label="Primary" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {NAV_MAIN.map((item) => (
-          <NavButton key={item.key} active={tab === item.key} collapsed={collapsed} label={item.label} onClick={() => navigate(item.to)}>
+          <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)}>
             {item.icon}
           </NavButton>
         ))}
         {adminItems.length > 0 && (
           <>
-            {!collapsed && (
+            {!effCollapsed && (
               <p className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Admin</p>
             )}
-            {collapsed && <div className="mx-2 my-2 border-t border-border" aria-hidden="true" />}
+            {effCollapsed && <div className="mx-2 my-2 border-t border-border" aria-hidden="true" />}
             {adminItems.map((item) => (
-              <NavButton key={item.key} active={tab === item.key} collapsed={collapsed} label={item.label} onClick={() => navigate(item.to)}>
+              <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)}>
                 {item.icon}
               </NavButton>
             ))}
@@ -179,39 +221,21 @@ export default function Sidebar() {
         )}
       </nav>
 
-      <div className={cn("flex flex-col gap-1 border-t border-border p-2", collapsed && "items-center")}>
-        {!collapsed && (
-          <button
-            type="button"
-            onClick={() => setCurrency(currency === "USD" ? "BDT" : "USD")}
-            title={currency === "USD" ? "Show BDT" : "Show USDC"}
-            className="flex items-center justify-between rounded-md px-3 py-2 text-xs font-bold hover:bg-muted"
-          >
-            <span>{balanceText}</span>
-            <span className="text-muted-foreground">{currency === "USD" ? "USDC" : "BDT"}</span>
-          </button>
-        )}
-        <div className={cn("flex items-center gap-1", collapsed ? "flex-col" : "flex-row")}>
-          <ThemeTogglerButton theme={theme} onToggle={toggle} />
-          {!collapsed && (
-            <span className="flex min-w-0 flex-1 items-center gap-2 px-1">
-              <Avatar className="size-7 shrink-0">
-                {user.photoUrl ? <AvatarImage src={user.photoUrl} alt="" /> : null}
-                <AvatarFallback>{displayName.slice(0, 1).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <span className="min-w-0 flex-1 truncate text-xs font-semibold">{displayName}</span>
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={logout}
-            aria-label="Log out"
-            title="Log out"
-            className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-destructive"
-          >
-            <LogOutIcon className="size-4" aria-hidden="true" />
-          </button>
-        </div>
+      <div className={cn("flex items-center gap-1 border-t border-border p-2", effCollapsed ? "flex-col justify-center" : "flex-row justify-between")}>
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="shrink-0">
+            <path d="M21.25 6.72v10.56a2.97 2.97 0 0 1-2.97 2.97H5.72a2.97 2.97 0 0 1-2.97-2.97V6.72a2.97 2.97 0 0 1 2.97-2.97h12.56a2.97 2.97 0 0 1 2.97 2.97" />
+            <path d="M6.25 7.25v9.5" className={cn("transition-transform duration-200 ease-out motion-reduce:transition-none", effCollapsed && "translate-x-[10.5px]")} />
+          </svg>
+        </button>
+        <ThemeTogglerButton theme={theme} onToggle={toggle} />
       </div>
     </aside>
   );

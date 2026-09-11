@@ -377,7 +377,7 @@ describe("sheetStore data-integrity", () => {
     // Server meanwhile moved on (someone else edited in parallel).
     harness.fullRows = [{ cookies: "c_user=999;", uid: "999", twofakey: "" }];
     harness.fullSeq = 7;
-    harness.nextAppend.reject(new Error("409 Conflict — version conflict"));
+    harness.nextAppend.reject(new Error("409 Conflict - version conflict"));
     await p;
 
     const s = useSheetStore.getState();

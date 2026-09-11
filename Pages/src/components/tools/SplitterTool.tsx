@@ -76,13 +76,13 @@ export default function SplitterTool() {
   const doSplit = async () => {
     if (!rows || !cols || !name) { showToast("Load a file first"); return; }
     const parts = effectiveN;
-    if (!Number.isFinite(parts) || parts < 1 || parts > 100) { showToast("Use 1–100 parts"); return; }
+    if (!Number.isFinite(parts) || parts < 1 || parts > 100) { showToast("Use 1-100 parts"); return; }
     if (parts === 1) { showToast("Choose at least 2 parts."); return; }
     const dlCols = source === "existing" ? cols.filter((c) => c.key !== "uid") : cols;
     const dataRows = rows.filter((r) => dlCols.some((c) => r[c.key]));
     if (!dataRows.length) { showToast("Empty file"); return; }
     const clamped = Math.min(parts, dataRows.length);
-    if (clamped !== parts) showToast(`Only ${dataRows.length} rows — splitting into ${clamped}`);
+    if (clamped !== parts) showToast(`Only ${dataRows.length} rows - splitting into ${clamped}`);
     const chunks = splitRows(dataRows, clamped);
     const base = name.replace(/\.xlsx?$/i, "");
     try {
@@ -121,7 +121,7 @@ export default function SplitterTool() {
       )}
 
       {loading ? <div style={{ fontSize: 13, color: "var(--text3)" }}>Loading…</div> : null}
-      {rows ? <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text2)", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "6px 10px", marginBottom: 12, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--green)", flexShrink: 0, display: "inline-block" }} />{name} — {rows.length} rows</div> : null}
+      {rows ? <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text2)", background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "6px 10px", marginBottom: 12, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--green)", flexShrink: 0, display: "inline-block" }} />{name} - {rows.length} rows</div> : null}
 
       {rows && cols ? (
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 16, background: "var(--bg)" }}>
@@ -161,7 +161,7 @@ export default function SplitterTool() {
               min={2}
               max={100}
               placeholder="Custom"
-              aria-label="Custom parts (2–100)"
+              aria-label="Custom parts (2-100)"
               aria-invalid={customInvalid}
               aria-describedby={customInvalid ? "custom-error" : undefined}
               value={custom}

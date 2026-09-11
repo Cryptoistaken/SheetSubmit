@@ -127,7 +127,7 @@ export default function SettingsView() {
     if (!rateInput.trim() || !Number.isFinite(v) || v <= 0 || v > 1_000_000) { showToast("Enter a rate above 0"); return; }
     setRate(v);
     setRateInput("");
-    showToast(`Rate saved — $1 = ৳${v.toLocaleString("en-US")}`);
+    showToast(`Rate saved - $1 = ৳${v.toLocaleString("en-US")}`);
   };
 
   return (
@@ -147,7 +147,7 @@ export default function SettingsView() {
           </div>
         </div>
         <p style={{ fontSize: 12, color: "var(--text3)", margin: "6px 0 0" }}>
-          {entryCurrency === "USD" ? "Price per row in USD — 0 to 1000." : `Enter BDT per row — auto-converts to stored USD ($1 = ৳${rate.toLocaleString("en-US")}).`}
+          {entryCurrency === "USD" ? "Price per row in USD - 0 to 1000." : `Enter BDT per row - auto-converts to stored USD ($1 = ৳${rate.toLocaleString("en-US")}).`}
         </p>
         {prices === null ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></div>

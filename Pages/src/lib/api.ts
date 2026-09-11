@@ -41,7 +41,7 @@ export function apiBase(): string {
 export type ConnStatus = "connecting" | "ok" | "err";
 export const useConnStore = create<{ status: ConnStatus }>()(() => ({ status: "connecting" }));
 function markConn(res: Response) { useConnStore.setState({ status: res.ok ? "ok" : "err" }); return res; }
-function isNotFound(e: unknown) { return e instanceof Error && /^\s*404[\s—\-:]/.test(e.message); }
+function isNotFound(e: unknown) { return e instanceof Error && /^\s*404[\s\-:]/.test(e.message); }
 function sanitizeDownloadName(name: string) { return name.replace(/["\r\n;\\]/g, "_").replace(/\.\.+/g, "_").slice(0, 128) || "download.xlsx"; }
 
 export function normalizeUser(raw: any): User {
@@ -89,7 +89,7 @@ async function request<T>(path: string, init?: RequestInit, opts?: { keepalive?:
     } catch {
       detail = "";
     }
-    throw new Error(`${res.status} ${res.statusText}${detail ? ` — ${detail}` : ""}`);
+    throw new Error(`${res.status} ${res.statusText}${detail ? ` - ${detail}` : ""}`);
   }
   return res.json() as Promise<T>;
 }
@@ -483,7 +483,7 @@ export const api = {
       if (!res.ok) {
         let detail = "";
         try { const body = await res.json(); detail = typeof body?.error === "string" ? body.error : JSON.stringify(body); } catch { detail = await res.text().catch(() => ""); }
-        throw new Error(`${res.status} ${res.statusText}${detail ? ` — ${detail}` : ""}`);
+        throw new Error(`${res.status} ${res.statusText}${detail ? ` - ${detail}` : ""}`);
       }
       try { localStorage.setItem(PROXY_FLAG, "1"); } catch {}
       return res.json() as Promise<{ ok: boolean }>;

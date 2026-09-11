@@ -277,7 +277,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                 Joined{" "}
                 {detailUser.createdAt
                   ? new Date(detailUser.createdAt).toLocaleDateString()
-                  : "—"}
+                  : "-"}
               </div>
               <div className="admin-detail-meta">
                 {detailUser.fileCount || 0} files, {detailUser.archivedCount || 0} archived
@@ -303,7 +303,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                   </button>
                 </>
               ) : detailUser.isAdmin ? (
-                <span style={{ fontSize: 12, color: "var(--text3)", fontWeight: 600 }}>Admin — no delete/ban</span>
+                <span style={{ fontSize: 12, color: "var(--text3)", fontWeight: 600 }}>Admin - no delete/ban</span>
               ) : null}
             </div>
           </div>
@@ -412,11 +412,11 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       {listError ? <div role="alert" style={{ fontSize: 13, color: "var(--red)", background: "var(--red-bg)", border: "1px solid var(--red)", borderRadius: "var(--r)", padding: "8px 12px", marginBottom: 12, display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}><span>{listError}</span><button type="button" className="btn btn-sm" onClick={() => void loadList()}>Retry</button></div> : null}
       <div className="admin-stats">
         <div className="admin-stat-card" aria-busy={stats === null}>
-          <div className="admin-stat-value">{stats ? stats.totalUsers : "—"}</div>
+          <div className="admin-stat-value">{stats ? stats.totalUsers : "-"}</div>
           <div className="admin-stat-label">Total Users</div>
         </div>
         <div className="admin-stat-card" aria-busy={stats === null}>
-          <div className="admin-stat-value">{stats ? stats.totalFiles : "—"}</div>
+          <div className="admin-stat-value">{stats ? stats.totalFiles : "-"}</div>
           <div className="admin-stat-label">Total Files</div>
         </div>
       </div>

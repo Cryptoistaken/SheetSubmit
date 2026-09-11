@@ -172,7 +172,7 @@ export default function ApprovalsView() {
       vibrate(20);
       const dead = Number((res as unknown as { dead?: number }).dead || 0);
       const n = Number((res as unknown as { approved?: number }).approved || 0);
-      showToast(dead ? `Approved ${n} — ${dead} dead, not paid` : "Approved — pays in 5 min");
+      showToast(dead ? `Approved ${n} - ${dead} dead, not paid` : "Approved - pays in 5 min");
       await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
@@ -181,7 +181,7 @@ export default function ApprovalsView() {
     try {
       await api.returnHold(id);
       vibrate(20);
-      showToast("Rejected — rows returned");
+      showToast("Rejected - rows returned");
       await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
   };
@@ -203,7 +203,7 @@ export default function ApprovalsView() {
         showToast("Approval deleted")
       } else {
         await api.rejectHold(id)
-        showToast("Rejected — rows returned")
+        showToast("Rejected - rows returned")
       }
       await refreshAll()
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
@@ -304,7 +304,7 @@ export default function ApprovalsView() {
             const st = holdStatus(h);
             const dt = h.at ?? (h as unknown as { ts?: number }).ts;
             const d = dt ? new Date(dt) : null;
-            const dateStr = d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
+            const dateStr = d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "-";
             const timeStr = d ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "";
             const poolLabel = POOL_META[h.poolId]?.label ?? h.poolId;
             const qty = (h as unknown as { held?: number; claimed?: number }).held ?? h.claimed ?? 0;
@@ -343,7 +343,7 @@ export default function ApprovalsView() {
                   <span className="badge" style={{ background: st === "PENDING" ? "#fef3c7" : st === "APPROVED" ? "#dcfce7" : "var(--bg3)", color: st === "PENDING" ? "#92400e" : st === "APPROVED" ? "#166534" : "var(--text3)", borderColor: st === "PENDING" ? "#fde68a" : st === "APPROVED" ? "#bbf7d0" : "var(--border)" }}>{st}</span>
                   <div className="pool-card-info" style={{ gap: 4 }}>
                     <div className="pool-card-name" title={h.filename}>{h.filename} · {poolLabel}</div>
-                    <div className="pool-card-sub"><span title={d ? d.toISOString() : ""}>{dateStr} {timeStr}</span><span>·</span><span>{qty} qty</span><span>·</span><span>{h.mode ?? "—"}</span><span>·</span><span>{price != null ? fmtMoney(qty * price, priceCurrency) : "—"}</span></div>
+                    <div className="pool-card-sub"><span title={d ? d.toISOString() : ""}>{dateStr} {timeStr}</span><span>·</span><span>{qty} qty</span><span>·</span><span>{h.mode ?? "-"}</span><span>·</span><span>{price != null ? fmtMoney(qty * price, priceCurrency) : "-"}</span></div>
                   </div>
                   <span className={`expand-icon ${open ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0, display: "inline-flex" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden><path d="M9 18l6-6-6-6" /></svg></span>
                 </div>
@@ -389,7 +389,7 @@ export default function ApprovalsView() {
                                         <div className="file-card-icon"><FileTypeIcon file={{ preset: g.preset ?? undefined, name: g.filename ?? undefined }} size={16} /></div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                           <div className="file-card-name" dir="auto" title={g.filename ?? undefined}>{fname}</div>
-                                          <div className="file-card-meta">{g.createdAt ? new Date(g.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"} · {g.count} rows{price != null ? ` · ${fmtMoney(g.count * price, priceCurrency)}` : ""}</div>
+                                          <div className="file-card-meta">{g.createdAt ? new Date(g.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "-"} · {g.count} rows{price != null ? ` · ${fmtMoney(g.count * price, priceCurrency)}` : ""}</div>
                                         </div>
                                         <div className="file-card-actions">
                                           <button type="button" className="file-card-btn" title="Download this file's rows" aria-label={`Download ${fname}`} disabled={!g.srcFileId || dlBusyId === `${h.id}:f:${g.srcFileId}`} onClick={(e) => { e.stopPropagation(); void doDownloadHold(h, { srcUid: uid, srcFileId: g.srcFileId!, name: `${baseName} - ${g.filename || (g.srcFileId ?? "file").slice(-8)}.xlsx`, busyKey: `${h.id}:f:${g.srcFileId}` }); }}><Download size={14} aria-hidden /></button>

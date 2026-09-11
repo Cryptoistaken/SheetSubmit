@@ -74,7 +74,7 @@ async function indexOp(op: string, a: any) {
               if (!Number.isFinite(amount) || amount <= 0) continue;
               await tx`INSERT INTO wallets(user_id,balance) VALUES(${uid},${amount}) ON CONFLICT(user_id) DO UPDATE SET balance=wallets.balance+EXCLUDED.balance`;
               const r: any = (await tx`SELECT balance FROM wallets WHERE user_id=${uid}`)[0];
-              await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'CREDIT',${amount},${Number(r.balance)},${`Pool earning — ${poolLabel(d.pool_id)} · ${Number(cr.n)} ${Number(cr.n) === 1 ? "row" : "rows"} paid`},${j({ pool_id: d.pool_id, download_id: d.id, rows: Number(cr.n), dead, unit_price: unit, settled: true })},${Date.now()})`;
+              await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'CREDIT',${amount},${Number(r.balance)},${`Pool earning - ${poolLabel(d.pool_id)} · ${Number(cr.n)} ${Number(cr.n) === 1 ? "row" : "rows"} paid`},${j({ pool_id: d.pool_id, download_id: d.id, rows: Number(cr.n), dead, unit_price: unit, settled: true })},${Date.now()})`;
             }
           }
           await tx`UPDATE downloads SET settled=true WHERE id=${d.id}`;
@@ -413,7 +413,7 @@ async function transition(password: string, op: string, a: any) {
       // owners keep settled payouts. Without this, Delete on an old approved
       // hold clawed back money and freed rows at any age.
       const racts = Number(d.action_count || 0), rfirstAt = Number(d.first_action_at || 0);
-      if (d.settled || racts >= 2 || (racts >= 1 && now >= rfirstAt + REVERT_WINDOW)) throw new Error("decision is final — revert window closed");
+      if (d.settled || racts >= 2 || (racts >= 1 && now >= rfirstAt + REVERT_WINDOW)) throw new Error("decision is final - revert window closed");
       if (!["HOLD", "CLAIMED", "APPROVED"].includes(d.status)) throw new Error("not revertable");
       if (!keys.length) { await tx`UPDATE downloads SET reverted=true,status='REVERTED' WHERE password=${password} AND id=${d.id}`; return { ok: true, reverted: 0, id: d.id, status: "REVERTED" }; }
       const revertedRows: any[] = d.status === "HOLD"
@@ -426,14 +426,14 @@ async function transition(password: string, op: string, a: any) {
         const updated: any[] = await tx`UPDATE wallets SET balance=balance-${amount} WHERE user_id=${uid} AND balance>=${amount} RETURNING balance`;
         if (!updated.length) throw new Error("insufficient wallet balance for revert");
         const r: any = updated[0];
-        await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'DEBIT',${amount},${Number(r.balance)},${`Hold returned — ${poolLabel(d.pool_id)}`},${j({ pool_id: d.pool_id, download_id: d.id })},${now})`;
+        await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'DEBIT',${amount},${Number(r.balance)},${`Hold returned - ${poolLabel(d.pool_id)}`},${j({ pool_id: d.pool_id, download_id: d.id })},${now})`;
       }
       await tx`UPDATE downloads SET reverted=true,status='REVERTED' WHERE password=${password} AND id=${d.id}`;
       return { ok: true, reverted, id: d.id, status: "REVERTED" };
     }
     if (op === "holdApprove") {
       const actions = Number(d.action_count || 0), firstAt = Number(d.first_action_at || 0);
-      if (d.settled || actions >= 2 || (actions === 1 && now >= firstAt + REVERT_WINDOW)) throw new Error("decision is final — revert window closed");
+      if (d.settled || actions >= 2 || (actions === 1 && now >= firstAt + REVERT_WINDOW)) throw new Error("decision is final - revert window closed");
       if (d.status === "APPROVED") throw new Error("already approved");
       if (d.status !== "HOLD" && d.status !== "REJECTED") throw new Error("not a hold");
       let approved = 0;
@@ -451,7 +451,7 @@ async function transition(password: string, op: string, a: any) {
       return { ok: true, approved, dead, id: d.id, status: "APPROVED", actionCount: actions + 1, settleAt: (firstAt || now) + REVERT_WINDOW };
     }
     // holdReject — one flip within the 5-minute window; wallets settle after the window closes
-    if (d.settled || Number(d.action_count || 0) >= 2 || (Number(d.action_count || 0) === 1 && now >= Number(d.first_action_at || 0) + REVERT_WINDOW)) throw new Error("decision is final — revert window closed");
+    if (d.settled || Number(d.action_count || 0) >= 2 || (Number(d.action_count || 0) === 1 && now >= Number(d.first_action_at || 0) + REVERT_WINDOW)) throw new Error("decision is final - revert window closed");
     if (d.status !== "HOLD" && d.status !== "APPROVED") throw new Error(d.status === "REJECTED" ? "already rejected" : "not a hold");
     let rejected = 0;
     if (keys.length) {

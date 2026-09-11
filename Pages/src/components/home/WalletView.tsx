@@ -35,7 +35,7 @@ const rowsText = (n: unknown) => {
 };
 export const maskAccount = (account: string) => {
   const a = account.trim();
-  if (!a) return "—";
+  if (!a) return "-";
   if (a.length > 12) return `${a.slice(0, 6)}…${a.slice(-4)}`;
   if (a.length > 4) return `••• ${a.slice(-4)}`;
   return a;
@@ -54,15 +54,15 @@ function formatTx(tx: WalletTransaction): { title: string; detail: string | null
     const fromDesc = (() => { const m = desc.match(/(\d+)\s+rows?/); return m ? rowsText(Number(m[1])) : null; })();
     const dead = Number(meta.dead ?? 0);
     return {
-      title: `Pool earning — ${pool}`,
+      title: `Pool earning - ${pool}`,
       detail: [fromMeta ?? fromDesc ? `${fromMeta ?? fromDesc} paid` : null, dead > 0 ? `${dead} expired` : null].filter(Boolean).join(" · ") || null,
     };
   }
-  if (/hold revert/i.test(desc) || /hold return/i.test(desc)) return { title: `Hold returned — ${pool}`, detail: null };
+  if (/hold revert/i.test(desc) || /hold return/i.test(desc)) return { title: `Hold returned - ${pool}`, detail: null };
   if (/withdrawal via/i.test(desc)) {
     const method = String(meta.method ?? desc.replace(/.*via\s+/i, "")).trim() || "Withdrawal";
     const acct = String(meta.account ?? "").trim();
-    return { title: `Withdrawal — ${method}`, detail: acct ? maskAccount(acct) : null };
+    return { title: `Withdrawal - ${method}`, detail: acct ? maskAccount(acct) : null };
   }
   if (/withdrawal refund/i.test(desc)) return { title: "Withdrawal refunded", detail: "Declined payout returned to balance" };
   const pretty = desc
@@ -172,7 +172,7 @@ function UserWallet() {
         setSavedMethods(updated);
       }
       setAmount(""); setAccount(""); showToast("Withdrawal request sent"); await load();
-    } catch (error) { showToast(String(error).includes("insufficient") ? "Insufficient balance." : "Send failed — retry"); } finally { setSending(false); setSlideKey((k) => k + 1); }
+    } catch (error) { showToast(String(error).includes("insufficient") ? "Insufficient balance." : "Send failed - retry"); } finally { setSending(false); setSlideKey((k) => k + 1); }
   };
   if (!wallet) return <div className="p-6 text-sm text-muted-foreground">Loading wallet…</div>;
   const value = Number(amount);

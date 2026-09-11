@@ -251,7 +251,7 @@ export default function HomePage() {
       await api.deleteFile(f.id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      showToast(msg.includes("—") ? msg.split("—").slice(1).join("—").trim() : "Could not archive file. Check your connection.");
+      showToast(msg.includes(" - ") ? msg.split(" - ").slice(1).join(" - ").trim() : "Could not archive file. Check your connection.");
       return;
     }
     loadFiles();
@@ -313,7 +313,7 @@ export default function HomePage() {
       await Promise.all(ids.map((id) => api.deleteFile(id)));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      showToast(msg.includes("—") ? msg.split("—").slice(1).join("—").trim() : "Could not archive files. Check your connection.");
+      showToast(msg.includes(" - ") ? msg.split(" - ").slice(1).join(" - ").trim() : "Could not archive files. Check your connection.");
       return;
     }
     setSelected(new Set());
@@ -692,7 +692,7 @@ export default function HomePage() {
                   className="home-fab-item"
                   key={o.preset}
                   disabled={disabled}
-                  title={disabled ? "File has 2FA data — pick 2fa or Page" : undefined}
+                  title={disabled ? "File has 2FA data - pick 2fa or Page" : undefined}
                   style={disabled ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
                   onClick={() => pickUploadType(o.preset)}
                 >

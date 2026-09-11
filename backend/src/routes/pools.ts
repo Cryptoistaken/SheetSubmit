@@ -132,7 +132,7 @@ pools.get("/:password/:pool/ledger", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   if (!isPool(c.req.param("pool"))) return c.json({ error: "invalid poolId" }, 400);
   // pool_ledger was dropped (006) — per-hold accounting now lives on downloads + wallet_transactions
-  return c.json({ error: "ledger removed — see download detail + wallet transactions", pool: c.req.param("pool") }, 410);
+  return c.json({ error: "ledger removed - see download detail + wallet transactions", pool: c.req.param("pool") }, 410);
 });
 pools.get("/:password/:pool/verified-counts", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);

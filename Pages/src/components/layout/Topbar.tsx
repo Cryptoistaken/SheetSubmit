@@ -195,12 +195,12 @@ export default function Topbar() {
         {isFilePage && <SheetToolbar />}
         {!isFilePage && <ThemeTogglerButton theme={theme} onToggle={toggle} />}
         {isFilePage && unsynced > 0 ? (
-          <span className="sync-dot" title={`${unsynced} unsynced change${unsynced === 1 ? "" : "s"} — syncs automatically`} aria-label={`${unsynced} unsynced changes`}>●{unsynced}</span>
+          <span className="sync-dot" title={`${unsynced} unsynced change${unsynced === 1 ? "" : "s"} - syncs automatically`} aria-label={`${unsynced} unsynced changes`}>●{unsynced}</span>
         ) : null}
         <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, ...hideHome }}>
         <DropdownMenu>
         <div className={`profile-btn split${photoLoaded ? " loaded" : ""}`} role="group" aria-label="Account">
-        <button type="button" className="pill-balance" onClick={toggleCurrency} title={currency === "USD" ? "Show BDT" : "Show USDC"} aria-label={currency === "USD" ? `Balance ${balanceText} USDC — show BDT` : `Balance ${balanceText} BDT — show USDC`}>
+        <button type="button" className="pill-balance" onClick={toggleCurrency} title={currency === "USD" ? "Show BDT" : "Show USDC"} aria-label={currency === "USD" ? `Balance ${balanceText} USDC - show BDT` : `Balance ${balanceText} BDT - show USDC`}>
           <span className="profile-currency" aria-hidden="true">
             <span>{balanceText}</span>
             {currency === "USD" ? <img src="/usdc.svg" alt="" width={14} height={14} /> : <BdtIcon />}

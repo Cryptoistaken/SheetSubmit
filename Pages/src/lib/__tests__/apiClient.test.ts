@@ -63,10 +63,10 @@ describe("request contract", () => {
     expect(JSON.parse(String(seen[0].init.body))).toEqual({ uids: ["1", "2"] });
   });
 
-  it("maps error JSON to '<status> <text> — <detail>'", async () => {
+  it("maps error JSON to '<status> <text> - <detail>'", async () => {
     next = () => Promise.resolve(new Response(JSON.stringify({ error: "version conflict" }), { status: 409, statusText: "Conflict" }));
     const err = await api.persist("f1", { rows: [] }).catch((e: Error) => e);
-    expect(err.message).toBe("409 Conflict — version conflict");
+    expect(err.message).toBe("409 Conflict - version conflict");
     expect(useConnStore.getState().status).toBe("err");
   });
 

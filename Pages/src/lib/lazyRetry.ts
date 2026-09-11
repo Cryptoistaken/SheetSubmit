@@ -17,7 +17,7 @@ export function lazyRetry(fn: () => Promise<{ default: ComponentType<any> }>) {
         sessionStorage.setItem("ss_chunk_reload", String(Date.now()));
         window.location.reload();
       }
-      throw new Error("Chunk failed — reloaded");
+      throw new Error("Chunk failed - reloaded");
     }
   });
 }

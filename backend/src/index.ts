@@ -19,7 +19,7 @@ import { signSession as signSessionFn } from "./lib/session";
 
 export const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any backend route change — lets health checks confirm a deploy landed
-export const API_VERSION = "2.0.25";
+export const API_VERSION = "2.0.26";
 // ponytail: repository errors are plain Errors — map known client failures to typed
 // 4xx JSON instead of masking everything as 500. Unknown (incl. SQL internals) stays masked.
 const CLIENT_ERRORS: [RegExp, ContentfulStatusCode][] = [

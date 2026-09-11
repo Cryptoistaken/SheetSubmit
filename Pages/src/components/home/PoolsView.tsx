@@ -236,7 +236,7 @@ export default function PoolsView() {
       const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? n;
       if (!held) return showToast("No rows available to claim");
       vibrate(20);
-      showToast(`Held ${held} from ${poolMeta.label} — ON HOLD`);
+      showToast(`Held ${held} from ${poolMeta.label} - ON HOLD`);
       const holdId = (res as unknown as { holdId?: string; downloadId?: string }).holdId ?? (res as unknown as { downloadId?: string }).downloadId;
       await refreshAll();
       if (holdId) navigate(`/approvals?hold=${encodeURIComponent(holdId)}`);
@@ -255,7 +255,7 @@ export default function PoolsView() {
       const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? 0;
       if (!held) return showToast("No rows available to claim");
       vibrate(20);
-      showToast(`Held ${held} from ${displayName(u).line1} — ON HOLD`);
+      showToast(`Held ${held} from ${displayName(u).line1} - ON HOLD`);
       await refreshAll();
     } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDownloading(false); }
   };
@@ -333,7 +333,7 @@ export default function PoolsView() {
       <div className="pools-stats" style={{ display: "grid", gridTemplateColumns: `repeat(${cur === "cookies_only" ? 3 : 4},1fr)`, gap: 12, marginTop: 16 }}>
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }} aria-busy={detail === null}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Ready to take</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? (cur === "page" && verified ? verified.verified : totals.available) : "—"}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? (cur === "page" && verified ? verified.verified : totals.available) : "-"}</div>
           <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>{cur === "page" ? "verified accounts (unverified cannot be taken)" : "available accounts"}</div>
           {cur === "page" && verified ? (
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -345,18 +345,18 @@ export default function PoolsView() {
         </div>
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Taken</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.claimed : "—"}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.claimed : "-"}</div>
           <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>held or claimed</div>
         </div>
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Owners</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.users : "—"}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.users : "-"}</div>
           <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>source users</div>
         </div>
         {cur !== "cookies_only" ? (
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
           <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Invalid</div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.invalid ?? 0 : "—"}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.invalid ?? 0 : "-"}</div>
           <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>missing / incomplete 2fa</div>
         </div>
         ) : null}
@@ -396,7 +396,7 @@ export default function PoolsView() {
               <input name="custom-qty" placeholder={customFocused ? "" : "Custom"} aria-label="Custom quantity" inputMode="numeric" value={customQty} onChange={(e) => setCustomQty(e.target.value.replace(/\D/g, ""))} onFocus={(e) => { setCustomFocused(true); e.currentTarget.select(); }} onBlur={() => setCustomFocused(false)} style={{ width: 72, border: "none", padding: "6px 8px", fontSize: 13, textAlign: "center", outline: "none", background: customQty ? "var(--bg3)" : "var(--bg)", borderLeft: customFocused ? "1px solid var(--border2)" : "none", cursor: customQty || customFocused ? "text" : "pointer" }} />
             </span>
           </div>
-          <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${effectiveN} × ${fmtMoney(unitPrice, priceCurrency)} = ${fmtMoney(effectiveN * unitPrice, priceCurrency)}` : "—"}</div>
+          <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${effectiveN} × ${fmtMoney(unitPrice, priceCurrency)} = ${fmtMoney(effectiveN * unitPrice, priceCurrency)}` : "-"}</div>
         </div>
         <button type="button" className="btn btn-primary" disabled={downloading || (cur === "page" ? !(verified ? verified.verified > 0 : totals.available > 0) : !totals.available)} onClick={() => void doHoldConfirm()} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,112,243,.22)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? (cur === "page" ? "All verified" : "All") : poolQty} from {poolMeta.label}</button>
         <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>{cur === "page" ? "Page pool is verified-only. Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles." : "Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles."}</div>
@@ -463,7 +463,7 @@ export default function PoolsView() {
                           <div className="file-card-icon"><FileTypeIcon file={{ preset: f.preset ?? undefined, name: f.name ?? undefined }} size={16} /></div>
                           <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
                             <div className="file-card-name" dir="auto" title={f.name ?? undefined}>{f.name || `#${f.fileId.slice(-8)}`}</div>
-                            <div className="file-card-meta">{f.createdAt ? new Date(f.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"} · {f.available} avail · {f.claimed} taken</div>
+                            <div className="file-card-meta">{f.createdAt ? new Date(f.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "-"} · {f.available} avail · {f.claimed} taken</div>
                           </div>
                           <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                             <span className="file-type-badge" title="Facebook" aria-label="Facebook" style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={10} /></span>

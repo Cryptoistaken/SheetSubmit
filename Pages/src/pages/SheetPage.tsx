@@ -24,7 +24,7 @@ export default function SheetPage() {
 
   // File name in the tab so several open sheets stay distinguishable.
   useEffect(() => {
-    document.title = fileName ? `${fileName} — SheetSubmit` : "SheetSubmit";
+    document.title = fileName ? `${fileName} - SheetSubmit` : "SheetSubmit";
     return () => {
       document.title = "SheetSubmit";
     };

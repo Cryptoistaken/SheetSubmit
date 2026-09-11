@@ -439,7 +439,7 @@ export default function SheetGrid() {
           }}
         >
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-            {logPopup.label} — {logPopup.logs.length} API call
+            {logPopup.label} - {logPopup.logs.length} API call
             {logPopup.logs.length > 1 ? "s" : ""}
           </div>
           {logPopup.crossInfo.length > 0 ? (
@@ -489,7 +489,7 @@ export default function SheetGrid() {
                   }}
                 >
                   <Check size={12} strokeWidth={3} style={{ flexShrink: 0 }} />
-                  <span>FB Page{logPopup.wa.pageName ? ` — ${logPopup.wa.pageName}` : ""}</span>
+                  <span>FB Page{logPopup.wa.pageName ? ` - ${logPopup.wa.pageName}` : ""}</span>
                 </div>
               ) : logPopup.wa.banReason ? (
                 <div

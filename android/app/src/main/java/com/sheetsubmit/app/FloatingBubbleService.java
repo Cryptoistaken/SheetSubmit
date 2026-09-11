@@ -353,7 +353,7 @@ private String claudeCodeHtml(String color) {
             windowManager.addView(bubbleView, bubbleParams);
         } catch (Exception e) {
             Log.e(TAG, "addBubbleToWindow failed", e);
-            Toast.makeText(this, "Cannot display overlay — allow the permission", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Cannot display overlay - allow the permission", Toast.LENGTH_LONG).show();
             bubbleView = null;
             stopSelf();
         }

@@ -586,7 +586,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           bubbleActiveRow: -1,
           ...recomputeMarks(finalRows, {}, columns),
         });
-        toast("Offline — showing last saved copy");
+        toast("Offline - showing last saved copy");
       } catch {
         set({ status: "error" });
       }
@@ -743,7 +743,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (row._hold || row._approved) {
       // Locked rows reject edits — say so loudly instead of dropping silently
       // (users thought pasted keys "vanished").
-      toast("Row is on hold — edits locked");
+      toast("Row is on hold - edits locked");
       return;
     }
     if (colKey === "twofakey" && value && value !== NO_2FA_MARK) {
@@ -830,7 +830,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     ];
     if (changeJournal.length > MAX_JOURNAL) {
       // journal overflow: force a flush first instead of silently dropping oldest ops
-      toast("Journal full — syncing");
+      toast("Journal full - syncing");
       void get().flushPersist();
     }
     set({
@@ -967,19 +967,19 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
                 ...recomputeMarks(rows, cur.crossDups, cur.columns),
               });
               syncMirror(s.fileId);
-              toast("Reloaded — yours in Undo");
+              toast("Reloaded - yours in Undo");
             } catch {
-              toast("Sync conflict — will retry");
+              toast("Sync conflict - will retry");
             }
             return;
           }
           if (errMsg.startsWith("409")) {
             // Server refused the structural save (e.g. deleted rows are ON HOLD
             // and locked). Keep local dirty state and tell the owner why.
-            toast(errMsg.split("—").slice(1).join("—").trim() || "Rows on hold — locked");
+            toast(errMsg.split(" - ").slice(1).join(" - ").trim() || "Rows on hold - locked");
             return;
           }
-          toast("Sync failed — retrying");
+          toast("Sync failed - retrying");
           return;
         }
         const cur = get();
@@ -1058,10 +1058,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
               });
               syncMirror(s.fileId);
             } catch {
-              toast("Sync conflict — will retry");
+              toast("Sync conflict - will retry");
             }
           } else {
-            toast("Sync failed — retrying");
+            toast("Sync failed - retrying");
           }
         }
       }

@@ -112,7 +112,7 @@ export function isDataRow(row: Row, columns: { key: string }[]): boolean {
  * (strict: the server rejects them too). Returns null when everything fits. */
 export function replaceCapMessage(n: number, cap: number): string | null {
   if (!Number.isFinite(n) || n <= cap) return null;
-  return `Too many rows — split (max ${cap})`;
+  return `Too many rows - split (max ${cap})`;
 }
 
 /** Marker the bubble writes into the 2fa cell when the user long-press-skips

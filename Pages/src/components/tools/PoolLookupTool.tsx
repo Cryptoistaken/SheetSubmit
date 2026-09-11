@@ -5,15 +5,15 @@ import { api } from "@/lib/api";
 import type { PoolDiag, PoolDiagFound } from "@/lib/api";
 
 function foundReason(f: PoolDiagFound, searched: string): string {
-  if (f.archived) return "file is archived — archived files do not feed pools.";
+  if (f.archived) return "file is archived - archived files do not feed pools.";
   if (!f.poolEnabled) return "pool is switched off for this file.";
   if (!f.password) return "file has no pool password.";
-  if (!f.key) return "row has neither uid nor c_user — it has no pool key.";
-  if (f.key !== searched) return `pool key is ${f.key}, not ${searched} — look that key up instead.`;
-  if (!f.live) return `not live (status "${f.status || "blank"}") — dead/bad or keyless rows never pool.`;
-  if (!f.pool) return "not classifiable — unexpected for a live row with a key.";
-  if (!f.has2fa) return `eligible for ${f.pool} only with a real 2FA key — currently keyless.`;
-  return `eligible for ${f.pool} — the feed never ran for it or failed silently. Re-save the file to force a feed.`;
+  if (!f.key) return "row has neither uid nor c_user - it has no pool key.";
+  if (f.key !== searched) return `pool key is ${f.key}, not ${searched} - look that key up instead.`;
+  if (!f.live) return `not live (status "${f.status || "blank"}") - dead/bad or keyless rows never pool.`;
+  if (!f.pool) return "not classifiable - unexpected for a live row with a key.";
+  if (!f.has2fa) return `eligible for ${f.pool} only with a real 2FA key - currently keyless.`;
+  return `eligible for ${f.pool} - the feed never ran for it or failed silently. Re-save the file to force a feed.`;
 }
 
 export default function PoolLookupTool() {
@@ -39,37 +39,37 @@ export default function PoolLookupTool() {
   };
 
   const fileName = (fid: string | null) =>
-    (fid && result?.files.find((f) => f.fileId === fid)?.name) || (fid ? "…" + fid.slice(-6) : "—");
+    (fid && result?.files.find((f) => f.fileId === fid)?.name) || (fid ? "…" + fid.slice(-6) : "-");
 
   const verdict = (() => {
     if (!result) return null;
     if (result.blocked.length) {
       const b = result.blocked[0];
       return b.reason === "sold"
-        ? "Already sold — permanently blocked from pooling. Re-uploads are removed at feed time."
-        : "Died while on hold — permanently blocked from pooling. Re-uploads are removed at feed time.";
+        ? "Already sold - permanently blocked from pooling. Re-uploads are removed at feed time."
+        : "Died while on hold - permanently blocked from pooling. Re-uploads are removed at feed time.";
     }
     const live = result.rows.filter((r) => r.state === "available");
     if (live.length) {
       const r = live[0];
-      return `Available under ${r.password} / ${r.pool_id}${live.length > 1 ? ` (+${live.length - 1} more)` : ""} — every other password skips it while it is pooled here.`;
+      return `Available under ${r.password} / ${r.pool_id}${live.length > 1 ? ` (+${live.length - 1} more)` : ""} - every other password skips it while it is pooled here.`;
     }
     const taken = result.rows.filter((r) => r.state === "held" || r.state === "claimed");
     if (taken.length) {
       const r = taken[0];
-      return `Taken (${r.state}) under ${r.password} / ${r.pool_id} — correctly absent from available.`;
+      return `Taken (${r.state}) under ${r.password} / ${r.pool_id} - correctly absent from available.`;
     }
-    if (result.rows.length) return "Only dead husks remain — re-save the file to force a re-feed and it should re-pool.";
+    if (result.rows.length) return "Only dead husks remain - re-save the file to force a re-feed and it should re-pool.";
     if (result.rejects.length) {
       const r = result.rejects[0];
-      return `Marked invalid under ${r.password} / ${r.pool_id} — at feed time it had no real 2FA (or a No_2Fa skip).`;
+      return `Marked invalid under ${r.password} / ${r.pool_id} - at feed time it had no real 2FA (or a No_2Fa skip).`;
     }
     if (result.downloads.length) {
       const d = result.downloads[0];
-      return `Taken before (${d.status}) from ${d.password} / ${d.pool_id} — sold accounts never re-enter pools.`;
+      return `Taken before (${d.status}) from ${d.password} / ${d.pool_id} - sold accounts never re-enter pools.`;
     }
     if (result.found.length) return foundReason(result.found[0], result.key);
-    return "Nowhere: not in any file either — wrong key, or the row was deleted. Check uid vs c_user.";
+    return "Nowhere: not in any file either - wrong key, or the row was deleted. Check uid vs c_user.";
   })();
 
   return (

@@ -50,6 +50,7 @@
  lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, WORKER_URL, CHECK_URL, ALLOW_TEST_AUTH, TELEGRAM_LOGIN_CLIENT_ID)
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
   src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder (SameSite=None on https for direct cross-origin calls, Lax on http)
+                      #   src/lib/__tests__/session.test.ts (sign/verify incl. tamper+expiry, cookie strings, isAdmin), sharedFeed.test.ts (poolRowKey/poolFeedSig) — `bun run test` in backend/
   src/lib/redis.ts        # optional standard node-redis client; fail-open read-through cache helpers using REDIS_URL
   src/lib/agent.ts        # DEV-ONLY agent door: agentDoorOpen (ALLOW_AGENT_ACCESS=1 + AGENT_TOKEN), timing-safe token check, requireAgent (404s when closed)
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
@@ -121,8 +122,8 @@ public/config.js          # injected at runtime: window.APP_CONFIG={apiBase:""}
 public/sw.js              # service worker (chunk-error reload)
 functions/api/[[path]].ts # Pages Functions proxy → BACKEND_URL
 functions/webhook/[[path]].ts
-lib/__tests__/customDownload.test.ts, split.test.ts, idb.test.ts (IDB outbox mirror/snapshot/replay), rowguard.test.ts (isDataRow/replaceCapMessage/isPersistConflict + destructive call-site guards)
-stores/__tests__/sheetStore.test.ts (api mock mirrors the live lib/api.ts surface — no version-history stubs; that API is gone)
+lib/__tests__/customDownload.test.ts, split.test.ts, idb.test.ts (IDB outbox mirror/snapshot/replay), rowguard.test.ts (isDataRow/replaceCapMessage/isPersistConflict + destructive call-site guards), xlsx.test.ts (build/parse round-trip, importXlsx, buildDownloadOpts, hydrateWaCache), apiClient.test.ts (request contract via mocked fetch)
+stores/__tests__/sheetStore.test.ts (api mock mirrors the live lib/api.ts surface — no version-history stubs; that API is gone), sheetStoreOffline.test.ts (offline snapshot open)
 ```
 
 ### Auth flow

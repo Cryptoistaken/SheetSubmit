@@ -1142,3 +1142,111 @@ describe("page ledger — auto vs manual + review regressions", () => {
     expect(isPageFile({ id: "x", name: "pageTest", type: "fb_cookie", preset: "page", columns: pageCols } as unknown as never)).toBe(true);
   });
 });
+
+describe("undo / redo / selection / rows", () => {
+  it("undo restores the previous value and redo reapplies it", async () => {
+    await openTestFile();
+    useSheetStore.getState().commitCell(0, "cookies", "c_user=9;");
+    expect(useSheetStore.getState().rows[0].cookies).toBe("c_user=9;");
+    expect(useSheetStore.getState().rows[0].uid).toBe("9");
+    useSheetStore.getState().undo();
+    expect(useSheetStore.getState().rows[0].cookies).toBe("");
+    expect(useSheetStore.getState().rows[0].uid).toBe("");
+    useSheetStore.getState().redo();
+    expect(useSheetStore.getState().rows[0].cookies).toBe("c_user=9;");
+    expect(useSheetStore.getState().rows[0].uid).toBe("9");
+  });
+
+  it("undo with an empty stack changes nothing", async () => {
+    await openTestFile();
+    const before = useSheetStore.getState().rows;
+    useSheetStore.getState().undo();
+    useSheetStore.getState().redo();
+    expect(useSheetStore.getState().rows).toBe(before);
+    expect(useSheetStore.getState().isDirty).toBe(false);
+  });
+
+  it("a new edit clears the redo stack", async () => {
+    await openTestFile();
+    const st = () => useSheetStore.getState();
+    st().commitCell(0, "cookies", "c_user=1;");
+    st().undo();
+    expect(st().rows[0].cookies).toBe("");
+    st().commitCell(0, "cookies", "c_user=2;");
+    st().redo();
+    expect(st().rows[0].cookies).toBe("c_user=2;");
+  });
+
+  it("selectAllCells selects every cell; unselectAll exits", async () => {
+    await openTestFile();
+    const st = () => useSheetStore.getState();
+    st().selectAllCells();
+    expect(st().selectionMode).toBe(true);
+    expect(st().selectedItems.size).toBe(st().rows.length * st().columns.length);
+    st().unselectAll();
+    expect(st().selectionMode).toBe(false);
+    expect(st().selectedItems.size).toBe(0);
+  });
+
+  it("selectRange with an unknown column selects nothing", async () => {
+    await openTestFile();
+    const st = () => useSheetStore.getState();
+    st().selectRange(0, "nope", 5, "alsono", false);
+    expect(st().selectionMode).toBe(false);
+    expect(st().selectedItems.size).toBe(0);
+  });
+
+  it("deleteSelected clears the rectangle, marks dirty, and stays undoable", async () => {
+    await openTestFile();
+    useSheetStore.setState({
+      rows: [
+        { cookies: "c_user=1;", uid: "1", twofakey: "" },
+        { cookies: "c_user=2;", uid: "2", twofakey: "" },
+      ],
+    });
+    const st = () => useSheetStore.getState();
+    st().selectRange(0, "cookies", 1, "uid", false);
+    expect(st().selectedItems.size).toBe(6);
+    st().deleteSelected();
+    expect(st().rows[0].cookies).toBe("");
+    expect(st().rows[1].uid).toBe("");
+    expect(st().isDirty).toBe(true);
+    expect(st().selectionMode).toBe(false);
+    expect(st().undoStack.length).toBe(1);
+    st().undo();
+    expect(st().rows[0].cookies).toBe("c_user=1;");
+  });
+
+  it("deleteSelected without a selection does nothing", async () => {
+    await openTestFile();
+    useSheetStore.getState().deleteSelected();
+    expect(useSheetStore.getState().isDirty).toBe(false);
+    expect(useSheetStore.getState().undoStack.length).toBe(0);
+  });
+
+  it("addRow appends a page of empty rows and refuses at the cap", async () => {
+    await openTestFile();
+    const st = () => useSheetStore.getState();
+    expect(st().rows.length).toBe(100);
+    st().addRow();
+    expect(st().rows.length).toBe(200);
+    expect(st().rows.slice(100).every((r) => !r.cookies && !r.uid && !r.twofakey)).toBe(true);
+    useSheetStore.setState({ rows: Array.from({ length: 500 }, () => ({})) });
+    st().addRow();
+    expect(st().rows.length).toBe(500);
+  });
+
+  it("applyRestore swaps in server rows, pads, and stays undoable", async () => {
+    await openTestFile();
+    const st = () => useSheetStore.getState();
+    st().commitCell(0, "cookies", "c_user=9;");
+    st().applyRestore([{ cookies: "c_user=1;", uid: "1", twofakey: "" }], 42);
+    expect(st().rows[0].cookies).toBe("c_user=1;");
+    expect(st().rows.length).toBe(100);
+    expect(st().lastSeq).toBe(42);
+    expect(st().isDirty).toBe(false);
+    expect(st().changeJournal).toEqual([]);
+    st().undo();
+    expect(st().rows[0].cookies).toBe("c_user=9;");
+  });
+});

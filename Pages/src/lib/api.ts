@@ -70,10 +70,18 @@ async function request<T>(path: string, init?: RequestInit, opts?: { keepalive?:
   if (!res.ok) {
     let detail = "";
     try {
-      const body = await res.json();
-      detail = typeof body?.error === "string" ? body.error : (body?.message ?? JSON.stringify(body));
+      // Read the body ONCE as text: res.json() consumes the stream, so a
+      // failed parse would leave a res.text() fallback empty and swallow
+      // non-JSON error pages (proxies, gateways) entirely.
+      const text = await res.text();
+      try {
+        const body = JSON.parse(text);
+        detail = typeof body?.error === "string" ? body.error : (body?.message ?? text);
+      } catch {
+        detail = text;
+      }
     } catch {
-      detail = await res.text().catch(() => "");
+      detail = "";
     }
     throw new Error(`${res.status} ${res.statusText}${detail ? ` — ${detail}` : ""}`);
   }

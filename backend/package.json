@@ -7,6 +7,7 @@
     "dev": "bun src/server.ts",
     "start": "bun src/server.ts",
     "typecheck": "tsc --noEmit",
+    "test": "bun test src",
     "schema:bootstrap": "bun scripts/schema.ts bootstrap",
     "schema:verify": "bun scripts/schema.ts verify"
   },

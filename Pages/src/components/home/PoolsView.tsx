@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { Download, ExternalLink, RefreshCw } from "lucide-react";
+import { Download, ExternalLink, MoreVertical, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import type { DownloadDetail, HoldRecord, PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
 import type { PoolLivePatch } from "@/lib/poolLive";
@@ -18,6 +18,7 @@ import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import SearchInput from "@/components/ui/search-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "@/components/ui/avatar";
@@ -63,7 +64,7 @@ function displayName(u: PoolDetail["users"][number]) {
   const un = String(raw["username"] ?? "").trim();
   if (n && un) return { line1: n, line2: "@" + un };
   if (un) return { line1: "@" + un, line2: "" };
-  if (n) return { line1: "#" + u.userId.slice(-6), line2: "" };
+  if (n) return { line1: n, line2: "" };
   return { line1: "#" + u.userId, line2: "" };
 }
 
@@ -663,26 +664,42 @@ export default function PoolsView() {
           <EmptyState title="No owners yet" sub={search.trim() ? "No match for your search" : "Owners appear here when they push rows"} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
         ) : filtered.map((u) => {
           const d = displayName(u);
+          const cachedName = String(cachedProfiles[u.userId]?.name ?? "").trim();
+          const title = d.line1.startsWith("#") && cachedName ? cachedName : d.line1;
           const isAdmin = Boolean(u.isAdmin || cachedProfiles[u.userId]?.isAdmin);
           const expanded = expandedUser === u.userId;
           const uf = getUserFilesFor(u.userId);
-          const checked = selectedUids.includes(u.userId);
           return (
             <div key={u.userId} style={{ display: "flex", flexDirection: "column", gap: expanded ? 8 : 0 }}>
-              <div className={`pool-card ${expanded ? "expanded" : ""}`} style={{ position: "relative" }} onClick={() => toggleExpand(u.userId)} role="button" tabIndex={0} aria-expanded={expanded} aria-controls={`pool-files-${u.userId}`} aria-label={`Show files for ${d.line1}`} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(u.userId); } }}>
-                {holdMode === "pick" ? <input type="checkbox" aria-label={`Select ${d.line1}`} checked={checked} onChange={() => toggleUid(u.userId)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, flexShrink: 0 }} /> : null}
-                <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}><ProfileAvatar photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={d.line1.charAt(0).toUpperCase()} className="size-9 bg-(--bg3) text-(--text2)" verified={isAdmin} /></span>
+              <div className={`pool-card ${expanded ? "expanded" : ""}`} style={{ position: "relative" }} onClick={() => toggleExpand(u.userId)} role="button" tabIndex={0} aria-expanded={expanded} aria-controls={`pool-files-${u.userId}`} aria-label={`Show files for ${title}`} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(u.userId); } }}>
+                <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}><ProfileAvatar photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={title.charAt(0).toUpperCase()} className="size-9 bg-(--bg3) text-(--text2)" verified={isAdmin} /></span>
                 <div className="pool-card-info">
-                  <div className="pool-card-name">{d.line1}</div>
+                  <div className="pool-card-name">{title}</div>
                   {d.line2 ? <div className="pool-card-sub">{d.line2}</div> : null}
                 </div>
                 <div className="pool-card-stats">
+                  {uf ? (<>
+                    <span className="pool-card-stat" style={{ color: "var(--text2)" }}>{uf.files.length} file{uf.files.length === 1 ? "" : "s"}</span>
+                    <span className="pool-card-stat" style={{ color: "var(--text3)" }}>·</span>
+                  </>) : null}
                   <span className="pool-card-stat" style={{ color: "var(--green)" }}>{u.available}</span>
                   <span className="pool-card-stat" style={{ color: "var(--text3)" }}>/</span>
                   <span className="pool-card-stat" style={{ color: u.claimed ? "var(--red)" : "var(--text3)" }}>{u.claimed} taken</span>
                 </div>
                 <div className="pool-card-actions" onClick={(e) => e.stopPropagation()}>
-                  <button type="button" className="btn btn-primary" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600 }} disabled={downloading} onClick={() => void doUserHold(u)}>Take</button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button type="button" className="file-card-btn" aria-label={`Actions for ${title}`}><MoreVertical size={14} aria-hidden /></button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem disabled={downloading} onSelect={() => void doUserHold(u)}>Take</DropdownMenuItem>
+                      {holdMode === "pick" ? (
+                        <DropdownMenuCheckboxItem checked={selectedUids.includes(u.userId)} onCheckedChange={() => toggleUid(u.userId)}>
+                          Select owner
+                        </DropdownMenuCheckboxItem>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
               {expanded && (

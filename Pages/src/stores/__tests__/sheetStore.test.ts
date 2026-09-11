@@ -1149,6 +1149,28 @@ describe("page ledger — auto vs manual + review regressions", () => {
     expect(useSheetStore.getState().rows[0].wa_status).toBe("eligible");
   });
 
+  it("page sweep skips dead, held, approved and already-eligible rows", async () => {
+    await openTestFile();
+    useSheetStore.setState({
+      rows: [
+        { cookies: "c_user=401;", uid: "401", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "", _dead: true },
+        { cookies: "c_user=402;", uid: "402", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "", _hold: true },
+        { cookies: "c_user=403;", uid: "403", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "", _approved: true },
+        { cookies: "c_user=404;", uid: "404", twofakey: "JBSWY3DPEHPK3PXP", status: "good", wa_status: "eligible" },
+      ],
+      columns: pageCols as never,
+    });
+    harness.pageCheckCalls = []; harness.waCheckCalls = [];
+    await useSheetStore.getState().runWaChecksFiltered(() => true);
+    expect(harness.pageCheckCalls.length).toBe(0);
+    harness.pageCheckCalls = []; harness.waCheckCalls = [];
+    await useSheetStore.getState().runWaChecksWaFiltered(() => true);
+    expect(harness.waCheckCalls.length).toBe(0);
+    const rows = useSheetStore.getState().rows;
+    expect(rows[0].wa_status).toBe("");
+    expect(rows[3].wa_status).toBe("eligible");
+  });
+
   it("applyUpload replace hydrates cached eligibility without live checks", async () => {
     await openTestFile();
     useSheetStore.setState({ columns: pageCols as never });

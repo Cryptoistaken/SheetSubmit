@@ -1906,6 +1906,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       const tf = (row.twofakey ?? "").trim();
       if (!tf || isNo2FAMark("twofakey", tf)) return;
       if (row.status !== "good") return;
+      // dead (live overlay), held or approved rows are never page-checked —
+      // dead can't be eligible, sold/locked rows must keep their flags.
+      const live = row as Row & { _dead?: boolean; _hold?: boolean; _approved?: boolean };
+      if (live._dead || live._hold || live._approved) return;
       if (!row.cookies || !/c_user=\d+/.test(row.cookies)) return;
       if (row.wa_status === "eligible") return;
       const cuser = extractCUser(row.cookies);

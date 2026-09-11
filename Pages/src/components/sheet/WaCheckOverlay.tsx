@@ -13,8 +13,9 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
   const [targets, setTargets] = useState<number[]>([]);
   const [doneCounts, setDoneCounts] = useState<{ page: number; noPage: number } | null>(null);
 
+  const isSkipped = (r: Record<string, unknown>) => Boolean(r._dead || r._hold || r._approved);
   const pageCount = useMemo(() => rows.filter((r) => r.wa_status === "eligible").length, [rows]);
-  const noPageCount = useMemo(() => rows.filter((r) => r.status === "good" && r.wa_status !== "eligible" && !!r.cookies && /c_user=\d+/.test(r.cookies)).length, [rows]);
+  const noPageCount = useMemo(() => rows.filter((r) => r.status === "good" && r.wa_status !== "eligible" && !!r.cookies && /c_user=\d+/.test(r.cookies) && !isSkipped(r as unknown as Record<string, unknown>)).length, [rows]);
 
   const handleClose = () => { setCustom(false); setSel(new Set()); setPhase("idle"); setTargets([]); setDoneCounts(null); setRunning(false); onClose(); };
   const modalRef = useModalA11y(open, handleClose);
@@ -81,7 +82,7 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
         ) : !custom ? (
           <>
             <button className="download-opt-btn btn-blue" disabled={running} onClick={() => void run((r) => (r as Record<string,string>).wa_status === "eligible", pageCount ? "Checking Page..." : "No Page rows")}>Page <span className="opt-count">{pageCount}</span></button>
-            <button className="download-opt-btn btn-amber" disabled={running} onClick={() => void run((r) => (r as Record<string,string>).status === "good" && (r as Record<string,string>).wa_status !== "eligible" && !!(r as Record<string,string>).cookies, noPageCount ? "Checking No Page..." : "No rows")}>No Page <span className="opt-count">{noPageCount}</span></button>
+            <button className="download-opt-btn btn-amber" disabled={running} onClick={() => void run((r) => (r as Record<string,string>).status === "good" && (r as Record<string,string>).wa_status !== "eligible" && !!(r as Record<string,string>).cookies && !isSkipped(r), noPageCount ? "Checking No Page..." : "No rows")}>No Page <span className="opt-count">{noPageCount}</span></button>
             <button className="download-opt-btn primary" disabled={running} onClick={() => setCustom(true)} style={{ background: "var(--grad-page)", borderColor: "transparent", color: "#fff" }}>Custom <span className="opt-count">{rows.filter((r) => !!r.cookies && /c_user=\d+/.test(r.cookies)).length}</span></button>
             <button className="download-opt-cancel" onClick={handleClose}>Cancel</button>
           </>

@@ -116,12 +116,13 @@ lib/xlsx.ts               # importXlsx/buildXlsx/downloadXlsx/parseSheetRows
 lib/downloadOpts.ts       # buildDownloadOpts counts
 lib/utils.ts (cn), theme.ts, device.ts, toast.tsx, confirm.tsx, lazyRetry.ts
 features/filetypes/index.ts, fbcookie.ts, validation.ts, totp.ts
+features/filetypes/__tests__/filetypes.test.ts (validateCell, TOTP RFC vectors, fb-cookie behavior, isPageFile)
 public/config.js          # injected at runtime: window.APP_CONFIG={apiBase:""}
 public/sw.js              # service worker (chunk-error reload)
 functions/api/[[path]].ts # Pages Functions proxy → BACKEND_URL
 functions/webhook/[[path]].ts
-lib/__tests__/customDownload.test.ts, split.test.ts, rowguard.test.ts (isDataRow/replaceCapMessage/isPersistConflict + destructive call-site guards)
-stores/__tests__/sheetStore.test.ts
+lib/__tests__/customDownload.test.ts, split.test.ts, idb.test.ts (IDB outbox mirror/snapshot/replay), rowguard.test.ts (isDataRow/replaceCapMessage/isPersistConflict + destructive call-site guards)
+stores/__tests__/sheetStore.test.ts (api mock mirrors the live lib/api.ts surface — no version-history stubs; that API is gone)
 ```
 
 ### Auth flow

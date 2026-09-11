@@ -147,14 +147,13 @@ mock.module("@/lib/api", () => ({
       if (harness.nextWaCheck) return harness.nextWaCheck(cookie) as null;
       return null;
     },
-    restoreVersion: async () => ({ ok: false }),
-    adminRestoreVersion: async () => ({ ok: false }),
+    // NOTE: no version-history stubs — that API is gone (restore-snapshot era).
+    // If a stub is added here for an api method that no longer exists, delete
+    // it: dead stubs hide seam drift between the store and lib/api.ts.
     adminFile: async (id: string) => ({ id, name: "Test", type: "fb_cookie" }),
     adminFileRows: async () => [],
     adminFileLogs: async () => [],
     adminUndo: async () => ({ undo: [], redo: [] }),
-    getVersion: async () => ({ v: 0, rows: [], action: null, ts: null }),
-    adminGetVersion: async () => ({ v: 0, rows: [], action: null, ts: null }),
   },
 }));
 

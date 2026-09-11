@@ -1,14 +1,9 @@
 import { useId } from "react";
 
 export const CookieIcon = ({ size = 12, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-    <title>cookie</title>
-    <path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5" />
-    <path d="M8.5 8.5v.01" />
-    <path d="M16 15.5v.01" />
-    <path d="M12 12v.01" />
-    <path d="M11 17v.01" />
-    <path d="M7 14v.01" />
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" {...props}>
+    <title>coda</title>
+    <path fill="#ef2b0d" d="M21.194 0H2.806A2.01 2.01 0 0 0 .8 2v20c0 1.1.903 2 2.006 2h18.388a2.01 2.01 0 0 0 2.006-2v-.933c-.033-1.2-.067-3.7-.067-4.834c0-.633-.468-1.166-1.07-1.166c-.668 0-1.103.4-1.437.733c-1.003.9-2.508 1.067-3.812.833c-.601-.133-1.17-.3-1.638-.6c-1.438-.833-2.374-2.4-2.374-4.066c0-1.667.936-3.2 2.374-4.067c.502-.3 1.07-.467 1.638-.6c1.27-.233 2.809-.067 3.812.833c.367.334.802.734 1.437.734c.602 0 1.07-.534 1.07-1.167c0-1.1.034-3.633.067-4.833V2c0-1.1-.903-2-2.006-2"/>
   </svg>
 );
 

@@ -122,6 +122,7 @@ stores/profileCache.ts    # profile cache (fed from /me + admin users)
 hooks/useUndoRedo.ts, usePersist.ts (beforeunload→flushPersist), useLiveRows.ts (ticket stream + polling fallback for open file, flag-only patches), useModalA11y.ts
   lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, useConnStore (connection status fed by request outcomes), files/persist/append/WA/admin/pools, live (requestLiveTicket/getLiveState/apiBase for the row-state stream), me/logout/botInfo/Telegram Login/claimDeviceSession; RUNTIME_BASE goes direct to Railway on the prod web host (override → proxy otherwise; Android app always proxies — WebView blocks third-party cookies); verifyTelegramLogin falls back to the same-origin proxy when the direct cross-site POST fails and pins it via ss_api_proxy localStorage (cleared on logout) so later calls stay on the cookie's host
 lib/types.ts              # FileType, ColumnDef, SheetFile, Row
+lib/currency.ts           # display currency (USD stored, BDT @120 shown): useCurrency hook (one ss_currency key, legacy USDC/ss_price_currency migrated, live-synced), fmtMoney, usdToInput/inputToUsd (BDT keeps paisa so 7.3 round-trips); Topbar pill + PoolsView + WalletView all follow it
 lib/xlsx.ts               # importXlsx/buildXlsx/downloadXlsx/parseSheetRows
 lib/downloadOpts.ts       # buildDownloadOpts counts
 lib/utils.ts (cn), theme.ts, device.ts, toast.tsx, confirm.tsx, lazyRetry.ts

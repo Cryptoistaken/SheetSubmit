@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import { Download, ExternalLink, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import type { DownloadDetail, HoldRecord, PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
+import { BDT_RATE, fmtMoney, inputToUsd, usdToInput, useCurrency, type Currency } from "@/lib/currency";
 import { useToast } from "@/lib/toast";
 import { useProfileCache } from "@/stores/profileCache";
 import { useAuth } from "@/contexts/AuthContext";
@@ -65,17 +66,7 @@ function displayName(u: PoolDetail["users"][number]) {
 }
 
 const REVERT_MS = 300_000; // must match REVERT_WINDOW in backend pg.ts
-const BDT_RATE = 120; // ৳ per $1 — display-only conversion, prices are stored in USD
-type PriceCurrency = "USD" | "BDT";
-const loadPriceCurrency = (): PriceCurrency => {
-  try {
-    return localStorage.getItem("ss_price_currency") === "BDT" ? "BDT" : "USD";
-  } catch {
-    return "USD";
-  }
-};
-const fmtPrice = (usd: number, cur: PriceCurrency) =>
-  cur === "USD" ? `$${usd.toFixed(2)}` : `৳${Math.round(usd * BDT_RATE).toLocaleString()}`;
+type PriceCurrency = Currency;
 const mmss = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 // window state: null = not yet actioned, >0 = ms left to flip once, 0 = locked
 const revertLeft = (h: HoldRecord, now: number) => { const acts = h.actionCount ?? 0; if (acts === 0) return null; const left = h.firstActionAt ? h.firstActionAt + REVERT_MS - now : 0; return left > 0 ? left : 0; };
@@ -147,14 +138,8 @@ export default function PoolsView() {
   const [priceInputs, setPriceInputs] = useState<Record<string, string>>({});
   const [priceSaving, setPriceSaving] = useState(false);
   const [priceConfirm, setPriceConfirm] = useState(false);
-  const [priceCurrency, setPriceCurrency] = useState<PriceCurrency>(loadPriceCurrency);
+  const [priceCurrency, setPriceCurrency] = useCurrency();
   // inputs are entered in the selected currency; stored/saved values are always USD
-  const usdToInput = (usd: number, cur: PriceCurrency) => (cur === "USD" ? String(usd) : String(Math.round(usd * BDT_RATE)));
-  const inputToUsd = (raw: string, cur: PriceCurrency) => {
-    const v = Number(raw);
-    if (!Number.isFinite(v)) return NaN;
-    return cur === "USD" ? v : Math.round((v / BDT_RATE) * 10000) / 10000;
-  };
   const switchPriceCurrency = (c: PriceCurrency) => {
     const prev = priceCurrency;
     if (prev !== c && priceOpen) {
@@ -170,7 +155,6 @@ export default function PoolsView() {
       });
     }
     setPriceCurrency(c);
-    try { localStorage.setItem("ss_price_currency", c); } catch {}
   };
 
   const loadHolds = useCallback(async () => {
@@ -543,7 +527,7 @@ export default function PoolsView() {
               <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>
             ))}
           </div>
-          {meIsAdmin ? <Button variant="outline" size="sm" onClick={() => { const init: Record<string, string> = {}; POOL_TABS.forEach((t) => { const v = prices[t.id] ?? prices[Object.keys(prices)[0]] ?? null; init[t.id] = v != null ? usdToInput(v, priceCurrency) : ""; }); setPriceInputs(init); setPriceOpen(true); }}>{prices[cur] != null ? `price $${prices[cur]}` : "Unit price"}</Button> : null}
+          {meIsAdmin ? <Button variant="outline" size="sm" onClick={() => { const init: Record<string, string> = {}; POOL_TABS.forEach((t) => { const v = prices[t.id] ?? prices[Object.keys(prices)[0]] ?? null; init[t.id] = v != null ? usdToInput(v, priceCurrency) : ""; }); setPriceInputs(init); setPriceOpen(true); }}>{prices[cur] != null ? `price ${fmtMoney(prices[cur]!, priceCurrency)}` : "Unit price"}</Button> : null}
           <div className="pool-switch stretch">
             {POOL_TABS.map((t) => {
               const meta = POOL_META[t.id];
@@ -624,7 +608,7 @@ export default function PoolsView() {
               <input name="custom-qty" placeholder={customFocused ? "" : "Custom"} aria-label="Custom quantity" inputMode="numeric" value={customQty} onChange={(e) => setCustomQty(e.target.value.replace(/\D/g, ""))} onFocus={(e) => { setCustomFocused(true); e.currentTarget.select(); }} onBlur={() => setCustomFocused(false)} style={{ width: 72, border: "none", padding: "6px 8px", fontSize: 13, textAlign: "center", outline: "none", background: customQty ? "var(--bg3)" : "var(--bg)", borderLeft: customFocused ? "1px solid var(--border2)" : "none", cursor: customQty || customFocused ? "text" : "pointer" }} />
             </span>
           </div>
-          <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${effectiveN} × $${unitPrice.toFixed(2)} = $${(effectiveN * unitPrice).toFixed(2)}` : "—"}</div>
+          <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${effectiveN} × ${fmtMoney(unitPrice, priceCurrency)} = ${fmtMoney(effectiveN * unitPrice, priceCurrency)}` : "—"}</div>
         </div>
         <button type="button" className="btn btn-primary" disabled={downloading || (cur === "page" ? !(verified ? verified.verified > 0 : totals.available > 0) : !totals.available)} onClick={() => void doHoldConfirm()} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,112,243,.22)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? (cur === "page" ? "All verified" : "All") : poolQty} from {poolMeta.label}</button>
         <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>{cur === "page" ? "Page pool is verified-only. Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles." : "Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles."}</div>
@@ -774,14 +758,14 @@ export default function PoolsView() {
                     <span className="badge" style={{ background: st === "PENDING" ? "#fef3c7" : st === "APPROVED" ? "#dcfce7" : "var(--bg3)", color: st === "PENDING" ? "#92400e" : st === "APPROVED" ? "#166534" : "var(--text3)", borderColor: st === "PENDING" ? "#fde68a" : st === "APPROVED" ? "#bbf7d0" : "var(--border)" }}>{st}</span>
                     <div className="pool-card-info" style={{ gap: 4 }}>
                       <div className="pool-card-name" title={h.filename}>{h.filename} · {poolLabel}</div>
-                      <div className="pool-card-sub"><span title={d ? d.toISOString() : ""}>{dateStr} {timeStr}</span><span>·</span><span>{qty} qty</span><span>·</span><span>{h.mode ?? "—"}</span><span>·</span><span>{price != null ? `$${(qty * price).toFixed(2)}` : "—"}</span></div>
+                      <div className="pool-card-sub"><span title={d ? d.toISOString() : ""}>{dateStr} {timeStr}</span><span>·</span><span>{qty} qty</span><span>·</span><span>{h.mode ?? "—"}</span><span>·</span><span>{price != null ? fmtMoney(qty * price, priceCurrency) : "—"}</span></div>
                     </div>
                     <span className={`expand-icon ${open ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0, display: "inline-flex" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden><path d="M9 18l6-6-6-6" /></svg></span>
                   </div>
                   {open && (
                     <div className="file-row" style={{ padding: "6px 0 10px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      <span style={{ fontSize: 12, color: "var(--text3)", marginRight: "auto" }}>{qty} rows{price != null ? ` · $${(qty * price).toFixed(2)}` : ""}</span>
+                      <span style={{ fontSize: 12, color: "var(--text3)", marginRight: "auto" }}>{qty} rows{price != null ? ` · ${fmtMoney(qty * price, priceCurrency)}` : ""}</span>
                       {left != null ? <span style={{ fontSize: 12, fontWeight: 600, color: locked ? "var(--text3)" : "var(--text2)" }}>{locked ? "Decision final" : `Revertable ${mmss(left)}`}</span> : null}
                       <button type="button" className="btn btn-primary" disabled={st === "APPROVED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doApprove(h.id); }} style={{ minHeight: 36, fontWeight: 700 }}>{st === "APPROVED" ? "Approved" : "Approve"}</button>
                       <button type="button" className="btn" disabled={st === "REJECTED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doReturn(h.id); }} style={{ minHeight: 36 }}>{st === "REJECTED" ? "Rejected" : "Reject"}</button>
@@ -805,7 +789,7 @@ export default function PoolsView() {
                                   <ProfileAvatar photoUrl={profile?.photoUrl} fallback={label.charAt(0).toUpperCase()} className="size-8 bg-(--bg3) text-(--text2)" verified={profile?.isAdmin} />
                                   <div className="pool-card-info">
                                     <div className="pool-card-name">{label}</div>
-                                    <div className="pool-card-sub">{rows} rows · {groups.length} file{groups.length !== 1 ? "s" : ""}{price != null ? ` · $${(rows * price).toFixed(2)}` : ""}</div>
+                                    <div className="pool-card-sub">{rows} rows · {groups.length} file{groups.length !== 1 ? "s" : ""}{price != null ? ` · ${fmtMoney(rows * price, priceCurrency)}` : ""}</div>
                                   </div>
                                   <div className="pool-card-actions" onClick={(e) => e.stopPropagation()}>
                                     <button type="button" className="btn" title={`Download all of ${label}'s rows in this approval`} aria-label={`Download ${label}'s rows`} disabled={dlBusyId === `${h.id}:u:${uid}`} onClick={() => void doDownloadHold(h, { srcUid: uid, name: `${baseName} - ${label}.xlsx`, busyKey: `${h.id}:u:${uid}` })}><Download size={14} aria-hidden /></button>
@@ -820,7 +804,7 @@ export default function PoolsView() {
                                           <div className="file-card-icon"><FileTypeIcon file={{ preset: g.preset ?? undefined, name: g.filename ?? undefined }} size={16} /></div>
                                           <div style={{ flex: 1, minWidth: 0 }}>
                                             <div className="file-card-name" dir="auto" title={g.filename ?? undefined}>{fname}</div>
-                                            <div className="file-card-meta">{g.createdAt ? new Date(g.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"} · {g.count} rows{price != null ? ` · $${(g.count * price).toFixed(2)}` : ""}</div>
+                                            <div className="file-card-meta">{g.createdAt ? new Date(g.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"} · {g.count} rows{price != null ? ` · ${fmtMoney(g.count * price, priceCurrency)}` : ""}</div>
                                           </div>
                                           <div className="file-card-actions">
                                             <button type="button" className="file-card-btn" title="Download this file's rows" aria-label={`Download ${fname}`} disabled={!g.srcFileId || dlBusyId === `${h.id}:f:${g.srcFileId}`} onClick={(e) => { e.stopPropagation(); void doDownloadHold(h, { srcUid: uid, srcFileId: g.srcFileId!, name: `${baseName} - ${g.filename || (g.srcFileId ?? "file").slice(-8)}.xlsx`, busyKey: `${h.id}:f:${g.srcFileId}` }); }}><Download size={14} aria-hidden /></button>
@@ -863,8 +847,8 @@ export default function PoolsView() {
               const raw = priceInputs[t.id] ?? "";
               const typed = Number(raw);
               const typedOk = raw.trim() !== "" && Number.isFinite(typed);
-              const other = typedOk ? (priceCurrency === "USD" ? fmtPrice(typed, "BDT") : fmtPrice(inputToUsd(raw, "BDT"), "USD")) : null;
-              return <label key={t.id} className="flex flex-col gap-1.5"><span className="text-sm font-medium flex items-center gap-2"><meta.Icon size={14} />{meta.label}{prices[t.id] != null ? <span className="text-muted-foreground text-xs font-normal">· {fmtPrice(prices[t.id]!, priceCurrency)}</span> : null}</span><input aria-label={`${meta.label} price in ${priceCurrency}`} type="number" min={0} max={priceCurrency === "USD" ? 1000 : 1000 * BDT_RATE} step={priceCurrency === "USD" ? 0.01 : 1} value={priceInputs[t.id] ?? ""} onChange={(e) => setPriceInputs((p) => ({ ...p, [t.id]: e.target.value }))} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />{other ? <span className="text-xs text-muted-foreground">≈ {other}</span> : null}</label>;
+              const other = typedOk ? (priceCurrency === "USD" ? fmtMoney(typed, "BDT") : fmtMoney(inputToUsd(raw, "BDT"), "USD")) : null;
+              return <label key={t.id} className="flex flex-col gap-1.5"><span className="text-sm font-medium flex items-center gap-2"><meta.Icon size={14} />{meta.label}{prices[t.id] != null ? <span className="text-muted-foreground text-xs font-normal">· {fmtMoney(prices[t.id]!, priceCurrency)}</span> : null}</span><input aria-label={`${meta.label} price in ${priceCurrency}`} type="number" min={0} max={priceCurrency === "USD" ? 1000 : 1000 * BDT_RATE} step={0.01} value={priceInputs[t.id] ?? ""} onChange={(e) => setPriceInputs((p) => ({ ...p, [t.id]: e.target.value }))} className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />{other ? <span className="text-xs text-muted-foreground">≈ {other}</span> : null}</label>;
             })}
           </div>
           <DialogFooter><Button variant="ghost" onClick={() => setPriceOpen(false)}>Cancel</Button><Button disabled={!hasPriceChanges} onClick={openPriceConfirm}>Save all</Button></DialogFooter>
@@ -887,9 +871,9 @@ export default function PoolsView() {
               return (
                 <div key={t.id} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
                   <span className="flex items-center gap-2 font-medium"><meta.Icon size={14} />{meta.label}</span>
-                  <span className="text-muted-foreground">{oldP != null ? fmtPrice(oldP, priceCurrency) : "—"}</span>
+                  <span className="text-muted-foreground">{oldP != null ? fmtMoney(oldP, priceCurrency) : "—"}</span>
                   <span>→</span>
-                  <span className="font-medium">{fmtPrice(newP, priceCurrency)}</span>
+                  <span className="font-medium">{fmtMoney(newP, priceCurrency)}</span>
                 </div>
               );
             })}

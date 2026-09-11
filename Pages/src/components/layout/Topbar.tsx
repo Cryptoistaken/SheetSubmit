@@ -7,6 +7,7 @@ import SheetToolbar from "@/components/sheet/SheetToolbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModalA11y } from "@/hooks/useModalA11y";
 import { api, useConnStore } from "@/lib/api";
+import { BDT_RATE, useCurrency } from "@/lib/currency";
 import { useTheme } from "@/lib/theme";
 import { useToast } from "@/lib/toast";
 import { useBubbleStore } from "@/stores/bubbleStore";
@@ -38,8 +39,6 @@ function BdtIcon() {
   );
 }
 
-const BDT_RATE = 120;
-
 // 0 → "0.00" (matches empty state), whole → grouped ("1,500"), fraction → 2 decimals ("1,500.50")
 const fmtBalance = (v: number) => {
   const r = Math.round(v * 100) / 100;
@@ -47,16 +46,6 @@ const fmtBalance = (v: number) => {
   if (Number.isInteger(r)) return r.toLocaleString("en-US");
   return r.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
-
-type Currency = "USDC" | "BDT";
-
-function loadCurrency(): Currency {
-  try {
-    return localStorage.getItem("ss_currency") === "BDT" ? "BDT" : "USDC";
-  } catch {
-    return "USDC";
-  }
-}
 
 interface ConnState {
   cls: "ok" | "err" | "";
@@ -77,7 +66,7 @@ export default function Topbar() {
   const [photoLoaded, setPhotoLoaded] = useState(false);
   const [renameName, setRenameName] = useState("");
   const [balance, setBalance] = useState<number | null>(null);
-  const [currency, setCurrency] = useState<Currency>(loadCurrency);
+  const [currency, setCurrency] = useCurrency();
   const renameRef = useModalA11y(renameOpen && !!file, () => setRenameOpen(false));
   const [isAndroid, setIsAndroid] = useState(() => !!getAndroid());
   const bubbleOn = useBubbleStore((s) => s.on);
@@ -127,14 +116,8 @@ export default function Topbar() {
 
   const ringColor = conn.cls === "ok" ? "var(--green)" : conn.cls === "err" ? "var(--red)" : "var(--text3)";
   const balanceUsd = balance ?? 0;
-  const balanceText = currency === "USDC" ? fmtBalance(balanceUsd) : fmtBalance(balanceUsd * BDT_RATE);
-  const toggleCurrency = () => {
-    setCurrency((c) => {
-      const next = c === "USDC" ? "BDT" : "USDC";
-      try { localStorage.setItem("ss_currency", next); } catch {}
-      return next;
-    });
-  };
+  const balanceText = currency === "USD" ? fmtBalance(balanceUsd) : fmtBalance(balanceUsd * BDT_RATE);
+  const toggleCurrency = () => setCurrency(currency === "USD" ? "BDT" : "USD");
   const displayName = ((user.firstName ?? "") + " " + (user.lastName ?? "")).trim();
   const fileName = file
     ? file.name.length > 10
@@ -217,10 +200,10 @@ export default function Topbar() {
         <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, ...hideHome }}>
         <DropdownMenu>
         <div className={`profile-btn split${photoLoaded ? " loaded" : ""}`} role="group" aria-label="Account">
-        <button type="button" className="pill-balance" onClick={toggleCurrency} title={currency === "USDC" ? "Show BDT" : "Show USDC"} aria-label={currency === "USDC" ? `Balance ${balanceText} USDC — show BDT` : `Balance ${balanceText} BDT — show USDC`}>
+        <button type="button" className="pill-balance" onClick={toggleCurrency} title={currency === "USD" ? "Show BDT" : "Show USDC"} aria-label={currency === "USD" ? `Balance ${balanceText} USDC — show BDT` : `Balance ${balanceText} BDT — show USDC`}>
           <span className="profile-currency" aria-hidden="true">
             <span>{balanceText}</span>
-            {currency === "USDC" ? <img src="/usdc.svg" alt="" width={14} height={14} /> : <BdtIcon />}
+            {currency === "USD" ? <img src="/usdc.svg" alt="" width={14} height={14} /> : <BdtIcon />}
           </span>
         </button>
           <span className="profile-pill-divider" aria-hidden="true"></span>

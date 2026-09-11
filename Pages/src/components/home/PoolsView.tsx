@@ -569,7 +569,7 @@ export default function PoolsView() {
               const Icon = meta.Icon;
               return (
                 <button key={t.id} className={cur === t.id ? "active" : ""} onClick={() => go(curPwd, t.id)}>
-                  <Icon size={14} />{t.label} <span className="badge" style={{ marginLeft: 2 }}>{poolCounts[t.id] ?? 0}</span>
+                  <Icon size={14} style={{ flexShrink: 0 }} /><span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{t.label}</span> <span className="badge" style={{ marginLeft: 2 }}>{poolCounts[t.id] ?? 0}</span>
                 </button>
               );
             })}

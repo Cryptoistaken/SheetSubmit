@@ -117,14 +117,16 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
 function Layout() {
   const { pathname } = useLocation();
   const variant = skeletonForPath(pathname);
-  // Sheet pages keep the full Topbar on every size; home sections pair the
-  // desktop sidebar at lg:+ with a slim right-aligned Topbar (profile /
-  // balance / theme, logo cluster hidden in CSS). The tab bar stays mobile-only.
+  // Header always spans the full top width; below it the sidebar + main sit
+  // side by side on desktop (lg:+). Sheet pages keep the full Topbar on every
+  // size; home sections pair the sidebar with a Topbar showing the route
+  // breadcrumb left + profile / balance / theme at the far right.
+  // The tab bar stays mobile-only.
   const isFilePage =
     pathname.startsWith("/file/") ||
     /\/admin\/user\/[^/]+\/file\/[^/]+/.test(pathname);
   return (
-    <div className="flex h-dvh flex-col lg:flex-row">
+    <div className="flex h-dvh flex-col">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded-md focus:bg-(--bg) focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-(--text) focus:shadow-md focus:outline-none focus:ring-2 focus:ring-(--ring)"
@@ -136,18 +138,18 @@ function Layout() {
           <Topbar />
         </header>
       ) : (
-        <>
-          <header className="home-topbar">
-            <Topbar />
-          </header>
-          <Sidebar />
-        </>
+        <header className="home-topbar">
+          <Topbar />
+        </header>
       )}
-      <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 min-w-0 focus:outline-none">
-        <Suspense fallback={<PageSkeleton variant={variant} className="min-h-0" sheetToolbar={variant !== "sheet"} />}>
-          <Outlet />
-        </Suspense>
-      </main>
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        {isFilePage ? null : <Sidebar />}
+        <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 min-w-0 focus:outline-none">
+          <Suspense fallback={<PageSkeleton variant={variant} className="min-h-0" sheetToolbar={variant !== "sheet"} />}>
+            <Outlet />
+          </Suspense>
+        </main>
+      </div>
     </div>
   );
 }

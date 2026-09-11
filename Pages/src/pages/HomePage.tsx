@@ -157,6 +157,13 @@ export default function HomePage() {
 
   const selectionMode = selected.size > 0;
 
+  // The desktop sidebar navigates directly (bypasses goTab): switching
+  // sections must not leave an armed selection bar behind from the old tab.
+  useEffect(() => {
+    setSelected(new Set());
+    setArchSel(new Set());
+  }, [tab]);
+
   const loadFiles = useCallback(async () => {
     try {
       const [fs, cd] = await Promise.all([api.getFiles(), api.getCrossDups()]);

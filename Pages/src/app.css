@@ -588,6 +588,15 @@ button, input, select, textarea {
     box-shadow: 0 1px 2px rgba(0,0,0,.04);
 }
 
+/* Desktop (lg:+) nav lives in the sidebar — the pill tab bar and its loading
+   skeleton are mobile-only there. Selection toolbars keep showing; only the
+   tablist hides. (A plain media query, not Tailwind lg:hidden: this unlayered
+   stylesheet beats layered utilities in Tailwind v4.) */
+@media (min-width: 1024px) {
+    #homeTabBar .home-tabs[role="tablist"] { display: none; }
+    #homeTabBar.skeleton-bar { display: none; }
+}
+
 /* ── Home panes ── */
 .home-pane {
     flex: 1;

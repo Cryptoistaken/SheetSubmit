@@ -10,6 +10,7 @@ import {
 
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 
+import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/lib/theme";
@@ -72,8 +73,18 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
           ? "homePaneAdmin"
           : "homePaneFiles";
   return (
-    <div className="flex h-dvh flex-col">
-      <header>
+    <div className="flex h-dvh flex-col lg:flex-row">
+      {!sheet ? (
+        <div className="hidden w-60 shrink-0 flex-col gap-2 border-r border-border bg-background p-2 lg:flex" aria-hidden="true">
+          <div className="flex items-center gap-2 px-2 py-2">
+            <Skeleton className="size-5 rounded-sm" />
+            <Skeleton className="h-4 w-24 rounded" />
+          </div>
+          {Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-9 w-full rounded-md" />)}
+        </div>
+      ) : null}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <header className={sheet ? undefined : "lg:hidden"}>
         <div className="topbar" aria-hidden="true">
           <div className="topbar-l">
             <Skeleton className="h-5 w-5 rounded-sm" />
@@ -84,7 +95,7 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
       </header>
       <main id="main-content" className="flex flex-1 min-h-0 flex-col">
         {!sheet ? (
-          <div id="homeTabBar" aria-hidden="true">
+          <div id="homeTabBar" className="skeleton-bar" aria-hidden="true">
             <div className="home-tabs">
               {Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-9 w-24 rounded-md" />)}
             </div>
@@ -98,6 +109,7 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
           <PageSkeleton variant={variant} className="min-h-0" sheetToolbar={false} />
         </div>
       </main>
+      </div>
     </div>
   );
 }
@@ -105,18 +117,32 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
 function Layout() {
   const { pathname } = useLocation();
   const variant = skeletonForPath(pathname);
+  // Sheet pages keep the Topbar on every size; home sections use the desktop
+  // sidebar at lg:+ (Topbar + tab bar stay mobile-only there).
+  const isFilePage =
+    pathname.startsWith("/file/") ||
+    /\/admin\/user\/[^/]+\/file\/[^/]+/.test(pathname);
   return (
-    <div className="flex h-dvh flex-col">
+    <div className="flex h-dvh flex-col lg:flex-row">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded-md focus:bg-(--bg) focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-(--text) focus:shadow-md focus:outline-none focus:ring-2 focus:ring-(--ring)"
       >
         Skip to content
       </a>
-      <header>
-        <Topbar />
-      </header>
-      <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 focus:outline-none">
+      {isFilePage ? (
+        <header>
+          <Topbar />
+        </header>
+      ) : (
+        <>
+          <header className="lg:hidden">
+            <Topbar />
+          </header>
+          <Sidebar />
+        </>
+      )}
+      <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 min-w-0 focus:outline-none">
         <Suspense fallback={<PageSkeleton variant={variant} className="min-h-0" sheetToolbar={variant !== "sheet"} />}>
           <Outlet />
         </Suspense>

@@ -415,7 +415,7 @@ export default function HomePage() {
 
   return (
     <>
-      <div id="homeTabBar">
+      <div id="homeTabBar" className={user?.isAdmin ? "admin-tabs" : undefined}>
         {tab === "files" && selectionMode ? (
           <div className="home-tabs" role="toolbar" aria-label={`${selected.size} selected`}>
             <span className="home-tab" role="status" aria-live="polite">{selected.size} selected</span>

@@ -586,6 +586,9 @@ button, input, select, textarea {
     -webkit-overflow-scrolling: touch;
 }
 .home-tabs::-webkit-scrollbar { display: none; }
+/* Admins navigate by sidebar drawer on phones — no duplicate pill tab bar
+   (selection toolbars keep showing; only the tablist hides). */
+#homeTabBar.admin-tabs .home-tabs[role="tablist"] { display: none; }
 .home-tab.sel-danger { color: var(--red); }
 .home-tab.sel-danger:hover { background: var(--red-bg); }
 .home-tab.sel-primary { color: var(--blue); }

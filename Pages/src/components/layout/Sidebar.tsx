@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -64,10 +64,10 @@ function NavButton({ active, collapsed, label, onClick, children }: { active: bo
   );
 }
 
-// Desktop-only app sidebar (lg:+). Hidden below lg — mobile keeps Topbar +
-// the home tab bar. Sheet pages (/file/:id) keep Topbar on all sizes, so the
-// Layout never mounts this there.
-export default function Sidebar() {
+// App sidebar. Desktop (lg:+): collapsible side rail. Phones: slide-over
+// drawer, admin-only (regulars keep the Topbar + tab bar — the sidebar would
+// be overkill for their 4 sections). Sheet pages never mount this.
+export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: boolean; onClose?: () => void }) {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -80,7 +80,21 @@ export default function Sidebar() {
   });
   // Hovering a collapsed sidebar temporarily expands it; leaving collapses back.
   const [hoverOpen, setHoverOpen] = useState(false);
-  const effCollapsed = collapsed && !hoverOpen;
+  // The phone drawer is always fully expanded while open.
+  const effCollapsed = collapsed && !hoverOpen && !mobileOpen;
+
+  // Drawer housekeeping (phone only): Escape closes, resizing up to desktop closes.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose?.(); };
+    const onResize = () => { if (window.innerWidth >= 1024) onClose?.(); };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [mobileOpen, onClose]);
 
   if (!user) return null;
 
@@ -98,21 +112,32 @@ export default function Sidebar() {
     });
   };
   const adminItems = NAV_ADMIN.filter((i) => !i.adminOnly || user.isAdmin);
+  const go = (to: string) => {
+    onClose?.();
+    navigate(to);
+  };
 
   return (
+    <>
     <aside
       onMouseLeave={() => setHoverOpen(false)}
-      className={cn("hidden shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background transition-[width] duration-200 ease-out motion-reduce:transition-none lg:flex", effCollapsed ? "w-16" : "w-60")}
+      className={cn(
+        "flex shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background shadow-xl transition-[width,transform] duration-200 ease-out motion-reduce:transition-none lg:shadow-none",
+        "fixed inset-y-0 left-0 z-[600] w-60",
+        mobileOpen ? "translate-x-0" : "-translate-x-full",
+        "lg:static lg:z-auto lg:translate-x-0",
+        effCollapsed ? "lg:w-16" : "lg:w-60",
+      )}
     >
       {/* Hover auto-expand covers everything except the footer trigger block
           below it — the footer is hover-dead (click only), the rest expands. */}
       <div onMouseEnter={() => { if (collapsed) setHoverOpen(true); }} className="flex min-h-0 flex-1 flex-col">
       <div className={cn("flex items-center gap-2 border-b border-border px-3 py-3", effCollapsed && "justify-center px-0")}>
-        <button type="button" onClick={() => navigate("/")} title="Sheet Submit — home" aria-label="Sheet Submit — home" className="grid size-8 shrink-0 place-items-center rounded-md hover:bg-muted">
+        <button type="button" onClick={() => go("/")} title="Sheet Submit — home" aria-label="Sheet Submit — home" className="grid size-8 shrink-0 place-items-center rounded-md hover:bg-muted">
           <img src="/logo.svg" className="size-5" alt="" aria-hidden="true" />
         </button>
         {!effCollapsed && (
-          <button type="button" onClick={() => navigate("/")} className="min-w-0 flex-1 truncate text-left text-sm font-semibold tracking-tight">
+          <button type="button" onClick={() => go("/")} className="min-w-0 flex-1 truncate text-left text-sm font-semibold tracking-tight">
             Sheet Submit
           </button>
         )}
@@ -120,7 +145,7 @@ export default function Sidebar() {
 
       <nav aria-label="Primary" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {NAV_MAIN.map((item) => (
-          <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)}>
+          <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => go(item.to)}>
             {item.icon}
           </NavButton>
         ))}
@@ -131,7 +156,7 @@ export default function Sidebar() {
             )}
             {effCollapsed && <div className="mx-2 my-2 border-t border-border" aria-hidden="true" />}
             {adminItems.map((item) => (
-              <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)}>
+              <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => go(item.to)}>
                 {item.icon}
               </NavButton>
             ))}
@@ -156,5 +181,7 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
+    {mobileOpen ? <div aria-hidden="true" onClick={() => onClose?.()} className="fixed inset-0 z-[500] bg-black/50 lg:hidden" /> : null}
+    </>
   );
 }

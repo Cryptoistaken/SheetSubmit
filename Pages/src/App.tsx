@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo } from "react";
+import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import {
   Navigate,
   Outlet,
@@ -125,6 +125,9 @@ function Layout() {
   const isFilePage =
     pathname.startsWith("/file/") ||
     /\/admin\/user\/[^/]+\/file\/[^/]+/.test(pathname);
+  // Phone sidebar drawer (admin-only; Topbar shows the hamburger for admins).
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
   return (
     <div className="flex h-dvh flex-col">
       <a
@@ -139,11 +142,11 @@ function Layout() {
         </header>
       ) : (
         <header className="home-topbar">
-          <Topbar />
+          <Topbar onMenu={() => setMobileNavOpen(true)} />
         </header>
       )}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {isFilePage ? null : <Sidebar />}
+        {isFilePage ? null : <Sidebar mobileOpen={mobileNavOpen} onClose={closeMobileNav} />}
         <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 min-w-0 focus:outline-none">
           <Suspense fallback={<PageSkeleton variant={variant} className="min-h-0" sheetToolbar={variant !== "sheet"} />}>
             <Outlet />

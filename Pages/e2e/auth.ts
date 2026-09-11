@@ -9,6 +9,9 @@ export async function loginAs(page: Page, uid = "e2e-user") {
     data: { uid, name: "E2E User" },
   });
   if (!res.ok()) throw new Error(`test login failed: ${res.status()}`);
+  // TEMPORARY e2e debug: prove whether the session cookie lands in the jar
+  const jar = await page.context().cookies();
+  console.log(`[e2e-debug] jar after login: ${JSON.stringify(jar.map((c) => `${c.name}@${c.domain}${c.path} secure=${c.secure}`))}`);
   await page.addInitScript(() => {
     localStorage.setItem("ss_had_session", "1");
   });

@@ -3,7 +3,7 @@ import type { Row, SheetFile } from "./shared";
 import { isPersistConflict, FILE_ROW_LIMIT, FILE_SNAPSHOT_LIMIT, pushSnapshot } from "./shared";
 import { groupLiveStates } from "./live";
 import type { FileSnapshot } from "./shared";
-import { redisDel, redisJsonGet, redisJsonGetMany, redisJsonSet } from "./redis";
+import { redisDel, redisDelPrefix, redisJsonGet, redisJsonGetMany, redisJsonSet } from "./redis";
 
 const db = postgres(Bun.env.DATABASE_URL || "", {
   max: 10,
@@ -418,6 +418,16 @@ async function transition(password: string, op: string, a: any) {
   });
 }
 
+/** Ops that mutate pool tables (pool_rows/pool_rejects/pool_blocked/downloads)
+ *  or file/user indexes — the rpc read cache (do.ts) must be evicted AFTER the
+ *  write commits, synchronously: a void eviction re-opens the exact stale-read
+ *  race the routing suite caught (global pool reads served pre-feed data). */
+const POOL_WRITE_OPS = new Set(["add", "claim", "hold", "holdApprove", "holdReject", "revertDownload", "markDead", "removeAvailable", "removeFileRows"]);
+const INDEX_WRITE_OPS = new Set(["ensureUser", "register", "archive", "batchArchive", "purge", "batchPurge", "deleteUser", "ban"]);
+
 export async function repository(namespace: "index" | "files" | "pools", name: string, op: string, args: Record<string, unknown>) {
-  return namespace === "index" ? indexOp(op, args) : namespace === "files" ? fileOp(name, op, args) : poolOp(name, op, args);
+  const out = await (namespace === "index" ? indexOp(op, args) : namespace === "files" ? fileOp(name, op, args) : poolOp(name, op, args));
+  if (namespace === "pools" && POOL_WRITE_OPS.has(op)) await redisDelPrefix("ss:rpc:pools:");
+  else if (namespace === "index" && INDEX_WRITE_OPS.has(op)) await redisDelPrefix("ss:rpc:index:");
+  return out;
 }

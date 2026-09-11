@@ -6,7 +6,7 @@
 // Available pool rows are NOT background-monitored — they are killed by user checks (POST /fb/check → markDead).
 // Env: DATABASE_URL, REDIS_URL (optional), CHECK_URL, HELD_INTERVAL_MS (10min), WA_INTERVAL_MS (30min), PAGE_INTERVAL_MS (30min)
 import postgres from "postgres";
-import { closeRedis, redisDel, publishLiveEvent } from "./redis";
+import { closeRedis, redisDel, redisDelPrefix, publishLiveEvent } from "./redis";
 
 if (!Bun.env.DATABASE_URL) throw new Error("DATABASE_URL is required for worker");
 const db = postgres(Bun.env.DATABASE_URL || "", { max: 2, idle_timeout: 20, connect_timeout: 10 });
@@ -39,6 +39,7 @@ async function checkUids(limit: number): Promise<number> {
   }
   if (dead.length) {
     await db`UPDATE pool_rows SET state='dead' WHERE state='held' AND row_key IN ${db(dead)}`;
+    await redisDelPrefix("ss:rpc:pools:");
     // died on hold → permanent blocklist (never re-poolable, even after file deletes)
     await db`INSERT INTO pool_blocked(row_key,reason,ts) SELECT u.k,'dead',${Date.now()} FROM unnest(${dead}::text[]) AS u(k) ON CONFLICT(row_key) DO NOTHING`;
     // wake any owner sheets watching these rows (backend relays to file rooms)
@@ -97,6 +98,7 @@ async function rowsNeedingCheck(kind: "wa" | "page", limit: number): Promise<Poo
 }
 async function applyResult(r: PoolRowRef, patch: Record<string, unknown>, cache: Record<string, unknown> | null) {
   await db`UPDATE pool_rows SET data=data||${j(patch)}::jsonb WHERE password=${r.password} AND pool_id=${r.pool_id} AND row_key=${r.row_key}`;
+  await redisDelPrefix("ss:rpc:pools:");
   if (r.src_uid && cache) { const k = `wa:${r.src_uid}:${r.cuser}`; await db`INSERT INTO meta(k,v) VALUES(${k},${j({ ...cache, ts: Date.now() })}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`; void redisDel(`ss:meta:${k}`); }
 }
 

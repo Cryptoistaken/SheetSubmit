@@ -34,6 +34,7 @@
   test/                   # test fixture xlsx files (2fa.xlsx, cookie.xlsx, Page.xlsx)
   Pages/e2e/              # Playwright browser tests (auth.ts cookie-injection login, smoke.spec.ts) — `bun run test:e2e`, needs backend ALLOW_TEST_AUTH=1 + test DB, never prod; CI e2e job in .github/workflows/ci.yml
   agent/                  # dev debugging tools (call.ts authed caller, health.ts backend+worker sweep, timing.ts dual-origin latency sweep, users.ts TEST-user mint/verify/delete via POST /api/test/login (needs ALLOW_TEST_AUTH=1, aborts on closed door — never prod), pipeline.ts end-to-end run on behalf of minted users: upload→pool→price→hold→approve→wallet (+optional --with-routing suite, --wait-settle); needs --admin-uid in dev ADMIN_IDS, rowloss.ts API row-loss regression (stale-base 409, uid/status round-trip, snapshot index restore, 500-cap refusal, purge tombstone)) — secrets from gitignored agent/.env (AGENT_TOKEN + BACKEND_URL + FRONT_URL + SS_SESSION), real env overrides; never commit tokens
+  docker-compose.test.yml # local test env (Postgres 16 + Redis 7, never prod) — `docker compose -f docker-compose.test.yml up -d`, then DATABASE_URL=postgres://postgres:postgres@localhost:5432/sheetsubmit_test + `bun scripts/schema.ts bootstrap` in backend/
 ```
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
@@ -51,7 +52,7 @@
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
   src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder (SameSite=None on https for direct cross-origin calls, Lax on http)
                       #   src/lib/__tests__/session.test.ts (sign/verify incl. tamper+expiry, cookie strings, isAdmin), sharedFeed.test.ts (poolRowKey/poolFeedSig), revertFinality.test.ts (revertDownload finality vs live DB, skipIf no DATABASE_URL), fileDeletePool.test.ts (filePoolState scoping + removeFileRows wipes one file fully + userFiles orphan filter, skipIf no DATABASE_URL), poolBlocked.test.ts (approve/claim record sold + feed refuses blocklisted, skipIf no DATABASE_URL), livePublish.test.ts (grouping/relay validation + guarded fan-out), routes/__tests__/live.test.ts (ticket SSE seam + guarded issue→stream→state), routes/__tests__/applyHoldFlags.test.ts (dead+approved flag overlay) — `bun run test` in backend/
-  src/lib/redis.ts        # optional standard node-redis client; fail-open read-through cache helpers using REDIS_URL; + live relay (publishLiveEvent, subscribeLiveEvents on ss:live with own sub connection)
+  src/lib/redis.ts        # optional standard node-redis client; fail-open read-through cache helpers using REDIS_URL (+ pool/index rpc entries evicted on mutation via redisDelPrefix — never cache pool reads across a feed); + live relay (publishLiveEvent, subscribeLiveEvents on ss:live with own sub connection)
   src/lib/live.ts         # live row-state domain: one-time stream tickets (60s TTL, single-use) + groupLiveStates (flat key rows → per-file maps, set flags only) + parseLiveEvent (worker relay validation, 500-key cap)
   src/lib/liveBus.ts      # in-process fan-out rooms per fileId (joinLive/publishLive)
   src/lib/livePublish.ts  # DB→rooms bridge: publishDownloadStates (one download) + publishKeyStates (bare keys, any password), fail-open

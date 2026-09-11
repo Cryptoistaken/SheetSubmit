@@ -730,9 +730,8 @@ const GridCell = memo(function GridCell({
   const flags = (row ?? {}) as Record<string, unknown>;
   const locked = !!flags._hold || !!flags._approved;
   // Cross-file duplicate: duplicated identity cells (uid/cookies) carry color.
-  const xdup =
-    (colKey === "uid" || colKey === "cookies") &&
-    useSheetStore((s) => s.crossDupRows.has(rowIdx));
+  const xdupRow = useSheetStore((s) => s.crossDupRows.has(rowIdx));
+  const xdup = (colKey === "uid" || colKey === "cookies") && xdupRow;
   return (
     <td
       className={

@@ -1,0 +1,38 @@
+# SheetSubmit local test environment (never prod).
+# Provides Postgres + Redis for backend integration tests and Playwright e2e.
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   $env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/sheetsubmit_test"
+#   bun run --cwd backend scripts/schema.ts bootstrap
+#   bun run --cwd backend test        # runs DB-gated suites too
+#   bun run --cwd Pages test
+#   # e2e (backend ALLOW_TEST_AUTH=1, never prod):
+#   PORT=3001 FRONTEND_URL=http://127.0.0.1:8080 ALLOW_TEST_AUTH=1 ADMIN_IDS=e2e-user SESSION_SECRET=e2e-test-secret bun --cwd backend src/server.ts &
+#   bun run --cwd Pages build; PORT=8080 BACKEND_URL=http://127.0.0.1:3001 bun --cwd Pages server.js &
+#   E2E_BASE_URL=http://127.0.0.1:8080 bun run --cwd Pages test:e2e
+#   docker compose -f docker-compose.test.yml down
+services:
+  postgres-test:
+    image: postgres:16
+    container_name: sheetsubmit-test-pg
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sheetsubmit_test
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-test:
+    image: redis:7-alpine
+    container_name: sheetsubmit-test-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

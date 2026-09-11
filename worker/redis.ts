@@ -20,6 +20,18 @@ async function getClient() {
   return null;
 }
 export async function redisDel(key: string) { try { const c = await getClient(); if (c) await c.del(key); } catch {} }
+/** Same hashed-rpc eviction as the backend (backend/src/lib/redis.ts): worker
+ *  sweeps write pool_rows directly, bypassing the backend repository seam. */
+export async function redisDelPrefix(prefix: string) {
+  try {
+    const c = await getClient();
+    if (!c) return;
+    for await (const batch of c.scanIterator({ MATCH: `${prefix}*`, COUNT: 100 })) {
+      const keys = (Array.isArray(batch) ? batch : [batch]) as string[];
+      for (const k of keys) if (typeof k === "string" && k) await c.del(k);
+    }
+  } catch {}
+}
 // live relay to the backend (best-effort — without REDIS_URL the backend
 // simply never hears worker-side deaths until clients resync)
 export async function publishLiveEvent(msg: unknown) { try { const c = await getClient(); if (c) await c.publish("ss:live", JSON.stringify(msg)); } catch {} }

@@ -95,10 +95,10 @@ describe.skipIf(!process.env.DATABASE_URL)("live issue → stream → state roun
 
   it("issues a ticket, streams, and serves the overlay for the owner", async () => {
     const { repository } = await import("../../lib/pg");
+    const cookie = await cookieFor();
     const file = { id: FID, name: "live", type: "fb_cookie", preset: "combo", poolKind: "combo", password: "dgddigital", poolEnabled: true, createdAt: Date.now(), updatedAt: Date.now() };
     await repository("index", "global", "register", { uid: UID, file });
     await repository("files", FID, "init", { file, rows: [{ cookies: "c_user=55;", uid: "55", twofakey: "K" }] });
-    const cookie = await cookieFor();
     try {
       const issue = await app.request(`/api/files/${FID}/live-ticket`, { method: "POST", headers: { Cookie: cookie } }, ENV2);
       expect(issue.status).toBe(200);
@@ -110,7 +110,7 @@ describe.skipIf(!process.env.DATABASE_URL)("live issue → stream → state roun
       await stream.body?.cancel();
       const state = await app.request(`/api/files/${FID}/live-state`, { headers: { Cookie: cookie } }, ENV2);
       expect(state.status).toBe(200);
-      expect(await state.json()).toEqual({ states: {} });
+      expect(await state.json()).toEqual({ states: { "55": {} } });
     } finally {
       const { default: postgres } = await import("postgres");
       const sql = postgres(process.env.DATABASE_URL as string, { max: 1 });

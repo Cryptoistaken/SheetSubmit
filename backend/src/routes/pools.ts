@@ -167,7 +167,7 @@ pools.post("/:password/:pool/claim", async (c) => {
   const srcFileIdRaw = body.srcFileId ?? body.fileId ?? null;
   if (srcUidRaw != null && (typeof srcUidRaw !== "string" || !srcUidRaw.trim() || srcUidRaw.length > 64)) return c.json({ error: "invalid srcUid" }, 400);
   if (srcFileIdRaw != null && (typeof srcFileIdRaw !== "string" || !srcFileIdRaw.trim() || srcFileIdRaw.length > 64)) return c.json({ error: "invalid srcFileId" }, 400);
-  // page is verified-only; verifiedOnly => claims from page (all eligible), unverifiedOnly => 0 (unverified live in cookies_2fa, use verified-counts to inspect)
+  // page takes verified-only (eligible); unverified rows pool in page but can never be taken (inspect via unverifiedOnly reads)
   let verifiedOnly = !!body.verifiedOnly;
   const unverifiedOnly = !!body.unverifiedOnly;
   if (verifiedOnly && unverifiedOnly) return c.json({ error: "verifiedOnly and unverifiedOnly are mutually exclusive" }, 400);

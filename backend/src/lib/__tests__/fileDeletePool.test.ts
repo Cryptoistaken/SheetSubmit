@@ -23,7 +23,7 @@ async function seed() {
   const sql = postgres(process.env.DATABASE_URL as string, { max: 1 });
   const now = Date.now();
   try {
-    await sql`INSERT INTO users(user_id) VALUES('u1-${run}') ON CONFLICT(user_id) DO NOTHING`;
+    await sql`INSERT INTO users(user_id) VALUES(${"u1-" + run}) ON CONFLICT(user_id) DO NOTHING`;
     await sql`INSERT INTO file_index(file_id,owner_id,data) VALUES(${F1},${`u1-${run}`},${{} as any}) ON CONFLICT(file_id) DO NOTHING`;
     await sql`INSERT INTO pool_rows(password,pool_id,row_key,data,state,src_uid,src_file_id,inserted_at,hold_id) VALUES
       (${PWD},'cookies_2fa',${A},${{} as any},'available',${`u1-${run}`},${F1},${now},NULL),

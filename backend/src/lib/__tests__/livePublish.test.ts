@@ -71,7 +71,7 @@ async function seed() {
     await sql`INSERT INTO pool_rows(password,pool_id,row_key,data,src_uid,src_file_id,inserted_at,state,hold_id)
       VALUES(${PWD},${"cookies_2fa"},${"k1"},${{ cookies: "c_user=11" } as any},${"11"},${"fA"},${Date.now()},${"held"},${dl("h")}),
             (${PWD},${"cookies_2fa"},${"k2"},${{ cookies: "c_user=22" } as any},${"22"},${"fA"},${Date.now()},${"held"},${dl("h")}),
-            (${PWD},${"cookies_2fa"},${"k9"},${{ cookies: "c_user=99" } as any},${"99"},${"fB"},${Date.now()},${"available"},${null as any})`;
+            (${PWD},${"cookies_2fa"},${"k9"},${{ cookies: "c_user=99" } as any},${"99"},${"fA"},${Date.now()},${"available"},${null as any})`;
   } finally {
     await sql.end();
   }
@@ -153,6 +153,9 @@ describe.skipIf(!hasDb)("approve fans out through the route", () => {
         headers: { Cookie: `ss_session=${token}` },
       }, { INDEX: "index", FILES: "files", POOLS: "pools", DATABASE_URL: process.env.DATABASE_URL as string, SESSION_SECRET: "test-secret", ADMIN_IDS: ADMIN });
       expect(res.status).toBe(200);
+      // the route fans out fire-and-forget (void publish) by design — wait for it
+      const deadline = Date.now() + 5000;
+      while (!got.length && Date.now() < deadline) await Bun.sleep(50);
       expect(got.length).toBe(1);
       expect(JSON.parse(got[0])).toEqual({ states: { k1: { approved: true }, k2: { approved: true } } });
     } finally {

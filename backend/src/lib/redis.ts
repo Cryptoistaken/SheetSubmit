@@ -33,6 +33,19 @@ export async function redisDel(key: string) {
   try { const c = await getClient(); if (c) await c.del(key); } catch {}
 }
 
+/** Bulk invalidation for hashed rpc cache keys (ss:rpc:<ns>:<sha>) — the hash
+ *  is one-way, so eviction scans the namespace prefix. Fail-open like the rest. */
+export async function redisDelPrefix(prefix: string) {
+  try {
+    const c = await getClient();
+    if (!c) return;
+    for await (const batch of c.scanIterator({ MATCH: `${prefix}*`, COUNT: 100 })) {
+      const keys = (Array.isArray(batch) ? batch : [batch]) as string[];
+      for (const k of keys) if (typeof k === "string" && k) await c.del(k);
+    }
+  } catch {}
+}
+
 /** Live fan-out channel (worker → backend rooms). Publish works on the shared
  * client; subscribing needs its own connection (subscriber mode is exclusive). */
 export const LIVE_CHANNEL = "ss:live";

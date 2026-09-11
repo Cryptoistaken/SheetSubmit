@@ -24,8 +24,8 @@ async function create(sess: string, name: string, rows: any[], preset: string) {
   return res.body as { id: string };
 }
 
-async function poolKeys(pool: string, fileId?: string, sess = session) {
-  const q = `fileId=${encodeURIComponent(fileId || "")}&limit=1000`;
+async function poolKeys(pool: string, fileId?: string, sess = session, extra = "") {
+  const q = `fileId=${encodeURIComponent(fileId || "")}&limit=1000${extra ? `&${extra}` : ""}`;
   const res = await request(`/pools/${encodeURIComponent(PWD)}/${pool}/rows?${q}`, {}, sess);
   if (res.status !== 200) { fails.push(`pool rows ${pool}: ${res.status} ${errorText(res)}`); return new Set<string>(); }
   return new Set((res.body.rows as any[]).map((r) => String(r.uid)));
@@ -59,15 +59,17 @@ async function run() {
   const s1combo = await create(session, "s1-combo", [row(c1, { two: true }), row(c2), row(c3, { two: true, status: "bad" }), { cookies: "datr=nocuser; xs=t", twofakey: "", uid: uid() }], "combo");
   const s1cookie = await create(session, "s1-cookie", [row(k1, { two: true }), row(k2)], "cookie");
   const s1page = await create(session, "s1-page", [row(p1, { two: true }), row(p2), row(p3, { two: true, eligible: true })], "page");
-  await waitFor(async () => (await poolKeys("cookies_2fa", s1combo?.id)).size === 1 && (await poolKeys("cookies_only", s1cookie?.id)).size === 2 && (await poolKeys("page", s1page?.id)).size === 1, 15000);
+  await waitFor(async () => (await poolKeys("cookies_2fa", s1combo?.id)).size === 1 && (await poolKeys("cookies_only", s1cookie?.id)).size === 2 && (await poolKeys("page", s1page?.id)).size === 2, 15000);
   check("S1 combo: 2fa row → cookies_2fa, no-2fa row invalid (pooled nowhere)", eq(await poolKeys("cookies_2fa", s1combo?.id), [c1]) && eq(await poolKeys("cookies_only", s1combo?.id), []));
   check("S1 combo: status=bad row pooled nowhere", ![...(await poolKeys("cookies_2fa")), ...(await poolKeys("cookies_only"))].some((k) => k === c3));
   check("S1 cookie: all rows → cookies_only (2fa ignored)", eq(await poolKeys("cookies_only", s1cookie?.id), [k1, k2]));
-  check("S1 page: only eligible (blue-dot) 2fa rows → page pool; p1 not eligible + p2 no 2fa → invalid", eq(await poolKeys("page", s1page?.id), [p3]) && eq(await poolKeys("cookies_only", s1page?.id), []));
+  check("S1 page: 2fa rows pool in page (eligible=verified, cookie+2fa=unverified); no-2fa row invalid", eq(await poolKeys("page", s1page?.id), [p1, p3]) && eq(await poolKeys("cookies_only", s1page?.id), []));
+  check("S1 page verifiedOnly → eligible rows only", eq(await poolKeys("page", s1page?.id, session, "verifiedOnly=true"), [p3]));
+  check("S1 page unverifiedOnly → cookie+2fa rows", eq(await poolKeys("page", s1page?.id, session, "unverifiedOnly=true"), [p1]));
   const s1inv = await request<any>(`/pools/${encodeURIComponent(PWD)}/cookies_2fa`);
   const s1pageSt = await request<any>(`/pools/${encodeURIComponent(PWD)}/page`);
   check("S1 invalid 2fa count surfaced in pool stats", s1inv.status === 200 && (s1inv.body?.totals?.invalid ?? 0) >= 1);
-  check("S1 page invalid count includes not-eligible rows", s1pageSt.status === 200 && (s1pageSt.body?.totals?.invalid ?? 0) >= 2);
+  check("S1 page invalid counts the no-2fa row", s1pageSt.status === 200 && (s1pageSt.body?.totals?.invalid ?? 0) >= 1);
 
   // ── S2: same user re-uploads same rows ──────────────────────────────
   const d1 = uid(), d2 = uid(), dRows = [row(d1, { two: true }), row(d2, { two: true })];

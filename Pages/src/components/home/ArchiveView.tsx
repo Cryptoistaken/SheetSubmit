@@ -107,7 +107,7 @@ export default function ArchiveView({
     const ids = Array.from(selected);
     const ok = await confirm("Restore " + plural(ids.length) + "?", "Restore");
     if (!ok) return;
-    const { done, failed } = await runBatched(ids, 40, async (b) => {
+    const { failed } = await runBatched(ids, 40, async (b) => {
       await api.batchRestore(b);
       return b.length;
     });
@@ -123,7 +123,7 @@ export default function ArchiveView({
       "Delete forever",
     );
     if (!ok) return;
-    const { done, failed } = await runBatched(ids, 20, async (b) => (await api.batchDelete(b)).deleted);
+    const { failed } = await runBatched(ids, 20, async (b) => (await api.batchDelete(b)).deleted);
     setSelected(new Set());
     load();
     if (failed) showToast("Some deletes failed");

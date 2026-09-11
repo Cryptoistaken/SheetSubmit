@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it } from "bun:test";
 // fan them out to live rooms. Pure grouping runs everywhere; the pg op and
 // the download→rooms bridge need a REAL database (same guard as
 // revertFinality.test.ts).
-import { groupLiveStates, parseLiveEvent } from "../live";
+import { groupLiveStates, isLiveStreamPathname, parseLiveEvent } from "../live";
 import { joinLive } from "../liveBus";
 import { publishDownloadStates, publishKeyStates } from "../livePublish";
 import type { repository as repoFn } from "../pg";
@@ -14,6 +14,21 @@ const mod = hasDb ? await import("../pg") : null;
 const repository: typeof repoFn = mod
   ? mod.repository
   : (async () => { throw new Error("no DATABASE_URL"); });
+
+describe("isLiveStreamPathname (SSE streams skip Bun's 10s idle kill)", () => {
+  it("matches the file and pool streams", () => {
+    expect(isLiveStreamPathname("/api/files/abc123/live")).toBe(true);
+    expect(isLiveStreamPathname("/api/pools/dgddigital/cookies_only/live")).toBe(true);
+  });
+
+  it("ignores quick JSON endpoints sharing the prefix", () => {
+    expect(isLiveStreamPathname("/api/files/abc123/live-ticket")).toBe(false);
+    expect(isLiveStreamPathname("/api/files/abc123/live-state")).toBe(false);
+    expect(isLiveStreamPathname("/api/pools/dgddigital/cookies_only/live-state")).toBe(false);
+    expect(isLiveStreamPathname("/api/health")).toBe(false);
+    expect(isLiveStreamPathname("/api/files/abc123/rows")).toBe(false);
+  });
+});
 
 describe("groupLiveStates", () => {
   it("splits key states per file and drops keyless rows", () => {

@@ -3,7 +3,7 @@ import type { Env, Row, SheetFile } from "../lib/shared";
 import { poolRowKey } from "../lib/shared";
 import { isAdmin, requireAuth } from "../lib/session";
 import { rpc } from "../lib/do";
-import { consumeLiveTicket, consumePoolLiveTicket, mintLiveTicket, mintPoolLiveTicket, poolRoom } from "../lib/live";
+import { consumeLiveTicket, consumePoolLiveTicket, LIVE_HEARTBEAT_MS, mintLiveTicket, mintPoolLiveTicket, poolRoom } from "../lib/live";
 import { joinLive } from "../lib/liveBus";
 import { poolCountsSnapshot } from "../lib/livePublish";
 import { decorateHoldState } from "./files";
@@ -94,7 +94,7 @@ live.get("/pools/:password/:pool/live-state", requireAuth, async (c) => {
   return c.json(snap);
 });
 
-// Shared ticket-stream transport: :connected + 25s :ping over a room fan-out.
+// Shared ticket-stream transport: :connected + 15s :ping over a room fan-out.
 function streamRoom(c: any, room: string) {
   const enc = new TextEncoder();
   let leave: () => void = () => {};
@@ -116,7 +116,7 @@ function streamRoom(c: any, room: string) {
         try {
           controller.enqueue(enc.encode(`:ping\n\n`));
         } catch {}
-      }, 25_000);
+      }, LIVE_HEARTBEAT_MS);
       const unref = (beat as unknown as { unref?: () => void })?.unref;
       if (typeof unref === "function") unref.call(beat);
     },

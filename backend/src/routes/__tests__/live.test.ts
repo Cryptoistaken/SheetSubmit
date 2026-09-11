@@ -138,6 +138,31 @@ describe.skipIf(!process.env.DATABASE_URL)("live issue → stream → state roun
   }, 30_000);
 });
 
+describe("live heartbeat", () => {
+  it("pings well inside idle limits (Bun kills quiet streams at 10s)", async () => {
+    const t = mintLiveTicket(TID);
+    const res = await req(`/api/files/${TID}/live?ticket=${t}`);
+    expect(res.status).toBe(200);
+    const reader = res.body!.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    let sawPing = false;
+    const end = Date.now() + 17_000;
+    while (Date.now() < end && !sawPing) {
+      const left = end - Date.now();
+      const chunk = await Promise.race([
+        reader.read(),
+        Bun.sleep(left).then(() => ({ done: true, value: undefined }) as ReadableStreamReadResult<Uint8Array>),
+      ]);
+      if (chunk.done) break;
+      buf += dec.decode(chunk.value, { stream: true });
+      if (buf.includes(":ping")) sawPing = true;
+    }
+    await reader.cancel();
+    expect(sawPing).toBe(true);
+  }, 30_000);
+});
+
 describe("live fan-out", () => {
   it("streams published states only to the ticket's own file", async () => {
     const t1 = mintLiveTicket(TID);

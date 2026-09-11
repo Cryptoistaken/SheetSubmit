@@ -3,7 +3,7 @@ import { app, startBackgroundTasks } from "./index";
 import type { Env } from "./lib/shared";
 import { bootstrapDatabase, closeDatabase } from "./lib/pg";
 import { closeRedis, subscribeLiveEvents } from "./lib/redis";
-import { parseLiveEvent } from "./lib/live";
+import { isLiveStreamPathname, parseLiveEvent } from "./lib/live";
 import { publishKeyStates } from "./lib/livePublish";
 
 const env: Env = {
@@ -43,7 +43,20 @@ void subscribeLiveEvents((message) => {
   const keys = parseLiveEvent(raw);
   if (keys && keys.length) void publishKeyStates(keys).catch(() => {});
 });
-const server = serve({ port, hostname: "0.0.0.0", fetch: (request) => app.fetch(request, env) });
+const server = serve({
+  port,
+  hostname: "0.0.0.0",
+  fetch: (request, srv) => {
+    // SSE streams are quiet between pushes — Bun closes connections after
+    // 10s idle by default, which killed every live stream (file + pool) and
+    // left the client reconnecting forever. Disabled per-request for streams
+    // only; the 15s :ping keeps intermediate proxies alive.
+    try {
+      if (isLiveStreamPathname(new URL(request.url).pathname)) srv.timeout(request, 0);
+    } catch {}
+    return app.fetch(request, env);
+  },
+});
 console.log(`SheetSubmit backend listening on 0.0.0.0:${port}`);
 
 let stopping = false;

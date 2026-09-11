@@ -73,7 +73,20 @@ export function groupLiveStates(rows: LiveRowState[]): Record<string, LiveStates
   return out;
 }
 
+/** SSE heartbeat: must stay well under intermediate idle limits (Railway /
+ * Cloudflare drop quiet connections) — 25s starved them and the client sat
+ * in a ~10s reconnect loop. Bun's own 10s kill is disabled per-request for
+ * streams (see server.ts), so 15s is safe on both sides. */
+export const LIVE_HEARTBEAT_MS = 15_000;
+
 export const LIVE_KEY_CAP = 500;
+
+/** Pathnames whose responses are infinite SSE streams (not quick JSON). The
+ * server disables Bun's 10s idle timeout for these — a quiet stream counts
+ * as idle and would otherwise be closed mid-response. */
+export function isLiveStreamPathname(pathname: string): boolean {
+  return pathname.endsWith("/live");
+}
 
 /** Validates a worker→backend relay message (untrusted input): only the
  * dead-keys shape passes, keys capped and sanitized. */

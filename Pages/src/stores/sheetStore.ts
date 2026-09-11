@@ -2443,10 +2443,17 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const idx = get().bubbleGetActiveRow();
     if (!isCookieOnly && s.rows[idx].cookies && !s.rows[idx].twofakey) {
       // Row already has a cookie and still needs its key — this second cookie
-      // paste was NOT saved (it's a cookie, not a 2FA key). Key-only rows DO
-      // accept cookies (2FA-first order). Keep it short: the bubble popup has
-      // no room for a long toast.
+      // paste was NOT saved (it's a cookie, not a 2FA key). Keep it short:
+      // the bubble popup has no room for a long toast.
       toast("Need 2FA");
+      return;
+    }
+    if (!isCookieOnly && !s.rows[idx].twofakey) {
+      // STRICT 2FA-first: a cookie never opens a row. The key anchors the
+      // account first, the cookie completes it — otherwise cookies leak onto
+      // keyless rows and accounts get mismatched. (Cookie-only files have no
+      // key slot, so they keep the direct cookie flow above.)
+      toast("Paste 2FA first");
       return;
     }
     const rows = s.rows.slice();
@@ -2499,6 +2506,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const isCookieOnly = !fileColumns(s.file).some((c) => c.key === "twofakey");
     if (isCookieOnly) return;
     const key = normalizeBubbleKey(text);
+    // STRICT 2FA shape: base32, 10–32 chars (32 = max key length, spaces
+    // optional — normalizeBubbleKey already stripped them). Anything else is
+    // refused so non-key blobs can never leak into the key slot.
+    if (!/^[A-Z2-7]{10,32}$/.test(key)) {
+      toast("Bad 2FA key");
+      return;
+    }
     if (bubbleKeyIndex(s.rows).has(key)) {
       toast("Duplicate 2FA");
       return;
@@ -2555,7 +2569,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (isCookieOnly) return;
     const idx = s.bubbleActiveRow >= 0 ? s.bubbleActiveRow : s.bubbleGetActiveRow();
     const row = s.rows[idx];
-    const canSkip = !!(row?.cookies && row.cookies.trim()) && !row.twofakey;
+    // STRICT 2FA-first: skip marks the key slot even before the cookie lands,
+    // so no-2FA accounts still anchor their row first. It never overwrites a
+    // real key or marker.
+    const canSkip = !!row && !row.twofakey;
     if (canSkip) {
       const rows = s.rows.slice();
       rows[idx] = { ...rows[idx], twofakey: NO_2FA_MARK };
@@ -2572,8 +2589,11 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       get().persist("bubble");
       vibrate(15);
       toast("2FA skipped");
-      // The marked row is complete — move to the next one that needs a cookie.
-      get().bubbleAdvanceActiveRow();
+      // Advance only when the row is complete (cookie + marker). A marked row
+      // with no cookie yet stays active so the next cookie paste lands on it.
+      if (row.cookies && row.cookies.trim()) {
+        get().bubbleAdvanceActiveRow();
+      }
     }
   },
 
@@ -2748,7 +2768,7 @@ function applyCells(
     if (
       cell.colKey === "twofakey" &&
       cell.value &&
-      /^[A-Z2-7]{10,}$/.test(cell.value.replace(/[\s\-]/g, "").toUpperCase())
+      /^[A-Z2-7]{10,32}$/.test(cell.value.replace(/[\s\-]/g, "").toUpperCase())
     ) {
       lastKey = cell.value;
     }

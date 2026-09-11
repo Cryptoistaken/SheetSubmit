@@ -667,7 +667,7 @@ describe("sheetStore data-integrity", () => {
 });
 
 describe("bubble user flow (as a user uses it)", () => {
-  it("cookie + key save completes the row, copies the code, and advances", async () => {
+  it("key + cookie saves in strict 2FA-first order, copies the code, and advances", async () => {
     await openTestFile();
     const writes: string[] = [];
     const hadNav = "navigator" in globalThis;
@@ -679,20 +679,28 @@ describe("bubble user flow (as a user uses it)", () => {
     });
     useSheetStore.setState({ isDesktop: false } as never);
     try {
-      useSheetStore.getState().bubbleSaveCookie("c_user=123; foo=bar;");
+      // The key anchors the row first — it waits key-only for its cookie.
+      void useSheetStore.getState().bubbleSaveKey("JBSWY3DPEHPK3PXP");
       let s = useSheetStore.getState();
-      expect(s.rows[0].cookies).toContain("c_user=123");
+      expect(s.rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
+      expect(s.rows[0].cookies ?? "").toBe("");
       expect(s.bubbleActiveRow).toBe(0);
       expect(s.isDirty).toBe(true);
-      expect(s.invalidCells.has("0:cookies")).toBe(false);
-
-      await useSheetStore.getState().bubbleSaveKey("JBSWY3DPEHPK3PXP");
       await new Promise((r) => setTimeout(r, 0));
       s = useSheetStore.getState();
-      expect(s.rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
-      expect(s.bubbleActiveRow).toBe(1);
+      expect(s.bubbleActiveRow).toBe(0);
+      await new Promise((r) => setTimeout(r, 0));
+      s = useSheetStore.getState();
       expect(writes).toHaveLength(1);
       expect(writes[0]).toMatch(/^\d{6}$/);
+
+      // The cookie completes the key-anchored row and advances.
+      useSheetStore.getState().bubbleSaveCookie("c_user=123; foo=bar;");
+      s = useSheetStore.getState();
+      expect(s.rows[0].cookies).toContain("c_user=123");
+      expect(s.rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
+      expect(s.bubbleActiveRow).toBe(1);
+      expect(s.invalidCells.has("0:cookies")).toBe(false);
     } finally {
       if (hadNav) {
         Object.defineProperty(globalThis, "navigator", { value: prevNav, configurable: true });
@@ -790,17 +798,24 @@ describe("bubble user flow (as a user uses it)", () => {
     expect(s.bubbleActiveRow).toBe(1);
   });
 
-  it("long-press skip does nothing when the row has no cookie", () => {
+  it("long-press skip on a keyless row marks it and waits for the cookie", async () => {
+    await openTestFile();
     useSheetStore.setState({
       rows: [{ cookies: "", uid: "", twofakey: "" }],
       bubbleActiveRow: 0,
     });
     useSheetStore.getState().bubbleSkipNo2FA();
-    const s = useSheetStore.getState();
-    expect(s.rows[0].twofakey).toBe("");
-    // A row that isn't "cookie present, no 2fa" must not be advanced or marked.
+    let s = useSheetStore.getState();
+    expect(s.rows[0].twofakey).toBe(NO_2FA_MARK);
+    // Not complete yet (no cookie) — stays put so the cookie lands here.
     expect(s.bubbleActiveRow).toBe(0);
-    expect(s.isDirty).toBeFalsy();
+    expect(s.isDirty).toBe(true);
+    // Its cookie completes the skipped row and advances.
+    useSheetStore.getState().bubbleSaveCookie("c_user=9; x=y;");
+    s = useSheetStore.getState();
+    expect(s.rows[0].cookies).toContain("c_user=9");
+    expect(s.rows[0].twofakey).toBe(NO_2FA_MARK);
+    expect(s.bubbleActiveRow).toBe(1);
   });
 
   it("long-press skip does nothing when the row already has a 2FA key", () => {
@@ -848,6 +863,20 @@ describe("bubble user flow (as a user uses it)", () => {
     await new Promise((r) => setTimeout(r, 20));
   });
 
+  it("strict key shape: spaced 32-char max key saves, longer blobs are refused", async () => {
+    await openTestFile();
+    // 33 chars is not a key — refused onto the empty row.
+    await useSheetStore.getState().bubbleSaveKey("F5RVFGWOIZFJBQP3GRCSTPTTGGG2UMJKX");
+    let s = useSheetStore.getState();
+    expect(s.rows[0].twofakey ?? "").toBe("");
+    // Max-length key with spaces strips to 32 base32 chars, saves, waits cookie.
+    await useSheetStore.getState().bubbleSaveKey("F5RV FGWO IZFJ BQP3 GRCS TPTT GGG2 UMJK");
+    s = useSheetStore.getState();
+    expect(s.rows[0].twofakey).toBe("F5RVFGWOIZFJBQP3GRCSTPTTGGG2UMJK");
+    expect(s.bubbleActiveRow).toBe(0);
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
   it("2FA-first: a second key never overwrites the waiting key", async () => {
     await openTestFile();
     await useSheetStore.getState().bubbleSaveKey("JBSWY3DPEHPK3PXP");
@@ -858,22 +887,35 @@ describe("bubble user flow (as a user uses it)", () => {
     await new Promise((r) => setTimeout(r, 20));
   });
 
-  it("cookie-first still completes the old way", async () => {
-    await openTestFile();
-    useSheetStore.getState().bubbleSaveCookie("c_user=555; x=y;");
-    await useSheetStore.getState().bubbleSaveKey("JBSWY3DPEHPK3PXP");
-    const s = useSheetStore.getState();
-    expect(s.rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
-    expect(s.bubbleActiveRow).toBe(1);
+  it("cookie before any key is refused (strict 2FA-first)", async () => {
+    const { setToastFn } = await import("@/lib/toast");
+    const toasted: string[] = [];
+    setToastFn((m: string) => { toasted.push(m); });
+    try {
+      await openTestFile();
+      useSheetStore.getState().bubbleSaveCookie("c_user=555; x=y;");
+      const s = useSheetStore.getState();
+      // Nothing saved — no row is anchored without its key first.
+      expect(s.rows[0].cookies ?? "").toBe("");
+      expect(s.rows[0].twofakey ?? "").toBe("");
+      expect(s.isDirty).toBe(false);
+      expect(toasted).toContain("Paste 2FA first");
+    } finally {
+      setToastFn(null);
+    }
     await new Promise((r) => setTimeout(r, 20));
   });
 
-  it("second cookie onto a row waiting for its key is refused", async () => {
+  it("second cookie onto a legacy cookie-only row is refused", async () => {
     await openTestFile();
-    useSheetStore.getState().bubbleSaveCookie("c_user=556; x=y;");
+    useSheetStore.setState({
+      rows: [{ cookies: "c_user=556; x=y;", uid: "", twofakey: "" }],
+      bubbleActiveRow: 0,
+    });
     useSheetStore.getState().bubbleSaveCookie("c_user=557; x=y;");
     const s = useSheetStore.getState();
     expect(s.rows[0].cookies).toContain("c_user=556");
+    expect(s.rows[0].cookies).not.toContain("c_user=557");
     expect(s.bubbleActiveRow).toBe(0);
     await new Promise((r) => setTimeout(r, 20));
   });

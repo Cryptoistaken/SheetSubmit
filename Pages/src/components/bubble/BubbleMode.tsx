@@ -33,14 +33,18 @@ function readClipboardText(): Promise<string> {
 }
 
 function looksLikeCookie(t: string): boolean {
-  return (
-    t.indexOf("c_user=") !== -1 && t.indexOf(";") !== -1 && t.indexOf("=") !== -1
-  );
+  // STRICT: a real FB cookie always carries a numeric c_user plus at least one
+  // more key=value pair. A bare "c_user=" fragment must never leak into the
+  // cookie slot.
+  return /c_user=\d+/.test(t) && t.indexOf(";") !== -1 && t.indexOf("=") !== -1;
 }
 
 function looksLikeKey(t: string): boolean {
   const cleaned = (t || "").replace(/[\s\-]/g, "").toUpperCase();
-  return cleaned.length >= 10 && /^[A-Z2-7]+$/.test(cleaned);
+  // STRICT 2FA shape: base32 only, 10–32 chars. 32 is the max key length
+  // ("F5RV FGWO IZFJ BQP3 GRCS TPTT GGG2 UMJK"); spaces/dashes are optional
+  // and already stripped above, so spaced and unspaced keys both pass.
+  return cleaned.length >= 10 && cleaned.length <= 32 && /^[A-Z2-7]+$/.test(cleaned);
 }
 
 export default function BubbleMode({ fileId }: { fileId: string }) {
@@ -169,9 +173,11 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
             finish();
             return;
           }
-          // 2FA-first order: a key is accepted even when the active row has no
-          // cookie yet (it waits key-only for its cookie). The store decides
-          // placement and toasts ("Need cookie" if the row already has a key).
+          // STRICT 2FA-first: the key anchors the row, the cookie completes
+          // it. A cookie pasted before its key is refused by the store
+          // ("Paste 2FA first") so cookies can never leak onto keyless rows.
+          // The store decides placement and toasts ("Need cookie" if the row
+          // already has a key, "Need 2FA" if it already has a cookie).
           void useSheetStore.getState().bubbleSaveKey(t).finally(finish);
         } else {
           toast("No cookie or key");

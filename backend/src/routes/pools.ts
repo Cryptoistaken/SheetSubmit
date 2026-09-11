@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/shared";
 import { requireAuth, isAdmin } from "../lib/session";
 import { rpc } from "../lib/do";
+import { publishDownloadStates } from "../lib/livePublish";
 export const pools = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 function admin(c: any) { return isAdmin(c.env, c.get("uid")); }
 const PASSWORDS = ["dgddigital", "L0VE@12345"];
@@ -56,6 +57,7 @@ pools.post("/holds/:id/approve", async (c) => {
   try {
     const r: any = await rpc(c.env.POOLS, d.password, "holdApprove", { id, uid: c.get("uid") });
     if (r?.error) return c.json({ error: r.error }, r.error === "not found" ? 404 : 400);
+    void publishDownloadStates(d.password, id);
     return c.json(r);
   } catch (e) { const m = String((e as Error)?.message || ""); return c.json({ error: m || "not found" }, m === "not found" ? 404 : 400); }
 });
@@ -68,6 +70,7 @@ const handleReject = async (c: any) => {
   try {
     const r: any = await rpc(c.env.POOLS, d.password, "holdReject", { id, uid: c.get("uid") });
     if (r?.error) return c.json({ error: r.error }, r.error === "not found" ? 404 : 400);
+    void publishDownloadStates(d.password, id);
     return c.json(r);
   } catch (e) { const m = String((e as Error)?.message || ""); return c.json({ error: m || "not found" }, m === "not found" ? 404 : 400); }
 };
@@ -86,7 +89,7 @@ pools.get("/downloads/:id/detail", async (c) => {
   return c.json({ ...dlMeta({ ...detail, password: d.password }), rows: detail.rows, keys: detail.keys, groups: detail.groups ?? [] });
 });
   pools.get("/downloads/:id", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findRecord(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); const srcUid = c.req.query("srcUid") || "", srcFileId = c.req.query("srcFileId") || ""; let rows: any[] = d.rows || [], filename = String(d.filename || "download.xlsx"); if (srcUid || srcFileId) { const f: any = await rpc(c.env.POOLS, d.password, "downloadRows", { id: d.id, srcUid: srcUid || null, srcFileId: srcFileId || null }).catch(() => null); if (!f) return c.json({ error: "not found" }, 404); rows = f.rows; filename = String(c.req.query("name") || filename).replace(/["\r\n;\\]/g, "_").slice(0, 128); } else { filename = filename.replace(/["\r\n;\\]/g, "_").slice(0, 128); } return c.json({ ...dlMeta({ ...d, rows }), rows, filename }); });
-pools.post("/downloads/:id/revert", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findRecord(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); return c.json(await rpc(c.env.POOLS, d.password, "revertDownload", { id: d.id, uid: c.get("uid") })); });
+pools.post("/downloads/:id/revert", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findRecord(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); const r: any = await rpc(c.env.POOLS, d.password, "revertDownload", { id: d.id, uid: c.get("uid") }); void publishDownloadStates(d.password, d.id); return c.json(r); });
 pools.delete("/downloads/:id", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const id = c.req.param("id");
@@ -212,6 +215,7 @@ pools.post("/:password/:pool/hold", async (c) => {
   const filename = `${META[pid].label.toLowerCase().replace(/\s+/g, "_")}_${pwd.replace(/[^A-Za-z0-9_-]/g, "_")}_${new Date().toISOString().slice(0, 10)}_${id.slice(-4)}.xlsx`;
   const out: any = await rpc(c.env.POOLS, pwd, "hold", { pool: pid, uid: c.get("uid"), count, mode: modeRaw, srcUid: srcUidRaw ? String(srcUidRaw) : null, srcFileId: srcFileIdRaw ? String(srcFileIdRaw) : null, srcUids: Array.isArray(body.srcUids) ? body.srcUids : null, srcFileIds: Array.isArray(body.srcFileIds) ? body.srcFileIds : null, verifiedOnly, unverifiedOnly, downloadId: id, filename });
   if (out?.error) return c.json({ error: out.error }, 400);
+  if (out?.downloadId) void publishDownloadStates(pwd, out.downloadId);
   return c.json({ password: pwd, poolId: pid, claimed: out.claimed ?? out.held ?? 0, held: out.held ?? out.claimed ?? 0, count: out.count ?? out.claimed ?? 0, rows: out.rows, holdId: out.holdId ?? out.downloadId, downloadId: out.downloadId ?? out.holdId, filename: out.filename, status: out.status, unitPrice: out.unitPrice, total: out.total, mode: out.mode, srcUids: out.srcUids, srcFileIds: out.srcFileIds });
 });
 pools.get("/:password/:pool/user-files", async (c) => {

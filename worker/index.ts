@@ -6,7 +6,7 @@
 // Available pool rows are NOT background-monitored — they are killed by user checks (POST /fb/check → markDead).
 // Env: DATABASE_URL, REDIS_URL (optional), CHECK_URL, HELD_INTERVAL_MS (10min), WA_INTERVAL_MS (30min), PAGE_INTERVAL_MS (30min)
 import postgres from "postgres";
-import { closeRedis, redisDel } from "./redis";
+import { closeRedis, redisDel, publishLiveEvent } from "./redis";
 
 if (!Bun.env.DATABASE_URL) throw new Error("DATABASE_URL is required for worker");
 const db = postgres(Bun.env.DATABASE_URL || "", { max: 2, idle_timeout: 20, connect_timeout: 10 });
@@ -37,7 +37,11 @@ async function checkUids(limit: number): Promise<number> {
       if (uid && x.data?.status?.name !== "valid") dead.push(uid);
     } catch {}
   }
-  if (dead.length) await db`UPDATE pool_rows SET state='dead' WHERE state='held' AND row_key IN ${db(dead)}`;
+  if (dead.length) {
+    await db`UPDATE pool_rows SET state='dead' WHERE state='held' AND row_key IN ${db(dead)}`;
+    // wake any owner sheets watching these rows (backend relays to file rooms)
+    void publishLiveEvent({ type: "dead-keys", keys: dead });
+  }
   console.log(`[worker:held] checked ${uids.length} uid(s) — ${dead.length} dead`);
   return dead.length;
 }

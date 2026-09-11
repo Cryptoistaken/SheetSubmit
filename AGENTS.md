@@ -25,7 +25,7 @@
   backend/                # Railway Hono/Bun service backed by Postgres; src/server.ts is the HTTP entrypoint; railway.toml deploy config; .env local-only template; optional REDIS_URL enables safe read-through caching
                         #   PERFORMANCE.md — 62-entry inventory covering 64 handlers + per-API perf plan (bottleneck → fix → est. speedup), 002_perf.sql migration sketch, rollout order
   worker/                 # Railway background worker service (Bun + postgres.js + standard redis client + Postgres, self-contained; Root Directory=worker in dashboard, railway.toml deploy config w/ /health check, single replica). Set optional REDIS_URL alongside DATABASE_URL. /health listens on $PORT and fixed :3000 (backend dials worker.railway.internal:3000), hostname 0.0.0.0. Jobs on own intervals (30s tick, single-leader advisory lock):
-                        #   held-uid-check first (pending-approval monitoring: dead UIDs → pool_rows.state='dead', default 10min; NO background check of available rows — they die via user checks, see wa.ts markDead),
+                        #   held-uid-check first (pending-approval monitoring: dead UIDs → pool_rows.state='dead', default 10min + ss:live relay so watching sheets update; NO background check of available rows — they die via user checks, see wa.ts markDead),
                         #   page-check + wa-check (eligibility sweeps → data.wa_status + wa:{src_uid}:{cuser} meta cache, 30min). Env: DATABASE_URL, CHECK_URL, *_INTERVAL_MS, UID_BATCH, CHECK_BATCH, WORKER_TOKEN (gates /health error detail); .env template
                         #   + HTTP GET /health (port 3000): {ok, startedAt, uptimeMs, jobs:[{name, everyMs, lastRunAt, lastRunAgoMs, lastError}]} — backend proxies it at GET /api/worker/health
   Pages/                  # React SPA (Vite)
@@ -38,7 +38,7 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 2.0.16; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.17; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   GET /api/worker/health (proxies worker.railway.internal:3000/health — proves worker connectivity from the public URL),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -50,18 +50,23 @@
  lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, WORKER_URL, CHECK_URL, ALLOW_TEST_AUTH, TELEGRAM_LOGIN_CLIENT_ID)
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
   src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder (SameSite=None on https for direct cross-origin calls, Lax on http)
-                      #   src/lib/__tests__/session.test.ts (sign/verify incl. tamper+expiry, cookie strings, isAdmin), sharedFeed.test.ts (poolRowKey/poolFeedSig), revertFinality.test.ts (revertDownload finality vs live DB, skipIf no DATABASE_URL) — `bun run test` in backend/
-  src/lib/redis.ts        # optional standard node-redis client; fail-open read-through cache helpers using REDIS_URL
+                      #   src/lib/__tests__/session.test.ts (sign/verify incl. tamper+expiry, cookie strings, isAdmin), sharedFeed.test.ts (poolRowKey/poolFeedSig), revertFinality.test.ts (revertDownload finality vs live DB, skipIf no DATABASE_URL), livePublish.test.ts (grouping/relay validation + guarded fan-out), routes/__tests__/live.test.ts (ticket SSE seam + guarded issue→stream→state) — `bun run test` in backend/
+  src/lib/redis.ts        # optional standard node-redis client; fail-open read-through cache helpers using REDIS_URL; + live relay (publishLiveEvent, subscribeLiveEvents on ss:live with own sub connection)
+  src/lib/live.ts         # live row-state domain: one-time stream tickets (60s TTL, single-use) + groupLiveStates (flat key rows → per-file maps, set flags only) + parseLiveEvent (worker relay validation, 500-key cap)
+  src/lib/liveBus.ts      # in-process fan-out rooms per fileId (joinLive/publishLive)
+  src/lib/livePublish.ts  # DB→rooms bridge: publishDownloadStates (one download) + publishKeyStates (bare keys, any password), fail-open
   src/lib/agent.ts        # DEV-ONLY agent door: agentDoorOpen (ALLOW_AGENT_ACCESS=1 + AGENT_TOKEN), timing-safe token check, requireAgent (404s when closed)
  src/lib/do.ts            # 5-line rpc wrapper → repository (pg.ts)
   src/lib/pg.ts            # Postgres.js repository for users, files, pools, wallets, withdrawals and wallet_transactions (max 10 connections); SQL-side pool pagination, batched claims/removals, file-key projection, session cleanup and admin user lookup
                         # + STRICT ROUTING (classify): file preset feeds ONLY its own pool — combo→cookies_2fa, page→page (real 2fa required; wa-eligible = verified, cookie+2fa only = unverified, both claimable in page pool via verifiedOnly/unverifiedOnly), cookie→cookies_only; key-less or no-2fa live rows are invalid → pool_rejects (deduped per account, cleared on successful pooling), never cookies_only
- src/routes/files.ts      # files, archive and duplicate routes (500 rows/file strict, server-enforced; files per user uncapped)
+                        # + LIVE STATES: liveStatesByDownload (per-file key flags for one download) + liveStatesByKeys (bare keys across passwords, cap 500) feed the row-state push fan-out (see routes/live.ts)
+  src/routes/files.ts      # files, archive and duplicate routes (500 rows/file strict, server-enforced; files per user uncapped)
                       # + HOLD LOCK: held pool rows block owner deletes — files.delete (archive), persist (removed rows), archive.delete, archive/batch-delete return 409 via heldCheck op (pg.ts); sheetStore persist + HomePage delete surface the error toast
                       # + ROW-LOSS GUARDS: PUT /:id/persist takes optional base seq → 409 version conflict on stale (two-editor overwrite protection, shared.ts isPersistConflict); POST /:id/restore-snapshot restores rolling snapshots (up to 3 in meta KV filesnap:<id>, optional {index}, wiped with file, hold-locked like persist); purge writes a forensic tombstone (meta filetomb:<id>: name/owner/rowCount/logs) served by admin GET /file/:id/logs
                       # + decorateHoldState: file row reads (GET /:id/rows, /:id/full; admin.ts /file/:id/rows) overlay pool state → row._hold/_approved/_dead (SheetGrid tints rows; hold+approved rows locked client-side)
                       #   + archive router (GET /, POST /:id/restore, POST /batch-restore, DELETE /:id, POST /batch-delete — bulk index ops, concurrent wipes, pool cleanup; archive removes the file's available pool rows (claimed/held stay), restore + batch-restore re-feed them via feedPools)
                       #   + crossDups router (GET /?fileId= — same-type uid scan, {counts, dups})
+src/routes/live.ts       # live row-state pushes: POST /files/:id/live-ticket (session + owner-or-admin → one-time ticket), GET /files/:id/live (ticket SSE stream, no session; mounts before files router so /* auth never sees it), GET /files/:id/live-state (flag-only overlay for resync/polling); approve/reject/revert/hold/markDead publish via livePublish, worker deaths relayed on ss:live
 src/routes/pools.ts       # admin pool, hold, download and pricing routes
                       #   GET /holds (status filter), POST /holds/:id/approve (from HOLD and REJECTED — re-claims still-free rows, dead rows consumed unpaid, {approved, dead, paid}), POST /holds/:id/reject + /return (same handler → holdReject op; from HOLD and APPROVED — rejecting an approved hold auto-debits wallets in full, {rejected, debited}),
                       #   GET /holds (status filter), POST /holds/:id/approve + /reject + /return (REVERT WINDOW: first action starts 5min, exactly one flip allowed, then final — pg.ts throws "decision is final — revert window closed"; NO wallet ops at action time), POST /downloads/:id/revert (revertDownload op, same finality guard — Delete on approvals uses it; UI Delete button locks when final),
@@ -74,7 +79,7 @@ src/routes/admin.ts       # admin stats, users, files and moderation routes
                       #   GET /pooldiag?key= (cross-password account trace: pool_rows in any state + pool_rejects + downloads + source files + live file-row locate with server-side classify; feeds the Pool lookup tool),
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist (feeds pools like the owner route),
                       #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore, DELETE /user/:id/archive/:fileId, DELETE /user/:id
-src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows), /fb/page-check, /fb/wa-check and WA cache routes
+src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows + live-publishes them), /fb/page-check, /fb/wa-check and WA cache routes
                       #   GET /wa/cache?uids= (meta-backed, eligible-only, 24h TTL)
 src/routes/bot.ts         # Telegram webhook and bot routes
 src/routes/testAuth.ts    # TEST-ONLY POST /api/test/login (mints ss_session for Playwright e2e; 404s unless ALLOW_TEST_AUTH=1 — never set on prod)
@@ -107,11 +112,11 @@ components/icons/FileTypeIcons.tsx, FacebookIcon.tsx
 components/profile/ProfileAvatar.tsx
  components/ui/button.tsx, avatar.tsx, dialog.tsx, alert-dialog.tsx, dropdown-menu.tsx, theme-toggler.tsx, hold-to-delete-button.tsx, slide-to-confirm-button.tsx, ink-stamp.tsx, page-skeleton.tsx, search-input.tsx  # shadcn and reusable pool actions
 contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, retry 3×1.5s
-stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection; _taken/_hold/_approved rows reject cell edits (commitCell, openQuickEdit, openInlineEdit); flushPersist sends base seq (409 version conflict → reload server version + stash ours in Undo + re-apply journal); applyRestore for snapshot restore; direct-edit guards: locked-row toast (never silent), formula blur-commit, open-cell draft commit, twofakey normalize + cookie/key blob split, bulk-clear skips locked
+stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection; _taken/_hold/_approved rows reject cell edits (commitCell, openQuickEdit, openInlineEdit); flushPersist sends base seq (409 version conflict → reload server version + stash ours in Undo + re-apply journal); applyRestore for snapshot restore; applyLiveStates for socket/poll flag patches (cells never touched); direct-edit guards: locked-row toast (never silent), formula blur-commit, open-cell draft commit, twofakey normalize + cookie/key blob split, bulk-clear skips locked
 stores/bubbleStore.ts     # {on, pickMode}
 stores/profileCache.ts    # profile cache (fed from /me + admin users)
-hooks/useUndoRedo.ts, usePersist.ts (beforeunload→flushPersist), useModalA11y.ts
-  lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, useConnStore (connection status fed by request outcomes), files/persist/append/WA/admin/pools, me/logout/botInfo/Telegram Login/claimDeviceSession; RUNTIME_BASE goes direct to Railway on the prod web host (override → proxy otherwise; Android app always proxies — WebView blocks third-party cookies); verifyTelegramLogin falls back to the same-origin proxy when the direct cross-site POST fails and pins it via ss_api_proxy localStorage (cleared on logout) so later calls stay on the cookie's host
+hooks/useUndoRedo.ts, usePersist.ts (beforeunload→flushPersist), useLiveRows.ts (ticket stream + polling fallback for open file, flag-only patches), useModalA11y.ts
+  lib/api.ts                # BASE=RUNTIME_BASE+"/api", request/requestBlob, useConnStore (connection status fed by request outcomes), files/persist/append/WA/admin/pools, live (requestLiveTicket/getLiveState/apiBase for the row-state stream), me/logout/botInfo/Telegram Login/claimDeviceSession; RUNTIME_BASE goes direct to Railway on the prod web host (override → proxy otherwise; Android app always proxies — WebView blocks third-party cookies); verifyTelegramLogin falls back to the same-origin proxy when the direct cross-site POST fails and pins it via ss_api_proxy localStorage (cleared on logout) so later calls stay on the cookie's host
 lib/types.ts              # FileType, ColumnDef, SheetFile, Row
 lib/xlsx.ts               # importXlsx/buildXlsx/downloadXlsx/parseSheetRows
 lib/downloadOpts.ts       # buildDownloadOpts counts
@@ -123,7 +128,7 @@ public/sw.js              # service worker (chunk-error reload)
 functions/api/[[path]].ts # Pages Functions proxy → BACKEND_URL
 functions/webhook/[[path]].ts
 lib/__tests__/customDownload.test.ts, split.test.ts, idb.test.ts (IDB outbox mirror/snapshot/replay), rowguard.test.ts (isDataRow/replaceCapMessage/isPersistConflict + destructive call-site guards), xlsx.test.ts (build/parse round-trip, importXlsx, buildDownloadOpts, hydrateWaCache), apiClient.test.ts (request contract via mocked fetch)
-stores/__tests__/sheetStore.test.ts (api mock mirrors the live lib/api.ts surface — no version-history stubs; that API is gone), sheetStoreOffline.test.ts (offline snapshot open)
+stores/__tests__/sheetStore.test.ts (api mock mirrors the live lib/api.ts surface — no version-history stubs; that API is gone), sheetStoreOffline.test.ts (offline snapshot open), liveStates.test.ts (flag patches), lib/__tests__/live.test.ts (stream client + poolRowKey)
 ```
 
 ### Auth flow

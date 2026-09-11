@@ -7,6 +7,7 @@ import SheetGrid from "@/components/sheet/SheetGrid";
 import PageSkeleton from "@/components/ui/page-skeleton";
 import { useConfirm } from "@/lib/confirm";
 import { usePersist } from "@/hooks/usePersist";
+import { useLiveRows } from "@/hooks/useLiveRows";
 import { useSheetStore } from "@/stores/sheetStore";
 
 export default function SheetPage() {
@@ -19,6 +20,7 @@ export default function SheetPage() {
   const confirm = useConfirm();
 
   usePersist();
+  useLiveRows();
 
   // File name in the tab so several open sheets stay distinguishable.
   useEffect(() => {

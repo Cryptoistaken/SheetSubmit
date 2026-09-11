@@ -2,7 +2,9 @@ import { serve } from "bun";
 import { app, startBackgroundTasks } from "./index";
 import type { Env } from "./lib/shared";
 import { bootstrapDatabase, closeDatabase } from "./lib/pg";
-import { closeRedis } from "./lib/redis";
+import { closeRedis, subscribeLiveEvents } from "./lib/redis";
+import { parseLiveEvent } from "./lib/live";
+import { publishKeyStates } from "./lib/livePublish";
 
 const env: Env = {
   INDEX: "index",
@@ -28,6 +30,19 @@ if (!env.DATABASE_URL) throw new Error("DATABASE_URL is required");
 const port = Number(Bun.env.PORT || 3000);
 await bootstrapDatabase();
 startBackgroundTasks(env);
+// worker → rooms relay: held-uid-check deaths arrive on the live channel
+// (fail-open — without REDIS_URL this simply never fires and clients resync
+// on reconnect/poll instead)
+void subscribeLiveEvents((message) => {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(message);
+  } catch {
+    return;
+  }
+  const keys = parseLiveEvent(raw);
+  if (keys && keys.length) void publishKeyStates(keys).catch(() => {});
+});
 const server = serve({ port, hostname: "0.0.0.0", fetch: (request) => app.fetch(request, env) });
 console.log(`SheetSubmit backend listening on 0.0.0.0:${port}`);
 

@@ -6,6 +6,7 @@ import type { Env } from "./lib/shared";
 import { requireAuth, isAdmin, cookie, verifySession } from "./lib/session";
 import { rpc } from "./lib/do";
 import { files, archive, crossDups } from "./routes/files";
+import { live } from "./routes/live";
 import { pools } from "./routes/pools";
 import { admin } from "./routes/admin";
 import { wa } from "./routes/wa";
@@ -18,7 +19,7 @@ import { signSession as signSessionFn } from "./lib/session";
 
 export const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 // ponytail: manual bump on any backend route change — lets health checks confirm a deploy landed
-export const API_VERSION = "2.0.16";
+export const API_VERSION = "2.0.17";
 // ponytail: repository errors are plain Errors — map known client failures to typed
 // 4xx JSON instead of masking everything as 500. Unknown (incl. SQL internals) stays masked.
 const CLIENT_ERRORS: [RegExp, ContentfulStatusCode][] = [
@@ -89,6 +90,9 @@ app.get("/api/wallet/requests", requireAuth, async (c) => { if (!isAdmin(c.env, 
 app.post("/api/wallet/requests/:id/:action", requireAuth, async (c) => { if (!isAdmin(c.env, c.get("uid"))) return c.json({ error: "admin access required" }, 403); const action = c.req.param("action"); if (action !== "approve" && action !== "reject") return c.json({ error: "unsupported action" }, 400); try { return c.json(await rpc(c.env.INDEX, "global", "walletDecision", { id: c.req.param("id"), status: action === "approve" ? "APPROVED" : "REJECTED" })); } catch (error) { if (String((error as Error)?.message || "").includes("withdrawal not found")) return c.json({ error: "withdrawal not found" }, 404); throw error; } });
 app.get("/api/wallet/methods", requireAuth, async (c) => { return c.json(await rpc(c.env.INDEX, "global", "paymentMethodsGet", { uid: c.get("uid") })); });
 app.put("/api/wallet/methods", requireAuth, async (c) => { let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "invalid body" }, 400); } const methods = body?.methods ?? {}; if (typeof methods !== "object" || methods === null || Array.isArray(methods)) return c.json({ error: "invalid methods" }, 400); if (Object.keys(methods).length > 20 || JSON.stringify(methods).length > 10000) return c.json({ error: "invalid methods" }, 400); return c.json(await rpc(c.env.INDEX, "global", "paymentMethodsSet", { uid: c.get("uid"), methods })); });
+// live row-state stream (ticket-authed, no session) mounts before the files
+// router: its /* session middleware would otherwise reject ticketed streams
+app.route("/api", live);
 app.route("/api/files", files);
 app.route("/api/archive", archive);
 app.route("/api/cross-dups", crossDups);

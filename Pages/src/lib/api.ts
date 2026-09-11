@@ -32,6 +32,12 @@ declare global {
 
 const BASE = RUNTIME_BASE + "/api";
 
+/** Absolute-or-same-origin API root for transports that cannot use fetch
+ * (EventSource takes no headers — the live stream authenticates by ticket). */
+export function apiBase(): string {
+  return RUNTIME_BASE;
+}
+
 export type ConnStatus = "connecting" | "ok" | "err";
 export const useConnStore = create<{ status: ConnStatus }>()(() => ({ status: "connecting" }));
 function markConn(res: Response) { useConnStore.setState({ status: res.ok ? "ok" : "err" }); return res; }
@@ -259,6 +265,10 @@ export const api = {
     request<SheetFile>(`/files/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteFile: (id: string) => request<{ ok: boolean }>(`/files/${id}`, { method: "DELETE" }),
   getRows: (id: string) => request<Row[]>(`/files/${id}/rows`),
+  requestLiveTicket: (id: string) =>
+    request<{ ticket: string }>(`/files/${encodeURIComponent(id)}/live-ticket`, { method: "POST" }),
+  getLiveState: (id: string) =>
+    request<{ states: Record<string, { hold?: boolean; approved?: boolean; dead?: boolean }> }>(`/files/${encodeURIComponent(id)}/live-state`),
   persist: (id: string, data: PersistPayload, opts?: { keepalive?: boolean }) =>
     request<{ ok: boolean; seq?: number; file?: SheetFile }>(`/files/${id}/persist`, { method: "PUT", body: JSON.stringify(data) }, opts),
   append: (id: string, data: AppendPayload, opts?: { keepalive?: boolean }) =>

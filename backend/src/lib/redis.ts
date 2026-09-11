@@ -32,4 +32,38 @@ export async function redisJsonSet(key: string, value: unknown, ttlSeconds: numb
 export async function redisDel(key: string) {
   try { const c = await getClient(); if (c) await c.del(key); } catch {}
 }
-export async function closeRedis() { if (client?.isOpen) await client.close(); }
+
+/** Live fan-out channel (worker → backend rooms). Publish works on the shared
+ * client; subscribing needs its own connection (subscriber mode is exclusive). */
+export const LIVE_CHANNEL = "ss:live";
+
+export async function publishLiveEvent(msg: unknown) {
+  try {
+    const c = await getClient();
+    if (c) await c.publish(LIVE_CHANNEL, JSON.stringify(msg));
+  } catch {}
+}
+
+let sub: ReturnType<typeof createClient> | null = null;
+export async function subscribeLiveEvents(onMsg: (msg: string) => void): Promise<void> {
+  if (!url || sub) return;
+  try {
+    const s = createClient({ url, socket: { connectTimeout: 500, reconnectStrategy: (retries) => Math.min(1000 * 2 ** retries, 30_000) }, disableOfflineQueue: true });
+    s.on("error", (error) => console.error("[redis:sub]", error.message));
+    await s.connect();
+    await s.subscribe(LIVE_CHANNEL, (message) => {
+      try {
+        onMsg(message);
+      } catch (e) {
+        console.error("[live-sub]", (e as Error)?.message ?? e);
+      }
+    });
+    sub = s;
+  } catch {
+    try {
+      await sub?.quit().catch(() => {});
+    } catch {}
+    sub = null;
+  }
+}
+export async function closeRedis() { if (client?.isOpen) await client.close(); if (sub?.isOpen) await sub.quit().catch(() => {}); sub = null; }

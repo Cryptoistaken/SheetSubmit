@@ -16,6 +16,7 @@ import { toast } from "@/lib/toast";
 import { mirrorPending, snapshotFile, applyMirror, idbGet, idbDel, mirrorKey, snapKey } from "@/lib/idb";
 import type { JournalMirror, FileSnapshot } from "@/lib/idb";
 import { vibrate } from "@/lib/utils";
+import { poolRowKey } from "@/lib/live";
 import { IS_DESKTOP } from "@/lib/device";
 import { getCachedTOTP } from "@/features/filetypes/totp";
 
@@ -391,6 +392,7 @@ export interface SheetState {
   restoreVersion: (v: number) => Promise<boolean>;
   applyRestore: (rows: Row[], seq: number, file?: SheetFile | null) => void;
   mergeRows: (incoming: Row[]) => void;
+  applyLiveStates: (states: Record<string, { hold?: boolean; approved?: boolean; dead?: boolean }>) => void;
   applyUpload: (mode: "replace" | "append", incoming: Row[]) => void;
   removeEmptyRows: () => void;
   deleteDeadRows: () => void;
@@ -2252,6 +2254,27 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       get().maybeAutoCheck(null, "cookies");
     }
     toast(fitting.length < added.length ? `Merged ${fitting.length} (skipped ${skipped}, limit ${MAX_GRID_ROWS})` : `Merged ${fitting.length} (skipped ${skipped})`);
+  },
+
+  // Live row-state pushes (socket/poll): patch overlay flags by pool key.
+  // Cell values, order, undo and journals are never touched — a push can
+  // land mid-edit without disturbing the user's work.
+  applyLiveStates: (states) => {
+    const s = get();
+    if (!s.rows.length || !states) return;
+    let changed = false;
+    const rows = s.rows.map((row) => {
+      const k = poolRowKey(row);
+      if (!k || !(k in states)) return row;
+      const st = states[k];
+      const hold = !!st.hold;
+      const approved = !!st.approved;
+      const dead = !!st.dead;
+      if ((row as Row & { _hold?: boolean })._hold === hold && (row as Row & { _approved?: boolean })._approved === approved && (row as Row & { _dead?: boolean })._dead === dead) return row;
+      changed = true;
+      return { ...row, _hold: hold, _approved: approved, _dead: dead };
+    });
+    if (changed) set({ rows });
   },
 
   applyUpload: (mode, incoming) => {

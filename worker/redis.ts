@@ -20,4 +20,7 @@ async function getClient() {
   return null;
 }
 export async function redisDel(key: string) { try { const c = await getClient(); if (c) await c.del(key); } catch {} }
+// live relay to the backend (best-effort — without REDIS_URL the backend
+// simply never hears worker-side deaths until clients resync)
+export async function publishLiveEvent(msg: unknown) { try { const c = await getClient(); if (c) await c.publish("ss:live", JSON.stringify(msg)); } catch {} }
 export async function closeRedis() { if (client?.isOpen) await client.close(); }

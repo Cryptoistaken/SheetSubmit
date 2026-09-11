@@ -251,7 +251,7 @@ export default function PoolsView() {
   const toggleExpand = async (userId: string) => {
     if (expandedUser === userId) { setExpandedUser(null); return; }
     setExpandedUser(userId);
-    if (!userFiles) {
+    if (!userFiles?.find((x) => x.userId === userId)) {
       setLoadingFiles(true);
       try { const uf = await api.getUserFiles(curPwd, cur); setUserFiles(uf.users); } catch {}
       setLoadingFiles(false);
@@ -658,29 +658,32 @@ export default function PoolsView() {
                 </div>
               </div>
               {expanded && (
-                <div id={`pool-files-${u.userId}`} className="file-row" style={{ padding: 0 }}>
+                <div id={`pool-files-${u.userId}`} className="file-row" style={{ padding: "4px 0 6px 32px" }}>
                   {loadingFiles && !uf ? <Skeleton className="h-4 w-20" /> : !uf || uf.files.length === 0 ? <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>No files in pool</div> : (
                     <div className="files-list">
-                      {uf.files.map((f) => (
+                      {uf.files.map((f) => {
+                        const canOpen = meIsAdmin || me?.id === u.userId;
+                        const openPath = !canOpen ? null : meIsAdmin ? `/admin/user/${u.userId}/file/${f.fileId}` : `/file/${f.fileId}`;
+                        return (
                         <div key={f.fileId} className="file-card list-row" role="group" aria-label={`File ${f.name || f.fileId}, ${f.available} available`} style={{ touchAction: "manipulation", userSelect: "none", WebkitUserSelect: "none", width: "100%", margin: 0 } as React.CSSProperties}>
                           {holdMode === "pick" ? <input type="checkbox" aria-label={`Select file ${f.name || f.fileId}`} checked={selectedFileIds.includes(f.fileId)} onChange={() => toggleFile(f.fileId, u.userId)} style={{ width: 16, height: 16, flexShrink: 0 }} /> : null}
-                          <span style={{ display: "inline-flex", flexShrink: 0 }} title={d.line1}><ProfileAvatar photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={d.line1.charAt(0).toUpperCase()} className="size-7 bg-(--bg3) text-(--text2)" verified={false} /></span>
                           <div className="file-card-icon"><FileTypeIcon file={{ preset: f.preset ?? undefined, name: f.name ?? undefined }} size={16} /></div>
-                          <div style={{ display: "flex", alignItems: "flex-start", gap: 6, minWidth: 0, flex: 1, overflow: "hidden" }}>
-                            <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
-                              <div className="file-card-name" dir="auto" title={f.name ?? undefined}>{f.name || `#${f.fileId.slice(-8)}`}</div>
-                              <div className="file-card-meta">{f.createdAt ? new Date(f.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"} · {f.available} avail · {f.claimed} taken</div>
-                            </div>
-                            <div style={{ display: "flex", gap: 4, flexShrink: 0, marginTop: 1 }}>
-                              <span className="file-type-badge" title="Facebook" aria-label="Facebook" style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={10} /></span>
-                              <span className="file-type-badge" style={{ fontSize: 10, padding: "2px 6px", maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={curPwd}><PasswordIcon password={curPwd} size={12} /></span>
-                            </div>
+                          <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+                            <div className="file-card-name" dir="auto" title={f.name ?? undefined}>{f.name || `#${f.fileId.slice(-8)}`}</div>
+                            <div className="file-card-meta">{f.createdAt ? new Date(f.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"} · {f.available} avail · {f.claimed} taken</div>
                           </div>
+                          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                            <span className="file-type-badge" title="Facebook" aria-label="Facebook" style={{ display: "inline-flex", alignItems: "center" }}><FacebookIcon size={10} /></span>
+                            <span className="file-type-badge" style={{ fontSize: 10, padding: "2px 6px", maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={curPwd}><PasswordIcon password={curPwd} size={12} /></span>
+                          </div>
+                          {openPath ? (
                           <div className="file-card-actions">
-                            <button type="button" className="file-card-btn" title="Open file in browser" aria-label={`Open ${f.name || f.fileId} in browser`} onClick={(e) => { e.stopPropagation(); navigate(`/admin/user/${u.userId}/file/${f.fileId}`); }}><ExternalLink size={14} aria-hidden /></button>
+                            <button type="button" className="file-card-btn" title="Open file in browser" aria-label={`Open ${f.name || f.fileId} in browser`} onClick={(e) => { e.stopPropagation(); navigate(openPath); }}><ExternalLink size={14} aria-hidden /></button>
                           </div>
+                          ) : null}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

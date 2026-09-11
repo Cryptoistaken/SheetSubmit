@@ -21,6 +21,7 @@ const txType = (t: string) => t === "CREDIT" || t === "DEBIT";
 const pools = ["cookies_only", "cookies_2fa", "page"] as const;
 type Pool = typeof pools[number];
 const prices: Record<Pool, number> = { cookies_only: .02, cookies_2fa: .05, page: .1 };
+const poolLabel = (id: string) => id === "cookies_only" ? "Cookies" : id === "cookies_2fa" ? "2FA" : id === "page" ? "Page" : id;
 const REVERT_WINDOW = 300_000; // first approve/reject opens a 5-minute window for exactly one flip; wallets pay at settlement
 const json = (v: any) => v == null ? null : typeof v === "string" ? JSON.parse(v) : v;
 const key = (r: Row) => String(r.uid || (String(r.cookies || "").match(/c_user=(\d+)/)?.[1] || ""));
@@ -67,13 +68,12 @@ async function indexOp(op: string, a: any) {
             const deadRows: any[] = await tx`SELECT COUNT(*) n FROM pool_rows WHERE password=${d.password} AND pool_id=${d.pool_id} AND hold_id=${d.id} AND state='dead'`;
             const dead = Number(deadRows[0]?.n || 0);
             const unit = d.unit_price == null ? price(d.pool_id) : Number(d.unit_price);
-            const total = creditRows.reduce((s: number, x: any) => s + Number(x.n), 0);
             for (const cr of creditRows) {
               const uid = String(cr.src_uid), amount = +(Number(cr.n) * unit).toFixed(2);
               if (!Number.isFinite(amount) || amount <= 0) continue;
               await tx`INSERT INTO wallets(user_id,balance) VALUES(${uid},${amount}) ON CONFLICT(user_id) DO UPDATE SET balance=wallets.balance+EXCLUDED.balance`;
               const r: any = (await tx`SELECT balance FROM wallets WHERE user_id=${uid}`)[0];
-              await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'CREDIT',${amount},${Number(r.balance)},${`Approved hold · ${total} rows${dead ? ` · ${dead} dead` : ""} · ${d.pool_id} pool`},${j({ pool_id: d.pool_id, download_id: d.id, rows: Number(cr.n), dead, unit_price: unit, settled: true })},${Date.now()})`;
+              await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'CREDIT',${amount},${Number(r.balance)},${`Pool earning — ${poolLabel(d.pool_id)} · ${Number(cr.n)} ${Number(cr.n) === 1 ? "row" : "rows"} paid`},${j({ pool_id: d.pool_id, download_id: d.id, rows: Number(cr.n), dead, unit_price: unit, settled: true })},${Date.now()})`;
             }
           }
           await tx`UPDATE downloads SET settled=true WHERE id=${d.id}`;
@@ -425,7 +425,7 @@ async function transition(password: string, op: string, a: any) {
         const updated: any[] = await tx`UPDATE wallets SET balance=balance-${amount} WHERE user_id=${uid} AND balance>=${amount} RETURNING balance`;
         if (!updated.length) throw new Error("insufficient wallet balance for revert");
         const r: any = updated[0];
-        await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'DEBIT',${amount},${Number(r.balance)},${`Hold reverted · ${d.pool_id} pool`},${j({ pool_id: d.pool_id, download_id: d.id })},${now})`;
+        await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'DEBIT',${amount},${Number(r.balance)},${`Hold returned — ${poolLabel(d.pool_id)}`},${j({ pool_id: d.pool_id, download_id: d.id })},${now})`;
       }
       await tx`UPDATE downloads SET reverted=true,status='REVERTED' WHERE password=${password} AND id=${d.id}`;
       return { ok: true, reverted, id: d.id, status: "REVERTED" };

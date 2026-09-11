@@ -25,6 +25,56 @@ function copyText(text: string) {
 
 const shortId = (id: string) => (id.length > 20 ? id.slice(0, 16) + "…" : id);
 
+const POOL_LABEL: Record<string, string> = { cookies_only: "Cookies", cookies_2fa: "2FA", page: "Page" };
+const poolLabel = (id: unknown) => {
+  const s = String(id ?? "").trim();
+  return POOL_LABEL[s] ?? (s ? s.charAt(0).toUpperCase() + s.slice(1) : "Pool");
+};
+const rowsText = (n: unknown) => {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return null;
+  return `${v} ${v === 1 ? "row" : "rows"}`;
+};
+const maskAccount = (account: string) => {
+  const a = account.trim();
+  if (!a) return "—";
+  if (a.length > 12) return `${a.slice(0, 6)}…${a.slice(-4)}`;
+  if (a.length > 4) return `••• ${a.slice(-4)}`;
+  return a;
+};
+const txDate = (ts: number) => new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const statusLabel = (s: string) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : s);
+
+// Turns raw backend reasons ("Approved hold · 1 rows · page pool") into a
+// clean title + supporting detail. Handles old rows too.
+function formatTx(tx: WalletTransaction): { title: string; detail: string | null } {
+  const meta = (tx.meta ?? {}) as Record<string, unknown>;
+  const desc = tx.description || "";
+  const pool = poolLabel((meta as Record<string, unknown>).pool_id ?? (meta as Record<string, unknown>).pool);
+  if (desc.startsWith("Approved hold") || meta.settled) {
+    const fromMeta = rowsText(meta.rows);
+    const fromDesc = (() => { const m = desc.match(/(\d+)\s+rows?/); return m ? rowsText(Number(m[1])) : null; })();
+    const dead = Number(meta.dead ?? 0);
+    return {
+      title: `Pool earning — ${pool}`,
+      detail: [fromMeta ?? fromDesc ? `${fromMeta ?? fromDesc} paid` : null, dead > 0 ? `${dead} expired` : null].filter(Boolean).join(" · ") || null,
+    };
+  }
+  if (/hold revert/i.test(desc) || /hold return/i.test(desc)) return { title: `Hold returned — ${pool}`, detail: null };
+  if (/withdrawal via/i.test(desc)) {
+    const method = String(meta.method ?? desc.replace(/.*via\s+/i, "")).trim() || "Withdrawal";
+    const acct = String(meta.account ?? "").trim();
+    return { title: `Withdrawal — ${method}`, detail: acct ? maskAccount(acct) : null };
+  }
+  if (/withdrawal refund/i.test(desc)) return { title: "Withdrawal refunded", detail: "Declined payout returned to balance" };
+  const pretty = desc
+    .replace(/(\d+)\s+rows\b/g, (_, n: string) => `${n} ${Number(n) === 1 ? "row" : "rows"}`)
+    .replace(/\bcookies_only\b/g, "Cookies")
+    .replace(/\bcookies_2fa\b/g, "2FA")
+    .replace(/^page\b/i, "Page");
+  return { title: pretty ? pretty.charAt(0).toUpperCase() + pretty.slice(1) : "Transaction", detail: null };
+}
+
 function CopyField({ label, value, copy, display, mono, className }: { label: string; value: string; copy?: string; display?: string; mono?: boolean; className?: string }) {
   const [copied, setCopied] = useState(false);
   return <button type="button" title="Tap to copy" onClick={() => { copyText(copy ?? value); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className={`group flex w-full cursor-pointer items-center justify-between gap-3 text-left transition-colors hover:text-foreground active:scale-[0.99] ${className ?? ""}`}><span className="shrink-0 text-muted-foreground capitalize">{label}</span><span className={`ml-4 inline-flex min-w-0 items-center gap-1.5 ${mono ? "font-mono" : ""}`}><span className="break-all">{display ?? value}</span>{copied ? <><span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">Copied</span><Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" /></> : <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-primary" />}</span></button>;
@@ -45,6 +95,23 @@ function WalletBalance({ balance }: { balance: number }) {
 
 type TxFilter = "ALL" | "RECEIVED" | "SENT";
 
+function TxRow({ tx, onOpen }: { tx: WalletTransaction; onOpen: () => void }) {
+  const [currency] = useCurrency();
+  const f = formatTx(tx);
+  return <button type="button" onClick={onOpen} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-muted w-full"><div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tx.type === "CREDIT" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400" : "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400"}`}>{tx.type === "CREDIT" ? <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19V5M5 12l7-7 7 7" /></svg> : <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7" /></svg>}</div><div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{f.title}</div><div className="text-xs text-muted-foreground truncate">{[f.detail, txDate(tx.created_at)].filter(Boolean).join(" · ")}</div></div><div className="text-right shrink-0"><div className={`text-sm font-semibold ${tx.type === "CREDIT" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{tx.type === "CREDIT" ? "+" : "-"}{fmtMoney(tx.amount, currency)}</div></div></button>;
+}
+
+function TxMetaRows({ tx }: { tx: WalletTransaction }) {
+  const meta = (tx.meta ?? {}) as Record<string, unknown>;
+  const rows: { label: string; value: string }[] = [];
+  if (meta.pool_id ?? meta.pool) rows.push({ label: "Pool", value: poolLabel(meta.pool_id ?? meta.pool) });
+  if (meta.rows != null) { const r = rowsText(meta.rows); if (r) rows.push({ label: "Rows paid", value: r }); }
+  if (Number(meta.dead ?? 0) > 0) rows.push({ label: "Expired", value: rowsText(meta.dead) ?? String(meta.dead) });
+  if (meta.method) rows.push({ label: "Method", value: String(meta.method) });
+  if (meta.account) rows.push({ label: "Account", value: maskAccount(String(meta.account)) });
+  return <>{rows.map((r) => <div key={r.label} className="flex justify-between"><span className="text-muted-foreground">{r.label}</span><span>{r.value}</span></div>)}</>;
+}
+
 function BalanceHistory({ items }: { items: WalletTransaction[] }) {
   const [currency] = useCurrency();
   const [filter, setFilter] = useState<TxFilter>("ALL");
@@ -57,7 +124,7 @@ function BalanceHistory({ items }: { items: WalletTransaction[] }) {
   return <>
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Balance history</h2><div className="flex gap-1.5">{filters.map((f) => <button type="button" key={f.key} onClick={() => setFilter(f.key)} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${filter === f.key ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}>{f.label}<span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none font-semibold">{counts[f.key]}</span></button>)}</div></div>
-      {groups.length ? groups.map((g) => <div key={g.label} className="flex flex-col gap-1.5"><div className="text-xs font-medium text-muted-foreground px-1">{g.label}</div>{g.items.map((tx) => <button type="button" key={tx.id} onClick={() => setDetail(tx)} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-muted w-full"><div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tx.type === "CREDIT" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400" : "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400"}`}>{tx.type === "CREDIT" ? <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19V5M5 12l7-7 7 7" /></svg> : <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7" /></svg>}</div><div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{tx.description}</div><div className="text-xs text-muted-foreground">{new Date(tx.created_at).toLocaleTimeString()}</div></div><div className="text-right shrink-0"><div className={`text-sm font-semibold ${tx.type === "CREDIT" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{tx.type === "CREDIT" ? "+" : "-"}{fmtMoney(tx.amount, currency)}</div></div></button>)}</div>) : <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No transactions yet.</div>}
+      {groups.length ? groups.map((g) => <div key={g.label} className="flex flex-col gap-1.5"><div className="text-xs font-medium text-muted-foreground px-1">{g.label}</div>{g.items.map((tx) => <TxRow key={tx.id} tx={tx} onOpen={() => setDetail(tx)} />)}</div>) : <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No transactions yet.</div>}
     </div>
     <Dialog open={!!detail} onOpenChange={(open) => { if (!open) setDetail(null); }}>
       <DialogContent className="sm:max-w-md">
@@ -68,11 +135,12 @@ function BalanceHistory({ items }: { items: WalletTransaction[] }) {
             <div><div className={`text-2xl font-bold ${detail.type === "CREDIT" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{detail.type === "CREDIT" ? "+" : "-"}{fmtMoney(detail.amount, currency)}</div><div className="text-xs text-muted-foreground">{detail.type === "CREDIT" ? "Received" : "Sent"}</div></div>
           </div>
           <div className="flex flex-col gap-2 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Reason</span><span className="text-right font-medium">{formatTx(detail).title}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Date</span><span>{new Date(detail.created_at).toLocaleString()}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Balance after</span><span>{fmtMoney(detail.balance_after, currency)}</span></div>
-            {detail.meta && Object.entries(detail.meta).map(([k, v]) => <CopyField key={k} label={k.replace(/_/g, " ")} value={String(v)} />)}
+            <TxMetaRows tx={detail} />
           </div>
-          <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">{detail.description}</div>
+          {formatTx(detail).detail ? <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">{formatTx(detail).detail}</div> : null}
           <CopyField label="Transaction ID" value={detail.id} display={shortId(detail.id)} mono className="border-t pt-2 text-xs text-muted-foreground" />
         </div>}
       </DialogContent>
@@ -84,7 +152,7 @@ function WithdrawalHistory({ items }: { items: Withdrawal[] }) {
   const [currency] = useCurrency();
   if (!items.length) return <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No withdrawals yet.</div>;
   const badge = (s: string) => s === "APPROVED" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400" : s === "REJECTED" ? "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400" : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400";
-  return <div className="flex flex-col gap-2"><h2 className="text-sm font-semibold">Withdrawal history</h2>{items.map((w) => <div key={w.id} className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3"><div className="min-w-0"><div className="text-sm font-medium">{fmtMoney(Number(w.amount), currency)} · {w.method}</div><div className="truncate text-xs text-muted-foreground">{w.account} · {new Date(w.created_at).toLocaleString()}</div></div><span className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${badge(w.status)}`}>{w.status}</span></div>)}</div>;
+  return <div className="flex flex-col gap-2"><h2 className="text-sm font-semibold">Withdrawal history</h2>{items.map((w) => <div key={w.id} className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3"><div className="min-w-0"><div className="text-sm font-medium truncate">{w.method} · {maskAccount(w.account)}</div><div className="truncate text-xs text-muted-foreground">{txDate(w.created_at)}</div></div><div className="flex shrink-0 flex-col items-end gap-1"><div className="text-sm font-semibold">{fmtMoney(Number(w.amount), currency)}</div><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge(w.status)}`}>{statusLabel(w.status)}</span></div></div>)}</div>;
 }
 
 function UserWallet() {
@@ -145,7 +213,7 @@ function AdminRequests() {
   const filtered = requests?.filter((r) => filter === "ALL" || r.status === filter) ?? [];
   const counts = { ALL: requests?.length ?? 0, PENDING: requests?.filter((r) => r.status === "PENDING").length ?? 0, APPROVED: requests?.filter((r) => r.status === "APPROVED").length ?? 0, REJECTED: requests?.filter((r) => r.status === "REJECTED").length ?? 0 };
   const filters: { key: FilterStatus; label: string }[] = [{ key: "ALL", label: "All" }, { key: "PENDING", label: "Pending" }, { key: "APPROVED", label: "Approved" }, { key: "REJECTED", label: "Rejected" }];
-  return <><div className="flex flex-col gap-2"><div><h2 className="text-sm font-semibold">Withdrawal requests</h2><p className="text-sm text-muted-foreground">Open a request to review and approve or reject it.</p></div><div className="flex flex-wrap gap-1.5">{filters.map((f) => <button type="button" key={f.key} onClick={() => setFilter(f.key)} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${filter === f.key ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}>{f.label}<span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none font-semibold">{counts[f.key]}</span></button>)}</div>{filtered.length ? filtered.map((request) => <button type="button" key={request.id} onClick={() => setSelected(request)} className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-muted"><div><div className="font-medium">{request.name || `User ${request.user_id.slice(-8)}`} · {fmtMoney(Number(request.amount), currency)}</div><div className="text-xs text-muted-foreground">{request.method} · {request.account} · {new Date(request.created_at).toLocaleString()}</div></div><span className="rounded-full bg-muted px-2 py-1 text-xs font-medium">{request.status}</span></button>) : <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No {filter === "ALL" ? "" : filter.toLowerCase() + " "}withdrawal requests.</div>}</div><RequestDialog request={selected} onClose={() => setSelected(null)} onDone={() => void load()}/></>;
+  return <><div className="flex flex-col gap-2"><div><h2 className="text-sm font-semibold">Withdrawal requests</h2><p className="text-sm text-muted-foreground">Open a request to review and approve or reject it.</p></div><div className="flex flex-wrap gap-1.5">{filters.map((f) => <button type="button" key={f.key} onClick={() => setFilter(f.key)} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${filter === f.key ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}>{f.label}<span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none font-semibold">{counts[f.key]}</span></button>)}</div>{filtered.length ? filtered.map((request) => <button type="button" key={request.id} onClick={() => setSelected(request)} className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-muted"><div><div className="font-medium">{request.name || `User ${request.user_id.slice(-8)}`} · {fmtMoney(Number(request.amount), currency)}</div><div className="text-xs text-muted-foreground">{request.method} · {request.account} · {new Date(request.created_at).toLocaleString()}</div></div><span className="rounded-full bg-muted px-2 py-1 text-xs font-medium">{statusLabel(request.status)}</span></button>) : <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No {filter === "ALL" ? "" : filter.toLowerCase() + " "}withdrawal requests.</div>}</div><RequestDialog request={selected} onClose={() => setSelected(null)} onDone={() => void load()}/></>;
 }
 
 export default function WalletView() {

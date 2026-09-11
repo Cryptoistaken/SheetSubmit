@@ -618,19 +618,15 @@ button, input, select, textarea {
     box-shadow: 0 1px 2px rgba(0,0,0,.04);
 }
 
-/* Desktop (lg:+) nav lives in the sidebar — the pill tab bar and its loading
-   skeleton are mobile-only there. Selection toolbars keep showing; only the
-   tablist hides. (A plain media query, not Tailwind lg:hidden: this unlayered
-   stylesheet beats layered utilities in Tailwind v4.) */
+/* Desktop (lg:+) header for admins (sidebar owners): brand hides, route
+   breadcrumb takes the left. Regulars keep the brand header + tab bar
+   (no sidebar for them). Admin tablist hiding is covered at all sizes by
+   #homeTabBar.admin-tabs above. (A plain media query, not Tailwind lg:hidden:
+   this unlayered stylesheet beats layered utilities in Tailwind v4.) */
 @media (min-width: 1024px) {
-    #homeTabBar .home-tabs[role="tablist"] { display: none; }
-    #homeTabBar.skeleton-bar { display: none; }
-    /* Home header on desktop: brand hides, route breadcrumb takes the left,
-       profile / balance / theme keep the right.
-       (Safe: the home header never renders file-page title/back controls.) */
-    .home-topbar .topbar-logo,
-    .home-topbar .home-top-title { display: none; }
-    .home-topbar .topbar-crumb { display: inline-flex; }
+    .home-topbar.admin .topbar-logo,
+    .home-topbar.admin .home-top-title { display: none; }
+    .home-topbar.admin .topbar-crumb { display: inline-flex; }
 }
 
 /* ── Home panes ── */

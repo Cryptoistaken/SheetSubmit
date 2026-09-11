@@ -1,4 +1,4 @@
-import { Download, LogOutIcon, Menu, MessageCircle, Palette, RefreshCw } from "lucide-react";
+import { Download, LogOutIcon, MessageCircle, Palette, RefreshCw } from "lucide-react";
 import { FileTypeIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -78,7 +78,7 @@ function homeCrumbs(pathname: string): string[] {
   return ["My Files"];
 }
 
-export default function Topbar({ onMenu }: { onMenu?: () => void }) {
+export default function Topbar() {
   const { user } = useAuth();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
@@ -185,17 +185,6 @@ export default function Topbar({ onMenu }: { onMenu?: () => void }) {
   return (
     <div className="topbar">
       <div className="topbar-l">
-        {onMenu && user?.isAdmin ? (
-          <button
-            type="button"
-            onClick={onMenu}
-            aria-label="Open navigation"
-            title="Menu"
-            className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
-          >
-            <Menu className="size-5" aria-hidden="true" />
-          </button>
-        ) : null}
         <img
           src="/logo.svg"
           className="topbar-logo"

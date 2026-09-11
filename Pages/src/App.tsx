@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import {
   Navigate,
   Outlet,
@@ -95,7 +95,7 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
       </header>
       <main id="main-content" className="flex flex-1 min-h-0 flex-col">
         {!sheet ? (
-          <div id="homeTabBar" className="skeleton-bar" aria-hidden="true">
+          <div id="homeTabBar" aria-hidden="true">
             <div className="home-tabs">
               {Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-9 w-24 rounded-md" />)}
             </div>
@@ -116,35 +116,33 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
 
 function Layout() {
   const { pathname } = useLocation();
+  const { user } = useAuth();
   const variant = skeletonForPath(pathname);
-  // Sidebar runs full height on the left (desktop); the header sits only over
-  // the main column, never above the sidebar. Sheet pages keep the full
-  // Topbar on every size; home sections pair the sidebar with a Topbar
-  // showing the route breadcrumb left + profile / balance / theme at the
-  // far right. The tab bar stays mobile-only.
+  // Admin-only sidebar rail, full height on the left (desktop and phones —
+  // same rail, tap the trigger on touch); the header sits only over the main
+  // column, never above the sidebar. Regulars get Topbar + tabs everywhere.
+  // Sheet pages keep the full Topbar on every size.
   const isFilePage =
     pathname.startsWith("/file/") ||
     /\/admin\/user\/[^/]+\/file\/[^/]+/.test(pathname);
-  // Phone sidebar drawer (admin-only; Topbar shows the hamburger for admins).
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
+  const isAdmin = !!user?.isAdmin;
   return (
-    <div className="flex h-dvh flex-col lg:flex-row">
+    <div className="flex h-dvh flex-row">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded-md focus:bg-(--bg) focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-(--text) focus:shadow-md focus:outline-none focus:ring-2 focus:ring-(--ring)"
       >
         Skip to content
       </a>
-      {isFilePage ? null : <Sidebar mobileOpen={mobileNavOpen} onClose={closeMobileNav} />}
+      {isFilePage || !isAdmin ? null : <Sidebar />}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {isFilePage ? (
           <header>
             <Topbar />
           </header>
         ) : (
-          <header className="home-topbar">
-            <Topbar onMenu={() => setMobileNavOpen(true)} />
+          <header className={isAdmin ? "home-topbar admin" : "home-topbar"}>
+            <Topbar />
           </header>
         )}
         <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 min-w-0 focus:outline-none">

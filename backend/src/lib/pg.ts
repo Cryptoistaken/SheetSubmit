@@ -230,8 +230,20 @@ async function poolOp(password: string, op: string, a: any) {
     }
     const keys = [...cand.keys()];
     const bad = [...rej].filter(([, v]) => v).map(([k]) => k);
-    if (!keys.length && !bad.length) return { added: 0 };
+    if (!keys.length && !bad.length) return { added: 0, blocked: 0 };
     const now = Date.now(), srcUid = a.srcUid || null, srcFileId = a.srcFileId || null;
+    // permanent blocklist: sold or died-on-hold accounts never re-enter any pool
+    let denied: string[] = [];
+    if (keys.length) {
+      const hit: any[] = await tx`SELECT row_key FROM pool_blocked WHERE row_key = ANY(${keys})`;
+      denied = hit.map((r: any) => String(r.row_key));
+      if (denied.length) {
+        for (const k of denied) cand.delete(k);
+        keys.splice(0, keys.length, ...cand.keys());
+        await tx`DELETE FROM pool_rows WHERE password=${password} AND row_key = ANY(${denied}) AND state='available'`;
+        console.log(`[pool] blocked ${denied.length} already-sold/dead account(s) from ${password}/${pp} feed`);
+      }
+    }
     if (keys.length) await tx`SELECT pg_advisory_xact_lock(x.h) FROM (SELECT DISTINCT hashtext(u.k) AS h FROM unnest(${keys}::text[]) AS u(k)) x ORDER BY x.h`;
     if (keys.length && srcFileId && pp) {
       const byPool = new Map<string, string[]>();
@@ -255,15 +267,16 @@ async function poolOp(password: string, op: string, a: any) {
       if (touch.length) await tx`UPDATE pool_rows p SET data=s.d FROM jsonb_to_recordset(${j(touch.map((r) => ({ pool: r.pool, k: r.k, d: r.d })))}::jsonb) AS s(pool text,k text,d jsonb) WHERE p.password=${password} AND p.pool_id=s.pool AND p.row_key=s.k AND p.state='available'`;
     }
     if (bad.length) { const rp = pp === "combo" ? "cookies_2fa" : "page"; await tx`INSERT INTO pool_rejects(password,pool_id,row_key,ts) SELECT ${password},s.pool,s.k,s.ts FROM jsonb_to_recordset(${j(bad.map((k) => ({ pool: rp, k, ts: now })))}::jsonb) AS s(pool text,k text,ts bigint) ON CONFLICT (password,pool_id,row_key) DO NOTHING`; }
-    return { added: put.length };
+    return { added: put.length, blocked: denied.length };
   });
   if (op === "diag") {
     // cross-password trace for one account key (uid or c_user): every pool row
-    // in any state, reject records, and past takes. Admin diagnostic — read-only.
+    // in any state, reject records, blocklist entry, and past takes. Admin diagnostic — read-only.
     const k = String(a.key || "").trim().slice(0, 64);
     if (!k) throw new Error("key required");
     const rows: any[] = await db`SELECT password,pool_id,state,src_uid,src_file_id,inserted_at::float8 AS inserted_at,claimed_by,hold_id FROM pool_rows WHERE row_key=${k} ORDER BY password,pool_id`;
     const rejects: any[] = await db`SELECT password,pool_id,ts::float8 AS ts FROM pool_rejects WHERE row_key=${k} ORDER BY password,pool_id`;
+    const blocked: any[] = await db`SELECT reason,password,pool_id,src_uid,hold_id,ts::float8 AS ts FROM pool_blocked WHERE row_key=${k}`;
     const dls: any[] = await db`SELECT id,password,pool_id,status,claimed_by,claimed,ts::float8 AS ts FROM downloads WHERE keys ? ${k} ORDER BY ts DESC LIMIT 10`;
     const fids = [...new Set(rows.map((r: any) => String(r.src_file_id || "")).filter(Boolean))];
     const files: any[] = fids.length ? await db`SELECT file_id,owner_id,data->>'name' AS name FROM file_index WHERE file_id = ANY(${fids})` : [];
@@ -281,7 +294,7 @@ async function poolOp(password: string, op: string, a: any) {
         wa: String((d as any).wa_status ?? (d as any).waStatus ?? ""), key: kk, live: liveRow(d), pool: classify(d, pp),
       };
     });
-    return { key: k, rows, rejects, downloads: dls, files: files.map((f: any) => ({ fileId: f.file_id, ownerId: f.owner_id, name: f.name })), found };
+    return { key: k, rows, rejects, blocked, downloads: dls, files: files.map((f: any) => ({ fileId: f.file_id, ownerId: f.owner_id, name: f.name })), found };
   }
   if (op === "counts") { const r: any[] = await db`SELECT pool_id,COUNT(*) n FROM pool_rows WHERE password=${password} AND state='available' GROUP BY pool_id`; return Object.fromEntries(pools.map((x) => [x, Number(r.find((y) => y.pool_id === x)?.n || 0)])); }
   if (op === "summary") { const r: any = (await db`SELECT COUNT(*) FILTER (WHERE state='available') available,COUNT(*) FILTER (WHERE state='claimed') claimed,COUNT(DISTINCT src_uid) users,(SELECT COUNT(*) FROM pool_rejects WHERE password=${password} AND pool_id=${p}) invalid FROM pool_rows WHERE password=${password} AND pool_id=${p}`)[0]; return { available: Number(r.available), claimed: Number(r.claimed), users: Number(r.users), invalid: Number(r.invalid) }; }
@@ -337,9 +350,9 @@ async function allocate(password: string, op: string, pool: string, a: any) {
     // eligibility pushed into SQL (was: fetch up to 5000 + JS filter) and select+update folded into one CTE (was: 2 round trips)
     const elig = a.verifiedOnly ? tx`AND LOWER(COALESCE(data->>'wa_status', data->>'waStatus', '')) = 'eligible'` : a.unverifiedOnly ? tx`AND LOWER(COALESCE(data->>'wa_status', data->>'waStatus', '')) <> 'eligible'` : tx``;
     const src = !u.length && f.length === 1 ? tx`AND src_file_id=${f[0]}` : u.length && f.length ? tx`AND src_uid IN ${db(u)} AND src_file_id IN ${db(f)}` : u.length ? tx`AND src_uid IN ${db(u)}` : f.length ? tx`AND src_file_id IN ${db(f)}` : tx``;
-    const rows: any[] = await tx`WITH selected AS (SELECT row_key FROM pool_rows WHERE password=${password} AND pool_id=${pool} AND state='available' ${src} ${elig} ORDER BY inserted_at,row_key LIMIT ${want} FOR UPDATE SKIP LOCKED) UPDATE pool_rows p SET state=${state},hold_id=${op === "hold" ? id : null},claimed_by=${a.uid},claimed_at=${now} FROM selected s WHERE p.password=${password} AND p.pool_id=${pool} AND p.row_key=s.row_key AND p.state='available' RETURNING p.row_key,p.data`;
+    const rows: any[] = await tx`WITH selected AS (SELECT row_key FROM pool_rows WHERE password=${password} AND pool_id=${pool} AND state='available' ${src} ${elig} ORDER BY inserted_at,row_key LIMIT ${want} FOR UPDATE SKIP LOCKED) UPDATE pool_rows p SET state=${state},hold_id=${op === "hold" ? id : null},claimed_by=${a.uid},claimed_at=${now} FROM selected s WHERE p.password=${password} AND p.pool_id=${pool} AND p.row_key=s.row_key AND p.state='available' RETURNING p.row_key,p.data,p.src_uid`;
     if (!rows.length) return op === "hold" ? { claimed: 0, held: 0, count: 0, rows: [], holdId: null, downloadId: null, filename: null, status: "HOLD", unitPrice: price(pool), total: 0, mode: a.mode || "fifo" } : { claimed: 0, rows: [], downloadId: null, filename: a.filename || null, status: null, unitPrice: price(pool), total: 0, mode: "fifo" };
-    const data = rows.map((r: any) => json(r.data)), keys = rows.map((r: any) => r.row_key);   const filename = String(a.filename || `${pool}_${id.slice(-4)}.xlsx`); await tx`INSERT INTO downloads(id,password,pool_id,claimed_by,claimed,filename,keys,rows,reverted,ts,status,unit_price,total,mode,src_uids,src_file_ids,selection) VALUES(${id},${password},${pool},${a.uid},${rows.length},${filename},${j(keys)},${j(data)},false,${now},${status},${unit},${+(unit * rows.length).toFixed(2)},${a.mode || "fifo"},${j(a.srcUids || (a.srcUid ? [String(a.srcUid)] : null))},${j(a.srcFileIds || (a.srcFileId ? [String(a.srcFileId)] : null))},${j({ verifiedOnly: !!a.verifiedOnly, unverifiedOnly: !!a.unverifiedOnly })}) ON CONFLICT(id) DO NOTHING`; return op === "hold" ? { claimed: rows.length, held: rows.length, count: rows.length, rows: data, holdId: id, downloadId: id, filename, status, unitPrice: unit, total: +(unit * rows.length).toFixed(2), mode: a.mode || "fifo", srcUids: a.srcUids || null, srcFileIds: a.srcFileIds || null } : { claimed: rows.length, rows: data, downloadId: id, filename, status, unitPrice: unit, total: +(unit * rows.length).toFixed(2), mode: "fifo" }; });
+    const data = rows.map((r: any) => json(r.data)), keys = rows.map((r: any) => r.row_key);   const filename = String(a.filename || `${pool}_${id.slice(-4)}.xlsx`); await tx`INSERT INTO downloads(id,password,pool_id,claimed_by,claimed,filename,keys,rows,reverted,ts,status,unit_price,total,mode,src_uids,src_file_ids,selection) VALUES(${id},${password},${pool},${a.uid},${rows.length},${filename},${j(keys)},${j(data)},false,${now},${status},${unit},${+(unit * rows.length).toFixed(2)},${a.mode || "fifo"},${j(a.srcUids || (a.srcUid ? [String(a.srcUid)] : null))},${j(a.srcFileIds || (a.srcFileId ? [String(a.srcFileId)] : null))},${j({ verifiedOnly: !!a.verifiedOnly, unverifiedOnly: !!a.unverifiedOnly })}) ON CONFLICT(id) DO NOTHING`; if (op !== "hold" && keys.length) await tx`INSERT INTO pool_blocked(row_key,reason,password,pool_id,src_uid,hold_id,ts) SELECT s.k,'sold',${password},${pool},s.u,${id},${now} FROM jsonb_to_recordset(${j(rows.map((r: any) => ({ k: String(r.row_key), u: r.src_uid ? String(r.src_uid) : null })))}::jsonb) AS s(k text,u text) ON CONFLICT(row_key) DO NOTHING`; return op === "hold" ? { claimed: rows.length, held: rows.length, count: rows.length, rows: data, holdId: id, downloadId: id, filename, status, unitPrice: unit, total: +(unit * rows.length).toFixed(2), mode: a.mode || "fifo", srcUids: a.srcUids || null, srcFileIds: a.srcFileIds || null } : { claimed: rows.length, rows: data, downloadId: id, filename, status, unitPrice: unit, total: +(unit * rows.length).toFixed(2), mode: "fifo" }; });
 }
 async function transition(password: string, op: string, a: any) {
   return db.begin(async (tx: any) => {
@@ -380,8 +393,9 @@ async function transition(password: string, op: string, a: any) {
       let approved = 0;
       if (keys.length) {
         // re-approving a REJECTED hold re-claims rows still free; scoped to this password/pool + hold keys only.
-        const rows: any[] = await tx`UPDATE pool_rows SET state='claimed',hold_id=${d.id},claimed_by=${d.claimed_by || a.uid},claimed_at=${now} WHERE password=${password} AND pool_id=${d.pool_id} AND row_key IN ${db(keys)} AND ((state='held' AND hold_id=${d.id}) OR state='available') RETURNING src_uid`;
+        const rows: any[] = await tx`UPDATE pool_rows SET state='claimed',hold_id=${d.id},claimed_by=${d.claimed_by || a.uid},claimed_at=${now} WHERE password=${password} AND pool_id=${d.pool_id} AND row_key IN ${db(keys)} AND ((state='held' AND hold_id=${d.id}) OR state='available') RETURNING row_key,src_uid`;
         approved = rows.length;
+        if (rows.length) await tx`INSERT INTO pool_blocked(row_key,reason,password,pool_id,src_uid,hold_id,ts) SELECT s.k,'sold',${password},${d.pool_id},s.u,${d.id},${now} FROM jsonb_to_recordset(${j(rows.map((r: any) => ({ k: String(r.row_key), u: r.src_uid ? String(r.src_uid) : null })))}::jsonb) AS s(k text,u text) ON CONFLICT(row_key) DO NOTHING`;
       }
       // dead rows (worker-marked) stay 'dead' — consumed unpaid
       const deadRows: any[] = await tx`SELECT COUNT(*) n FROM pool_rows WHERE password=${password} AND pool_id=${d.pool_id} AND state='dead' AND hold_id=${d.id}`;

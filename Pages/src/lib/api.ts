@@ -223,10 +223,12 @@ export interface PoolDiagFound {
   fileName: string | null; password: string; preset: string | null; poolEnabled: boolean;
   uid: string; status: string; has2fa: boolean; wa: string; key: string; live: boolean; pool: string | null;
 }
+export interface PoolDiagBlocked { reason: string; password: string | null; pool_id: string | null; src_uid: string | null; hold_id: string | null; ts: number }
 export interface PoolDiag {
   key: string;
   rows: PoolDiagRow[];
   rejects: { password: string; pool_id: string; ts: number }[];
+  blocked: PoolDiagBlocked[];
   downloads: { id: string; password: string; pool_id: string; status: string; claimed_by: string | null; claimed: number; ts: number }[];
   files: { fileId: string; ownerId: string; name: string | null }[];
   found: PoolDiagFound[];

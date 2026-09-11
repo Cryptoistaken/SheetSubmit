@@ -206,3 +206,29 @@ CREATE TABLE IF NOT EXISTS pool_rejects (
 -- 006: drop pool_ledger — the only reader (per-pool ledger route) was never called by any client;
 -- removing it kills one INSERT per pool add/claim/hold/approve/reject and drops a write-heavy table
 DROP TABLE IF EXISTS pool_ledger;
+
+-- 007: permanent sold/dead UID blocklist — sold or died-on-hold accounts can never
+-- re-enter any pool, even after their file is deleted (deletes wipe pool rows, so without
+-- this the same accounts could be re-uploaded and resold). Keyed globally by account key.
+CREATE TABLE IF NOT EXISTS pool_blocked (
+  row_key TEXT PRIMARY KEY,
+  reason TEXT NOT NULL CHECK (reason IN ('sold','dead')),
+  password TEXT,
+  pool_id TEXT,
+  src_uid TEXT,
+  hold_id TEXT,
+  ts BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS pool_blocked_ts_idx ON pool_blocked (ts);
+
+-- backfill: currently claimed rows + dead-while-held rows + every key from a decided-sold
+-- download (APPROVED/CLAIMED, not reverted — covers files already deleted)
+INSERT INTO pool_blocked(row_key,reason,password,pool_id,src_uid,hold_id,ts)
+SELECT row_key,'sold',password,pool_id,src_uid,hold_id,COALESCE(claimed_at,inserted_at) FROM pool_rows WHERE state='claimed'
+ON CONFLICT(row_key) DO NOTHING;
+INSERT INTO pool_blocked(row_key,reason,password,pool_id,src_uid,hold_id,ts)
+SELECT row_key,'dead',password,pool_id,src_uid,hold_id,inserted_at FROM pool_rows WHERE state='dead' AND hold_id IS NOT NULL
+ON CONFLICT(row_key) DO NOTHING;
+INSERT INTO pool_blocked(row_key,reason,password,pool_id,src_uid,hold_id,ts)
+SELECT DISTINCT k,'sold',d.password,d.pool_id,NULL,d.id,d.ts FROM downloads d, jsonb_array_elements_text(d.keys) k WHERE d.status IN ('APPROVED','CLAIMED') AND d.reverted=false
+ON CONFLICT(row_key) DO NOTHING;

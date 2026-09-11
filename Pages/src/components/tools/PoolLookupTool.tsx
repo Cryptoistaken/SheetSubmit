@@ -43,6 +43,12 @@ export default function PoolLookupTool() {
 
   const verdict = (() => {
     if (!result) return null;
+    if (result.blocked.length) {
+      const b = result.blocked[0];
+      return b.reason === "sold"
+        ? "Already sold — permanently blocked from pooling. Re-uploads are removed at feed time."
+        : "Died while on hold — permanently blocked from pooling. Re-uploads are removed at feed time.";
+    }
     const live = result.rows.filter((r) => r.state === "available");
     if (live.length) {
       const r = live[0];
@@ -90,6 +96,18 @@ export default function PoolLookupTool() {
 
       {error ? <div role="alert" style={{ fontSize: 13, color: "var(--red)", marginBottom: 8 }}>{error}</div> : null}
       {verdict ? <div role="status" style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{verdict}</div> : null}
+
+      {result && result.blocked.length ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--red)" }}>BLOCKED ({result.blocked.length})</div>
+          {result.blocked.map((b, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: "var(--red)" }}>
+              <span className="font-mono text-xs">{b.reason}</span>
+              <span className="text-xs text-muted-foreground">{[b.password, b.pool_id].filter(Boolean).join(" / ") || "history"}{b.hold_id ? ` · hold …${b.hold_id.slice(-6)}` : ""}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {result && result.rows.length ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>

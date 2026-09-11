@@ -39,6 +39,8 @@ async function checkUids(limit: number): Promise<number> {
   }
   if (dead.length) {
     await db`UPDATE pool_rows SET state='dead' WHERE state='held' AND row_key IN ${db(dead)}`;
+    // died on hold → permanent blocklist (never re-poolable, even after file deletes)
+    await db`INSERT INTO pool_blocked(row_key,reason,ts) SELECT u.k,'dead',${Date.now()} FROM unnest(${dead}::text[]) AS u(k) ON CONFLICT(row_key) DO NOTHING`;
     // wake any owner sheets watching these rows (backend relays to file rooms)
     void publishLiveEvent({ type: "dead-keys", keys: dead });
   }

@@ -117,11 +117,11 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
 function Layout() {
   const { pathname } = useLocation();
   const variant = skeletonForPath(pathname);
-  // Header always spans the full top width; below it the sidebar + main sit
-  // side by side on desktop (lg:+). Sheet pages keep the full Topbar on every
-  // size; home sections pair the sidebar with a Topbar showing the route
-  // breadcrumb left + profile / balance / theme at the far right.
-  // The tab bar stays mobile-only.
+  // Sidebar runs full height on the left (desktop); the header sits only over
+  // the main column, never above the sidebar. Sheet pages keep the full
+  // Topbar on every size; home sections pair the sidebar with a Topbar
+  // showing the route breadcrumb left + profile / balance / theme at the
+  // far right. The tab bar stays mobile-only.
   const isFilePage =
     pathname.startsWith("/file/") ||
     /\/admin\/user\/[^/]+\/file\/[^/]+/.test(pathname);
@@ -129,24 +129,24 @@ function Layout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
   return (
-    <div className="flex h-dvh flex-col">
+    <div className="flex h-dvh flex-col lg:flex-row">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded-md focus:bg-(--bg) focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-(--text) focus:shadow-md focus:outline-none focus:ring-2 focus:ring-(--ring)"
       >
         Skip to content
       </a>
-      {isFilePage ? (
-        <header>
-          <Topbar />
-        </header>
-      ) : (
-        <header className="home-topbar">
-          <Topbar onMenu={() => setMobileNavOpen(true)} />
-        </header>
-      )}
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {isFilePage ? null : <Sidebar mobileOpen={mobileNavOpen} onClose={closeMobileNav} />}
+      {isFilePage ? null : <Sidebar mobileOpen={mobileNavOpen} onClose={closeMobileNav} />}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {isFilePage ? (
+          <header>
+            <Topbar />
+          </header>
+        ) : (
+          <header className="home-topbar">
+            <Topbar onMenu={() => setMobileNavOpen(true)} />
+          </header>
+        )}
         <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 min-w-0 focus:outline-none">
           <Suspense fallback={<PageSkeleton variant={variant} className="min-h-0" sheetToolbar={variant !== "sheet"} />}>
             <Outlet />

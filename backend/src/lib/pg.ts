@@ -74,7 +74,20 @@ async function indexOp(op: string, a: any) {
     case "batchArchive": { const files = (a.files as SheetFile[]) || []; if (files.length > 40) throw new Error("too many files"); if (!files.length) return { ok: true }; await db`UPDATE file_index SET archived=false,data=s.d,updated_at=now() FROM jsonb_to_recordset(${j(files.map((f) => ({ id: f.id, d: f })))}::jsonb) AS s(id text,d jsonb) WHERE file_index.file_id=s.id`; return { ok: true }; }
     case "purge": await db`DELETE FROM file_index WHERE file_id=${a.id}`; return { ok: true };
     case "batchPurge": { const ids = (a.ids || []).map(String); if (!ids.length) return { ok: true }; await db`DELETE FROM file_index WHERE file_id IN ${db(ids)}`; return { ok: true }; }
-    case "deleteUser": await db`DELETE FROM users WHERE user_id=${a.id}`; return { ok: true };
+    case "deleteUser": return db.begin(async (tx: any) => {
+      // R4 bulk purge: one tx wipes the user's files (tombstones + snapshots +
+      // pool rows), then FK cascades clear file_meta/file_rows/file_logs and
+      // sessions/wallets/withdrawals/wallet_transactions on user delete.
+      const uid = String(a.id || ""), now = Date.now();
+      await tx`DELETE FROM meta WHERE k IN (SELECT 'filesnap:'||file_id FROM file_index WHERE owner_id=${uid})`;
+      // forensic tombstones mirror the fileOp "wipe" shape exactly
+      // ({id,name,ownerUid,purgedAt,rowCount,seq,logs}, logs newest-first, max 200).
+      await tx`INSERT INTO meta(k,v) SELECT 'filetomb:'||f.file_id,jsonb_build_object('id',f.file_id,'name',fm.data->>'name','ownerUid',${uid}::text,'purgedAt',${now}::bigint,'rowCount',(SELECT COUNT(*)::int FROM file_rows r WHERE r.file_id=f.file_id),'seq',COALESCE(fm.seq,0),'logs',COALESCE((SELECT jsonb_agg(jsonb_build_object('ts',l.ts,'action',l.action,'seq',l.seq) ORDER BY l.id DESC) FROM (SELECT ts,action,seq,id FROM file_logs WHERE file_id=f.file_id ORDER BY id DESC LIMIT 200) l),'[]'::jsonb)) FROM file_index f LEFT JOIN file_meta fm ON fm.file_id=f.file_id WHERE f.owner_id=${uid} ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`;
+      await tx`DELETE FROM pool_rows WHERE src_file_id IN (SELECT file_id FROM file_index WHERE owner_id=${uid}) OR src_uid=${uid}`;
+      await tx`DELETE FROM file_index WHERE owner_id=${uid}`;
+      await tx`DELETE FROM users WHERE user_id=${uid}`;
+      return { ok: true };
+    });
     case "settleHolds": {
       // run every 30s by the backend: pay out holds whose 5-minute revert window closed
       const due: any[] = await db`SELECT id,password,pool_id,claimed_by,unit_price,status FROM downloads WHERE settled=false AND status IN ('APPROVED','REJECTED') AND first_action_at IS NOT NULL AND first_action_at <= ${Date.now() - REVERT_WINDOW} ORDER BY first_action_at LIMIT 20 FOR UPDATE SKIP LOCKED`;

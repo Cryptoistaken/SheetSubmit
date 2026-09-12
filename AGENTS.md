@@ -47,7 +47,7 @@
                       #   POST /api/auth/device/claim {token} (deviceGet/Delete),
                       #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS, stores picture+phone),
                       #   GET /api/bot/info, ensureWebhook on first request
-                      #   + wallet routes: GET /api/wallet, POST /api/wallet/withdraw, GET /api/wallet/requests, POST /api/wallet/requests/:id/:action, POST /api/wallet/credit (admin manual credit w/ title → walletCredit op, surfaced on the admin user detail page)
+                      #   + wallet routes: GET /api/wallet, POST /api/wallet/withdraw, GET /api/wallet/requests, POST /api/wallet/requests/:id/:action, POST /api/wallet/credit (admin manual add/reduce w/ title+direction → walletCredit op, debit guards insufficient balance, surfaced on the admin user detail page)
  lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, WORKER_URL, CHECK_URL, ALLOW_TEST_AUTH, TELEGRAM_LOGIN_CLIENT_ID)
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
   src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder (SameSite=None on https for direct cross-origin calls, Lax on http)
@@ -95,7 +95,7 @@ src/routes/agent.ts     # DEV-ONLY /api/agent/* introspection (health, routes, s
 ```
 main.tsx              # StrictMode, Toast>Confirm>Auth>App, service-worker + chunk-error reload guard
 App.tsx               # createBrowserRouter: RequireAuth gate (unauth → /login with redirect-back state) → Layout (Topbar+Outlet); public /login route (LoginRoute, bounces authed users back); bubble mode; /archive/:id is the read-only archived viewer (SheetPage archived mode)
-index.css / app.css   # tailwind v4 + shadcn + geist + legacy styles
+index.css / app.css   # tailwind v4 + shadcn + geist + legacy styles; motion dialect is --anim-fast/.12s + --anim-med/.18s over --ease-out (sliding thumbs, pane fade-slide, press scale, global reduced-motion kill)
 vite.config.ts        # react + @tailwindcss/vite, alias @→src, proxy /api→localhost:3000, manualChunks vendor-react|xlsx|vendor-ui|vendor-state|vendor
 server.js             # Bun static server + same-origin /api + /webhook proxy (identity encoding, cookie forward) for Railway Web
 components.json       # shadcn Nova, neutral, cssVariables, lucide
@@ -115,7 +115,7 @@ components/tools/SplitterTool.tsx   # xlsx split into N parts (/tools/splitter)
 components/tools/PoolLookupTool.tsx # trace a uid/c_user across all pools + live file rows (/tools/pool-lookup, admin-only tool calling GET /admin/pooldiag) — shows BLOCKED banner + verdict for sold/dead-blocklisted accounts
 components/icons/FileTypeIcons.tsx, ApprovalsIcon (rescript-icon), FacebookIcon.tsx
 components/profile/ProfileAvatar.tsx
- components/ui/button.tsx, avatar.tsx, dialog.tsx, alert-dialog.tsx, dropdown-menu.tsx, theme-toggler.tsx, hold-to-delete-button.tsx, slide-to-confirm-button.tsx, ink-stamp.tsx, page-skeleton.tsx, search-input.tsx  # shadcn and reusable pool actions
+ components/ui/button.tsx, avatar.tsx, dialog.tsx, alert-dialog.tsx, dropdown-menu.tsx, theme-toggler.tsx, hold-to-delete-button.tsx, slide-to-confirm-button.tsx, slide-switch.tsx (segmented control with sliding thumb, same pattern as ViewSwitch), ink-stamp.tsx, page-skeleton.tsx, search-input.tsx  # shadcn and reusable pool actions
 contexts/AuthContext.tsx           # skip /me if no ss_had_session, session_expired redirect, retry 3×1.5s
 stores/sheetStore.ts      # central Zustand: rows, undo/redo, persist (PUT /persist vs /append), dedup marks, WA checks, selection; archivedMode (openFileArchived via GET /archive/:id/full — view + copy + UID-check only, all mutations/persist/page-WA no-op, Check shows liveness in-grid only); _taken/_hold/_approved rows reject cell edits (commitCell, openQuickEdit, openInlineEdit); flushPersist sends base seq (409 version conflict → reload server version + stash ours in Undo + re-apply journal); applyRestore for snapshot restore; applyLiveStates for socket/poll flag patches (cells never touched); direct-edit guards: locked-row toast (never silent), formula blur-commit, open-cell draft commit, twofakey normalize + cookie/key blob split, bulk-clear skips locked
 stores/bubbleStore.ts     # {on, pickMode}

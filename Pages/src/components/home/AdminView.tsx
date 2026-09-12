@@ -13,6 +13,7 @@ import type { AdminUser, ArchiveFile, SheetFile } from "@/lib/types";
 import { downloadXlsx } from "@/lib/xlsx";
 import { fmtMoney, inputToUsd, useCurrency, type Currency } from "@/lib/currency";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
+import SlideSwitch from "@/components/ui/slide-switch";
 import EmptyState from "./EmptyState";
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 import FileCard from "./FileCard";
@@ -41,6 +42,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   const [creditAmount, setCreditAmount] = useState("");
   const [creditTitle, setCreditTitle] = useState("Manual credit");
   const [creditCurrency, setCreditCurrency] = useState<Currency>("USD");
+  const [creditMode, setCreditMode] = useState<"credit" | "debit">("credit");
   const [creditBusy, setCreditBusy] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -169,7 +171,15 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     setCreditAmount("");
     setCreditTitle("Manual credit");
     setCreditCurrency(currency);
+    setCreditMode("credit");
     setCreditOpen(true);
+  };
+
+  const switchCreditMode = (mode: "credit" | "debit") => {
+    setCreditMode(mode);
+    const want = mode === "credit" ? "Manual credit" : "Manual debit";
+    const other = mode === "credit" ? "Manual debit" : "Manual credit";
+    if (!creditTitle.trim() || creditTitle.trim() === other) setCreditTitle(want);
   };
 
   const commitCredit = async () => {
@@ -179,15 +189,16 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       showToast(creditCurrency === "USD" ? "Enter a valid amount up to 100,000." : "Enter a valid amount.");
       return;
     }
-    const title = creditTitle.trim() || "Manual credit";
+    const title = creditTitle.trim() || (creditMode === "credit" ? "Manual credit" : "Manual debit");
     setCreditBusy(true);
     try {
-      const res = await api.adminCreditBalance(detailUser.id, amount, title);
+      const res = await api.adminAdjustBalance(detailUser.id, amount, title, creditMode);
       setCreditOpen(false);
       await reloadDetail(detailUser.id);
-      showToast(`Credited ${fmtMoney(res.amount, creditCurrency)} to ${userName(detailUser)}.`);
+      showToast(creditMode === "credit" ? `Added ${fmtMoney(res.amount, creditCurrency)} to ${userName(detailUser)}.` : `Removed ${fmtMoney(res.amount, creditCurrency)} from ${userName(detailUser)}.`);
     } catch (e) {
-      showToast(e instanceof Error && e.message ? e.message : "Unable to credit balance. Please try again.");
+      const raw = e instanceof Error ? e.message : "";
+      showToast(raw.replace(/^\d+ \S+ - /, "") || "Unable to adjust balance. Please try again.");
     } finally {
       setCreditBusy(false);
     }
@@ -451,13 +462,13 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
           }}
         >
           <div ref={creditRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="admin-credit-title">
-            <div id="admin-credit-title" className="modal-title">Credit balance</div>
+            <div id="admin-credit-title" className="modal-title">{creditMode === "credit" ? "Add balance" : "Reduce balance"}</div>
+            <div style={{ marginTop: 12 }}>
+              <SlideSwitch options={[{ value: "credit", label: "Add" }, { value: "debit", label: "Reduce" }] as const} value={creditMode} onChange={switchCreditMode} ariaLabel="Adjustment direction" />
+            </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4, marginTop: 12 }}>
               <label style={{ fontSize: 12, color: "var(--text3)", fontWeight: 600 }} htmlFor="admin-credit-amount">Amount</label>
-              <div className="pool-switch" role="group" aria-label="Credit currency">
-                <button type="button" className={creditCurrency === "USD" ? "active" : ""} aria-pressed={creditCurrency === "USD"} onClick={() => setCreditCurrency("USD")}>USD</button>
-                <button type="button" className={creditCurrency === "BDT" ? "active" : ""} aria-pressed={creditCurrency === "BDT"} onClick={() => setCreditCurrency("BDT")}>BDT</button>
-              </div>
+              <SlideSwitch options={[{ value: "USD", label: "USD" }, { value: "BDT", label: "BDT" }] as const} value={creditCurrency} onChange={setCreditCurrency} ariaLabel="Credit currency" />
             </div>
             <input
               id="admin-credit-amount"
@@ -502,7 +513,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                 Cancel
               </button>
               <button type="button" className="btn btn-primary" disabled={creditBusy} onClick={() => void commitCredit()}>
-                {creditBusy ? "Crediting…" : "Credit"}
+                {creditBusy ? (creditMode === "credit" ? "Adding…" : "Removing…") : (creditMode === "credit" ? "Add" : "Remove")}
               </button>
             </div>
           </div>

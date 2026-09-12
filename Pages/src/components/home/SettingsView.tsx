@@ -5,6 +5,7 @@ import { useToast } from "@/lib/toast";
 import { CookieIcon, PageIcon, PasswordIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
 import { Skeleton } from "@/components/ui/page-skeleton";
 import { Button } from "@/components/ui/button";
+import SlideSwitch from "@/components/ui/slide-switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const PASSWORDS = ["dgddigital", "Love@12345"] as const;
@@ -174,10 +175,7 @@ export default function SettingsView() {
       <section style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)", padding: "14px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, marginRight: "auto" }}>Pool prices</h3>
-          <div className="pool-switch" role="group" aria-label="Price entry currency">
-            <button type="button" className={entryCurrency === "USD" ? "active" : ""} aria-pressed={entryCurrency === "USD"} onClick={() => switchEntryCurrency("USD")}>USD</button>
-            <button type="button" className={entryCurrency === "BDT" ? "active" : ""} aria-pressed={entryCurrency === "BDT"} onClick={() => switchEntryCurrency("BDT")}>BDT</button>
-          </div>
+          <SlideSwitch options={[{ value: "USD", label: "USD" }, { value: "BDT", label: "BDT" }] as const} value={entryCurrency} onChange={switchEntryCurrency} ariaLabel="Price entry currency" />
         </div>
         <p style={{ fontSize: 12, color: "var(--text3)", margin: "6px 0 0" }}>
           {entryCurrency === "USD" ? "Price per row in USD, from 0 to 1000." : `Enter BDT per row. Values convert to stored USD automatically ($1 = ৳${rate.toLocaleString("en-US")}).`}

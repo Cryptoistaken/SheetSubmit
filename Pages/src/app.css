@@ -84,6 +84,10 @@
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+    /* Motion */
+    --anim-fast: .12s;
+    --anim-med: .18s;
 }
 
 /* ── Dark theme ── */
@@ -633,7 +637,10 @@ button, input, select, textarea {
     border-radius: 6px;
     cursor: pointer;
     white-space: nowrap;
-    transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
+    transition: background var(--anim-fast), color var(--anim-fast), border-color var(--anim-fast), box-shadow var(--anim-fast), transform var(--anim-fast) var(--ease-out);
+}
+.home-tab:active {
+    transform: scale(0.97);
 }
 .home-tab:hover {
     color: var(--text);
@@ -658,6 +665,10 @@ button, input, select, textarea {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    animation: paneIn var(--anim-med) var(--ease-out) both;
+}
+@keyframes paneIn {
+    from { opacity: 0; transform: translateY(6px); }
 }
 /* Multi-select status line: sits at the top of the file list while selection
    mode is on (the action buttons stay in the tab bar, without the count). */
@@ -752,6 +763,9 @@ button, input, select, textarea {
 .file-card:nth-child(5) { animation-delay: 120ms; }
 .file-card:nth-child(6) { animation-delay: 150ms; }
 .file-card:nth-child(n + 7) { animation-delay: 180ms; }
+.file-card:active {
+    transform: scale(0.98);
+}
 
 @media (hover: hover) and (pointer: fine) {
     .file-card:hover {
@@ -822,8 +836,11 @@ button, input, select, textarea {
     cursor: pointer;
     background: transparent;
     border: none;
-    transition: background 0.1s, color 0.1s;
+    transition: background var(--anim-fast), color var(--anim-fast), transform var(--anim-fast) var(--ease-out);
     padding: 0;
+}
+.file-card-btn:active {
+    transform: scale(0.92);
 }
 .file-card-btn:hover {
     background: var(--bg3);
@@ -854,7 +871,7 @@ button, input, select, textarea {
     border-radius: 6px;
     background: var(--bg);
     box-shadow: var(--shadow-sm);
-    transition: left 0.18s ease, width 0.18s ease;
+    transition: left var(--anim-med) var(--ease-out), width var(--anim-med) var(--ease-out);
 }
 .view-switch button {
     position: relative;
@@ -1037,7 +1054,7 @@ button, input, select, textarea {
     border-radius: 6px;
     cursor: pointer;
     color: var(--text);
-    transition: background 0.08s;
+    transition: background 0.08s, transform var(--anim-fast) var(--ease-out);
     border: none;
     background: none;
     text-align: left;
@@ -1310,6 +1327,7 @@ button, input, select, textarea {
 .pool-switch{display:inline-flex;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px}
 .pool-switch button{padding:7px 14px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;min-height:36px;transition:.12s}
 .pool-switch button.active{background:var(--bg);border-color:var(--border2);color:var(--text);box-shadow:var(--shadow-sm)}
+.pool-switch button:active{transform:scale(0.96)}
 /* ── Buttons ── */
 .btn {
     display: inline-flex;
@@ -1323,7 +1341,7 @@ button, input, select, textarea {
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: transform 0.1s;
+    transition: transform var(--anim-fast);
     white-space: nowrap;
     line-height: 1.4;
 }

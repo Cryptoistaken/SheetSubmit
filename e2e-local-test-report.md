@@ -80,3 +80,17 @@ bun scripts/e2e-local.ts down   # stop everything
   double-tap paste → archive + purge → verify 404. **Never presses Check** (zero
   FB/check-service calls), never takes pool rows; the 1 fake pool row lives seconds.
 - Verdict: green on live. Not for bulk: 500 fake rows would pollute shared pools.
+
+## Live 500 (prod, owner-insisted, harm-bounded)
+
+- `Pages/e2e/live-500.spec.ts` (env-gated like the smoke): types all 500 `Page500.xlsx` rows
+  on live mobile, one manual Check at the end, archive + purge, verify 404.
+- Harm bounds: unique pool password per run (fake rows never touch shared pools),
+  auto-checks OFF while typing (exactly one Check), full delete after.
+- Verdicts: `data=500, judged=500, eligible=0` — real services call all fake UIDs dead,
+  so no page calls fire (page sweep needs alive rows; page logic proven locally).
+- Prod-only findings:
+  - Instant archive→purge can **404** (file-list RPC cached ~5s) — specs retry purge ≤8×2s.
+  - Live timings: auth/me ~150-225ms, wallet ~270-360ms, files/cross-dups/flags ~85-220ms,
+    live-ticket ~110-150ms, real `fb/check` ~550ms.
+  - Debounced appends racing a delete get `404 file not found` (harmless, no write).

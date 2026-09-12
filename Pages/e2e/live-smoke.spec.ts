@@ -16,6 +16,29 @@ const BASE = process.env.E2E_BASE_URL ?? "";
 test.skip(!LIVE || !SS_SESSION || !BASE.includes("pages.dev"), "live smoke needs LIVE_SMOKE=1 + SS_SESSION + live E2E_BASE_URL");
 
 test("live: create, type, delete one file", async ({ page }) => {
+  // Network monitor: every /api call with timing + status + body summary.
+  const t0map = new WeakMap<object, number>();
+  page.on("request", (r) => {
+    if (!r.url().includes("/api/")) return;
+    t0map.set(r, Date.now());
+    const bytes = r.postData()?.length ?? 0;
+    console.log(`NET> ${r.method()} ${r.url().split("/api/")[1]} req=${bytes}B`);
+  });
+  page.on("response", async (res) => {
+    const r = res.request();
+    if (!r.url().includes("/api/")) return;
+    const ms = Date.now() - (t0map.get(r) ?? Date.now());
+    let extra = "";
+    try {
+      if ((res.headers()["content-type"] ?? "").includes("json")) {
+        extra = ` body=${JSON.stringify(await res.json()).slice(0, 220)}`;
+      }
+    } catch { /* binary / empty */ }
+    console.log(`NET< ${ms}ms ${res.status()} ${r.method()} ${r.url().split("/api/")[1]}${extra}`);
+  });
+  page.on("requestfailed", (r) => {
+    if (r.url().includes("/api/")) console.log(`NET! FAILED ${r.method()} ${r.url().split("/api/")[1]}`);
+  });
   const host = new URL(BASE).hostname;
   const token = SS_SESSION.replace(/^ss_session=/, "");
   await page.context().addCookies([
@@ -30,7 +53,8 @@ test("live: create, type, delete one file", async ({ page }) => {
 
   await page.goto("/");
   await expect(page).not.toHaveURL(/\/login/);
-  await expect(page.locator("#homeTabBar")).toBeVisible({ timeout: 15000 });
+  // Admins get the sidebar and a hidden tab bar — attached = home rendered.
+  await expect(page.locator("#homeTabBar")).toBeAttached({ timeout: 15000 });
 
   const created = await page.request.post("/api/files", {
     data: {
@@ -60,10 +84,16 @@ test("live: create, type, delete one file", async ({ page }) => {
   );
 
   // Cleanup: archive (wipes pool rows) then purge, verify gone.
+  // Prod caches the file list ~5s, so an instant purge can 404 — retry it.
   const archived = await page.request.delete(`/api/files/${file.id}`);
   expect(archived.ok(), `live archive failed: ${archived.status()}`).toBeTruthy();
-  const purged = await page.request.delete(`/api/archive/${file.id}`);
-  expect(purged.ok(), `live purge failed: ${purged.status()}`).toBeTruthy();
+  let purgedOk = false;
+  for (let k = 0; k < 8 && !purgedOk; k++) {
+    const purged = await page.request.delete(`/api/archive/${file.id}`);
+    purgedOk = purged.ok();
+    if (!purgedOk) await page.waitForTimeout(2000);
+  }
+  expect(purgedOk, "live purge failed after retries").toBeTruthy();
   const gone = await page.request.get(`/api/files/${file.id}/full`);
   expect(gone.status()).toBe(404);
 });

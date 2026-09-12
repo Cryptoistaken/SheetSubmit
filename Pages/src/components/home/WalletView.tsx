@@ -26,7 +26,7 @@ export const shortId = (id: string) => (id.length > 20 ? id.slice(0, 16) + "…"
 const POOL_LABEL: Record<string, string> = { cookies_only: "Cookies", cookies_2fa: "2FA", page: "Page" };
 const poolLabel = (id: unknown) => {
   const s = String(id ?? "").trim();
-  return POOL_LABEL[s] ?? (s ? s.charAt(0).toUpperCase() + s.slice(1) : "Pool");
+  return POOL_LABEL[s] ?? (s ? s.charAt(0).toUpperCase() + s.slice(1) : "Sale");
 };
 const rowsText = (n: unknown) => {
   const v = Number(n);
@@ -43,7 +43,7 @@ export const maskAccount = (account: string) => {
 export const txDate = (ts: number) => new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 export const statusLabel = (s: string) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : s);
 
-// Turns raw backend reasons ("Approved hold · 1 rows · page pool") into a
+// Turns raw backend reasons ("Earning - Page · 5 rows paid") into a
 // clean title + supporting detail. Handles old rows too.
 function formatTx(tx: WalletTransaction): { title: string; detail: string | null } {
   const meta = (tx.meta ?? {}) as Record<string, unknown>;
@@ -54,7 +54,7 @@ function formatTx(tx: WalletTransaction): { title: string; detail: string | null
     const fromDesc = (() => { const m = desc.match(/(\d+)\s+rows?/); return m ? rowsText(Number(m[1])) : null; })();
     const dead = Number(meta.dead ?? 0);
     return {
-      title: `Pool earning: ${pool}`,
+      title: `Earning: ${pool}`,
       detail: [fromMeta ?? fromDesc ? `${fromMeta ?? fromDesc} paid` : null, dead > 0 ? `${dead} expired` : null].filter(Boolean).join(" · ") || null,
     };
   }
@@ -66,10 +66,14 @@ function formatTx(tx: WalletTransaction): { title: string; detail: string | null
   }
   if (/withdrawal refund/i.test(desc)) return { title: "Withdrawal refunded", detail: "Declined payout returned to balance." };
   const pretty = desc
+    .replace(/\bpools?\b/gi, "")
     .replace(/(\d+)\s+rows\b/g, (_, n: string) => `${n} ${Number(n) === 1 ? "row" : "rows"}`)
     .replace(/\bcookies_only\b/g, "Cookies")
     .replace(/\bcookies_2fa\b/g, "2FA")
-    .replace(/^page\b/i, "Page");
+    .replace(/^page\b/i, "Page")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([·.,])/g, "$1")
+    .trim();
   return { title: pretty ? pretty.charAt(0).toUpperCase() + pretty.slice(1) : "Transaction", detail: null };
 }
 
@@ -88,7 +92,7 @@ function groupByDate(items: WalletTransaction[]) {
 
 function WalletBalance({ balance }: { balance: number }) {
   const [currency] = useCurrency();
-  return <div className="rounded-xl border bg-card p-6 shadow-sm"><div className="text-sm text-muted-foreground">Available balance</div><div className="mt-2 text-4xl font-semibold tracking-tight">{fmtMoney(balance, currency)}</div><div className="mt-2 text-sm text-muted-foreground">Earned from approved pool activity</div></div>;
+  return <div className="rounded-xl border bg-card p-6 shadow-sm"><div className="text-sm text-muted-foreground">Available balance</div><div className="mt-2 text-4xl font-semibold tracking-tight">{fmtMoney(balance, currency)}</div><div className="mt-2 text-sm text-muted-foreground">Earned from approved orders</div></div>;
 }
 
 type TxFilter = "ALL" | "RECEIVED" | "SENT";
@@ -102,7 +106,7 @@ function TxRow({ tx, onOpen }: { tx: WalletTransaction; onOpen: () => void }) {
 function TxMetaRows({ tx }: { tx: WalletTransaction }) {
   const meta = (tx.meta ?? {}) as Record<string, unknown>;
   const rows: { label: string; value: string }[] = [];
-  if (meta.pool_id ?? meta.pool) rows.push({ label: "Pool", value: poolLabel(meta.pool_id ?? meta.pool) });
+  if (meta.pool_id ?? meta.pool) rows.push({ label: "Category", value: poolLabel(meta.pool_id ?? meta.pool) });
   if (meta.rows != null) { const r = rowsText(meta.rows); if (r) rows.push({ label: "Rows paid", value: r }); }
   if (Number(meta.dead ?? 0) > 0) rows.push({ label: "Expired", value: rowsText(meta.dead) ?? String(meta.dead) });
   if (meta.method) rows.push({ label: "Method", value: String(meta.method) });

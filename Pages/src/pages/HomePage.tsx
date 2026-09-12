@@ -31,8 +31,8 @@ import { AnalysisIcon, ApprovalsIcon, ArchiveIcon, CookieIcon, ObsidianIcon, Pag
 
 type Tab = "files" | "archive" | "wallet" | "withdrawals" | "pools" | "approvals" | "settings" | "admin" | "analysis" | "tools";
 
-// Built-in pool passwords — files under these feed the shared pools; the modal
-// only offers these two, so every file created here pools by default.
+// Built-in passwords for new files — files under these are shared by
+// default; the modal only offers these two.
 export const LOVE_PASSWORD = "L0VE@12345";
 
 interface AndroidBridge {
@@ -700,7 +700,7 @@ export default function HomePage() {
       <div className={`modal-overlay${pwModal ? " open" : ""}`} onClick={(e) => { if (e.target === e.currentTarget) { setPwModal(null); setUploadPending(null); } }}>
         <div ref={pwRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="pw-title" style={{ width: 340 }}>
           <div id="pw-title" className="modal-title">Pick a password</div>
-          <p style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>Files under these passwords feed the shared pools.</p>
+          <p style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>Files under these passwords are shared by default.</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginTop: 12 }}>
             {[
               { id: "dgddigital" },

@@ -74,7 +74,7 @@ async function indexOp(op: string, a: any) {
               if (!Number.isFinite(amount) || amount <= 0) continue;
               await tx`INSERT INTO wallets(user_id,balance) VALUES(${uid},${amount}) ON CONFLICT(user_id) DO UPDATE SET balance=wallets.balance+EXCLUDED.balance`;
               const r: any = (await tx`SELECT balance FROM wallets WHERE user_id=${uid}`)[0];
-              await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'CREDIT',${amount},${Number(r.balance)},${`Pool earning - ${poolLabel(d.pool_id)} · ${Number(cr.n)} ${Number(cr.n) === 1 ? "row" : "rows"} paid`},${j({ pool_id: d.pool_id, download_id: d.id, rows: Number(cr.n), dead, unit_price: unit, settled: true })},${Date.now()})`;
+              await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'CREDIT',${amount},${Number(r.balance)},${`Earning - ${poolLabel(d.pool_id)} · ${Number(cr.n)} ${Number(cr.n) === 1 ? "row" : "rows"} paid`},${j({ pool_id: d.pool_id, download_id: d.id, rows: Number(cr.n), dead, unit_price: unit, settled: true })},${Date.now()})`;
             }
           }
           await tx`UPDATE downloads SET settled=true WHERE id=${d.id}`;

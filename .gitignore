@@ -54,3 +54,4 @@ test/*
 !test/lib.ts
 !test/accounts.example.json
 !test/.env.example
+Pages/test-results/.last-run.json

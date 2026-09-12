@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -104,11 +104,10 @@ function tabForPath(path: string): string {
   return "files";
 }
 
-function NavButton({ active, collapsed, label, onClick, children, buttonRef }: { active: boolean; collapsed: boolean; label: string; onClick: () => void; children: ReactNode; buttonRef?: (el: HTMLButtonElement | null) => void }) {
+function NavButton({ active, collapsed, label, onClick, children }: { active: boolean; collapsed: boolean; label: string; onClick: () => void; children: ReactNode }) {
   return (
     <button
       type="button"
-      ref={buttonRef}
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       title={collapsed ? label : undefined}
@@ -149,18 +148,6 @@ export default function Sidebar() {
   const [mode, setMode] = useState<RailMode>(loadMode);
   const [customWidth, setCustomWidth] = useState<number | null>(loadWidth);
   const [hoverOpen, setHoverOpen] = useState(false);
-  // Sliding active-item bar (same motion dialect as the view-switch thumb).
-  const btnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const [ind, setInd] = useState<{ top: number; height: number; show: boolean }>({ top: 0, height: 0, show: false });
-  useEffect(() => {
-    if (!user) return;
-    const btn = btnRefs.current[tabForPath(location.pathname)];
-    const next = btn ? { top: btn.offsetTop, height: btn.offsetHeight, show: true } : null;
-    setInd((p) => {
-      const n = next ?? { top: p.top, height: p.height, show: false };
-      return p.top === n.top && p.height === n.height && p.show === n.show ? p : n;
-    });
-  });
   // Live width while edge-dragging (null otherwise).
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const dragStart = useRef<{ x: number; w: number } | null>(null);
@@ -278,10 +265,9 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <nav aria-label="Primary" className="relative flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-        <span aria-hidden="true" className="pointer-events-none absolute left-[3px] w-1 rounded-full bg-foreground transition-[top,height,opacity] duration-[var(--anim-med)] ease-[var(--ease-out)] motion-reduce:transition-none" style={{ top: ind.top, height: ind.height, opacity: ind.show ? 1 : 0 }} />
+      <nav aria-label="Primary" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {NAV_MAIN.map((item) => (
-          <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)} buttonRef={(el) => { btnRefs.current[item.key] = el; }}>
+          <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)}>
             {item.icon}
           </NavButton>
         ))}
@@ -292,7 +278,7 @@ export default function Sidebar() {
             )}
             {effCollapsed && <div className="mx-2 my-2 border-t border-border" aria-hidden="true" />}
             {adminItems.map((item) => (
-              <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)} buttonRef={(el) => { btnRefs.current[item.key] = el; }}>
+              <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)}>
                 {item.icon}
               </NavButton>
             ))}

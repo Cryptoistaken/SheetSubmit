@@ -25,6 +25,8 @@ export interface ImportXlsxResult {
   type: FileType;
   rows: Row[];
   dataCount: number;
+  /** Pool password read from a UID-first vendor layout (UID|password|cookie|2fa) — offered as a choice, never applied silently. */
+  detectedPassword?: string;
 }
 
 export async function importXlsx(
@@ -57,6 +59,7 @@ export async function importXlsx(
   const td = FILE_TYPE_DEFS[typeKey];
   let colMap: { key: string; idx: number }[];
   let dataStart: number;
+  let detectedPassword: string | undefined;
   if (bestMatch > 0) {
     colMap = td.columns
       .map((c) => {
@@ -67,6 +70,31 @@ export async function importXlsx(
       .filter((cm) => cm.idx !== -1);
     dataStart = 1;
   } else {
+    // Headerless UID-first vendor layout: UID | password | cookie | 2fa (no header row).
+    // Content-sniffed so existing cookie-first blobs can never match (their col 0
+    // is cookie text, never bare digits). Only cookie + 2fa are mapped — the uid
+    // is derived from c_user by the fallback below, the password is returned as
+    // a suggestion and never stored on rows.
+    const cellAt = (r: unknown[] | undefined, i: number) => String((r ?? [])[i] ?? "").trim();
+    const sniff = json.slice(0, Math.min(20, json.length));
+    const isUidCell = (v: string) => /^\d{5,20}$/.test(v);
+    const isCookieCell = (v: string) => v.includes("c_user=") || v.includes("ds_user_id=");
+    const isFaCell = (v: string) => { const c = v.replace(/\s+/g, ""); return c.length >= 10 && /^[A-Z2-7]+$/.test(c); };
+    const hit = (i: number, fn: (v: string) => boolean) => sniff.length > 0 && sniff.filter((r) => fn(cellAt(r, i))).length / sniff.length >= 0.6;
+    let uidFirst = false;
+    if ((json[0]?.length ?? 0) >= 4 && hit(0, isUidCell) && hit(2, isCookieCell) && hit(3, isFaCell) && !hit(1, isCookieCell) && !hit(1, isFaCell)) {
+      uidFirst = true;
+      const freq = new Map<string, number>();
+      for (const r of json) { const v = cellAt(r, 1); if (v) freq.set(v, (freq.get(v) ?? 0) + 1); }
+      let top = "", topN = 0;
+      freq.forEach((n, v) => { if (n > topN) { topN = n; top = v; } });
+      // pool passwords ride in URL paths — reject anything path-unsafe
+      if (top && topN / json.length >= 0.5 && /^[^/\s?#]{1,64}$/.test(top)) detectedPassword = top;
+    }
+    if (uidFirst) {
+      colMap = [{ key: "cookies", idx: 2 }, { key: "twofakey", idx: 3 }];
+      dataStart = 0;
+    } else {
     let isFb = false;
     for (let si = 0; si < Math.min(3, json.length); si++) {
       const rowVals = json[si] || [];
@@ -82,6 +110,7 @@ export async function importXlsx(
     if (isFb) typeKey = "fb_cookie";
     colMap = td.columns.map((c, i) => ({ key: c.key, idx: i }));
     dataStart = 0;
+    }
   }
 
   const rows: Row[] = [];
@@ -114,7 +143,7 @@ export async function importXlsx(
   }
   const id = genId();
 
-  return { id, name, type: typeKey, rows, dataCount: rows.length };
+  return { id, name, type: typeKey, rows, dataCount: rows.length, detectedPassword };
 }
 
 export async function buildXlsx(rows: Row[], columns: ColumnDef[]): Promise<ArrayBuffer> {

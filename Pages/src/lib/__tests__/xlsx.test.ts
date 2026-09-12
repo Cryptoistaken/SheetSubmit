@@ -90,6 +90,38 @@ describe("importXlsx", () => {
     expect(res.rows[0]).toMatchObject({ cookies: "c_user=5; xs=1", twofakey: "ABCDEFGHJK", uid: "5" });
   });
 
+  it("detects UID-first vendor layout: maps cookie+2fa, derives uid, suggests password", async () => {
+    const buf = toBuf([
+      ["61594280670436", "Love@12345", "datr=x; c_user=61594280670436; xs=1", "RBOCDYV7NHW32WIN6YSJEEDFCRH4WGIY"],
+      ["61594141865457", "Love@12345", "datr=y; c_user=61594141865457; xs=2", "NN4JVKXK7FOMFDCCF6DY7YORLU5LBXKP"],
+    ]);
+    const res = await importXlsx(buf, "2fa (Cookie & 2FA) [317].xlsx", []);
+    expect(res.type).toBe("fb_cookie");
+    expect(res.dataCount).toBe(2);
+    expect(res.detectedPassword).toBe("Love@12345");
+    expect(res.rows[0]).toMatchObject({ cookies: "datr=x; c_user=61594280670436; xs=1", twofakey: "RBOCDYV7NHW32WIN6YSJEEDFCRH4WGIY", uid: "61594280670436" });
+    expect(res.rows[0].password).toBeUndefined();
+    expect(res.rows[1].uid).toBe("61594141865457");
+  });
+
+  it("does not trigger UID-first detection on cookie-first blobs", async () => {
+    const buf = toBuf([["c_user=5; xs=1", "ABCDEFGHJK", "5", "extra"]]);
+    const res = await importXlsx(buf, "blob.xlsx", []);
+    expect(res.detectedPassword).toBeUndefined();
+    expect(res.rows[0]).toMatchObject({ cookies: "c_user=5; xs=1", twofakey: "ABCDEFGHJK", uid: "5" });
+  });
+
+  it("still maps UID-first rows when the password is path-unsafe", async () => {
+    const buf = toBuf([
+      ["12345", "a/b", "c_user=9; x=1", "ABCDEFGHJK"],
+      ["12346", "a/b", "c_user=9; x=1", "ABCDEFGHJK"],
+    ]);
+    const res = await importXlsx(buf, "u.xlsx", []);
+    expect(res.detectedPassword).toBeUndefined();
+    expect(res.dataCount).toBe(2);
+    expect(res.rows[0]).toMatchObject({ cookies: "c_user=9; x=1", twofakey: "ABCDEFGHJK", uid: "9" });
+  });
+
   it("dedups the file name against existing files", async () => {
     const buf = toBuf([["cookies", "2fa key", "uid"], ["c_user=1;", "", "1"]]);
     const res = await importXlsx(buf, "batch.xlsx", [{ name: "batch" }]);

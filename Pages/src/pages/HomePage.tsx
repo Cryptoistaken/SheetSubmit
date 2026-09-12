@@ -344,7 +344,7 @@ export default function HomePage() {
 
   const createFile = async (preset: FilePreset) => openCreatePw("fb_cookie", preset);
 
-  const [uploadPending, setUploadPending] = useState<null | { id: string; name: string; type: FileType; rows: import("@/lib/types").Row[]; dataCount: number; cacheReady: Promise<void> }>(null);
+  const [uploadPending, setUploadPending] = useState<null | { id: string; name: string; type: FileType; rows: import("@/lib/types").Row[]; dataCount: number; detectedPassword?: string; cacheReady: Promise<void> }>(null);
   const [typePick, setTypePick] = useState<null | { has2fa: boolean; pageHint: boolean }>(null);
   const typePickRef = useModalA11y(!!typePick, () => { setTypePick(null); setUploadPending(null); });
   const pwRef = useModalA11y(!!pwModal, () => { setPwModal(null); setUploadPending(null); });
@@ -380,7 +380,7 @@ export default function HomePage() {
       const result = await importXlsx(buf, file.name, current);
       // ask file type first, then password — L0VE preselect if name contains Love
       const cacheReady = hydrateWaCache(result.rows);
-      setUploadPending({ id: result.id, name: result.name, type: result.type, rows: result.rows, dataCount: result.dataCount, cacheReady });
+      setUploadPending({ id: result.id, name: result.name, type: result.type, rows: result.rows, dataCount: result.dataCount, detectedPassword: result.detectedPassword, cacheReady });
       setTypePick({
         has2fa: result.rows.some((r) => String(r.twofakey ?? "").trim() !== ""),
         pageHint: result.name.toLowerCase().includes("page"),
@@ -722,6 +722,19 @@ export default function HomePage() {
                 <span className="file-card-name" style={{ fontSize: 13, fontWeight: 600 }}>{c.id}</span>
               </button>
             ))}
+            {uploadPending?.detectedPassword && uploadPending.detectedPassword !== "dgddigital" && uploadPending.detectedPassword !== LOVE_PASSWORD ? (
+              <button
+                className="file-card"
+                style={{ display: "flex", flexDirection: "row", gap: 12, textAlign: "left", padding: "14px 16px", minHeight: 56, justifyContent: "flex-start", alignItems: "center", borderColor: "var(--border2)" }}
+                onClick={() => { if (uploadPending?.detectedPassword) void doUploadWithPassword(uploadPending.detectedPassword); }}
+              >
+                <span style={{ display: "inline-flex", flexShrink: 0 }} aria-hidden="true"><PasswordIcon password={uploadPending.detectedPassword} size={18} aria-hidden="true" /></span>
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span className="file-card-name" style={{ fontSize: 13, fontWeight: 600 }}>{uploadPending.detectedPassword}</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "var(--green)", background: "var(--green-bg)", padding: "1px 6px", borderRadius: 999 }}>Detected from file</span>
+                </span>
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

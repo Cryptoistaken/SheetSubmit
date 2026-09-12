@@ -14,7 +14,9 @@ const WIDTH_KEY = "ss_sidebar_width";
 const MIN_W = 64;
 const DEFAULT_W = 240;
 const MAX_W = 320;
-const HIDE_BELOW = 88;
+// 64 = the icons rail itself: only a deliberate drag fully left hides it,
+// so the collapsed state gets real room (68–159px) before hidden.
+const HIDE_BELOW = 68;
 const ICONS_BELOW = 160;
 const LABEL_W = 180;
 
@@ -227,7 +229,7 @@ export default function Sidebar() {
     <aside
       onMouseLeave={() => setHoverOpen(false)}
       style={{ width: effWidth }}
-      className={cn("relative flex shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background ease-out motion-reduce:transition-none", dragWidth == null && "transition-[width] duration-200")}
+      className={cn("group relative flex shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background ease-out motion-reduce:transition-none", dragWidth == null && "transition-[width] duration-200")}
     >
       {/* Hover auto-expand covers everything except the footer trigger block
           below it — the footer is hover-dead (click only), the rest expands. */}
@@ -301,8 +303,16 @@ export default function Sidebar() {
           else if (e.key === "ArrowLeft") { e.preventDefault(); applyWidth(effWidth - 16); }
         }}
         title="Drag to resize"
-        className="absolute inset-y-0 right-0 z-10 w-3 cursor-ew-resize touch-none outline-none hover:bg-muted/60 focus-visible:bg-muted/60"
-      />
+        className="absolute inset-y-0 right-0 z-10 w-6 cursor-ew-resize touch-none outline-none"
+      >
+        <div
+          aria-hidden="true"
+          className={cn(
+            "absolute right-[5px] top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-border transition-opacity",
+            dragWidth != null ? "opacity-100" : "opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+          )}
+        />
+      </div>
     </aside>
   );
 }

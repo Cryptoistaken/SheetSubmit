@@ -118,6 +118,7 @@ export default function Topbar() {
     location.pathname.startsWith("/file/") ||
     location.pathname.startsWith("/archive/") ||
     /\/admin\/user\/[^/]+\/file\/[^/]+/.test(location.pathname);
+  const hideHome = isFilePage ? { display: "none" as const } : undefined;
   const crumbs = isFilePage ? [] : homeCrumbs(location.pathname);
 
   const connStatus = useConnStore((s) => s.status);
@@ -195,10 +196,11 @@ export default function Topbar() {
       <div className="topbar-l">
         <img
           src={logoUrl}
-          className="topbar-logo shrinkable"
+          className="topbar-logo"
           alt="Logo"
+          style={hideHome}
         />
-        <span className="home-top-title shrinkable">
+        <span className="home-top-title" style={hideHome}>
           Sheet Submit
         </span>
         {crumbs.length > 0 && (
@@ -255,7 +257,7 @@ export default function Topbar() {
         {isFilePage && unsynced > 0 ? (
           <span className="sync-dot" title={`${unsynced} unsynced change${unsynced === 1 ? "" : "s"} - syncs automatically`} aria-label={`${unsynced} unsynced changes`}>●{unsynced}</span>
         ) : null}
-        <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+        <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, ...hideHome }}>
         <DropdownMenu>
         <div className={`profile-btn split${photoLoaded ? " loaded" : ""}`} role="group" aria-label="Account">
         <button type="button" className="pill-balance sweepable" onClick={(e) => { sweepClick(e); toggleCurrency(); }} title={currency === "USD" ? "Show BDT" : "Show USDC"} aria-label={currency === "USD" ? `Balance ${balanceText} USDC - show BDT` : `Balance ${balanceText} BDT - show USDC`}>

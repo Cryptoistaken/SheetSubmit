@@ -419,7 +419,6 @@ export default function HomePage() {
           <div className="home-tabs" role="tablist" aria-label="Home sections">
         <button
           className={`home-tab${tab === "files" ? " active" : ""}`}
-          title="My Files"
           role="tab"
           aria-selected={tab === "files"}
           onClick={() => goTab("/")}
@@ -429,7 +428,6 @@ export default function HomePage() {
         </button>
         <button
           className={`home-tab${tab === "wallet" ? " active" : ""}`}
-          title="Wallet"
           role="tab"
           aria-selected={tab === "wallet"}
           onClick={() => goTab("/wallet")}
@@ -440,7 +438,6 @@ export default function HomePage() {
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "withdrawals" ? " active" : ""}`}
-            title="Withdrawals"
             role="tab"
             aria-selected={tab === "withdrawals"}
             onClick={() => goTab("/withdrawals")}
@@ -452,7 +449,6 @@ export default function HomePage() {
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "admin" ? " active" : ""}`}
-            title="Admin"
             role="tab"
             aria-selected={tab === "admin"}
             onClick={() => goTab("/admin")}
@@ -464,7 +460,6 @@ export default function HomePage() {
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "pools" ? " active" : ""}`}
-            title="Pools"
             role="tab"
             aria-selected={tab === "pools"}
             onClick={() => goTab("/pools/dgddigital/cookies_only")}
@@ -476,7 +471,6 @@ export default function HomePage() {
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "approvals" ? " active" : ""}`}
-            title="Approvals"
             role="tab"
             aria-selected={tab === "approvals"}
             onClick={() => goTab("/approvals")}
@@ -488,7 +482,6 @@ export default function HomePage() {
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "settings" ? " active" : ""}`}
-            title="Settings"
             role="tab"
             aria-selected={tab === "settings"}
             onClick={() => goTab("/settings")}
@@ -500,7 +493,6 @@ export default function HomePage() {
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "tools" ? " active" : ""}`}
-            title="Tools"
             role="tab"
             aria-selected={tab === "tools"}
             onClick={() => goTab("/tools")}
@@ -511,7 +503,6 @@ export default function HomePage() {
         ) : null}
         <button
           className={`home-tab${tab === "archive" ? " active" : ""}`}
-          title="Archive"
           role="tab"
           aria-selected={tab === "archive"}
           onClick={() => goTab("/archive")}
@@ -522,7 +513,6 @@ export default function HomePage() {
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "analysis" ? " active" : ""}`}
-            title="Analysis"
             role="tab"
             aria-selected={tab === "analysis"}
             onClick={() => goTab("/analysis")}

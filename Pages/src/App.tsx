@@ -74,9 +74,9 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
           ? "homePaneAdmin"
           : "homePaneFiles";
   return (
-    <div className="flex h-dvh flex-row">
+    <div className="flex h-dvh flex-col lg:flex-row">
       {!sheet ? (
-        <div className="flex w-12 shrink-0 flex-col gap-2 border-r border-border bg-background p-1 lg:w-60 lg:p-2" aria-hidden="true">
+        <div className="hidden w-60 shrink-0 flex-col gap-2 border-r border-border bg-background p-2 lg:flex" aria-hidden="true">
           <div className="flex items-center gap-2 px-2 py-2">
             <Skeleton className="size-5 rounded-sm" />
             <Skeleton className="h-4 w-24 rounded" />
@@ -136,7 +136,7 @@ function Layout() {
       >
         Skip to content
       </a>
-      {isFilePage || !isAdmin ? <Sidebar minimal /> : <Sidebar />}
+      {isFilePage || !isAdmin ? null : <Sidebar />}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {isFilePage ? (
           <header>

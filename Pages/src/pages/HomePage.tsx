@@ -34,8 +34,6 @@ type Tab = "files" | "archive" | "wallet" | "withdrawals" | "pools" | "approvals
 // Built-in passwords for new files — files under these are shared by
 // default; the modal only offers these two.
 export const LOVE_PASSWORD = "L0VE@12345";
-/** Pool passwords compared loosely for detection badges: case-insensitive, 0≈o (vendor files write Love@12345 for L0VE@12345). Pooling itself always uses the exact string. */
-export const normPoolPassword = (s: string) => s.toLowerCase().replace(/0/g, "o");
 
 interface AndroidBridge {
   getBubbleFile?: () => string;
@@ -380,6 +378,12 @@ export default function HomePage() {
       const buf = await file.arrayBuffer();
       const current = files ?? (await api.getFiles());
       const result = await importXlsx(buf, file.name, current);
+      // Strict pools: a file declaring any other password is rejected outright —
+      // no file is ever created under an unsupported pool.
+      if (result.detectedPassword && result.detectedPassword !== "dgddigital" && result.detectedPassword !== LOVE_PASSWORD) {
+        showToast(`Unsupported file password "${result.detectedPassword}". Only dgddigital and ${LOVE_PASSWORD} files can be uploaded.`);
+        return;
+      }
       // ask file type first, then password — L0VE preselect if name contains Love
       const cacheReady = hydrateWaCache(result.rows);
       setUploadPending({ id: result.id, name: result.name, type: result.type, rows: result.rows, dataCount: result.dataCount, detectedPassword: result.detectedPassword, cacheReady });
@@ -714,7 +718,7 @@ export default function HomePage() {
               { id: "dgddigital" },
               { id: LOVE_PASSWORD },
             ].map((c) => {
-              const isDetected = !!uploadPending?.detectedPassword && normPoolPassword(c.id) === normPoolPassword(uploadPending.detectedPassword);
+              const isDetected = uploadPending?.detectedPassword === c.id;
               return (
               <button
                 key={c.id}

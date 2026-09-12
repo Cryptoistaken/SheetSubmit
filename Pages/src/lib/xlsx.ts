@@ -25,7 +25,7 @@ export interface ImportXlsxResult {
   type: FileType;
   rows: Row[];
   dataCount: number;
-  /** Pool password read from a UID-first vendor layout (UID|password|cookie|2fa) — offered as a choice, never applied silently. */
+  /** Pool password read from a UID-first vendor layout (UID|password|cookie|2fa) — upload accepts only exact pool matches and rejects anything else. Never stored on rows. */
   detectedPassword?: string;
 }
 

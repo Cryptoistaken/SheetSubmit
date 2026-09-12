@@ -39,6 +39,7 @@ export default function SheetGrid() {
   const fileId = useSheetStore((s) => s.fileId);
   // Archived viewer is read-only: no "Add row" affordance.
   const archivedMode = useSheetStore((s) => s.archivedMode);
+  const selectedCell = useSheetStore((s) => s.selectedCell);
 
   // Windowed rendering: show GRID_PAGE rows at a time so large sheets don't
   // mount thousands of <tr>. Row indices match the store (slice from 0).
@@ -49,6 +50,13 @@ export default function SheetGrid() {
   useEffect(() => {
     if (visibleCount > rows.length) setVisibleCount(Math.max(GRID_PAGE, rows.length));
   }, [rows.length, visibleCount]);
+  // Typing near the end reveals new rows on its own — no "Show more" taps
+  // needed to keep entering data (the store also tops up 10 spare rows).
+  useEffect(() => {
+    if (selectedCell && selectedCell.rowIdx >= visibleCount - 10 && visibleCount < rows.length) {
+      setVisibleCount(rows.length);
+    }
+  }, [rows.length, visibleCount, selectedCell]);
   const visibleRows = rows.slice(0, visibleCount);
   const hiddenCount = rows.length - visibleRows.length;
 
@@ -66,6 +74,10 @@ export default function SheetGrid() {
   const clickTarget = useRef<Element | null>(null);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTap = useRef<{ row: number; col: string; t: number } | null>(null);
+  // Deferred single-tap: a lone tap opens the edit bar only after the
+  // double-tap window passes, so a double-tap paste/copy never flashes it.
+  const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSingle = useRef<(() => void) | null>(null);
   const dragStart = useRef<{ row: number; col: string } | null>(null);
   const dragActive = useRef(false);
   const dragMoved = useRef(false);
@@ -76,6 +88,8 @@ export default function SheetGrid() {
     return () => {
       if (holdTimer.current) clearTimeout(holdTimer.current);
       if (clickTimer.current) clearTimeout(clickTimer.current);
+      if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
+      pendingSingle.current = null;
     };
   }, []);
 
@@ -94,6 +108,33 @@ export default function SheetGrid() {
       clearTimeout(holdTimer.current);
       holdTimer.current = null;
     }
+  }
+
+  // Single-tap is deferred past the double-tap window: a second tap on the
+  // same cell cancels it (pure double-tap, edit bar never opens), while a
+  // tap elsewhere flushes it first (keeps commit-then-open ordering).
+  function cancelSingleTap() {
+    if (singleTapTimer.current) {
+      clearTimeout(singleTapTimer.current);
+      singleTapTimer.current = null;
+    }
+    pendingSingle.current = null;
+  }
+
+  function flushSingleTap() {
+    const fn = pendingSingle.current;
+    cancelSingleTap();
+    fn?.();
+  }
+
+  function armSingleTap(fn: () => void) {
+    cancelSingleTap();
+    pendingSingle.current = fn;
+    singleTapTimer.current = setTimeout(() => {
+      singleTapTimer.current = null;
+      pendingSingle.current = null;
+      fn();
+    }, 400);
   }
 
   function endDrag() {
@@ -224,6 +265,7 @@ export default function SheetGrid() {
         return;
       }
       if (store.selectionMode) {
+        cancelSingleTap();
         store.toggleSelection("cell", rowIdx, colKey);
         return;
       }
@@ -235,21 +277,29 @@ export default function SheetGrid() {
         last.col === colKey &&
         now - last.t < 400
       ) {
+        // Double-tap: the deferred single-tap is dropped, so the edit bar
+        // never flashes open for a paste/copy gesture.
         lastTap.current = null;
+        cancelSingleTap();
         useSheetStore.getState().selectCellOnly(rowIdx, colKey);
         void useSheetStore.getState().doubleTap(rowIdx, colKey);
         return;
       }
+      // A tap elsewhere runs the pending single first, then defers this one.
+      flushSingleTap();
       lastTap.current = { row: rowIdx, col: colKey, t: now };
-      if (
-        store.qebOpen &&
-        store.selectedCell &&
-        (store.selectedCell.rowIdx !== rowIdx ||
-          store.selectedCell.colIdx !== colKey)
-      ) {
-        store.commitQuickEdit();
-      }
-      store.openQuickEdit(rowIdx, colKey);
+      armSingleTap(() => {
+        const st = useSheetStore.getState();
+        if (
+          st.qebOpen &&
+          st.selectedCell &&
+          (st.selectedCell.rowIdx !== rowIdx ||
+            st.selectedCell.colIdx !== colKey)
+        ) {
+          st.commitQuickEdit();
+        }
+        useSheetStore.getState().openQuickEdit(rowIdx, colKey);
+      });
     }
   }
 

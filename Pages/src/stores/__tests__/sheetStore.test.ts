@@ -293,7 +293,9 @@ describe("sheetStore data-integrity", () => {
     harness.nextAppend.resolve({ ok: true, seq: 5 });
     await p;
 
-    // The resolved append must NOT clear the newer dirty state, journal or seq.
+    // The resolved append must NOT clear the newer dirty state or journal,
+    // but it MUST adopt the new seq as base — otherwise the next flush
+    // reuses the stale base, 409s, and refetches the whole file.
     expect(useSheetStore.getState().isDirty).toBe(true);
     expect(useSheetStore.getState().rows[0].uid).toBe("222");
     // Journal is coalesced per-row: the later commit on the same row replaces
@@ -301,7 +303,7 @@ describe("sheetStore data-integrity", () => {
     expect(useSheetStore.getState().changeJournal).toEqual([
       { rowIdx: 0, cols: { uid: "222" } },
     ]);
-    expect(useSheetStore.getState().lastSeq).toBe(0);
+    expect(useSheetStore.getState().lastSeq).toBe(5);
   });
 
   it("closeFile commits the open draft, awaits the final flush, then resets", async () => {

@@ -915,6 +915,16 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       invalidCells: newInvalid,
       ...recomputeMarksForRow(newRows, s.crossDups, s.columns, rowIdx),
     });
+    // Keep 10 spare empty rows below the edited row so users never hit a
+    // wall at the bottom — no manual "Add row" needed while typing down.
+    // Padding only (never dirty): trims and sparse appends ignore it.
+    const grown = get();
+    if (!grown.archivedMode && rowIdx >= grown.rows.length - 10 && grown.rows.length < MAX_GRID_ROWS) {
+      const add = Math.min(10, MAX_GRID_ROWS - grown.rows.length);
+      if (add > 0) {
+        set({ rows: grown.rows.concat(Array.from({ length: add }, () => makeEmptyRow(grown.columns))) });
+      }
+    }
     get().maybeAutoCheck(rowIdx, colKey);
     get().persist();
     if (
@@ -1076,7 +1086,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           // structural change was already sent; keep dirtyStructural only if a
           // NEW structural change arrived (cell edits belong in the journal and
           // can go out as a small append instead of another full upload).
-          set({ dirtyStructural: cur.structuralVersion !== startStruct });
+          // Adopt the new seq too — our rows are on the server, so the next
+          // append must use it as base instead of 409ing.
+          set({ dirtyStructural: cur.structuralVersion !== startStruct, lastSeq: resp.seq });
         }
       } else {
         if (s.changeJournal.length === 0 && !s.isDirty) return;
@@ -1103,6 +1115,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
             void snapshotFile(s.fileId, cur.rows, resp.seq).catch(() => {});
             syncMirror(s.fileId);
             trimMemoryRows();
+          } else if (cur.fileId === s.fileId && resp) {
+            // Newer edits landed mid-flight, but our ops still applied (the
+            // server moved to resp.seq). Adopt it as the next base — reusing
+            // the stale base would 409, refetch the whole file and remount
+            // the grid on every overlapping save. Journal resend is a
+            // last-writer-wins merge of the same values, so it stays safe.
+            set({ lastSeq: resp.seq });
           }
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e);

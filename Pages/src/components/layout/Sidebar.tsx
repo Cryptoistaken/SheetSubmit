@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -9,6 +9,33 @@ import { cn } from "@/lib/utils";
 import { useViewStore } from "@/stores/viewStore";
 
 const COLLAPSE_KEY = "ss_sidebar_collapsed";
+const WIDTH_KEY = "ss_sidebar_width";
+const MIN_W = 64;
+const DEFAULT_W = 240;
+const MAX_W = 320;
+const SNAP_W = 120;
+const LABEL_W = 180;
+
+const clampWidth = (w: number) => Math.min(MAX_W, Math.max(MIN_W, Math.round(w)));
+
+function loadWidth(): number | null {
+  try {
+    const raw = Number(localStorage.getItem(WIDTH_KEY));
+    if (Number.isFinite(raw) && raw >= MIN_W && raw <= MAX_W) return Math.round(raw);
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function saveWidth(w: number | null) {
+  try {
+    if (w == null) localStorage.removeItem(WIDTH_KEY);
+    else localStorage.setItem(WIDTH_KEY, String(w));
+  } catch {
+    // ignore
+  }
+}
 
 interface NavItem {
   key: string;
@@ -83,10 +110,16 @@ export default function Sidebar() {
       return false;
     }
   });
+  const [customWidth, setCustomWidth] = useState<number | null>(loadWidth);
   // Hover-expand is desktop-only (touch has no hover); the footer trigger
   // tap collapses/expands everywhere.
   const [hoverOpen, setHoverOpen] = useState(false);
-  const effCollapsed = collapsed && !hoverOpen;
+  // Live width while edge-dragging (null otherwise).
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const dragStart = useRef<{ x: number; w: number } | null>(null);
+
+  const effCollapsed = dragWidth != null ? dragWidth < LABEL_W : collapsed && !hoverOpen;
+  const effWidth = dragWidth ?? (collapsed && !hoverOpen ? MIN_W : (customWidth ?? DEFAULT_W));
 
   if (!user) return null;
 
@@ -103,12 +136,52 @@ export default function Sidebar() {
       return next;
     });
   };
+  // Drag release (and arrow keys): narrow snaps to collapsed, wide persists
+  // as the custom expanded width. Near-default rounds back to the default.
+  const applyWidth = (w: number) => {
+    const width = clampWidth(w);
+    try {
+      if (width < SNAP_W) {
+        setCollapsed(true);
+        localStorage.setItem(COLLAPSE_KEY, "1");
+        setCustomWidth(null);
+        saveWidth(null);
+      } else {
+        const custom = Math.abs(width - DEFAULT_W) < 4 ? null : width;
+        setCollapsed(false);
+        localStorage.setItem(COLLAPSE_KEY, "0");
+        setCustomWidth(custom);
+        saveWidth(custom);
+      }
+    } catch {
+      // ignore
+    }
+  };
+  const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragStart.current = { x: e.clientX, w: effWidth };
+    setDragWidth(effWidth);
+  };
+  const moveDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const s = dragStart.current;
+    if (s == null) return;
+    setDragWidth(clampWidth(s.w + e.clientX - s.x));
+  };
+  const endDrag = () => {
+    dragStart.current = null;
+    if (dragWidth != null) {
+      applyWidth(dragWidth);
+      setDragWidth(null);
+    }
+  };
   const adminItems = NAV_ADMIN.filter((i) => !i.adminOnly || user.isAdmin);
 
   return (
     <aside
       onMouseLeave={() => setHoverOpen(false)}
-      className={cn("flex shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background transition-[width] duration-200 ease-out motion-reduce:transition-none", effCollapsed ? "w-16" : "w-60")}
+      style={{ width: effWidth }}
+      className={cn("relative flex shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background ease-out motion-reduce:transition-none", dragWidth == null && "transition-[width] duration-200")}
     >
       {/* Hover auto-expand covers everything except the footer trigger block
           below it — the footer is hover-dead (click only), the rest expands. */}
@@ -168,6 +241,25 @@ export default function Sidebar() {
         </button>
         </div>
       </div>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        aria-valuenow={Math.round(effWidth)}
+        aria-valuemin={MIN_W}
+        aria-valuemax={MAX_W}
+        tabIndex={0}
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowRight") { e.preventDefault(); applyWidth(effWidth + 16); }
+          else if (e.key === "ArrowLeft") { e.preventDefault(); applyWidth(effWidth - 16); }
+        }}
+        title="Drag to resize"
+        className="absolute inset-y-0 right-0 z-10 w-3 cursor-ew-resize touch-none outline-none hover:bg-muted/60 focus-visible:bg-muted/60"
+      />
     </aside>
   );
 }

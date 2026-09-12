@@ -218,8 +218,8 @@ button, input, select, textarea {
     padding: 0 28px;
     border: none;
     border-radius: 22px;
-    background: var(--text);
-    color: var(--bg);
+    background: var(--tg-blue);
+    color: #fff;
     font-family: var(--sans);
     font-size: 16px;
     font-weight: 600;

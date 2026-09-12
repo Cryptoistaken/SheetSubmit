@@ -193,18 +193,14 @@ export default function Topbar() {
   return (
     <div className="topbar">
       <div className="topbar-l">
-        {!isFilePage ? (
-          <>
-            <img
-              src={logoUrl}
-              className="topbar-logo shrinkable"
-              alt="Logo"
-            />
-            <span className="home-top-title shrinkable">
-              Sheet Submit
-            </span>
-          </>
-        ) : null}
+        <img
+          src={logoUrl}
+          className="topbar-logo shrinkable"
+          alt="Logo"
+        />
+        <span className="home-top-title shrinkable">
+          Sheet Submit
+        </span>
         {crumbs.length > 0 && (
           <nav aria-label="Breadcrumb" className="topbar-crumb">
             {crumbs.map((c, i) => (

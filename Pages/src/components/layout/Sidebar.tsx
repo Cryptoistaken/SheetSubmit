@@ -133,10 +133,9 @@ function PanelTriggerIcon({ shifted }: { shifted?: boolean }) {
   );
 }
 
-// Responsive shell rail (desktop non-file pages only — Layout mounts this when
-// !isFilePage && isDesktop; mobile uses Topbar + tabs, file pages use the
-// Topbar functional header). Same persistent rail for admins and regulars;
-// expanded ↔ icons via the footer trigger, drag-only stops at
+// Admin-only sidebar rail (regulars keep Topbar + tabs everywhere — the rail
+// would be overkill for their 4 sections). Same persistent rail on desktop
+// and phones: expanded ↔ icons via the footer trigger, drag-only stops at
 // tight (48) and mini (40) inside the collapsed space, mini (icons-only 40px
 // rail, never unmounts) via the footer X button.
 // Tap works everywhere; hover-expand needs a real mouse.

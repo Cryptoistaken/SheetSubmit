@@ -114,7 +114,7 @@ export default function SplitterTool() {
           <input type="file" accept=".xlsx,.xls" hidden aria-label="Choose xlsx file" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f); e.currentTarget.value = ""; }} />
         </label>
       ) : (
-        <select className="modal-input" style={{ maxWidth: "min(360px, calc(100vw - 32px - env(safe-area-inset-left) - env(safe-area-inset-right)))", marginBottom: 12 }} value={selId} aria-label="Select existing file" onChange={(e) => void handleExisting(e.target.value)}>
+        <select className="modal-input" style={{ maxWidth: 360, marginBottom: 12 }} value={selId} aria-label="Select existing file" onChange={(e) => void handleExisting(e.target.value)}>
           <option value="">Select file…</option>
           {(files ?? []).map((f) => <option key={f.id} value={f.id}>{f.name} ({f.dataCount ?? f.rowCount ?? "?"})</option>)}
         </select>
@@ -140,7 +140,6 @@ export default function SplitterTool() {
                   style={{
                     flex: "1 1 72px",
                     minWidth: 72,
-                    minHeight: 40,
                     justifyContent: "center",
                     padding: "10px 12px",
                     fontWeight: 600,
@@ -167,12 +166,12 @@ export default function SplitterTool() {
               aria-describedby={customInvalid ? "custom-error" : undefined}
               value={custom}
               onChange={(e) => setCustom(e.target.value.replace(/[^\d]/g, ""))}
-              style={{ flex: "1 1 96px", minWidth: 96, width: 96, textAlign: "center", fontSize: 16, minHeight: 40, fontWeight: 600, height: 38, alignSelf: "stretch", borderColor: customInvalid ? "var(--red)" : customTrim ? "var(--blue)" : undefined, background: customInvalid ? "var(--red-bg)" : customTrim ? "var(--blue-light)" : undefined, color: customInvalid ? "var(--red)" : customTrim ? "var(--blue)" : undefined }}
+              style={{ flex: "1 1 96px", minWidth: 96, width: 96, textAlign: "center", fontWeight: 600, height: 38, alignSelf: "stretch", borderColor: customInvalid ? "var(--red)" : customTrim ? "var(--blue)" : undefined, background: customInvalid ? "var(--red-bg)" : customTrim ? "var(--blue-light)" : undefined, color: customInvalid ? "var(--red)" : customTrim ? "var(--blue)" : undefined }}
             />
           </div>
           {customInvalid ? <div id="custom-error" role="alert" style={{ fontSize: 12, color: "var(--red)", marginBottom: 8 }}>Please enter a number between 2 and 100.</div> : null}
           {rows.length > 0 && Number.isFinite(effectiveN) && effectiveN >= 2 ? (
-            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "nowrap", overflow: "auto" }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "nowrap", overflow: "hidden" }}>
               {Array.from({ length: Math.min(effectiveN, Math.min(rows.length, 6)) }).map((_, i, arr) => {
                 const total = Math.min(effectiveN, rows.length);
                 const per = Math.ceil(rows.length / total);

@@ -226,7 +226,7 @@ pools.get("/:password/:pool/user-files", async (c) => {
   return c.json(r);
 });
 pools.get("/flags", async (c) => c.json(await rpc(c.env.INDEX, "global", "poolFlagsGet", {})));
-pools.put("/flags", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const body = await c.req.json().catch(() => ({}) as any); return c.json(await rpc(c.env.INDEX, "global", "poolFlagsSet", { types: body?.types, passwords: body?.passwords })); });
+pools.put("/flags", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const body = await c.req.json().catch(() => ({}) as any); return c.json(await rpc(c.env.INDEX, "global", "poolFlagsSet", { combos: body?.combos, types: body?.types, passwords: body?.passwords })); });
 pools.get("/:password/:pool/price", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const pid = c.req.param("pool");

@@ -23,12 +23,24 @@ const pools = ["cookies_only", "cookies_2fa", "page"] as const;
 type Pool = typeof pools[number];
 const prices: Record<Pool, number> = { cookies_only: .02, cookies_2fa: .05, page: .1 };
 // Pool availability flags (meta key "poolflags", admin-toggled in Settings).
-// A combo is enabled only when BOTH its type and password are on; takes from
-// an off combo are free (unit price forced to 0, settlement skips zeroes).
+// Stored per combination ("password:pool") so a file type can be on for one
+// password and off for another. Legacy {types, passwords} blobs auto-migrate
+// on read (combo on = both dims on). Takes from an off combo are free
+// (unit price forced to 0, settlement skips zeroes).
 const POOL_FLAG_POOLS = ["cookies_only", "cookies_2fa", "page"];
 const POOL_FLAG_PASSWORDS = ["dgddigital", "Love@12345"];
-const poolFlagsShape = (v: any) => ({ types: Object.fromEntries(POOL_FLAG_POOLS.map((p) => [p, (v as any)?.types?.[p] !== false])), passwords: Object.fromEntries(POOL_FLAG_PASSWORDS.map((p) => [p, (v as any)?.passwords?.[p] !== false])) });
-const poolComboOff = async (password: string, pool: string) => { const r: any = (await db`SELECT v FROM meta WHERE k='poolflags'`)[0]; const f = poolFlagsShape(json(r?.v)); return (f.types as any)[pool] === false || (f.passwords as any)[password] === false; };
+const comboKey = (password: string, pool: string) => `${password}:${pool}`;
+const poolFlagsShape = (v: any) => {
+  const combos: Record<string, boolean> = {};
+  for (const pwd of POOL_FLAG_PASSWORDS) for (const p of POOL_FLAG_POOLS) {
+    const k = comboKey(pwd, p);
+    combos[k] = (v as any)?.combos?.[k] !== undefined
+      ? (v as any).combos[k] !== false
+      : (v as any)?.types?.[p] !== false && (v as any)?.passwords?.[pwd] !== false;
+  }
+  return { combos };
+};
+const poolComboOff = async (password: string, pool: string) => { const r: any = (await db`SELECT v FROM meta WHERE k='poolflags'`)[0]; const f = poolFlagsShape(json(r?.v)); return (f.combos as any)[comboKey(password, pool)] === false; };
 const poolLabel = (id: string) => id === "cookies_only" ? "Cookies" : id === "cookies_2fa" ? "2FA" : id === "page" ? "Page" : id;
 const REVERT_WINDOW = 300_000; // first approve/reject opens a 5-minute window for exactly one flip; wallets pay at settlement
 const json = (v: any) => v == null ? null : typeof v === "string" ? JSON.parse(v) : v;
@@ -99,7 +111,7 @@ async function indexOp(op: string, a: any) {
     case "walletRequests": { const status = String(a.status || "").trim(); return status ? db`SELECT w.id,w.user_id,w.amount::float8 AS amount,w.method,w.account,w.status,w.created_at::float8 AS created_at,w.updated_at::float8 AS updated_at,u.name,u.username,u.photo_url FROM withdrawals w LEFT JOIN users u ON u.user_id=w.user_id WHERE w.status=${status} ORDER BY w.created_at DESC` : db`SELECT w.id,w.user_id,w.amount::float8 AS amount,w.method,w.account,w.status,w.created_at::float8 AS created_at,w.updated_at::float8 AS updated_at,u.name,u.username,u.photo_url FROM withdrawals w LEFT JOIN users u ON u.user_id=w.user_id ORDER BY w.created_at DESC`; }
     case "walletDecision": { const id = String(a.id || ""), status = String(a.status || ""); if (!id || !["APPROVED", "REJECTED"].includes(status)) throw new Error("invalid wallet decision"); return db.begin(async (tx: any) => { const row: any = (await tx`SELECT amount,user_id,status FROM withdrawals WHERE id=${id} FOR UPDATE`)[0]; if (!row) throw new Error("withdrawal not found"); if (row.status !== "PENDING") return { id, status: row.status }; await tx`UPDATE withdrawals SET status=${status},updated_at=${Date.now()} WHERE id=${id}`; if (status === "REJECTED") { await tx`INSERT INTO wallets(user_id,balance) VALUES(${row.user_id},${row.amount}) ON CONFLICT(user_id) DO UPDATE SET balance=wallets.balance+EXCLUDED.balance`; const r: any = (await tx`SELECT balance FROM wallets WHERE user_id=${row.user_id}`)[0]; await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${row.user_id},'CREDIT',${row.amount},${Number(r.balance)},'Withdrawal refunded',${j({ withdrawal_id: id })},${Date.now()})`; } return { id, status }; }); }
     case "poolFlagsGet": { const r: any = (await db`SELECT v FROM meta WHERE k='poolflags'`)[0]; return poolFlagsShape(json(r?.v)); }
-    case "poolFlagsSet": { const v = poolFlagsShape({ types: (a as any).types, passwords: (a as any).passwords }); await db`INSERT INTO meta(k,v) VALUES('poolflags',${j(v)}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`; void redisDel("ss:meta:poolflags"); return v; }
+    case "poolFlagsSet": { const v = poolFlagsShape({ combos: (a as any).combos, types: (a as any).types, passwords: (a as any).passwords }); await db`INSERT INTO meta(k,v) VALUES('poolflags',${j(v)}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`; void redisDel("ss:meta:poolflags"); return v; }
     case "paymentMethodsGet": { const uid = String(a.uid || ""); if (!uid) throw new Error("uid required"); const r: any = (await db`SELECT v FROM meta WHERE k=${`paymentMethods:${uid}`}`)[0]; return json(r?.v) ?? {}; }
     case "paymentMethodsSet": { const uid = String(a.uid || ""); if (!uid) throw new Error("uid required"); const methods = a.methods ?? {}; await db`INSERT INTO meta(k,v) VALUES(${`paymentMethods:${uid}`},${j(methods)}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`; return { ok: true }; }
     case "adminUsers": { const rows: any[] = await db`SELECT u.*,COUNT(f.file_id) FILTER (WHERE f.archived=false) AS "fileCount",COUNT(f.file_id) FILTER (WHERE f.archived=true) AS "archivedCount" FROM users u LEFT JOIN file_index f ON f.owner_id=u.user_id GROUP BY u.user_id ORDER BY u.created_at DESC LIMIT 500`; return rows; }

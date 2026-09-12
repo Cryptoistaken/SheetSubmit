@@ -85,7 +85,7 @@ export default function PoolsView() {
   const [priceCurrency] = useCurrency();
   // availability flags: takes from an off combo are free (backend forces unit price 0)
   const [poolFlags, setPoolFlags] = useState<PoolFlags | null>(null);
-  const comboOff = poolFlags != null && (poolFlags.types[cur] === false || poolFlags.passwords[curPwd] === false);
+  const comboOff = poolFlags != null && poolFlags.combos[`${curPwd}:${cur}`] === false;
 
   const loadPrices = useCallback(async () => {
     const allPrices: Record<string, number | null> = {};

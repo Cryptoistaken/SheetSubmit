@@ -350,8 +350,9 @@ export default function HomePage() {
   const [poolFlags, setPoolFlags] = useState<PoolFlags | null>(null);
   useEffect(() => { api.getPoolFlags().then(setPoolFlags).catch(() => setPoolFlags(null)); }, []);
   const presetPoolId = (preset: FilePreset) => preset === "cookie" ? "cookies_only" : preset === "combo" ? "cookies_2fa" : "page";
-  const presetOff = (preset: FilePreset) => poolFlags != null && poolFlags.types[presetPoolId(preset)] === false;
-  const poolPwOff = (pwd: string) => poolFlags != null && poolFlags.passwords[pwd] === false;
+  const comboOff = (preset: FilePreset, pwd: string) => poolFlags != null && poolFlags.combos[`${pwd}:${presetPoolId(preset)}`] === false;
+  // a type is unusable only when off for every password (password is picked after type)
+  const presetOff = (preset: FilePreset) => poolFlags != null && (["dgddigital", LOVE_PASSWORD] as const).every((pwd) => comboOff(preset, pwd));
   const [typePick, setTypePick] = useState<null | { has2fa: boolean; pageHint: boolean }>(null);
   const typePickRef = useModalA11y(!!typePick, () => { setTypePick(null); setUploadPending(null); });
   const pwRef = useModalA11y(!!pwModal, () => { setPwModal(null); setUploadPending(null); });
@@ -725,7 +726,7 @@ export default function HomePage() {
             {[
               { id: "dgddigital" },
               { id: LOVE_PASSWORD },
-            ].filter((c) => !poolPwOff(c.id)).map((c) => {
+            ].filter((c) => pwModal == null || !comboOff(pwModal.preset, c.id)).map((c) => {
               const isDetected = uploadPending?.detectedPassword === c.id;
               return (
               <button

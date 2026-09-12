@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api, type PoolFlags } from "@/lib/api";
 import { fmtMoney, inputToUsd, useBdtRate, useCurrency, usdToInput, type Currency } from "@/lib/currency";
 import { useToast } from "@/lib/toast";
@@ -40,19 +40,34 @@ export default function SettingsView() {
 
   // pool availability flags (admin kill-switches: off stops new files, existing pulls free)
   const [flags, setFlags] = useState<PoolFlags | null>(null);
+  const comboKey = (pwd: string, pid: string) => `${pwd}:${pid}`;
 
-  const flipFlag = async (dim: "types" | "passwords", key: string) => {
+  const saveCombos = async (combos: Record<string, boolean>, msg: string) => {
     if (!flags) return;
     const prev = flags;
-    const next: PoolFlags = { ...flags, [dim]: { ...flags[dim], [key]: !flags[dim][key] } };
-    setFlags(next);
+    setFlags({ combos });
     try {
-      setFlags(await api.setPoolFlags(next.types, next.passwords));
-      showToast(next[dim][key] ? "Pool turned on." : "Pool turned off. Existing files pull free of charge.");
+      setFlags(await api.setPoolFlags(combos));
+      showToast(msg);
     } catch {
       setFlags(prev);
       showToast("Unable to save. Please try again.");
     }
+  };
+
+  const flipCombo = (pwd: string, pid: string) => {
+    if (!flags) return;
+    const k = comboKey(pwd, pid);
+    const on = flags.combos[k] !== false;
+    void saveCombos({ ...flags.combos, [k]: !on }, on ? "Pool turned off. Existing files pull free of charge." : "Pool turned on.");
+  };
+
+  const flipLine = (keys: string[], label: string) => {
+    if (!flags) return;
+    const allOn = keys.every((k) => flags.combos[k] !== false);
+    const combos = { ...flags.combos };
+    keys.forEach((k) => { combos[k] = !allOn; });
+    void saveCombos(combos, allOn ? `${label} turned off.` : `${label} turned on.`);
   };
 
   // inputs are entered in the selected currency; stored/saved values are always USD
@@ -213,40 +228,47 @@ export default function SettingsView() {
       {/* pool availability */}
       <section style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)", padding: "14px 16px" }}>
         <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Pool availability</h3>
-        <p style={{ fontSize: 12, color: "var(--text3)", margin: "6px 0 0" }}>Turn off a file type or password to stop new files of that kind. Existing files stay visible and pull free of charge.</p>
+        <p style={{ fontSize: 12, color: "var(--text3)", margin: "6px 0 0" }}>Turn off any password and file-type combination to stop new files of that kind. Existing files stay visible and pull free of charge.</p>
         {flags === null ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginTop: 12 }}>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>File types</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {POOL_TABS.map((t) => {
-                  const meta = POOL_META[t.id];
-                  const on = flags.types[t.id] !== false;
-                  return (
-                    <button key={t.id} type="button" role="switch" aria-checked={on} aria-label={`${meta.label} pool ${on ? "on" : "off"}`} className={"autocheck-toggle" + (on ? " on" : "")} onClick={() => void flipFlag("types", t.id)}>
-                      <span className="autocheck-track" aria-hidden="true"></span>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><meta.Icon size={14} />{meta.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>Passwords</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {PASSWORDS.map((pwd) => {
-                  const on = flags.passwords[pwd] !== false;
-                  return (
-                    <button key={pwd} type="button" role="switch" aria-checked={on} aria-label={`${pwd} pool ${on ? "on" : "off"}`} className={"autocheck-toggle" + (on ? " on" : "")} onClick={() => void flipFlag("passwords", pwd)}>
-                      <span className="autocheck-track" aria-hidden="true"></span>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><PasswordIcon password={pwd} size={14} />{pwd}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.4fr) repeat(3,minmax(0,1fr))", gap: "10px 8px", marginTop: 12, alignItems: "center" }}>
+            <span />
+            {POOL_TABS.map((t) => {
+              const meta = POOL_META[t.id];
+              const keys = PASSWORDS.map((pwd) => comboKey(pwd, t.id));
+              const allOn = keys.every((k) => flags.combos[k] !== false);
+              return (
+                <span key={t.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontSize: 11, fontWeight: 700, color: "var(--text2)", textAlign: "center" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><meta.Icon size={13} />{meta.label}</span>
+                  <button type="button" className="btn btn-ghost btn-sm" style={{ height: 22, fontSize: 10, padding: "0 8px" }} aria-pressed={allOn} title={`${allOn ? "Turn off" : "Turn on"} ${meta.label} for all passwords`} onClick={() => flipLine(keys, `${meta.label} for all passwords`)}>{allOn ? "All on" : "All off"}</button>
+                </span>
+              );
+            })}
+            {PASSWORDS.map((pwd) => {
+              const keys = POOL_TABS.map((t) => comboKey(pwd, t.id));
+              const allOn = keys.every((k) => flags.combos[k] !== false);
+              return (
+                <Fragment key={pwd}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "var(--text2)", minWidth: 0 }}>
+                    <PasswordIcon password={pwd} size={14} />
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pwd}</span>
+                    <button type="button" className="btn btn-ghost btn-sm" style={{ height: 22, fontSize: 10, padding: "0 8px", flexShrink: 0 }} aria-pressed={allOn} title={`${allOn ? "Turn off" : "Turn on"} all types for ${pwd}`} onClick={() => flipLine(keys, `All types for ${pwd}`)}>{allOn ? "All on" : "All off"}</button>
+                  </span>
+                  {POOL_TABS.map((t) => {
+                    const meta = POOL_META[t.id];
+                    const on = flags.combos[comboKey(pwd, t.id)] !== false;
+                    return (
+                      <span key={t.id} style={{ display: "flex", justifyContent: "center" }}>
+                        <button type="button" role="switch" aria-checked={on} aria-label={`${meta.label} for ${pwd} ${on ? "on" : "off"}`} className={"autocheck-toggle" + (on ? " on" : "")} style={{ width: "auto" }} onClick={() => flipCombo(pwd, t.id)}>
+                          <span className="autocheck-track" aria-hidden="true"></span>
+                        </button>
+                      </span>
+                    );
+                  })}
+                </Fragment>
+              );
+            })}
           </div>
         )}
       </section>

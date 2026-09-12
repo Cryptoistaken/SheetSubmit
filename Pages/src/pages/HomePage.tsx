@@ -394,11 +394,7 @@ export default function HomePage() {
     <>
       <div id="homeTabBar" className={user?.isAdmin ? "admin-tabs" : undefined}>
         {tab === "files" && selectionMode ? (
-          <div className="home-tabs" role="toolbar" aria-label={`${selected.size} selected`}>
-            <span className="home-tab" role="status" aria-live="polite">{selected.size} selected</span>
-            {selected.size > 2 ? (
-              <button type="button" className="home-tab" aria-label="Unselect all files" onClick={unselectAll}>Unselect all</button>
-            ) : null}
+          <div className="home-tabs" role="toolbar" aria-label="File selection actions">
               <button type="button" className="home-tab sel-danger" aria-label={`Move ${selected.size} files to archive`} onClick={() => void deleteSelected()}>Move to archive</button>
             <button type="button" className="home-tab sel-primary" aria-label="Select all files" onClick={selectAll}>Select all</button>
           </div>
@@ -512,6 +508,12 @@ export default function HomePage() {
 
       {tab === "files" ? (
         <div className="home-pane" id="homePaneFiles">
+          {selectionMode ? (
+            <div className="sel-count-bar" role="status" aria-live="polite">
+              <span>{selected.size} selected</span>
+              <button type="button" className="btn btn-ghost" aria-label="Clear file selection" onClick={unselectAll}>Clear</button>
+            </div>
+          ) : null}
           {bubblePickMode ? (
             <div className="bubble-pick-banner">
               <div>

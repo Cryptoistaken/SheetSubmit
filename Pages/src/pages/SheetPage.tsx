@@ -1,11 +1,13 @@
 import { useEffect } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 
 import QuickEditBar from "@/components/sheet/QuickEditBar";
 import SelectionBar from "@/components/sheet/SelectionBar";
 import SheetGrid from "@/components/sheet/SheetGrid";
 import PageSkeleton from "@/components/ui/page-skeleton";
+import { api } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
+import { useToast } from "@/lib/toast";
 import { usePersist } from "@/hooks/usePersist";
 import { useLiveRows } from "@/hooks/useLiveRows";
 import { useSheetStore } from "@/stores/sheetStore";
@@ -13,11 +15,16 @@ import { useSheetStore } from "@/stores/sheetStore";
 export default function SheetPage() {
   const params = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const status = useSheetStore((s) => s.status);
+  const archivedMode = useSheetStore((s) => s.archivedMode);
   const fileName = useSheetStore((s) => s.file?.name);
   const fileId = params.fileId ?? params.id;
   const ownerId = params.userId;
+  // /archive/:id is the read-only archived viewer (view + copy + UID-check).
+  const archivedView = !ownerId && location.pathname.startsWith("/archive/");
   const confirm = useConfirm();
+  const showToast = useToast();
 
   usePersist();
   useLiveRows();
@@ -33,11 +40,12 @@ export default function SheetPage() {
   useEffect(() => {
     if (!fileId) return;
     if (ownerId) void useSheetStore.getState().openFileAdmin(fileId, ownerId);
+    else if (archivedView) void useSheetStore.getState().openFileArchived(fileId);
     else void useSheetStore.getState().openFile(fileId);
     return () => {
       void useSheetStore.getState().closeFile();
     };
-  }, [fileId, ownerId]);
+  }, [fileId, ownerId, archivedView]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -125,7 +133,7 @@ export default function SheetPage() {
           <div className="empty-state-title">Unable to open file. Please try again.</div>
           <button
             className="btn btn-ghost"
-            onClick={() => navigate(ownerId ? `/admin/user/${ownerId}` : "/")}
+            onClick={() => navigate(archivedView ? "/archive" : ownerId ? `/admin/user/${ownerId}` : "/")}
           >
             Back
           </button>
@@ -138,11 +146,33 @@ export default function SheetPage() {
     return <PageSkeleton variant="sheet" sheetToolbar={false} />;
   }
 
+  const restoreArchived = async () => {
+    if (!fileId) return;
+    const ok = await confirm("Restore this file to My Files?", "Restore");
+    if (!ok) return;
+    try {
+      await api.restoreFile(fileId);
+    } catch {
+      showToast("Unable to restore. Please try again.");
+      return;
+    }
+    showToast("File restored to My Files.");
+    navigate("/file/" + fileId);
+  };
+
   return (
     <div className="sheet-view">
+      {archivedMode ? (
+        <div className="archived-banner" role="status">
+          <span>Archived file — view only. You can check UIDs and copy data.</span>
+          <button type="button" className="btn btn-primary" onClick={() => void restoreArchived()}>
+            Restore
+          </button>
+        </div>
+      ) : null}
       <SheetGrid />
-      <QuickEditBar />
-      <SelectionBar />
+      {archivedMode ? null : <QuickEditBar />}
+      <SelectionBar readOnly={archivedMode} />
     </div>
   );
 }

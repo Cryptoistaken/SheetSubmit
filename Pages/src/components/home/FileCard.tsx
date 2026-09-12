@@ -42,6 +42,48 @@ export default function FileCard({
 }: FileCardProps) {
   const movedRef = useRef(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
+  // Touch-only long-press: first entry into multi-select (once selectionMode
+  // is on, plain taps toggle). Firing also arms lpFired so the release click
+  // does not toggle the card straight back off.
+  const lpTimer = useRef<number | null>(null);
+  const lpFired = useRef(false);
+  const lpPos = useRef<{ x: number; y: number } | null>(null);
+
+  const cancelLongPress = () => {
+    if (lpTimer.current !== null) {
+      window.clearTimeout(lpTimer.current);
+      lpTimer.current = null;
+    }
+    lpPos.current = null;
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    lpFired.current = false;
+    if (selectionMode || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    lpPos.current = { x: t.clientX, y: t.clientY };
+    lpTimer.current = window.setTimeout(() => {
+      lpTimer.current = null;
+      lpPos.current = null;
+      lpFired.current = true;
+      try {
+        navigator.vibrate?.(15);
+      } catch {
+        // vibrate unsupported — selection still applies
+      }
+      onToggleSelect();
+    }, 550);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    const p = lpPos.current;
+    if (!p || e.touches.length !== 1) {
+      if (lpTimer.current !== null) cancelLongPress();
+      return;
+    }
+    const t = e.touches[0];
+    if (Math.hypot(t.clientX - p.x, t.clientY - p.y) > 10) cancelLongPress();
+  };
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
@@ -100,6 +142,11 @@ export default function FileCard({
   };
 
   const onClick = () => {
+    // A long-press release must not toggle the card back off.
+    if (lpFired.current) {
+      lpFired.current = false;
+      return;
+    }
     if (movedRef.current) return;
     if (selectionMode) onToggleSelect();
     else doOpen();
@@ -157,9 +204,14 @@ export default function FileCard({
       role="group"
       aria-label={cardLabel}
       tabIndex={0}
-      style={{ touchAction: "manipulation", userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties}
+      style={{ touchAction: "manipulation", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" } as React.CSSProperties}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={cancelLongPress}
+      onTouchCancel={cancelLongPress}
+      onContextMenu={(e) => e.preventDefault()}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === "Escape" && menuOpen) { e.stopPropagation(); setMenuOpen(false); dotsRef.current?.focus(); return; }

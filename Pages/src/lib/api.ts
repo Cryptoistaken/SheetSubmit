@@ -287,6 +287,9 @@ export const api = {
   getPaymentMethods: () => request<Record<string, string>>("/wallet/methods"),
   setPaymentMethods: (methods: Record<string, string>) => request<{ ok: boolean }>("/wallet/methods", { method: "PUT", body: JSON.stringify({ methods }) }),
   getArchive: () => request<ArchiveFile[]>("/archive"),
+  getArchiveRows: (id: string) => request<Row[]>(`/archive/${encodeURIComponent(id)}/rows`),
+  getArchiveFull: (id: string) =>
+    request<{ file: SheetFile; rows: Row[]; seq?: number }>(`/archive/${encodeURIComponent(id)}/full`),
   restoreFile: (id: string) => request<{ ok: boolean }>(`/archive/${id}/restore`, { method: "POST" }),
   permanentDelete: (id: string) => request<{ ok: boolean }>(`/archive/${id}`, { method: "DELETE" }),
   batchRestore: (ids: string[]) =>

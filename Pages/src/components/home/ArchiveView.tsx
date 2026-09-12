@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router";
 
 import { api } from "@/lib/api";
 import { forgetFile } from "@/lib/idb";
@@ -23,6 +24,7 @@ export default function ArchiveView({
   const [archived, setArchived] = useState<ArchiveFile[] | null>(null);
   const showToast = useToast();
   const confirm = useConfirm();
+  const navigate = useNavigate();
 
   const load = useCallback(() => {
     api
@@ -135,6 +137,12 @@ export default function ArchiveView({
 
   return (
     <>
+      {selectionMode ? (
+        <div className="sel-count-bar" role="status" aria-live="polite">
+          <span>{selected.size} selected</span>
+          <button type="button" className="btn btn-ghost" aria-label="Clear archived selection" onClick={unselectAll}>Clear</button>
+        </div>
+      ) : null}
       {archived.length === 0 ? (
         <EmptyState title="No archived files." sub="Archived files are kept here for 30 days." />
       ) : (
@@ -151,8 +159,8 @@ export default function ArchiveView({
                 list={view === "list"}
                 selected={selected.has(f.id)}
                 selectionMode={selectionMode}
-                disableOpen
                 daysLeft={daysLeft}
+                onOpen={() => navigate(`/archive/${f.id}`)}
                 onRestore={() => restoreOne(f.id)}
                 onDelete={() => deleteOne(f.id)}
                 onToggleSelect={() => handleCardSelect(f.id)}
@@ -165,11 +173,7 @@ export default function ArchiveView({
         const bar = document.getElementById("homeTabBar");
         if (!bar) return null;
         return createPortal(
-          <div className="home-tabs" role="toolbar" aria-label={`${selected.size} selected`}>
-            <span className="home-tab" role="status" aria-live="polite">{selected.size} selected</span>
-            {selected.size > 2 ? (
-              <button type="button" className="home-tab" aria-label="Unselect all files" onClick={unselectAll}>Unselect all</button>
-            ) : null}
+          <div className="home-tabs" role="toolbar" aria-label="Archived selection actions">
             <button type="button" className="home-tab sel-primary" aria-label={`Restore ${selected.size} files`} onClick={() => void restoreSelected()}>Restore</button>
             <button type="button" className="home-tab sel-danger" aria-label={`Delete ${selected.size} files forever`} onClick={() => void deleteSelected()}>Delete forever</button>
             <button type="button" className="home-tab sel-primary" aria-label="Select all archived files" onClick={selectAll}>Select all</button>

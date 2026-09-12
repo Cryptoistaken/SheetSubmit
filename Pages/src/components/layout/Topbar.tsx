@@ -114,6 +114,7 @@ export default function Topbar() {
 
   const isFilePage =
     location.pathname.startsWith("/file/") ||
+    location.pathname.startsWith("/archive/") ||
     /\/admin\/user\/[^/]+\/file\/[^/]+/.test(location.pathname);
   const hideHome = isFilePage ? { display: "none" as const } : undefined;
   const crumbs = isFilePage ? [] : homeCrumbs(location.pathname);
@@ -146,6 +147,7 @@ export default function Topbar() {
   const balanceText = currency === "USD" ? fmtBalance(balanceUsd) : fmtBalance(balanceUsd * loadBdtRate());
   const toggleCurrency = () => setCurrency(currency === "USD" ? "BDT" : "USD");
   const displayName = ((user.firstName ?? "") + " " + (user.lastName ?? "")).trim();
+  const archivedMode = useSheetStore((s) => s.archivedMode);
   const fileName = file
     ? file.name.length > 10
       ? file.name.substring(0, 10) + "..."
@@ -164,6 +166,11 @@ export default function Topbar() {
     const name = renameName.trim();
     if (!name || !file) return;
     const st = useSheetStore.getState();
+    // Archived viewer is read-only — renames are disabled.
+    if (st.archivedMode) {
+      closeRename();
+      return;
+    }
     try {
       if (st.adminMode) await api.adminUpdateFile(file.id, { name });
       else await api.updateFile(file.id, { name });
@@ -215,14 +222,17 @@ export default function Topbar() {
           onClick={() => {
             const st = useSheetStore.getState();
             navigate(
-              st.adminMode && st.adminOwnerId
-                ? `/admin/user/${st.adminOwnerId}`
-                : "/",
+              st.archivedMode
+                ? "/archive"
+                : st.adminMode && st.adminOwnerId
+                  ? `/admin/user/${st.adminOwnerId}`
+                  : "/",
             );
           }}
         >
           <span className="back-btn-chevron">{"\u2039"}</span>
         </button>
+        {isFilePage && !archivedMode ? (
         <button
           className={"sheet-title-btn" + (isFilePage ? " visible" : "")}
           title={file ? file.name : "Rename file"}
@@ -231,6 +241,13 @@ export default function Topbar() {
           {file ? <FileTypeIcon file={file} size={14} /> : null}
           {fileName}
         </button>
+        ) : null}
+        {isFilePage && archivedMode ? (
+          <span className="sheet-title-btn visible" title={file ? file.name : undefined} aria-label={file ? file.name : undefined} style={{ cursor: "default" }}>
+            {file ? <FileTypeIcon file={file} size={14} /> : null}
+            {fileName}
+          </span>
+        ) : null}
       </div>
       <div className="topbar-r">
         {isFilePage && <SheetToolbar />}

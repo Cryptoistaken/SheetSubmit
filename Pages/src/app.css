@@ -632,6 +632,33 @@ button, input, select, textarea {
     flex-direction: column;
     overflow-y: auto;
 }
+/* Multi-select status line: sits at the top of the file list while selection
+   mode is on (the action buttons stay in the tab bar, without the count). */
+.sel-count-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 4px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+}
+/* Archived viewer banner: read-only notice + direct restore. */
+.archived-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    margin: 12px 12px 0;
+    background: var(--blue-light);
+    border: 1px solid var(--sel-border);
+    border-radius: var(--rl);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+}
 .bubble-pick-banner {
     display: flex;
     align-items: center;

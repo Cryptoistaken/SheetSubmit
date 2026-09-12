@@ -1,7 +1,7 @@
 import { useConfirm } from "@/lib/confirm";
 import { useSheetStore } from "@/stores/sheetStore";
 
-export default function SelectionBar() {
+export default function SelectionBar({ readOnly = false }: { readOnly?: boolean }) {
   const selectionMode = useSheetStore((s) => s.selectionMode);
   const selectedItems = useSheetStore((s) => s.selectedItems);
   const size = selectedItems.size;
@@ -21,6 +21,7 @@ export default function SelectionBar() {
         >
           Copy
         </button>
+        {readOnly ? null : (
         <button
           type="button"
           className="sel-btn danger"
@@ -33,6 +34,7 @@ export default function SelectionBar() {
         >
           Clear
         </button>
+        )}
         <button
           type="button"
           className="sel-btn"

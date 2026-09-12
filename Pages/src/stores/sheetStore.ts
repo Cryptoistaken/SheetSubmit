@@ -329,9 +329,12 @@ export interface SheetState {
   isDesktop: boolean;
   adminMode: boolean;
   adminOwnerId: string | null;
+  // Archived viewer: view + copy + UID-check only. All mutations no-op.
+  archivedMode: boolean;
 
   openFile: (id: string) => Promise<void>;
   openFileAdmin: (id: string, ownerId: string) => Promise<void>;
+  openFileArchived: (id: string) => Promise<void>;
   closeFile: () => Promise<void>;
   refreshSheet: () => Promise<void>;
   commitCell: (rowIdx: number, colKey: string, value: string) => void;
@@ -472,12 +475,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   bubbleActiveRow: -1,
   adminMode: false,
   adminOwnerId: null,
+  archivedMode: false,
 
   openFile: async (id) => {
     const seq = ++openSeq;
     pendingAutoTriggerRow = null;
     if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; persistTimerFileId = null; }
-    set({ status: "loading", adminMode: false, adminOwnerId: null, pendingAutoCheck: false });
+    set({ status: "loading", adminMode: false, adminOwnerId: null, archivedMode: false, pendingAutoCheck: false });
     try {
       const [full, crossDups] = await Promise.all([
         api.getFileFull(id),
@@ -599,12 +603,15 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; persistTimerFileId = null; }
     set({ pendingAutoCheck: false });
     const st = get();
-    if (st.selectedCell && (st.qebOpen || st.inlineEdit)) {
-      const rows = st.rows.slice();
-      rows[st.selectedCell.rowIdx] = { ...rows[st.selectedCell.rowIdx], [st.selectedCell.colIdx]: st.draft };
-      set({ rows, isDirty: true, dirtyStructural: true, structuralVersion: ++structuralCounter });
+    // Archived viewer never mutates: skip the draft-commit + final flush.
+    if (!st.archivedMode) {
+      if (st.selectedCell && (st.qebOpen || st.inlineEdit)) {
+        const rows = st.rows.slice();
+        rows[st.selectedCell.rowIdx] = { ...rows[st.selectedCell.rowIdx], [st.selectedCell.colIdx]: st.draft };
+        set({ rows, isDirty: true, dirtyStructural: true, structuralVersion: ++structuralCounter });
+      }
+      if (get().isDirty) await get().flushPersist();
     }
-    if (get().isDirty) await get().flushPersist();
     set({
       status: "idle",
       fileId: null,
@@ -641,6 +648,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       bubbleActiveRow: -1,
       adminMode: false,
       adminOwnerId: null,
+      archivedMode: false,
     });
   },
 
@@ -705,6 +713,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         checkRunning: false,
         pendingAutoCheck: false,
         bubbleActiveRow: -1,
+        archivedMode: false,
         ...recomputeMarks(finalRows, {}, columns),
       });
       if (resumed) void get().flushPersist();
@@ -713,9 +722,70 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     }
   },
 
+  // Archived viewer: view + copy + UID-check only. No snapshots, no local
+  // resume, no persist — the file stays archived until explicitly restored.
+  openFileArchived: async (id) => {
+    const seq = ++openSeq;
+    pendingAutoTriggerRow = null;
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; persistTimerFileId = null; }
+    set({ status: "loading", adminMode: false, adminOwnerId: null, archivedMode: true, pendingAutoCheck: false });
+    try {
+      const full = await api.getArchiveFull(id);
+      const f = full.file;
+      if (!f?.id) throw new Error("File not found");
+      if (seq !== openSeq) return;
+      const columns = fileColumns(f);
+      let visibleCols = new Set<string>(columns.map((c) => c.key));
+      try {
+        const saved = localStorage.getItem(`ss_cols_${id}`);
+        if (saved) visibleCols = new Set<string>(JSON.parse(saved) as string[]);
+      } catch {
+        // ignore malformed saved columns
+      }
+      const finalRows = [...(full.rows ?? [])];
+      while (finalRows.length < 100) finalRows.push(makeEmptyRow(columns));
+      set({
+        status: "ready",
+        fileId: id,
+        file: f,
+        rows: finalRows,
+        columns,
+        visibleCols,
+        undoStack: [],
+        redoStack: [],
+        apiLogs: [],
+        logBase: 0,
+        undoBase: 0,
+        redoBase: 0,
+        isDirty: false,
+        changeJournal: [],
+        lastSeq: full.seq ?? 0,
+        dirtyStructural: false,
+        selectedCell: null,
+        draft: "",
+        qebOpen: false,
+        inlineEdit: false,
+        selectionMode: false,
+        selectedItems: new Set(),
+        selRows: new Set(),
+        selCols: new Set(),
+        invalidCells: new Set(),
+        crossDups: {},
+        checkRunning: false,
+        pendingAutoCheck: false,
+        bubbleActiveRow: -1,
+        archivedMode: true,
+        ...recomputeMarks(finalRows, {}, columns),
+      });
+    } catch {
+      if (seq === openSeq) set({ status: "error" });
+    }
+  },
+
   refreshSheet: async () => {
     const fileId = get().fileId;
     if (!fileId) return;
+    if (get().archivedMode) return;
     if (get().isDirty || get().changeJournal.length || get().dirtyStructural) return;
     const rowsBefore = get().rows;
     try {
@@ -738,6 +808,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   commitCell: (rowIdx, colKey, value) => {
     const s = get();
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (s.archivedMode) return;
     const row = s.rows[rowIdx];
     if (!row) return;
     if (row._hold || row._approved) {
@@ -883,6 +955,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const run = async () => {
       const s = get();
       if (!s.fileId || !s.file) return;
+      // Archived viewer never writes back.
+      if (s.archivedMode) return;
       const columns = fileColumns(s.file);
       let dataCount = 0;
       let lastData = -1;
@@ -1171,6 +1245,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   },
 
   openQuickEdit: (rowIdx, colKey) => {
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (get().archivedMode) return;
     // Commit any pending draft first — grid call sites do this, but toolbar
     // and overlay actions can leave one behind; never silently abandon it.
     const sc = get().selectedCell;
@@ -1187,6 +1263,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   },
 
   openInlineEdit: (rowIdx, colKey) => {
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (get().archivedMode) return;
     const sc = get().selectedCell;
     if (sc && (sc.rowIdx !== rowIdx || sc.colIdx !== colKey)) get().commitQuickEdit();
     const row = get().rows[rowIdx];
@@ -1207,6 +1285,11 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   commitQuickEdit: () => {
     const sc = get().selectedCell;
     if (!sc) return;
+    // Archived viewer is read-only — drop any draft without writing.
+    if (get().archivedMode) {
+      set({ qebOpen: false, inlineEdit: false, selectedCell: null });
+      return;
+    }
     get().commitCell(sc.rowIdx, sc.colIdx, get().draft);
     set({ qebOpen: false, inlineEdit: false, selectedCell: null });
   },
@@ -1241,6 +1324,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   },
 
   quickEditPaste: async () => {
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (get().archivedMode) return;
     let text: string;
     try {
       text = await navigator.clipboard.readText();
@@ -1256,6 +1341,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
   },
 
   quickEditClear: () => {
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (get().archivedMode) return;
     const sc = get().selectedCell;
     if (!sc) return;
     set({ draft: "" });
@@ -1459,6 +1546,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   deleteSelected: () => {
     const s = get();
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (s.archivedMode) return;
     if (!s.selectionMode) return;
     const behavior = getFileBehavior(s.file?.type ?? "fb_cookie");
     const rows = s.rows.slice();
@@ -1554,6 +1643,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   addRow: () => {
     const s = get();
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (s.archivedMode) return;
     const room = MAX_GRID_ROWS - s.rows.length;
     if (room <= 0) {
       toast(`Row limit reached. Maximum ${MAX_GRID_ROWS} rows allowed.`);
@@ -1573,6 +1664,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (!row) return;
     const val = row[colKey] ?? "";
     if (!val) {
+      // Archived viewer is read-only: empty cells have nothing to copy.
+      if (get().archivedMode) return;
       let text: string;
       try {
         text = await navigator.clipboard.readText();
@@ -1613,6 +1706,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           toast("Unable to copy. Please try again.");
         });
     } else {
+      // Archived viewer is read-only: pasting into empty rows is disabled.
+      if (get().archivedMode) return;
       let text: string;
       try {
         text = await navigator.clipboard.readText();
@@ -1651,6 +1746,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           toast("Unable to copy. Please try again.");
         });
     } else {
+      // Archived viewer is read-only: pasting into empty rows is disabled.
+      if (get().archivedMode) return;
       let text: string;
       try {
         text = await navigator.clipboard.readText();
@@ -1740,10 +1837,15 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const isPage = isPageFile(s.file);
     const pageOn = localStorage.getItem("ss_waCheck") === "true";
     const waOn = localStorage.getItem("ss_checkWa") === "true";
-    const shouldDoUid = uidOn;
-    const shouldDispatchPageWa = isPage && (pageOn || waOn);
+    // Archived viewer: Check always runs the UID check (toggle-independent),
+    // never page/WA sweeps.
+    const shouldDoUid = uidOn || s.archivedMode;
+    // Archived viewer: UID-check only, never page/WA sweeps.
+    const shouldDispatchPageWa = !s.archivedMode && isPage && (pageOn || waOn);
     if (!shouldDoUid && !shouldDispatchPageWa) return;
     const dispatchPageWa = () => {
+      // Archived viewer: UID-check only, never page/WA sweeps.
+      if (get().archivedMode) return;
       const curIsPage = isPageFile(get().file);
       if (!curIsPage) return;
       const curPageOn = localStorage.getItem("ss_waCheck") === "true";
@@ -1846,6 +1948,17 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         const hit = changedByRow.get(i);
         return hit ? { ...r, ...hit.cols } : r;
       });
+      // Archived viewer: show liveness in the grid but never write back.
+      if (cur.archivedMode) {
+        set({
+          rows: finalRows,
+          apiLogs,
+          checkRunning: false,
+          ...recomputeMarks(finalRows, s.crossDups, s.columns),
+        });
+        showSummary();
+        return;
+      }
       const changeJournal = mergeJournal(get().changeJournal, changed);
       if (changeJournal.length > MAX_JOURNAL) {
         toast("Syncing changes…");
@@ -1888,6 +2001,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   _pageSweepCore: async (mode, filter, excludeIdx) => {
     const s = get();
+    // Archived viewer: UID-check only, never page/WA sweeps.
+    if (s.archivedMode) return;
     if (s.file?.type !== "fb_cookie") return;
     if (!isPageFile(s.file)) return;
     const sweepFileId = s.fileId;
@@ -2167,15 +2282,21 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   runWaChecks: async () => {
     const s = get();
+    // Archived viewer: UID-check only, no page/WA sweeps.
+    if (s.archivedMode) return;
     if (s.file?.type !== "fb_cookie") return;
     await (get() as unknown as { _pageSweepCore: (m: string) => Promise<void> })._pageSweepCore("auto-page");
   },
 
   runWaChecksFiltered: async (filter) => {
+    // Archived viewer: UID-check only, no page/WA sweeps.
+    if (get().archivedMode) return;
     await (get() as unknown as { _pageSweepCore: (m: string, f: unknown) => Promise<void> })._pageSweepCore("manual-page", filter as unknown as (row: Row, idx: number) => boolean);
   },
 
   runWaChecksWaFiltered: async (filter) => {
+    // Archived viewer: UID-check only, no page/WA sweeps.
+    if (get().archivedMode) return;
     await (get() as unknown as { _pageSweepCore: (m: string, f: unknown) => Promise<void> })._pageSweepCore("manual-wa", filter as unknown as (row: Row, idx: number) => boolean);
   },
 
@@ -2186,6 +2307,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   applyRestore: (rows, seq, file) => {
     const s = get();
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (s.archivedMode) return;
     const cols = fileColumns(file ?? s.file);
     const padded = [...rows];
     while (padded.length < 100) padded.push(makeEmptyRow(cols));
@@ -2209,6 +2332,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   mergeRows: (incoming) => {
     const s = get();
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (s.archivedMode) return;
     const existing = new Set<string>();
     s.rows.forEach((row) => {
       const k = dedupKeyForRow(row);
@@ -2289,6 +2414,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   applyUpload: (mode, incoming) => {
     const s = get();
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (s.archivedMode) return;
     let lastDataIdx = -1;
     s.rows.forEach((row, idx) => {
       if (isDataRow(row, s.columns)) lastDataIdx = idx;
@@ -2397,6 +2524,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   removeEmptyRows: () => {
     const s = get();
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (s.archivedMode) return;
     const columns = s.columns;
     let lastDataIdx = -1;
     s.rows.forEach((row, idx) => {
@@ -2441,6 +2570,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   deleteDeadRows: () => {
     const s = get();
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (s.archivedMode) return;
     const deadIdx: number[] = [];
     s.rows.forEach((row, idx) => {
       if (row.status === "bad") deadIdx.push(idx);
@@ -2686,6 +2817,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   setCellStyle: (rowIdx, colKey, patch) => {
     const s = get();
+    // Archived viewer is read-only (view + copy + UID-check only).
+    if (s.archivedMode) return;
     const row = s.rows[rowIdx];
     if (!row) return;
     const map = parseStyles(row);

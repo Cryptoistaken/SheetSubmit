@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
+import { useNavigate } from "react-router";
 
 import { useUndoRedo } from "@/hooks/useUndoRedo";
 import { api } from "@/lib/api";
@@ -49,6 +50,8 @@ export default function SheetToolbar() {
   const { canUndo, canRedo, undo, redo } = useUndoRedo();
   const showToast = useToast();
   const confirm = useConfirm();
+  const navigate = useNavigate();
+  const archivedMode = useSheetStore((s) => s.archivedMode);
   const columns = useSheetStore((s) => s.columns);
   const visibleCols = useSheetStore((s) => s.visibleCols);
   const checkRunning = useSheetStore((s) => s.checkRunning);
@@ -245,6 +248,23 @@ export default function SheetToolbar() {
 
   const poolOn = file?.poolEnabled !== false;
 
+  // Archived viewer: direct restore into My Files (the sheet stays read-only).
+  const restoreArchived = async () => {
+    const st = useSheetStore.getState();
+    const fid = st.fileId;
+    if (!fid) return;
+    const ok = await confirm("Restore this file to My Files?", "Restore");
+    if (!ok) return;
+    try {
+      await api.restoreFile(fid);
+    } catch {
+      showToast("Unable to restore. Please try again.");
+      return;
+    }
+    showToast("File restored to My Files.");
+    navigate("/file/" + fid);
+  };
+
   const togglePool = async () => {
     close();
     const st = useSheetStore.getState();
@@ -285,6 +305,17 @@ export default function SheetToolbar() {
   return (
     <>
 
+      {archivedMode ? (
+      <button
+        className="btn btn-primary"
+        title="Restore this file to My Files"
+        aria-label="Restore this file to My Files"
+        onClick={() => void restoreArchived()}
+      >
+        Restore
+      </button>
+      ) : (
+      <>
       <button
         className="undo-redo-btn"
         title="Undo"
@@ -303,11 +334,13 @@ export default function SheetToolbar() {
       >
         <RedoIcon />
       </button>
+      </>
+      )}
       <div className="check-split-wrap" data-check={checkRunning ? "checking" : ""}>
         <button
           className="check-split-main"
           disabled={hasDups}
-          title={hasDups ? "Please remove duplicate rows first." : undefined}
+          title={archivedMode ? "Check UID liveness" : hasDups ? "Please remove duplicate rows first." : undefined}
           onClick={() => void useSheetStore.getState().runCheck()}
         >
           {checkRunning ? (
@@ -330,6 +363,7 @@ export default function SheetToolbar() {
             "Check"
           )}
         </button>
+        {archivedMode ? null : (
         <button
           ref={checkArrowRef}
           className={"check-split-arrow" + (checkOpen ? " open" : "")}
@@ -345,7 +379,9 @@ export default function SheetToolbar() {
             <path fill="currentColor" d="M13 5h2v3h2v3h2v3h2v3h2v3H1v-3h2v-3h2v-3h2V8h2V5h2V3h2z" />
           </svg>
         </button>
+        )}
       </div>
+      {archivedMode ? null : (
       <div
         ref={checkMenuRef}
         id="check-dropdown"
@@ -417,6 +453,7 @@ export default function SheetToolbar() {
           </>
         ) : null}
       </div>
+      )}
       <button
         ref={btnRef}
         className="sheet-more-btn"
@@ -453,6 +490,10 @@ export default function SheetToolbar() {
           </svg>
           Copy all data
         </button>
+        {/* Archived viewer: copy + column visibility only — no downloads,
+            uploads, edits, checks beyond UID, pooling or snapshot restores. */}
+        {archivedMode ? null : (
+        <>
         <button
           role="menuitem"
           className="sheet-more-item"
@@ -633,6 +674,8 @@ export default function SheetToolbar() {
             <div className="sheet-more-sep" role="separator"></div>
           </>
         ) : null}
+        </>
+        )}
         {columns.map((col) => (
           <div
             key={col.key}

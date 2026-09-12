@@ -36,6 +36,8 @@ export default function SheetGrid() {
   const selectionMode = useSheetStore((s) => s.selectionMode);
   const selCols = useSheetStore((s) => s.selCols);
   const fileId = useSheetStore((s) => s.fileId);
+  // Archived viewer is read-only: no "Add row" affordance.
+  const archivedMode = useSheetStore((s) => s.archivedMode);
 
   // Windowed rendering: show GRID_PAGE rows at a time so large sheets don't
   // mount thousands of <tr>. Row indices match the store (slice from 0).
@@ -405,17 +407,18 @@ export default function SheetGrid() {
               </td>
             </tr>
           )}
-          <tr className="add-row" role="row">
+          <tr className="add-row" role="row" hidden={archivedMode}>
             <td
               className="rh-add"
               colSpan={displayCols.length + 2}
               role="button"
-              tabIndex={0}
-              onClick={() => useSheetStore.getState().addRow()}
+              tabIndex={archivedMode ? -1 : 0}
+              aria-hidden={archivedMode}
+              onClick={() => { if (!useSheetStore.getState().archivedMode) useSheetStore.getState().addRow(); }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  useSheetStore.getState().addRow();
+                  if (!useSheetStore.getState().archivedMode) useSheetStore.getState().addRow();
                 }
               }}
             >

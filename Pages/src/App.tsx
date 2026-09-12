@@ -40,6 +40,7 @@ type DetailedSkeletonVariant = "files" | "archive" | "pools" | "admin" | "admin-
 
 function skeletonForPath(pathname: string): DetailedSkeletonVariant {
   if (pathname.includes("/file/")) return "sheet";
+  if (pathname.startsWith("/archive/")) return "sheet";
   if (pathname.startsWith("/archive")) return "archive";
   if (pathname.startsWith("/pools")) return "pools";
   if (pathname.startsWith("/approvals")) return "pools";
@@ -124,6 +125,7 @@ function Layout() {
   // Sheet pages keep the full Topbar on every size.
   const isFilePage =
     pathname.startsWith("/file/") ||
+    pathname.startsWith("/archive/") ||
     /\/admin\/user\/[^/]+\/file\/[^/]+/.test(pathname);
   const isAdmin = !!user?.isAdmin;
   return (
@@ -173,6 +175,7 @@ const router = createBrowserRouter([
           { index: true, element: <HomePage /> },
           { path: "files", element: <HomePage /> },
           { path: "archive", element: <HomePage /> },
+          { path: "archive/:id", element: <SheetPage /> },
           { path: "wallet", element: <HomePage /> },
           { path: "withdrawals", element: <HomePage /> },
           { path: "pools", element: <Navigate to="/pools/dgddigital/cookies_only" replace /> },

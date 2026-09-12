@@ -10,9 +10,12 @@ import { useSheetStore } from "@/stores/sheetStore";
 export function useLiveRows(): void {
   const fileId = useSheetStore((s) => s.fileId);
   const status = useSheetStore((s) => s.status);
+  // Archived viewer has no live state (pool rows are wiped on archive).
+  const archivedMode = useSheetStore((s) => s.archivedMode);
 
   useEffect(() => {
     if (!fileId || status !== "ready") return;
+    if (archivedMode) return;
     const id = fileId;
     const client: LiveClient = createLiveClient({
       base: apiBase(),
@@ -33,5 +36,5 @@ export function useLiveRows(): void {
       },
     });
     return () => client.close();
-  }, [fileId, status]);
+  }, [archivedMode, fileId, status]);
 }

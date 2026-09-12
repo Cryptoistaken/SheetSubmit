@@ -1,4 +1,4 @@
-import { Download, LogOutIcon, MessageCircle, Palette, RefreshCw } from "lucide-react";
+import { Download, LogOutIcon, MessageCircle, Moon, Palette, RefreshCw, Sun } from "lucide-react";
 import logoUrl from "@/assets/logo.svg";
 import { FileTypeIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import { useEffect, useState } from "react";
@@ -15,7 +15,7 @@ import { useBubbleStore } from "@/stores/bubbleStore";
 import { useSheetStore } from "@/stores/sheetStore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ThemeTogglerButton } from "@/components/ui/theme-toggler";
+import SlideSwitch from "@/components/ui/slide-switch";
 
 interface AndroidBridge {
   isBubbleEnabled?: () => boolean;
@@ -252,7 +252,7 @@ export default function Topbar() {
       </div>
       <div className="topbar-r">
         {isFilePage && <SheetToolbar />}
-        {!isFilePage && <ThemeTogglerButton theme={theme} onToggle={toggle} />}
+        {!isFilePage && <SlideSwitch ariaLabel="Theme" value={theme} onChange={(v) => { if (v !== theme) toggle(); }} options={[{ value: "light", label: (<Sun size={14} aria-label="Light" />) }, { value: "dark", label: (<Moon size={14} aria-label="Dark" />) }]} />}
         {isFilePage && unsynced > 0 ? (
           <span className="sync-dot" title={`${unsynced} unsynced change${unsynced === 1 ? "" : "s"} - syncs automatically`} aria-label={`${unsynced} unsynced changes`}>●{unsynced}</span>
         ) : null}
@@ -310,6 +310,11 @@ export default function Topbar() {
           ) : (
             <DropdownMenuItem onSelect={() => window.open("https://github.com/Cryptoistaken/SheetSubmit/releases/latest/download/SheetSubmit.apk", "_blank", "noopener,noreferrer")}><Download /> Download app</DropdownMenuItem>
           )}
+          <DropdownMenuSeparator />
+          <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+            <span className="text-xs font-semibold text-muted-foreground">Currency</span>
+            <SlideSwitch ariaLabel="Currency" value={currency} onChange={setCurrency} options={[{ value: "USD", label: "USD" }, { value: "BDT", label: "BDT" }]} />
+          </div>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={logout}><LogOutIcon /> Log out</DropdownMenuItem>
         </DropdownMenuContent>

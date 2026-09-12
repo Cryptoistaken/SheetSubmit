@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ExternalLink, MoreVertical } from "lucide-react";
+import { ChevronDown, ExternalLink, MoreVertical } from "lucide-react";
 import { api } from "@/lib/api";
 import type { PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
 import type { PoolLivePatch } from "@/lib/poolLive";
@@ -67,6 +67,7 @@ export default function PoolsView() {
   const [customFocused, setCustomFocused] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [usersOpen, setUsersOpen] = useState(true);
   const [userFiles, setUserFiles] = useState<PoolUserFile[] | null>(null);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [verified, setVerified] = useState<VerifiedCounts | null>(null);
@@ -404,12 +405,17 @@ export default function PoolsView() {
         <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>{cur === "page" ? "Page pool is verified-only. Take creates a hold. First approve/reject opens a 5-minute window to flip once; users are paid when it settles." : "Take creates a hold. First approve/reject opens a 5-minute window to flip once; users are paid when it settles."}</div>
       </div>
 
-      <div style={{ display: "flex", marginTop: 16, marginBottom: 8 }}>
+      <button type="button" onClick={() => setUsersOpen((v) => !v)} aria-expanded={usersOpen} aria-controls="pool-users-panel" style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", marginTop: 16, marginBottom: 8, padding: 0, background: "none", border: 0, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+        <ChevronDown size={15} aria-hidden style={{ transition: "transform .15s", transform: usersOpen ? "none" : "rotate(-90deg)" }} />
+        Users
+        <span style={{ marginLeft: 2, fontFamily: "var(--mono)", fontSize: 11, fontWeight: 500, opacity: .6 }}>{filtered.length}</span>
+      </button>
+      {usersOpen ? (<>
+      <div style={{ display: "flex", marginBottom: 8 }}>
         <SearchInput placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search users" containerStyle={{ width: "100%" }} />
       </div>
-      <h2 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 8px" }}>Users</h2>
 
-      <div className="card-list">
+      <div id="pool-users-panel" className="card-list">
         {filtered.length === 0 ? (
           <EmptyState title="No users yet." sub={search.trim() ? "No match for your search." : "Users appear here when they push rows."} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
         ) : filtered.map((u) => {
@@ -486,6 +492,7 @@ export default function PoolsView() {
           );
         })}
       </div>
+      </>) : null}
       </div>
       </div>
   );

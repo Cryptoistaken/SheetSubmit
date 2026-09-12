@@ -34,6 +34,8 @@ type Tab = "files" | "archive" | "wallet" | "withdrawals" | "pools" | "approvals
 // Built-in passwords for new files — files under these are shared by
 // default; the modal only offers these two.
 export const LOVE_PASSWORD = "L0VE@12345";
+/** Pool passwords compared loosely for detection badges: case-insensitive, 0≈o (vendor files write Love@12345 for L0VE@12345). Pooling itself always uses the exact string. */
+export const normPoolPassword = (s: string) => s.toLowerCase().replace(/0/g, "o");
 
 interface AndroidBridge {
   getBubbleFile?: () => string;
@@ -711,7 +713,9 @@ export default function HomePage() {
             {[
               { id: "dgddigital" },
               { id: LOVE_PASSWORD },
-            ].map((c) => (
+            ].map((c) => {
+              const isDetected = !!uploadPending?.detectedPassword && normPoolPassword(c.id) === normPoolPassword(uploadPending.detectedPassword);
+              return (
               <button
                 key={c.id}
                 className="file-card"
@@ -719,10 +723,14 @@ export default function HomePage() {
                 onClick={() => { if (uploadPending) doUploadWithPassword(c.id); else createWithPassword(c.id); }}
               >
                 <span style={{ display: "inline-flex", flexShrink: 0 }} aria-hidden="true"><PasswordIcon password={c.id} size={18} aria-hidden="true" /></span>
-                <span className="file-card-name" style={{ fontSize: 13, fontWeight: 600 }}>{c.id}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span className="file-card-name" style={{ fontSize: 13, fontWeight: 600 }}>{c.id}</span>
+                  {isDetected ? <span style={{ fontSize: 10, fontWeight: 600, color: "var(--green)", background: "var(--green-bg)", padding: "1px 6px", borderRadius: 999 }}>Detected from file</span> : null}
+                </span>
               </button>
-            ))}
-            {uploadPending?.detectedPassword && uploadPending.detectedPassword !== "dgddigital" && uploadPending.detectedPassword !== LOVE_PASSWORD ? (
+              );
+            })}
+            {uploadPending?.detectedPassword && !["dgddigital", LOVE_PASSWORD].some((k) => normPoolPassword(k) === normPoolPassword(uploadPending.detectedPassword ?? "")) ? (
               <button
                 className="file-card"
                 style={{ display: "flex", flexDirection: "row", gap: 12, textAlign: "left", padding: "14px 16px", minHeight: 56, justifyContent: "flex-start", alignItems: "center", borderColor: "var(--border2)" }}

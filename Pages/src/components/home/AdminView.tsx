@@ -334,12 +334,13 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
               </div>
             </div>
             <div className="admin-detail-actions">
-                {!detailUser.isAdmin && detailUser.id !== me?.id ? (
+                {detailUser.id !== me?.id ? (
                 <>
                   <button type="button" className="btn btn-sm" onClick={openCredit}>
                     Credit balance
                   </button>
-                  {detailUser.banned ? (
+                  {!detailUser.isAdmin ? (
+                  <>{detailUser.banned ? (
                     <button type="button" className="btn btn-sm" onClick={() => void unbanUser()}>
                       <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true"><title>ban</title><path fill="currentColor" d="M12 2c5.5 0 10 4.5 10 10s-4.5 10-10 10S2 17.5 2 12S6.5 2 12 2m0 2c-1.9 0-3.6.6-4.9 1.7l11.2 11.2c1-1.4 1.7-3.1 1.7-4.9c0-4.4-3.6-8-8-8m4.9 14.3L5.7 7.1C4.6 8.4 4 10.1 4 12c0 4.4 3.6 8 8 8c1.9 0 3.6-.6 4.9-1.7" /></svg>
                       Unban User
@@ -354,6 +355,8 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                     <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true"><title>delete</title><path fill="currentColor" d="M7 21q-.825 0-1.412-.587T5 19V6H4V4h5V3h6v1h5v2h-1v13q0 .825-.587 1.413T17 21zm2-4h2V8H9zm4 0h2V8h-2z" /></svg>
                     Delete User
                   </button>
+                  </>
+                  ) : null}
                 </>
               ) : detailUser.isAdmin ? (
                 <span style={{ fontSize: 12, color: "var(--text3)", fontWeight: 600 }}>Admin. Actions unavailable.</span>

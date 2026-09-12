@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SlideToConfirmButton } from "@/components/ui/slide-to-confirm-button";
-import { api, type WalletTransaction } from "@/lib/api";
+import { api, type WalletTransaction, type Withdrawal } from "@/lib/api";
 import { fmtMoney, loadBdtRate, useCurrency } from "@/lib/currency";
 import { useToast } from "@/lib/toast";
 
@@ -42,6 +42,23 @@ export const maskAccount = (account: string) => {
 };
 export const txDate = (ts: number) => new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 export const statusLabel = (s: string) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : s);
+
+export function WithdrawalStatusBadge({ status }: { status: string }) {
+  const cls = status === "APPROVED"
+    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
+    : status === "REJECTED"
+      ? "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400"
+      : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400";
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{statusLabel(status)}</span>;
+}
+
+// Withdrawal transactions carry the request id in meta — join against the
+// withdrawals list so rows can show pending/approved/rejected.
+export function txWithdrawalId(tx: WalletTransaction): string | null {
+  const meta = (tx.meta ?? {}) as Record<string, unknown>;
+  const id = meta.withdrawal_id;
+  return typeof id === "string" && id ? id : null;
+}
 
 // Turns raw backend reasons ("Earning - Page · 5 rows paid") into a
 // clean title + supporting detail. Handles old rows too.
@@ -97,16 +114,17 @@ function WalletBalance({ balance }: { balance: number }) {
 
 type TxFilter = "ALL" | "RECEIVED" | "SENT";
 
-function TxRow({ tx, onOpen }: { tx: WalletTransaction; onOpen: () => void }) {
+function TxRow({ tx, withdrawalStatus, onOpen }: { tx: WalletTransaction; withdrawalStatus?: string | null; onOpen: () => void }) {
   const [currency] = useCurrency();
   const f = formatTx(tx);
-  return <button type="button" onClick={onOpen} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-muted w-full"><div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tx.type === "CREDIT" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400" : "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400"}`}>{tx.type === "CREDIT" ? <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19V5M5 12l7-7 7 7" /></svg> : <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7" /></svg>}</div><div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{f.title}</div><div className="text-xs text-muted-foreground truncate">{[f.detail, txDate(tx.created_at)].filter(Boolean).join(" · ")}</div></div><div className="text-right shrink-0"><div className={`text-sm font-semibold ${tx.type === "CREDIT" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{tx.type === "CREDIT" ? "+" : "-"}{fmtMoney(tx.amount, currency)}</div></div></button>;
+  return <button type="button" onClick={onOpen} className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-muted w-full"><div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tx.type === "CREDIT" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400" : "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400"}`}>{tx.type === "CREDIT" ? <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19V5M5 12l7-7 7 7" /></svg> : <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7" /></svg>}</div><div className="flex-1 min-w-0"><div className="flex min-w-0 items-center gap-2"><div className="text-sm font-medium truncate">{f.title}</div>{withdrawalStatus ? <WithdrawalStatusBadge status={withdrawalStatus} /> : null}</div><div className="text-xs text-muted-foreground truncate">{[f.detail, txDate(tx.created_at)].filter(Boolean).join(" · ")}</div></div><div className="text-right shrink-0"><div className={`text-sm font-semibold ${tx.type === "CREDIT" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{tx.type === "CREDIT" ? "+" : "-"}{fmtMoney(tx.amount, currency)}</div></div></button>;
 }
 
-function TxMetaRows({ tx }: { tx: WalletTransaction }) {
+function TxMetaRows({ tx, withdrawalStatus }: { tx: WalletTransaction; withdrawalStatus?: string | null }) {
   const meta = (tx.meta ?? {}) as Record<string, unknown>;
   const rows: { label: string; value: string }[] = [];
   if (meta.pool_id ?? meta.pool) rows.push({ label: "Category", value: poolLabel(meta.pool_id ?? meta.pool) });
+  if (withdrawalStatus) rows.push({ label: "Status", value: statusLabel(withdrawalStatus) });
   if (meta.rows != null) { const r = rowsText(meta.rows); if (r) rows.push({ label: "Rows paid", value: r }); }
   if (Number(meta.dead ?? 0) > 0) rows.push({ label: "Expired", value: rowsText(meta.dead) ?? String(meta.dead) });
   if (meta.method) rows.push({ label: "Method", value: String(meta.method) });
@@ -114,7 +132,7 @@ function TxMetaRows({ tx }: { tx: WalletTransaction }) {
   return <>{rows.map((r) => <div key={r.label} className="flex justify-between"><span className="text-muted-foreground">{r.label}</span><span>{r.value}</span></div>)}</>;
 }
 
-function BalanceHistory({ items }: { items: WalletTransaction[] }) {
+function BalanceHistory({ items, withdrawals }: { items: WalletTransaction[]; withdrawals?: Withdrawal[] }) {
   const [currency] = useCurrency();
   const [filter, setFilter] = useState<TxFilter>("ALL");
   const [detail, setDetail] = useState<WalletTransaction | null>(null);
@@ -122,11 +140,16 @@ function BalanceHistory({ items }: { items: WalletTransaction[] }) {
   const counts = { ALL: items.length, RECEIVED: items.filter((t) => t.type === "CREDIT").length, SENT: items.filter((t) => t.type === "DEBIT").length };
   const filters: { key: TxFilter; label: string }[] = [{ key: "ALL", label: "All" }, { key: "RECEIVED", label: "Received" }, { key: "SENT", label: "Sent" }];
   const groups = groupByDate(filtered);
+  const statusByWithdrawal = new Map((withdrawals ?? []).map((w) => [w.id, w.status]));
+  const statusOf = (tx: WalletTransaction): string | null => {
+    const id = txWithdrawalId(tx);
+    return id ? statusByWithdrawal.get(id) ?? null : null;
+  };
 
   return <>
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Balance history</h2><div className="flex gap-1.5">{filters.map((f) => <button type="button" key={f.key} onClick={() => setFilter(f.key)} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${filter === f.key ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}>{f.label}<span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none font-semibold">{counts[f.key]}</span></button>)}</div></div>
-      {groups.length ? groups.map((g) => <div key={g.label} className="flex flex-col gap-1.5"><div className="text-xs font-medium text-muted-foreground px-1">{g.label}</div>{g.items.map((tx) => <TxRow key={tx.id} tx={tx} onOpen={() => setDetail(tx)} />)}</div>) : <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No transactions yet.</div>}
+      <div className="flex flex-col gap-2"><h2 className="text-sm font-semibold">Balance history</h2><div className="flex flex-wrap gap-1.5">{filters.map((f) => <button type="button" key={f.key} onClick={() => setFilter(f.key)} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${filter === f.key ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}>{f.label}<span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none font-semibold">{counts[f.key]}</span></button>)}</div></div>
+      {groups.length ? groups.map((g) => <div key={g.label} className="flex flex-col gap-1.5"><div className="text-xs font-medium text-muted-foreground px-1">{g.label}</div>{g.items.map((tx) => <TxRow key={tx.id} tx={tx} withdrawalStatus={statusOf(tx)} onOpen={() => setDetail(tx)} />)}</div>) : <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No transactions yet.</div>}
     </div>
     <Dialog open={!!detail} onOpenChange={(open) => { if (!open) setDetail(null); }}>
       <DialogContent className="sm:max-w-md">
@@ -140,7 +163,7 @@ function BalanceHistory({ items }: { items: WalletTransaction[] }) {
             <div className="flex justify-between"><span className="text-muted-foreground">Reason</span><span className="text-right font-medium">{formatTx(detail).title}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Date</span><span>{new Date(detail.created_at).toLocaleString()}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Balance after</span><span>{fmtMoney(detail.balance_after, currency)}</span></div>
-            <TxMetaRows tx={detail} />
+            <TxMetaRows tx={detail} withdrawalStatus={statusOf(detail)} />
           </div>
           {formatTx(detail).detail ? <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">{formatTx(detail).detail}</div> : null}
           <CopyField label="Transaction ID" value={detail.id} display={shortId(detail.id)} mono className="border-t pt-2 text-xs text-muted-foreground" />
@@ -152,7 +175,7 @@ function BalanceHistory({ items }: { items: WalletTransaction[] }) {
 
 function UserWallet() {
   const showToast = useToast();
-  const [wallet, setWallet] = useState<{ balance: number; transactions: WalletTransaction[] } | null>(null);
+  const [wallet, setWallet] = useState<{ balance: number; transactions: WalletTransaction[]; withdrawals?: Withdrawal[] } | null>(null);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("bKash");
   const [account, setAccount] = useState("");
@@ -183,7 +206,7 @@ function UserWallet() {
   const amountOk = Number.isFinite(value) && value > 0 && value <= wallet.balance;
   const accountOk = validAccount(method, account);
   const isBD = method === "bKash" || method === "Nagad";
-  return <div className="flex flex-col gap-6"><WalletBalance balance={wallet.balance}/><form onSubmit={submit} className="rounded-xl border bg-card p-6"><h2 className="text-sm font-semibold">Request a withdrawal</h2><p className="mt-1 text-sm text-muted-foreground">Requests are reviewed before payment is sent.</p><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="flex flex-col gap-2 text-sm font-medium"><span className="flex items-center justify-between">Amount<button type="button" className="text-xs font-semibold text-primary" onClick={() => setAmount(wallet.balance.toFixed(2))}>Max</button></span><input className="h-10 rounded-md border bg-background px-3 font-normal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />{isBD && value > 0 && <span className="text-xs font-normal text-muted-foreground">≈ ৳{Math.round(value * loadBdtRate()).toLocaleString()} <span className="opacity-70">(৳{loadBdtRate()}/$)</span></span>}</label><label className="flex flex-col gap-2 text-sm font-medium">Payout account<input className="h-10 rounded-md border bg-background px-3 font-normal" value={account} onChange={(e) => setAccount(e.target.value)} placeholder={METHODS.find((m) => m.id === method)?.placeholder ?? "Account"} /></label></div><div className="mt-4 flex flex-col gap-2 text-sm font-medium">Method<div className="flex gap-3">{METHODS.map((m) => <button key={m.id} type="button" onClick={() => setMethod(m.id)} className={`flex items-center justify-center rounded-lg border px-3 py-2.5 transition-colors ${method === m.id ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"}`}><img src={m.icon} alt={m.label} className="h-8 w-8" /></button>)}</div></div><label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none"><input type="checkbox" checked={saveAccount} onChange={(e) => setSaveAccount(e.target.checked)} className="h-3.5 w-3.5 rounded border-input" />Save account for {METHODS.find((m) => m.id === method)?.label ?? method}</label><div className="mt-4"><SlideToConfirmButton key={slideKey} label="Slide to withdraw" disabled={sending || !amountOk || !accountOk} onConfirm={() => void submit(new Event("submit") as any)} /></div></form><BalanceHistory items={wallet.transactions}/></div>;
+  return <div className="flex flex-col gap-6"><WalletBalance balance={wallet.balance}/><form onSubmit={submit} className="rounded-xl border bg-card p-6"><h2 className="text-sm font-semibold">Request a withdrawal</h2><p className="mt-1 text-sm text-muted-foreground">Requests are reviewed before payment is sent.</p><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="flex flex-col gap-2 text-sm font-medium"><span className="flex items-center justify-between">Amount<button type="button" className="text-xs font-semibold text-primary" onClick={() => setAmount(wallet.balance.toFixed(2))}>Max</button></span><input className="h-10 rounded-md border bg-background px-3 font-normal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />{isBD && value > 0 && <span className="text-xs font-normal text-muted-foreground">≈ ৳{Math.round(value * loadBdtRate()).toLocaleString()} <span className="opacity-70">(৳{loadBdtRate()}/$)</span></span>}</label><label className="flex flex-col gap-2 text-sm font-medium">Payout account<input className="h-10 rounded-md border bg-background px-3 font-normal" value={account} onChange={(e) => setAccount(e.target.value)} placeholder={METHODS.find((m) => m.id === method)?.placeholder ?? "Account"} /></label></div><div className="mt-4 flex flex-col gap-2 text-sm font-medium">Method<div className="flex gap-3">{METHODS.map((m) => <button key={m.id} type="button" onClick={() => setMethod(m.id)} className={`flex items-center justify-center rounded-lg border px-3 py-2.5 transition-colors ${method === m.id ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted"}`}><img src={m.icon} alt={m.label} className="h-8 w-8" /></button>)}</div></div><label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none"><input type="checkbox" checked={saveAccount} onChange={(e) => setSaveAccount(e.target.checked)} className="h-3.5 w-3.5 rounded border-input" />Save account for {METHODS.find((m) => m.id === method)?.label ?? method}</label><div className="mt-4"><SlideToConfirmButton key={slideKey} label="Slide to withdraw" disabled={sending || !amountOk || !accountOk} onConfirm={() => void submit(new Event("submit") as any)} /></div></form><BalanceHistory items={wallet.transactions} withdrawals={wallet.withdrawals}/></div>;
 }
 
 export default function WalletView() {

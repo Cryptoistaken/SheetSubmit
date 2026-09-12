@@ -33,6 +33,16 @@ export async function redisDel(key: string) {
   try { const c = await getClient(); if (c) await c.del(key); } catch {}
 }
 
+/** Fixed-window limiter. Fail-open: `true` when Redis is unset/unreachable. */
+export async function rateLimit(key: string, limit: number, windowSec: number): Promise<boolean> {
+  try {
+    const c = await getClient();
+    if (!c) return true;
+    const res: any = await c.multi().incr(key).expire(key, windowSec).exec();
+    return Number(res?.[0] ?? 1) <= limit;
+  } catch { return true; }
+}
+
 /** Bulk invalidation for hashed rpc cache keys (ss:rpc:<ns>:<sha>) — the hash
  *  is one-way, so eviction scans the namespace prefix. Fail-open like the rest. */
 export async function redisDelPrefix(prefix: string) {

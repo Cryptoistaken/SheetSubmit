@@ -1,7 +1,8 @@
 // Local e2e stack helper (test env only, never prod).
 // Usage: bun scripts/e2e-local.ts up|down|status|test [--headed] [extra playwright args]
 //   up     -> test DB + schema + backend :3001 + web :8080
-//   test   -> npx playwright test e2e/page-entry.spec.ts (headed by default)
+//   test   -> npx playwright test e2e --grep-invert @deep (headed by default)
+//   test:e2e:deep -> bun --cwd Pages run test:e2e:deep (500-row scale test)
 //   down   -> stop backend/web + test containers
 //   status -> ports + health check
 import { join } from "node:path";
@@ -83,7 +84,7 @@ if (cmd === "up") {
   console.log("web:", (await healthy(WEB_URL)) ? "UP" : "DOWN", WEB_URL);
 } else if (cmd === "test") {
   const headed = rest.includes("--headed") ? [] : ["--headed"];
-  const args = ["playwright", "test", "e2e/page-entry.spec.ts", ...headed, ...rest.filter((a) => a !== "--headed")];
+  const args = ["playwright", "test", "e2e", "--grep-invert", "@deep", ...headed, ...rest.filter((a) => a !== "--headed")];
   const code = await sh(["npx", ...args], WEB, { E2E_BASE_URL: WEB_URL });
   process.exit(code);
 } else {

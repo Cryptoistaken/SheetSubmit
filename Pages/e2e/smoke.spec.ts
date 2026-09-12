@@ -2,7 +2,9 @@ import { expect, test } from "@playwright/test";
 import { loginAs } from "./auth";
 
 test("home loads after test login (no redirect to /login)", async ({ page }) => {
-  await loginAs(page);
+  // Non-admin uid: admins render the breadcrumb topbar where .home-top-title is
+  // hidden by design (e2e-user is in ADMIN_IDS in the local/CI stack).
+  await loginAs(page, "e2e-regular");
   await page.goto("/");
   await expect(page).not.toHaveURL(/\/login/);
   await expect(page.locator(".home-top-title")).toBeVisible();

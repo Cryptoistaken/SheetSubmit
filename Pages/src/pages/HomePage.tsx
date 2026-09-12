@@ -26,7 +26,7 @@ import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { COLUMN_PRESETS, fileTypeDef, FILE_PRESET_NAMES } from "@/lib/types";
 import type { FilePreset, FileType, SheetFile } from "@/lib/types";
-import { downloadXlsx, genId, hydrateCheckCache, importXlsx } from "@/lib/xlsx";
+import { downloadXlsx, hydrateCheckCache, importXlsx } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
 import { AnalysisIcon, ApprovalsIcon, ArchiveIcon, CookieIcon, ObsidianIcon, PageIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, TwoFaIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
 
@@ -332,9 +332,8 @@ export default function HomePage() {
         finalName = base + " " + n;
       }
     }
-    const id = genId();
     try {
-      await api.createFile({ id, name: finalName, type, preset: pwModal.preset, poolKind: pwModal.preset, password, poolEnabled: true, columns });
+      await api.createFile({ name: finalName, type, preset: pwModal.preset, poolKind: pwModal.preset, password, poolEnabled: true, columns });
     } catch {
       showToast("Unable to create file. Please try again.");
       return;
@@ -366,13 +365,13 @@ export default function HomePage() {
 
   const doUploadWithPassword = async (password: string) => {
     if (!uploadPending) return;
-    const { id, name, type, rows, dataCount } = uploadPending;
+    const { name, type, rows, dataCount } = uploadPending;
     const preset = pwModal?.preset ?? "page";
     setUploadPending(null);
     setPwModal(null);
     await uploadPending.cacheReady;
     try {
-      await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: true, rows, dataCount, columns: COLUMN_PRESETS[preset] });
+      await api.createFile({ name, type, preset, poolKind: preset, password, poolEnabled: true, rows, dataCount, columns: COLUMN_PRESETS[preset] });
     } catch {
       showToast("Unable to import file. Please try again.");
       return;

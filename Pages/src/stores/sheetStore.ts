@@ -438,6 +438,27 @@ function mergeJournal(
   return [...m].map(([rowIdx, cols]) => ({ rowIdx, cols }));
 }
 
+// Conflict refetches replace local rows with the server copy. Pad the fresh
+// rows to cover EVERY journal row so a pending edit past the old 100-row
+// window is re-applied instead of silently skipped (journal kept either way).
+function padRowsForJournal(rows: Row[], journal: { rowIdx: number; cols: Record<string, string> }[], cols: ColumnDef[]): void {
+  const need = Math.min(MAX_GRID_ROWS, journal.reduce((m, op) => Math.max(m, op.rowIdx + 1), 100));
+  while (rows.length < need) rows.push(makeEmptyRow(cols));
+}
+
+// Failed/conflicted flushes retry within a second instead of waiting for the
+// 5s outbox pipe; the journal + IDB mirror stay untouched until the ack.
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+function schedulePersistRetry(fileId: string) {
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    const st = useSheetStore.getState();
+    if (st.fileId !== fileId) return;
+    if (st.isDirty || st.changeJournal.length || st.dirtyStructural) void st.flushPersist();
+  }, 1000);
+}
+
 export const useSheetStore = create<SheetState>()((set, get) => ({
   status: "idle",
   fileId: null,
@@ -659,11 +680,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; persistTimerFileId = null; }
     set({ status: "loading", adminMode: true, adminOwnerId: ownerId, pendingAutoCheck: false });
     try {
-      const [f, rowsRes, logsRes, undoData] = await Promise.all([
+      const [f, rowsRes, logsRes] = await Promise.all([
         api.adminFile(id),
         api.adminFileRows(id),
         api.adminFileLogs(id),
-        api.adminUndo(id),
       ]);
       if (!f?.id) throw new Error("File not found");
       if (seq !== openSeq) return;
@@ -681,8 +701,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       if (seq !== openSeq) return;
       const finalRows = resumed ? resumed.rows : rows;
       while (finalRows.length < 100) finalRows.push(makeEmptyRow(columns));
-      const undoStack = (undoData?.undo ?? []) as UndoEntry[];
-      const redoStack = (undoData?.redo ?? []) as UndoEntry[];
+      const undoStack: UndoEntry[] = [];
+      const redoStack: UndoEntry[] = [];
       const apiLogs = logsRes ?? [];
       set({
         status: "ready",
@@ -1033,8 +1053,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
               const undoStack: UndoEntry[] = [...cur.undoStack, { type: "rows", prevRows: s.rows.map((r) => ({ ...r })) }];
               if (undoStack.length > 100) undoStack.shift();
               const rows: Row[] = [...(freshRows ?? [])];
-              while (rows.length < 100) rows.push(makeEmptyRow(fileColumns(cur.file)));
               const liveJournal = get().changeJournal.length ? get().changeJournal : s.changeJournal;
+              padRowsForJournal(rows, liveJournal, fileColumns(cur.file));
               liveJournal.forEach((op) => {
                 const row = rows[op.rowIdx];
                 if (!row) return;
@@ -1053,6 +1073,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
               });
               syncMirror(s.fileId);
               toast("Updated with the latest version. Your changes are in Undo.");
+              schedulePersistRetry(s.fileId);
             } catch {
               toast("Sync conflict detected. Retrying.");
             }
@@ -1136,8 +1157,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
               if (!f?.id || cur.fileId !== s.fileId) return;
               const freshCols = fileColumns(f);
               const rows: Row[] = [...(fresh.rows ?? [])];
-              while (rows.length < 100) rows.push(makeEmptyRow(freshCols));
               const liveJournal = get().changeJournal.length ? get().changeJournal : s.changeJournal;
+              padRowsForJournal(rows, liveJournal, freshCols);
               liveJournal.forEach((op) => {
                 const row = rows[op.rowIdx];
                 if (!row) return;
@@ -1151,11 +1172,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
                 ...recomputeMarks(rows, cur.crossDups, cur.columns),
               });
               syncMirror(s.fileId);
+              schedulePersistRetry(s.fileId);
             } catch {
               toast("Sync conflict detected. Retrying.");
             }
           } else {
             toast("Sync failed. Retrying.");
+            if (!/^4\d\d/.test(errMsg)) schedulePersistRetry(s.fileId);
           }
         }
       }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SlideToConfirmButton } from "@/components/ui/slide-to-confirm-button";
@@ -183,6 +183,9 @@ function UserWallet() {
   const [savedMethods, setSavedMethods] = useState<Record<string, string>>({});
   const [saveAccount, setSaveAccount] = useState(true);
   const [slideKey, setSlideKey] = useState(0);
+  // H5: identical retries reuse the same requestId so a timed-out-but-applied
+  // withdrawal is never created twice; any field edit starts a new one.
+  const ridRef = useRef<{ key: string; id: string } | null>(null);
   const load = () => api.getWallet().then(setWallet).catch(() => showToast("Unable to load wallet. Please try again."));
   useEffect(() => { void load(); api.getPaymentMethods().then(setSavedMethods).catch(() => {}); }, []);
   useEffect(() => { setAccount(savedMethods[method] ?? ""); }, [method, savedMethods]);
@@ -190,9 +193,13 @@ function UserWallet() {
     event.preventDefault();
     const value = Number(amount);
     if (!Number.isFinite(value) || value <= 0 || value > (wallet?.balance ?? 0) || !validAccount(method, account)) { showToast(value > (wallet?.balance ?? 0) ? "Amount exceeds your available balance." : "Please check the amount and account details."); return; }
+    const payloadKey = `${value}|${method}|${account.trim()}`;
+    const requestId = ridRef.current?.key === payloadKey ? ridRef.current.id : crypto.randomUUID();
+    ridRef.current = { key: payloadKey, id: requestId };
     setSending(true);
     try {
-      await api.withdraw({ amount: value, method, account: account.trim() });
+      await api.withdraw({ amount: value, method, account: account.trim(), requestId });
+      ridRef.current = null;
       if (saveAccount && account.trim() !== (savedMethods[method] ?? "")) {
         const updated = { ...savedMethods, [method]: account.trim() };
         await api.setPaymentMethods(updated);

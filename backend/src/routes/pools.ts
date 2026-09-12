@@ -14,6 +14,7 @@ const META: Record<PoolId, { label: string; badge: string; cols: string[]; filen
   page: { label: "Page", badge: "Page", cols: ["cookies", "twofakey"], filename: "page_pool.xlsx", rule: 'cookies + 2FA + check_status === "eligible"' },
 };
 const isPool = (v: string): v is PoolId => (POOL_IDS as readonly string[]).includes(v);
+const holdStatus = (m: string) => m.includes("final") ? 409 : m === "not found" ? 404 : 400;
 
 pools.use("/*", requireAuth);
 const dlMeta = (m: any) => ({
@@ -43,10 +44,10 @@ pools.get("/holds", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const status = c.req.query("status");
   if (status && status.length > 32) return c.json({ error: "invalid status" }, 400);
-  const r: any = await rpc(c.env.POOLS, "global", "holdsAll", { status: status || null }).catch((e: any) => { console.error("holds fetch failed", e?.message ?? e); return { holds: [] }; });
+  const r: any = await rpc(c.env.POOLS, "global", "holdsAll", (() => { const a: any = { status: status || null }; const ql = Number(c.req.query("limit")), qo = Number(c.req.query("offset")); if (Number.isFinite(ql)) a.limit = ql; if (Number.isFinite(qo)) a.offset = qo; return a; })()).catch((e: any) => { console.error("holds fetch failed", e?.message ?? e); return { holds: [] }; });
   const all = (r.holds || r.downloads || []).map((d: any) => ({ ...dlMeta(d), held: d.claimed ?? d.held ?? 0 }));
   // if status filter provided, already filtered in SQL; if no filter, SQL returns HOLD+APPROVED
-  return c.json(all.slice(0, 50));
+  return c.json(all);
 });
 pools.post("/holds/:id/approve", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
@@ -56,10 +57,10 @@ pools.post("/holds/:id/approve", async (c) => {
   if (!d) return c.json({ error: "not found" }, 404);
   try {
     const r: any = await rpc(c.env.POOLS, d.password, "holdApprove", { id, uid: c.get("uid") });
-    if (r?.error) return c.json({ error: r.error }, r.error === "not found" ? 404 : 400);
+    if (r?.error) return c.json({ error: r.error }, holdStatus(r.error));
     void publishDownloadStates(d.password, id);
     return c.json(r);
-  } catch (e) { const m = String((e as Error)?.message || ""); return c.json({ error: m || "not found" }, m === "not found" ? 404 : 400); }
+  } catch (e) { const m = String((e as Error)?.message || ""); return c.json({ error: m || "not found" }, holdStatus(m || "not found")); }
 });
 const handleReject = async (c: any) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
@@ -69,15 +70,15 @@ const handleReject = async (c: any) => {
   if (!d) return c.json({ error: "not found" }, 404);
   try {
     const r: any = await rpc(c.env.POOLS, d.password, "holdReject", { id, uid: c.get("uid") });
-    if (r?.error) return c.json({ error: r.error }, r.error === "not found" ? 404 : 400);
+    if (r?.error) return c.json({ error: r.error }, holdStatus(r.error));
     void publishDownloadStates(d.password, id);
     return c.json(r);
-  } catch (e) { const m = String((e as Error)?.message || ""); return c.json({ error: m || "not found" }, m === "not found" ? 404 : 400); }
+  } catch (e) { const m = String((e as Error)?.message || ""); return c.json({ error: m || "not found" }, holdStatus(m || "not found")); }
 };
 pools.post("/holds/:id/reject", handleReject);
 pools.post("/holds/:id/return", handleReject);
 
-pools.get("/downloads", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const r: any = await rpc(c.env.POOLS, "global", "downloadsAll", {}).catch((e: any) => { console.error("downloads fetch failed", e?.message ?? e); return { downloads: [] }; }); return c.json((r.downloads || []).map(dlMeta).slice(0, 50)); });
+pools.get("/downloads", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const a: any = {}; const ql = Number(c.req.query("limit")), qo = Number(c.req.query("offset")); if (Number.isFinite(ql)) a.limit = ql; if (Number.isFinite(qo)) a.offset = qo; const r: any = await rpc(c.env.POOLS, "global", "downloadsAll", a).catch((e: any) => { console.error("downloads fetch failed", e?.message ?? e); return { downloads: [] }; }); return c.json((r.downloads || []).map(dlMeta)); });
 pools.get("/downloads/:id/detail", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const id = c.req.param("id");
@@ -152,6 +153,15 @@ pools.get("/:password/:pool", async (c) => {
   const users: any[] = await rpc(c.env.POOLS, c.req.param("password"), "poolUsers", { pool: pid }).catch(() => []);
   return c.json({ pool: { id: pid, ...META[pid] }, password: c.req.param("password"), totals: { available: st.available, claimed: st.claimed, users: users.length, invalid: st.invalid ?? 0 }, users });
 });
+pools.get("/:password/:pool/view", async (c) => {
+  if (!admin(c)) return c.json({ error: "admin access required" }, 403);
+  const pid = c.req.param("pool");
+  const pwd = c.req.param("password");
+  if (!isPool(pid)) return c.json({ error: "invalid poolId" }, 400);
+  if (!pwd || pwd.length > 64) return c.json({ error: "invalid password" }, 400);
+  const [st, users, userFiles, verifiedCounts, price]: any[] = await Promise.all([rpc(c.env.POOLS, pwd, "summary", { pool: pid }).catch(() => ({ available: 0, claimed: 0, users: 0, invalid: 0 })), rpc(c.env.POOLS, pwd, "poolUsers", { pool: pid }).catch(() => []), rpc(c.env.POOLS, pwd, "userFiles", { pool: pid }), rpc(c.env.POOLS, pwd, "verifiedCounts", { pool: pid }), rpc(c.env.POOLS, pwd, "priceGet", { pool: pid, password: pwd })]);
+  return c.json({ pool: { id: pid, ...META[pid] }, password: pwd, totals: { available: st.available, claimed: st.claimed, users: users.length, invalid: st.invalid ?? 0 }, users, userFiles, verifiedCounts, price });
+});
 pools.post("/:password/:pool/claim", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const pid = c.req.param("pool");
@@ -167,13 +177,17 @@ pools.post("/:password/:pool/claim", async (c) => {
   const srcFileIdRaw = body.srcFileId ?? body.fileId ?? null;
   if (srcUidRaw != null && (typeof srcUidRaw !== "string" || !srcUidRaw.trim() || srcUidRaw.length > 64)) return c.json({ error: "invalid srcUid" }, 400);
   if (srcFileIdRaw != null && (typeof srcFileIdRaw !== "string" || !srcFileIdRaw.trim() || srcFileIdRaw.length > 64)) return c.json({ error: "invalid srcFileId" }, 400);
+  if (Array.isArray(body.srcUids) && body.srcUids.length > 1000) return c.json({ error: "too many srcUids" }, 400);
+  if (Array.isArray(body.srcFileIds) && body.srcFileIds.length > 1000) return c.json({ error: "too many srcFileIds" }, 400);
   // page takes verified-only (eligible); unverified rows pool in page but can never be taken (inspect via unverifiedOnly reads)
   let verifiedOnly = !!body.verifiedOnly;
   const unverifiedOnly = !!body.unverifiedOnly;
   if (verifiedOnly && unverifiedOnly) return c.json({ error: "verifiedOnly and unverifiedOnly are mutually exclusive" }, 400);
   if ((verifiedOnly || unverifiedOnly) && pid !== "page") return c.json({ error: "verified filters only for page pool" }, 400);
   if (pid === "page") { if (unverifiedOnly) return c.json({ error: "page pool is verified-only" }, 400); verifiedOnly = true; }
-  const id = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
+  const reqId = body.requestId != null ? String(body.requestId) : "";
+  if (body.requestId != null && !/^[A-Za-z0-9-]{8,64}$/.test(reqId)) return c.json({ error: "invalid requestId" }, 400);
+  const id = reqId || crypto.randomUUID().replaceAll("-", "").slice(0, 12);
   const filename = `${META[pid].label.toLowerCase().replace(/\s+/g, "_")}_${pwd.replace(/[^A-Za-z0-9_-]/g, "_")}_${new Date().toISOString().slice(0, 10)}_${id.slice(-4)}.xlsx`;
   const out = await rpc(c.env.POOLS, pwd, "claim", { pool: pid, uid: c.get("uid"), count, srcUid: srcUidRaw ? String(srcUidRaw) : null, srcFileId: srcFileIdRaw ? String(srcFileIdRaw) : null, claimForUser: srcUidRaw ? String(srcUidRaw) : null, verifiedOnly, unverifiedOnly, downloadId: id, filename });
   if (out?.error) return c.json({ error: out.error }, 400);
@@ -198,6 +212,8 @@ pools.post("/:password/:pool/hold", async (c) => {
     if (!hasUids && !hasFileIds) return c.json({ error: "pick mode requires srcUids or srcFileIds" }, 400);
   }
   // validate srcUids/srcFileIds arrays if provided
+  if (Array.isArray(body.srcUids) && body.srcUids.length > 1000) return c.json({ error: "too many srcUids" }, 400);
+  if (Array.isArray(body.srcFileIds) && body.srcFileIds.length > 1000) return c.json({ error: "too many srcFileIds" }, 400);
   if (body.srcUids != null && !Array.isArray(body.srcUids)) return c.json({ error: "invalid srcUids" }, 400);
   if (body.srcFileIds != null && !Array.isArray(body.srcFileIds)) return c.json({ error: "invalid srcFileIds" }, 400);
   if (Array.isArray(body.srcUids) && body.srcUids.some((v: any) => typeof v !== "string" || !v.trim() || v.length > 64)) return c.json({ error: "invalid srcUids" }, 400);
@@ -211,7 +227,9 @@ pools.post("/:password/:pool/hold", async (c) => {
   if (verifiedOnly && unverifiedOnly) return c.json({ error: "verifiedOnly and unverifiedOnly are mutually exclusive" }, 400);
   if ((verifiedOnly || unverifiedOnly) && pid !== "page") return c.json({ error: "verified filters only for page pool" }, 400);
   if (pid === "page") { if (unverifiedOnly) return c.json({ error: "page pool is verified-only" }, 400); verifiedOnly = true; }
-  const id = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
+  const reqId = body.requestId != null ? String(body.requestId) : "";
+  if (body.requestId != null && !/^[A-Za-z0-9-]{8,64}$/.test(reqId)) return c.json({ error: "invalid requestId" }, 400);
+  const id = reqId || crypto.randomUUID().replaceAll("-", "").slice(0, 12);
   const filename = `${META[pid].label.toLowerCase().replace(/\s+/g, "_")}_${pwd.replace(/[^A-Za-z0-9_-]/g, "_")}_${new Date().toISOString().slice(0, 10)}_${id.slice(-4)}.xlsx`;
   const out: any = await rpc(c.env.POOLS, pwd, "hold", { pool: pid, uid: c.get("uid"), count, mode: modeRaw, srcUid: srcUidRaw ? String(srcUidRaw) : null, srcFileId: srcFileIdRaw ? String(srcFileIdRaw) : null, srcUids: Array.isArray(body.srcUids) ? body.srcUids : null, srcFileIds: Array.isArray(body.srcFileIds) ? body.srcFileIds : null, verifiedOnly, unverifiedOnly, downloadId: id, filename });
   if (out?.error) return c.json({ error: out.error }, 400);
@@ -225,6 +243,7 @@ pools.get("/:password/:pool/user-files", async (c) => {
   const r = await rpc(c.env.POOLS, c.req.param("password"), "userFiles", { pool: pid });
   return c.json(r);
 });
+pools.get("/prices", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const out: any[] = await Promise.all(PASSWORDS.flatMap((pwd) => POOL_IDS.map((pid) => [pwd, pid] as const)).map(([pwd, pid]) => rpc(c.env.POOLS, pwd, "priceGet", { pool: pid, password: pwd }))); return c.json({ prices: out.map((r: any) => ({ password: r.password, poolId: r.poolId, price: r.price })) }); });
 pools.get("/flags", async (c) => c.json(await rpc(c.env.INDEX, "global", "poolFlagsGet", {})));
 pools.put("/flags", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const body = await c.req.json().catch(() => ({}) as any); return c.json(await rpc(c.env.INDEX, "global", "poolFlagsSet", { combos: body?.combos, types: body?.types, passwords: body?.passwords })); });
 pools.get("/:password/:pool/price", async (c) => {

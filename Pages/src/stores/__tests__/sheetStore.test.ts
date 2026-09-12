@@ -153,7 +153,6 @@ mock.module("@/lib/api", () => ({
     adminFile: async (id: string) => ({ id, name: "Test", type: "fb_cookie" }),
     adminFileRows: async () => [],
     adminFileLogs: async () => [],
-    adminUndo: async () => ({ undo: [], redo: [] }),
   },
 }));
 
@@ -304,6 +303,70 @@ describe("sheetStore data-integrity", () => {
       { rowIdx: 0, cols: { uid: "222" } },
     ]);
     expect(useSheetStore.getState().lastSeq).toBe(5);
+  });
+
+  it("a failed append keeps the unsent journal for retry (no silent loss)", async () => {
+    await openTestFile();
+    useSheetStore.getState().commitCell(0, "uid", "111");
+
+    harness.nextAppend = deferred<{ ok: boolean; seq: number }>();
+    const p = useSheetStore.getState().flushPersist();
+    await Promise.resolve();
+    expect(harness.appendCalls.length).toBe(1);
+    harness.nextAppend.reject(new Error("500 Internal server error"));
+    await p;
+
+    const failed = useSheetStore.getState();
+    expect(failed.changeJournal).toEqual([{ rowIdx: 0, cols: { uid: "111" } }]);
+    expect(failed.isDirty).toBe(true);
+
+    // The next flush (retry pipe / next edit / unload) re-sends the same op.
+    harness.nextAppend = deferred<{ ok: boolean; seq: number }>();
+    const p2 = useSheetStore.getState().flushPersist();
+    await Promise.resolve();
+    expect(harness.appendCalls.length).toBe(2);
+    expect(harness.appendCalls[1].payload.ops).toEqual([{ rowIdx: 0, cols: { uid: "111" } }]);
+    harness.nextAppend.resolve({ ok: true, seq: 7 });
+    await p2;
+
+    expect(useSheetStore.getState().changeJournal).toEqual([]);
+    expect(useSheetStore.getState().isDirty).toBe(false);
+    harness.nextAppend = null;
+    // Consume the scheduled 1s retry (clean state -> it must not re-send).
+    await Bun.sleep(1100);
+    expect(harness.appendCalls.length).toBe(2);
+  });
+
+  it("409 conflict refetch keeps unsent edits for rows beyond the padded window", async () => {
+    await openTestFile();
+    // 200 rows: edit sits at row 150, past the old pad-to-100 window.
+    const rows = Array.from({ length: 200 }, () => ({ cookies: "", uid: "", twofakey: "" }));
+    useSheetStore.setState({ rows, isDirty: true, changeJournal: [{ rowIdx: 150, cols: { uid: "999" } }], lastSeq: 4 });
+    harness.fullSeq = 9;
+
+    harness.nextAppend = deferred<{ ok: boolean; seq: number }>();
+    const p = useSheetStore.getState().flushPersist();
+    await Promise.resolve();
+    expect(harness.appendCalls.length).toBe(1);
+    harness.nextAppend.reject(new Error("409 Conflict - version conflict"));
+    await p;
+
+    const s = useSheetStore.getState();
+    expect(s.rows[150]?.uid).toBe("999");
+    expect(s.changeJournal).toEqual([{ rowIdx: 150, cols: { uid: "999" } }]);
+    expect(s.lastSeq).toBe(9);
+    expect(s.isDirty).toBe(true);
+
+    // The scheduled retry sends the retained op with the fresh base, then clears.
+    harness.nextAppend = null;
+    await Bun.sleep(1100);
+    expect(harness.appendCalls.length).toBe(2);
+    expect(harness.appendCalls[1].payload.base).toBe(9);
+    expect(harness.appendCalls[1].payload.ops).toEqual([{ rowIdx: 150, cols: { uid: "999" } }]);
+    const retried = useSheetStore.getState();
+    expect(retried.changeJournal).toEqual([]);
+    expect(retried.isDirty).toBe(false);
+    harness.fullSeq = 0;
   });
 
   it("closeFile commits the open draft, awaits the final flush, then resets", async () => {

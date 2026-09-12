@@ -90,25 +90,27 @@ export default function PoolsView() {
 
   const loadPrices = useCallback(async () => {
     const allPrices: Record<string, number | null> = {};
-    await Promise.all(POOL_TABS.map(async (t) => {
-      try { const pr = await api.getPoolPrice(curPwd, t.id); allPrices[t.id] = pr.price; } catch { allPrices[t.id] = null; }
-    }));
+    try {
+      const r = await api.getPoolPrices();
+      for (const t of POOL_TABS) { const hit = r.prices.find((p) => p.password === curPwd && p.poolId === t.id); allPrices[t.id] = hit ? hit.price : null; }
+    } catch { for (const t of POOL_TABS) allPrices[t.id] = null; }
     setPrices(allPrices);
   }, [curPwd]);
 
   const load = useCallback(async () => {
     setLoadFailed(false);
     try {
-      const [ps, d, uf] = await Promise.all([
+      const [ps, view] = await Promise.all([
         api.getPools(),
-        api.getPoolDetail(curPwd, cur),
-        api.getUserFiles(curPwd, cur).catch(() => ({ users: [] }) as unknown as { users: [] }),
+        api.getPoolView(curPwd, cur),
       ]);
       const list = (ps as { pools: PoolSummary[] }).pools ?? (ps as unknown as PoolSummary[]);
       setPools(list);
-      setDetail(d);
-      try { useProfileCache.getState().setProfiles(d.users as unknown[]); } catch {}
-      setUserFiles((uf as { users: never[] }).users ?? []);
+      setDetail({ pool: view.pool, password: view.password, totals: view.totals, users: view.users });
+      try { useProfileCache.getState().setProfiles(view.users as unknown[]); } catch {}
+      setUserFiles(view.userFiles?.users ?? []);
+      if (cur === "page") setVerified(view.verifiedCounts);
+      else setVerified(null);
     } catch { setLoadFailed(true); showToast("Unable to load pools. Please try again."); }
   }, [cur, curPwd, showToast]);
 
@@ -122,13 +124,6 @@ export default function PoolsView() {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [loadPrices]);
-
-  useEffect(() => {
-    if (cur !== "page") { setVerified(null); return; }
-    let cancelled = false;
-    api.getVerifiedCounts(curPwd, cur).then((r) => { if (!cancelled) setVerified(r); }).catch(() => { if (!cancelled) setVerified(null); });
-    return () => { cancelled = true; };
-  }, [cur, curPwd]);
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
   useEffect(() => { setSelectedUids([]); setSelectedFileIds([]); }, [cur, curPwd]);
@@ -240,7 +235,6 @@ export default function PoolsView() {
     try {
       const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: holdMode };
       if (holdMode === "pick") { if (selectedUids.length) payload.srcUids = selectedUids; if (selectedFileIds.length) payload.srcFileIds = selectedFileIds; }
-      if (cur === "page") payload.verifiedOnly = true;
       const res = await api.holdPool(curPwd, cur, payload);
       const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? n;
       if (!held) return showToast("No rows available.");
@@ -259,7 +253,6 @@ export default function PoolsView() {
     setDownloading(true);
     try {
       const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: "fifo", srcUids: [u.userId] };
-      if (cur === "page") payload.verifiedOnly = true;
       const res = await api.holdPool(curPwd, cur, payload);
       const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? 0;
       if (!held) return showToast("No rows available.");

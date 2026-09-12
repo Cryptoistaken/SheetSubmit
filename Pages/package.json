@@ -10,7 +10,8 @@
     "typecheck": "tsc -b",
     "lint": "oxlint",
     "test": "bun test src",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test e2e --grep-invert @deep",
+    "test:e2e:deep": "playwright test e2e --grep @deep",
     "preview": "vite preview"
   },
   "dependencies": {

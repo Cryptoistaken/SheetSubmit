@@ -4,8 +4,10 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { compress } from "hono/compress";
 import { etag } from "hono/etag";
 import type { Env } from "./lib/shared";
-import { requireAuth, isAdmin, cookie, verifySession } from "./lib/session";
+import { requireAuth, isAdmin, cookie, verifySession, evictSessions } from "./lib/session";
 import { rpc } from "./lib/do";
+import { rateLimit } from "./lib/redis";
+import { fetchWorkerHealth } from "./lib/workerHealth";
 import { files, archive, crossDups } from "./routes/files";
 import { live } from "./routes/live";
 import { pools } from "./routes/pools";
@@ -21,7 +23,7 @@ import { logEvent, newReqId } from "./lib/log";
 
 export const app = new Hono<{ Bindings: Env; Variables: { uid: string; logCtx?: Record<string, unknown> } }>();
 // ponytail: manual bump on any backend route change — lets health checks confirm a deploy landed
-export const API_VERSION = "2.0.33";
+export const API_VERSION = "2.0.34";
 // ponytail: repository errors are plain Errors — map known client failures to typed
 // 4xx JSON instead of masking everything as 500. Unknown (incl. SQL internals) stays masked.
 const CLIENT_ERRORS: [RegExp, ContentfulStatusCode][] = [
@@ -99,7 +101,23 @@ app.use("/api/*", async (c, next) => {
   }
   return next();
 });
-app.use("/api/*", async (c, next) => { const len = Number(c.req.header("Content-Length")); if (Number.isFinite(len) && len > 4_000_000) return c.json({ error: "payload too large" }, 413); return next(); });
+// ponytail: chunked requests carry no Content-Length — clone-read with a cap
+// instead of buffering the real body (clone keeps the original stream intact).
+app.use("/api/*", async (c, next) => {
+  const len = Number(c.req.header("Content-Length"));
+  if (Number.isFinite(len) && len > 4_000_000) return c.json({ error: "payload too large" }, 413);
+  if (!c.req.header("Content-Length")) {
+    const body = c.req.raw.clone().body;
+    if (body) {
+      const reader = body.getReader();
+      let total = 0;
+      try { for (;;) { const { done, value } = await reader.read(); if (done) break; total += value?.byteLength ?? 0; if (total > 4_000_000) { await reader.cancel().catch(() => {}); return c.json({ error: "payload too large" }, 413); } } }
+      catch { return c.json({ error: "invalid body" }, 400); }
+      finally { try { reader.releaseLock(); } catch {} }
+    }
+  }
+  return next();
+});
 // ponytail: Server-Timing separates backend ms from network ms when diagnosing slow APIs
 app.use("/api/*", async (c, next) => { const t = Date.now(); await next(); c.header("Server-Timing", `app;dur=${Date.now() - t}`); });
 // compress after CORS so Vary: Origin is kept (compress appends Accept-Encoding); xlsx blobs are skipped by hono's compressible-type filter
@@ -136,17 +154,12 @@ app.use("/api/files/*", privateEtag());
 app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now(), version: API_VERSION }));
 // Pings the worker over Railway's internal network (WORKER_URL) so connectivity is verifiable from the public backend URL
 app.get("/api/worker/health", async (c) => {
-  const base = c.env.WORKER_URL;
-  if (!base) return c.json({ ok: false, worker: null, error: "WORKER_URL not set" }, 503);
-  const target = /^https?:\/\//i.test(base) ? `${base.replace(/\/+$/, "")}/health` : `http://${base}${base.includes(":") ? "" : ":3000"}/health`;
-  try {
-    const r = await fetch(target, { signal: AbortSignal.timeout(5000) });
-    if (!r.ok) return c.json({ ok: false, worker: null, error: `worker responded ${r.status}` }, 502);
-    return c.json({ ok: true, worker: await r.json() });
-  } catch (e) { return c.json({ ok: false, worker: null, error: String((e as Error)?.message || e) }, 502); }
+  const r = await fetchWorkerHealth(c.env);
+  return r.ok ? c.json({ ok: true, worker: r.worker }) : c.json({ ok: false, worker: null, error: r.error }, r.status);
 });
 app.get("/api/wallet", requireAuth, async (c) => { const uid = c.get("uid"); const [wallet, withdrawals, transactions] = await Promise.all([rpc(c.env.INDEX, "global", "walletGet", { uid }), rpc(c.env.INDEX, "global", "walletWithdrawals", { uid }), rpc(c.env.INDEX, "global", "walletTxList", { uid })]); return c.json({ ...(wallet as object), withdrawals, transactions }); });
-app.post("/api/wallet/withdraw", requireAuth, async (c) => { let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "invalid body" }, 400); } const amount = Number(body?.amount); const method = String(body?.method || "").trim(); const account = String(body?.account || "").trim(); if (!Number.isFinite(amount) || amount <= 0 || amount > 100000 || !method || method.length > 64 || account.length < 3 || account.length > 256) return c.json({ error: "invalid withdrawal" }, 400); try { return c.json(await rpc(c.env.INDEX, "global", "walletWithdraw", { uid: c.get("uid"), id: crypto.randomUUID(), amount: Math.round(amount * 100) / 100, method: method.slice(0, 64), account })); } catch (error) { const message = String((error as Error)?.message || ""); if (message.includes("insufficient")) return c.json({ error: "insufficient balance" }, 400); throw error; } });
+app.get("/api/wallet/balance", requireAuth, async (c) => c.json(await rpc(c.env.INDEX, "global", "walletGet", { uid: c.get("uid") })));
+app.post("/api/wallet/withdraw", requireAuth, async (c) => { let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "invalid body" }, 400); } const amount = Number(body?.amount); const method = String(body?.method || "").trim(); const account = String(body?.account || "").trim(); const rid = String(body?.requestId || "").trim(); if (rid && !/^[A-Za-z0-9-]{8,64}$/.test(rid)) return c.json({ error: "invalid requestId" }, 400); if (!Number.isFinite(amount) || amount <= 0 || amount > 100000 || !method || method.length > 64 || account.length < 3 || account.length > 256) return c.json({ error: "invalid withdrawal" }, 400); try { return c.json(await rpc(c.env.INDEX, "global", "walletWithdraw", { uid: c.get("uid"), id: rid || crypto.randomUUID(), amount: Math.round(amount * 100) / 100, method: method.slice(0, 64), account })); } catch (error) { const message = String((error as Error)?.message || ""); if (message.includes("insufficient")) return c.json({ error: "insufficient balance" }, 400); throw error; } });
 app.get("/api/wallet/requests", requireAuth, async (c) => { if (!isAdmin(c.env, c.get("uid"))) return c.json({ error: "admin access required" }, 403); return c.json(await rpc(c.env.INDEX, "global", "walletRequests", { status: c.req.query("status") || "" })); });
 app.post("/api/wallet/requests/:id/:action", requireAuth, async (c) => { if (!isAdmin(c.env, c.get("uid"))) return c.json({ error: "admin access required" }, 403); const action = c.req.param("action"); if (action !== "approve" && action !== "reject") return c.json({ error: "unsupported action" }, 400); try { return c.json(await rpc(c.env.INDEX, "global", "walletDecision", { id: c.req.param("id"), status: action === "approve" ? "APPROVED" : "REJECTED" })); } catch (error) { if (String((error as Error)?.message || "").includes("withdrawal not found")) return c.json({ error: "withdrawal not found" }, 404); throw error; } });
 app.post("/api/wallet/credit", requireAuth, async (c) => { if (!isAdmin(c.env, c.get("uid"))) return c.json({ error: "admin access required" }, 403); let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "invalid body" }, 400); } const uid = String(body?.uid || ""); const amount = Math.round(Number(body?.amount) * 100) / 100; const title = String(body?.title || "").trim().slice(0, 128) || "Manual credit"; if (!uid || uid.length > 64 || !Number.isFinite(amount) || amount <= 0 || amount > 100000) return c.json({ error: "invalid credit" }, 400); const direction = String(body?.direction || "credit").toLowerCase(); if (direction !== "credit" && direction !== "debit") return c.json({ error: "invalid direction" }, 400); const target: any = await rpc(c.env.INDEX, "global", "adminUser", { id: uid }); if (!target) return c.json({ error: "user not found" }, 404); try { return c.json(await rpc(c.env.INDEX, "global", "walletCredit", { uid, amount, title, direction, adminUid: c.get("uid") })); } catch (error) { if (String((error as Error)?.message || "").includes("insufficient")) return c.json({ error: "insufficient balance" }, 400); throw error; } });
@@ -167,7 +180,7 @@ app.route("/api", wa);
   // DEV-ONLY agent door — 404s unless ALLOW_AGENT_ACCESS=1 + AGENT_TOKEN (never prod)
   app.route("/api/agent", agent);
 app.get("/api/auth/me", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (!token) return c.json({ error: "not_authenticated", loginRequired: true }, 401); if (!c.env.SESSION_SECRET) return c.json({ error: "Server configuration error" }, 500); let session: { uid: string } | null = null; try { session = await verifySession(token, c.env.SESSION_SECRET); } catch { return c.json({ error: "session_expired", loginRequired: true }, 401); } if (!session) return c.json({ error: "session_expired", loginRequired: true }, 401); try { const dbSession: any = await rpc(c.env.INDEX, "global", "getSession", { token }); if (!dbSession) return c.json({ error: "session_expired", loginRequired: true }, 401); } catch { return c.json({ error: "session_expired", loginRequired: true }, 401); } const user: any = await rpc(c.env.INDEX, "global", "user", { id: session.uid }); if (!user) return c.json({ error: "session_expired", loginRequired: true }, 401); if (user.banned) return c.json({ error: "account_banned", loginRequired: true }, 403); return c.json({ id: String(user.user_id), name: user.name || "", username: user.username || "", photoUrl: user.photo_url || null, phone: user.phone || null, isAdmin: isAdmin(c.env, session.uid) }); });
-app.post("/api/auth/logout", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (token) await rpc(c.env.INDEX, "global", "deleteSession", { token }); const secure = c.req.header("x-forwarded-proto") !== "http" ? " Secure;" : ""; return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": `ss_session=; Path=/; HttpOnly;${secure ? " Secure; SameSite=None" : " SameSite=Lax"}; Max-Age=0` } }); });
+app.post("/api/auth/logout", async (c) => { const token = c.req.header("Cookie")?.match(/(?:^|;\s*)ss_session=([^;]+)/)?.[1]; if (token) { evictSessions(undefined, token); await rpc(c.env.INDEX, "global", "deleteSession", { token }); } const secure = c.req.header("x-forwarded-proto") !== "http" ? " Secure;" : ""; return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": `ss_session=; Path=/; HttpOnly;${secure ? " Secure; SameSite=None" : " SameSite=Lax"}; Max-Age=0` } }); });
 app.post("/api/auth/device/claim", async (c) => {
   let body: { token?: string }; try { body = await c.req.json(); } catch { return c.json({ ok: false }, 400); } const did = body.token || ""; if (!/^[A-Za-z0-9-]{8,64}$/.test(did)) return c.json({ ok: false }); const info: any = await rpc(c.env.INDEX, "global", "deviceGet", { did }); if (!info?.chatId || !info.chatId.includes(".")) return c.json({ ok: false }); await rpc(c.env.INDEX, "global", "deviceDelete", { did }); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json", "Set-Cookie": cookie(info.chatId, 2592000, c.req.header("x-forwarded-proto") !== "http") } }); });
 // ponytail: getMe is env-static — module-memory cache keyed by token (success 10min, failure 60s)
@@ -175,6 +188,8 @@ let botCache: { token: string; username: string; exp: number } | null = null;
 app.get("/api/bot/info", async (c) => { const token = c.env.TG_BOT_TOKEN || ""; if (botCache && botCache.token === token && Date.now() < botCache.exp) { c.header("Cache-Control", "public, max-age=600"); return c.json({ username: botCache.username }); } if (!token) return c.json({ username: "" }); try { const r = await fetch(`https://api.telegram.org/bot${token}/getMe`); if (!r.ok) { botCache = { token, username: "", exp: Date.now() + 60_000 }; return c.json({ username: "" }); } const j = await r.json() as any; const username = j.result?.username || ""; botCache = { token, username, exp: Date.now() + (username ? 600_000 : 60_000) }; c.header("Cache-Control", "public, max-age=600"); return c.json({ username }); } catch { botCache = { token, username: "", exp: Date.now() + 60_000 }; return c.json({ username: "" }); } });
 app.get("/api/auth/telegram/config", (c) => { c.header("Cache-Control", "public, max-age=3600"); return c.json({ clientId: c.env.TELEGRAM_LOGIN_CLIENT_ID || "" }); });
 app.post("/api/auth/telegram/verify", async (c) => {
+   const ip = String(c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
+   if (!(await rateLimit(`rl:auth:tg:${ip}`, 30, 60))) return c.json({ ok: false, error: "Rate limited", code: "rate_limited" }, 429);
    let body: { id_token?: string }; try { body = await c.req.json(); } catch { return c.json({ ok: false, error: "invalid body" }, 400); }
    const idToken = String(body.id_token || "").trim();
    if (!idToken || idToken.length > 8192) return c.json({ ok: false, error: "missing id_token" }, 400);

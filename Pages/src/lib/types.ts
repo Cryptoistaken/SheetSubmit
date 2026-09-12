@@ -173,11 +173,6 @@ export interface CheckCacheEntry {
   ts: number | null;
 }
 
-export interface HistoryResult {
-  undo: unknown[];
-  redo: unknown[];
-}
-
 export type AdminUser = User & {
   fileCount: number;
   archivedCount: number;

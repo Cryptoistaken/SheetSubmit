@@ -10,6 +10,10 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
+  // Single worker: these tests paste through the REAL OS clipboard
+  // (navigator.clipboard + double-tap), so parallel browsers steal each
+  // other's clipboard contents. Serial keeps settle loops deterministic.
+  workers: 1,
   use: {
     baseURL: process.env.E2E_BASE_URL || "http://127.0.0.1:8080",
     trace: "retain-on-failure",

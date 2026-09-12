@@ -138,7 +138,7 @@ export default function Topbar() {
     let cancelled = false;
     const last = Number(sessionStorage.getItem("ss_wallet_ts") || 0);
     if (Date.now() - last < 60000) return;
-    api.getWallet().then((w) => { if (!cancelled) { setBalance(w.balance); sessionStorage.setItem("ss_wallet_ts", String(Date.now())); } }).catch(() => {});
+    api.getWalletBalance().then((w) => { if (!cancelled) { setBalance(w.balance); sessionStorage.setItem("ss_wallet_ts", String(Date.now())); } }).catch(() => {});
     return () => { cancelled = true; };
   }, [location.pathname]);
 

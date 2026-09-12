@@ -3,6 +3,7 @@ import type { Env } from "../lib/shared";
 import { requireAuth } from "../lib/session";
 import { rpc } from "../lib/do";
 import { publishKeyStates } from "../lib/livePublish";
+import { rateLimit } from "../lib/redis";
 export const wa = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 wa.use("/fb/*", requireAuth);
 wa.use("/wa/*", requireAuth);
@@ -15,73 +16,52 @@ const legacyCacheKey = (uid: string, cuser: string) => `wa:${uid}:${cuser}`;
 async function checkCacheSet(env: Env, uid: string, cuser: string, v: unknown) { await rpc(env.INDEX, "global", "metaSet", { k: checkCacheKey(uid, cuser), v }).catch(() => {}); }
 async function checkCacheDel(env: Env, uid: string, cuser: string) { await rpc(env.INDEX, "global", "metaDelMany", { keys: [checkCacheKey(uid, cuser), legacyCacheKey(uid, cuser)] }).catch(() => {}); }
 
-wa.post("/fb/check", async (c) => {
-  const body = await c.req.json<{ uids?: unknown[] }>().catch(() => ({}) as { uids?: unknown[] }); const uids = [...new Set(Array.isArray(body.uids) ? body.uids.map(String).filter((v) => /^\d{5,20}$/.test(v)) : [])].slice(0, 500); if (!uids.length) return c.json({ error: "Invalid UIDs" }, 400); const checkUrl = c.env.CHECK_URL || "https://check.fb.tools/api/check/facebook"; try { const r = await fetch(checkUrl, { method: "POST", headers: { accept: "application/x-ndjson", "content-type": "application/json" }, signal: AbortSignal.timeout(10_000), body: JSON.stringify({ inputData: uids, userLang: "en", checkFriends: false }) }); if (!r.ok) return c.json({ error: `Upstream returned ${r.status}` }, 502); const text = await r.text(); if (text.length > 1_000_000) return c.json({ error: "Upstream response too large" }, 502); const valid: string[] = [], dead: string[] = []; for (const line of text.split("\n")) { try { const x = JSON.parse(line.slice(line.indexOf("{"))); const uid = String(x.data?.uid || x.data?.account || ""); if (!uid) continue; (x.data?.status?.name === "valid" ? valid : dead).push(uid); } catch {} } if (dead.length) { await rpc(c.env.POOLS, "global", "markDead", { dead }).catch((e: any) => console.error("markDead failed", e?.message ?? e)); void publishKeyStates(dead); } return c.json({ valid, dead, uncertain: [] }); } catch { return c.json({ error: "Service unavailable" }, 502); } });
+wa.post("/fb/check", async (c) => { if (!(await rateLimit(`rl:fb:check:${c.get("uid")}`, 60, 60))) return c.json({ error: "Rate limited", code: "rate_limited" }, 429); const body = await c.req.json<{ uids?: unknown[] }>().catch(() => ({}) as { uids?: unknown[] }); const uids = [...new Set(Array.isArray(body.uids) ? body.uids.map(String).filter((v) => /^\d{5,20}$/.test(v)) : [])].slice(0, 500); if (!uids.length) return c.json({ error: "Invalid UIDs", code: "invalid_uids" }, 400); const checkUrl = c.env.CHECK_URL || "https://check.fb.tools/api/check/facebook"; try { const r = await fetch(checkUrl, { method: "POST", headers: { accept: "application/x-ndjson", "content-type": "application/json" }, signal: AbortSignal.timeout(10_000), body: JSON.stringify({ inputData: uids, userLang: "en", checkFriends: false }) }); if (!r.ok) return c.json({ error: `Upstream returned ${r.status}`, code: "upstream_error" }, 502); const text = await r.text(); if (text.length > 1_000_000) return c.json({ error: "Upstream response too large", code: "upstream_error" }, 502); const valid: string[] = [], dead: string[] = []; for (const line of text.split("\n")) { try { const x = JSON.parse(line.slice(line.indexOf("{"))); const uid = String(x.data?.uid || x.data?.account || ""); if (!uid) continue; (x.data?.status?.name === "valid" ? valid : dead).push(uid); } catch {} } if (dead.length) { await rpc(c.env.POOLS, "global", "markDead", { dead }).catch((e: any) => console.error("markDead failed", e?.message ?? e)); void publishKeyStates(dead); } return c.json({ valid, dead, uncertain: [] }); } catch { return c.json({ error: "Service unavailable", code: "service_unavailable" }, 502); } });
 
-wa.post("/fb/page-simple", async (c) => {
-  const { cookie } = await c.req.json<{ cookie?: string }>().catch(() => ({}) as { cookie?: string });
-  if (!cookie) return c.json({ error: "Cookie required" }, 400);
-  if (cookie.length > 50000) return c.json({ error: "Cookie too large" }, 400);
-  const fail = (error: string | null) => c.json({ eligible: false, banReason: null, linkedNumber: null, pageName: null, error });
+wa.post("/fb/page-simple", async (c) => { if (!(await rateLimit(`rl:fb:simple:${c.get("uid")}`, 30, 60))) return c.json({ eligible: false, banReason: null, linkedNumber: null, pageName: null, error: "Rate limited", code: "rate_limited" }); const { cookie } = await c.req.json<{ cookie?: string }>().catch(() => ({}) as { cookie?: string }); if (!cookie) return c.json({ error: "Cookie required", code: "invalid_cookie" }, 400); if (cookie.length > 50000) return c.json({ error: "Cookie too large", code: "invalid_cookie" }, 400); const fail = (error: string | null, code = "upstream_error") => c.json({ eligible: false, banReason: null, linkedNumber: null, pageName: null, error, code });
   try {
     const pageRes = await fetch("https://accountscenter.facebook.com/profiles", { headers: { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", cookie, "sec-ch-ua-mobile": "?1", "sec-ch-ua-platform": '"iOS"', "sec-fetch-dest": "document", "sec-fetch-mode": "navigate", "sec-fetch-site": "same-origin", "upgrade-insecure-requests": "1", "user-agent": UA_IOS }, signal: AbortSignal.timeout(20000), redirect: "follow" });
     const html = await pageRes.text();
-    if (challenged(html)) return fail("Session requires 2FA or login challenge");
+    if (challenged(html)) return fail("Session requires 2FA or login challenge", "session_challenge");
     const pages = extractPages(html);
     const linkedNumber = extractLinkedNumber(html);
     const cuser = cookie.match(/c_user=(\d+)/)?.[1] || "";
     if (cuser) { if (pages.length) await checkCacheSet(c.env, c.get("uid"), cuser, { status: "eligible", banReason: null, pageName: pages[0].name, linkedNumber, error: null, ts: Date.now() }); else await checkCacheDel(c.env, c.get("uid"), cuser); }
     return c.json({ eligible: pages.length > 0, banReason: null, linkedNumber, pageName: pages[0]?.name ?? null, error: null });
-  } catch (e) { return fail(/abort|timeout|network|fetch/i.test(e instanceof Error ? `${e.name} ${e.message}` : String(e)) ? "Service unavailable" : String(e instanceof Error ? e.message : e)); }
+  } catch (e) { const msg = e instanceof Error ? `${e.name} ${e.message}` : String(e); const net = /abort|timeout|network|fetch/i.test(msg); return fail(net ? "Service unavailable" : String(e instanceof Error ? e.message : e), net ? "service_unavailable" : "upstream_error"); }
 });
 
-wa.post("/fb/page-advanced", async (c) => {
-  const { cookie } = await c.req.json<{ cookie?: string }>().catch(() => ({}) as { cookie?: string });
-  if (!cookie) return c.json({ error: "Cookie required" }, 400);
-  if (cookie.length > 50000) return c.json({ error: "Cookie too large" }, 400);
-  const fail = (error: string) => c.json({ eligible: false, banReason: null, linkedNumber: null, error });
+wa.post("/fb/page-advanced", async (c) => { if (!(await rateLimit(`rl:fb:advanced:${c.get("uid")}`, 30, 60))) return c.json({ eligible: false, banReason: null, linkedNumber: null, error: "Rate limited", code: "rate_limited" }); const { cookie } = await c.req.json<{ cookie?: string }>().catch(() => ({}) as { cookie?: string }); if (!cookie) return c.json({ error: "Cookie required", code: "invalid_cookie" }, 400); if (cookie.length > 50000) return c.json({ error: "Cookie too large", code: "invalid_cookie" }, 400); const fail = (error: string, code = "upstream_error") => c.json({ eligible: false, banReason: null, linkedNumber: null, error, code });
   try {
     const pageRes = await fetch("https://business.facebook.com/latest/inbox/wec", { headers: { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", cookie, "sec-fetch-dest": "document", "sec-fetch-mode": "navigate", "sec-fetch-site": "none", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" }, signal: AbortSignal.timeout(15000) });
     const html = await pageRes.text();
-    if (challenged(html)) return fail("Session requires 2FA or login challenge");
-    if (html.includes("Insufficient Permission") || html.includes("You do not have the necessary permission")) return fail("Not eligible for this page");
+    if (challenged(html)) return fail("Session requires 2FA or login challenge", "session_challenge");
+    if (html.includes("Insufficient Permission") || html.includes("You do not have the necessary permission")) return fail("Not eligible for this page", "not_eligible");
     const pageIdPatterns = [pageRes.url.match(/[?&](?:asset_id|page_id)[=_](\d{14,17})/)?.[1], pageRes.url.match(/\/pages\/(\d{14,17})\//)?.[1], ...[/"pageID"\s*:\s*"(\d{14,17})"/, /"page_id"\s*:\s*(\d{14,17})/, /"localScopeID"\s*:\s*"(\d{14,17})"/, /"assetID"\s*:\s*"(\d{14,17})"/, /"selectedPageId"\s*:\s*"(\d{14,17})"/, /"ownerId"\s*:\s*"(\d{14,17})"/, /"business_id"\s*:\s*(\d{14,17})/, /"actorID"\s*:\s*"(\d{14,17})"/].map((p) => html.match(p)?.[1]), cookie.match(/c_user=(\d+)/)?.[1]];
     const pageID = pageIdPatterns.find((x): x is string => !!x && /^\d+$/.test(x));
-    if (!pageID) return fail("Invalid pageID");
+    if (!pageID) return fail("Invalid pageID", "invalid_page");
     const fb_dtsg = html.match(/"DTSGInitData"[,\[\]\s]*\{[^}]*"token"\s*:\s*"([^"]+)"/)?.[1] ?? null;
-    if (!fb_dtsg) return fail("Could not extract fb_dtsg");
+    if (!fb_dtsg) return fail("Could not extract fb_dtsg", "upstream_error");
     const cuser = cookie.match(/c_user=(\d+)/)?.[1] || "";
     const dpr = Math.round(parseFloat(cookie.match(/dpr=([\d.]+)/)?.[1] || "3"));
     const body = new URLSearchParams({ av: pageID, __user: cuser, dpr: String(dpr), fb_dtsg, __crn: "comet.bizweb.BusinessCometBizSuiteInboxWhatsAppRoute", fb_api_caller_class: "RelayModern", fb_api_req_friendly_name: "WhatsAppOnboardingUnifiedInboxSurfaceQuery", server_timestamps: "true", variables: JSON.stringify({ pageID, wabaID: "", hasWabaID: false }), doc_id: "27161030553583658" });
     const gqlRes = await fetch("https://business.facebook.com/api/graphql/", { method: "POST", headers: { accept: "*/*", "content-type": "application/x-www-form-urlencoded", "x-fb-friendly-name": "WhatsAppOnboardingUnifiedInboxSurfaceQuery", cookie }, body, signal: AbortSignal.timeout(15000) });
-    if (gqlRes.status === 429) return fail("Rate limited");
-    if (!gqlRes.ok) return fail(`GraphQL returned ${gqlRes.status}`);
+    if (gqlRes.status === 429) return fail("Rate limited", "rate_limited");
+    if (!gqlRes.ok) return fail(`GraphQL returned ${gqlRes.status}`, "upstream_error");
     let text = await gqlRes.text();
-    if (text.includes("Insufficient Permission") || text.includes("You do not have the necessary permission")) return fail("Not eligible for this page");
-    let json: any; try { json = JSON.parse(text.replace(/^for\s*\(;;\)\s*;?\s*/, "")); } catch { return fail("Invalid GraphQL JSON"); }
+    if (text.includes("Insufficient Permission") || text.includes("You do not have the necessary permission")) return fail("Not eligible for this page", "not_eligible");
+    let json: any; try { json = JSON.parse(text.replace(/^for\s*\(;;\)\s*;?\s*/, "")); } catch { return fail("Invalid GraphQL JSON", "upstream_error"); }
     const elig = json?.data?.xfb_is_page_eligible_for_wa_link;
-    if (elig === undefined || elig === null) return fail("Unexpected response structure");
+    if (elig === undefined || elig === null) return fail("Unexpected response structure", "upstream_error");
     const result = { eligible: elig?.is_eligible === true, banReason: elig?.ban_reason || null, linkedNumber: elig?.page_whatsapp_number || null, error: null };
     if (cuser) { if (result.eligible) await checkCacheSet(c.env, c.get("uid"), cuser, { status: "eligible", banReason: result.banReason, error: null, ts: Date.now() }); else if (result.error === null) await checkCacheDel(c.env, c.get("uid"), cuser); }
     return c.json(result);
-  } catch (e) { return fail(/abort|timeout|network|fetch/i.test(e instanceof Error ? `${e.name} ${e.message}` : String(e)) ? "Service unavailable" : String(e instanceof Error ? e.message : e)); }
+  } catch (e) { const msg = e instanceof Error ? `${e.name} ${e.message}` : String(e); const net = /abort|timeout|network|fetch/i.test(msg); return fail(net ? "Service unavailable" : String(e instanceof Error ? e.message : e), net ? "service_unavailable" : "upstream_error"); }
 });
 
 // check cache served only when fresh+eligible, mirroring backend purge-on-read
 // (reads check: keys with legacy wa: fallback; purges both prefixes when stale)
 const CHECK_TTL = 86400_000;
-wa.get("/fb/cache", async (c) => {
-  const uids = (c.req.query("uids") || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 1000);
-  const uid = c.get("uid");
-  const keys = uids.flatMap((u) => [checkCacheKey(uid, u), legacyCacheKey(uid, u)]);
-  const raw: Record<string, any> = uids.length ? await rpc(c.env.INDEX, "global", "metaGetMany", { keys }).catch(() => ({})) : {};
-  const cache: Record<string, unknown> = {};
-  const stale: string[] = [];
-  for (const u of uids) {
-    const v = raw[checkCacheKey(uid, u)] ?? raw[legacyCacheKey(uid, u)];
-    if (!v || v.status !== "eligible" || (v.ts && Date.now() - v.ts > CHECK_TTL)) { if (v) stale.push(u); continue; }
-    cache[u] = { status: v.status ?? null, banReason: v.banReason ?? null, error: v.error ?? null, pageName: v.pageName ?? null, linkedNumber: v.linkedNumber ?? null, ts: v.ts ?? null };
-  }
-  if (stale.length) await rpc(c.env.INDEX, "global", "metaDelMany", { keys: stale.flatMap((u) => [checkCacheKey(uid, u), legacyCacheKey(uid, u)]) }).catch(() => {});
-  return c.json({ cache });
-});
+async function serveCache(env: Env, uid: string, uids: string[]) { const keys = uids.flatMap((u) => [checkCacheKey(uid, u), legacyCacheKey(uid, u)]); const raw: Record<string, any> = uids.length ? await rpc(env.INDEX, "global", "metaGetMany", { keys }).catch(() => ({})) : {}; const cache: Record<string, unknown> = {}; const stale: string[] = []; for (const u of uids) { const v = raw[checkCacheKey(uid, u)] ?? raw[legacyCacheKey(uid, u)]; if (!v || v.status !== "eligible" || (v.ts && Date.now() - v.ts > CHECK_TTL)) { if (v) stale.push(u); continue; } cache[u] = { status: v.status ?? null, banReason: v.banReason ?? null, error: v.error ?? null, pageName: v.pageName ?? null, linkedNumber: v.linkedNumber ?? null, ts: v.ts ?? null }; } if (stale.length) await rpc(env.INDEX, "global", "metaDelMany", { keys: stale.flatMap((u) => [checkCacheKey(uid, u), legacyCacheKey(uid, u)]) }).catch(() => {}); return { cache }; }
+wa.get("/fb/cache", async (c) => { if (!(await rateLimit(`rl:fb:cache:${c.get("uid")}`, 60, 60))) return c.json({ error: "Rate limited", code: "rate_limited" }, 429); const uids = (c.req.query("uids") || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 1000); return c.json(await serveCache(c.env, c.get("uid"), uids)); });
+wa.post("/fb/cache", async (c) => { if (!(await rateLimit(`rl:fb:cache:${c.get("uid")}`, 60, 60))) return c.json({ error: "Rate limited", code: "rate_limited" }, 429); const body = await c.req.json<{ uids?: unknown }>().catch(() => ({}) as { uids?: unknown }); if (!Array.isArray(body.uids) || body.uids.some((v) => typeof v !== "string")) return c.json({ error: "invalid uids", code: "invalid_uids" }, 400); const uids = [...new Set(body.uids.map((v) => (v as string).trim()).filter(Boolean))].slice(0, 1000); return c.json(await serveCache(c.env, c.get("uid"), uids)); });

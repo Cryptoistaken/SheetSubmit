@@ -5,7 +5,6 @@ import type {
   CrossDupResult,
   ColumnDef,
   FileType,
-  HistoryResult,
   Row,
   SheetFile,
   User,
@@ -41,7 +40,6 @@ export function apiBase(): string {
 export type ConnStatus = "connecting" | "ok" | "err";
 export const useConnStore = create<{ status: ConnStatus }>()(() => ({ status: "connecting" }));
 function markConn(res: Response) { useConnStore.setState({ status: res.ok ? "ok" : "err" }); return res; }
-function isNotFound(e: unknown) { return e instanceof Error && /^\s*404[\s\-:]/.test(e.message); }
 function sanitizeDownloadName(name: string) { return name.replace(/["\r\n;\\]/g, "_").replace(/\.\.+/g, "_").slice(0, 128) || "download.xlsx"; }
 
 export function normalizeUser(raw: any): User {
@@ -217,6 +215,11 @@ export interface DownloadDetail {
   groups: DownloadDetailGroup[];
 }
 export interface PoolPrice { poolId: string; password: string | null; price: number }
+export interface PoolViewResult extends PoolDetail {
+  userFiles: PoolUserFilesResult;
+  verifiedCounts: VerifiedCounts;
+  price: PoolPrice;
+}
 export interface PoolFlags { combos: Record<string, boolean> }
 export interface PoolDiagRow { password: string; pool_id: string; state: string; src_uid: string | null; src_file_id: string | null; inserted_at: number; claimed_by: string | null; hold_id: string | null }
 export interface PoolDiagFound {
@@ -262,7 +265,7 @@ export const api = {
   getFiles: () => request<SheetFile[]>("/files"),
   getFileFull: (id: string) =>
     request<{ file: SheetFile; rows: Row[]; logs?: unknown[]; undo?: unknown[]; redo?: unknown[]; seq?: number }>(`/files/${id}/full`),
-  createFile: (data: { id: string; name: string; type: FileType; preset?: string; poolKind?: string; password?: string; poolEnabled?: boolean; rows?: Row[]; dataCount?: number; columns?: ColumnDef[] }) =>
+  createFile: (data: { name: string; type: FileType; preset?: string; poolKind?: string; password?: string; poolEnabled?: boolean; rows?: Row[]; dataCount?: number; columns?: ColumnDef[] }) =>
     request<SheetFile>("/files", { method: "POST", body: JSON.stringify(data) }),
   updateFile: (id: string, data: Record<string, unknown>) =>
     request<SheetFile>(`/files/${id}`, { method: "PUT", body: JSON.stringify(data) }),
@@ -282,7 +285,8 @@ export const api = {
     request<{ ok: boolean; seq: number; file?: SheetFile }>(`/files/${id}/append`, { method: "PUT", body: JSON.stringify(data) }, opts),
   health: () => request<{ ok: boolean; ts: number; version: string }>("/health"),
   getWallet: () => request<{ uid: string; balance: number; withdrawals: Withdrawal[]; transactions: WalletTransaction[] }>("/wallet"),
-  withdraw: (data: { amount: number; method: string; account: string }) => request<Withdrawal>("/wallet/withdraw", { method: "POST", body: JSON.stringify(data) }),
+  getWalletBalance: () => request<{ uid: string; balance: number }>("/wallet/balance"),
+  withdraw: (data: { amount: number; method: string; account: string; requestId?: string }) => request<Withdrawal>("/wallet/withdraw", { method: "POST", body: JSON.stringify(data) }),
   getWithdrawalRequests: (status = "") => request<Withdrawal[]>(status ? `/wallet/requests?status=${encodeURIComponent(status)}` : "/wallet/requests"),
   decideWithdrawal: (id: string, action: "approve" | "reject") => request<{ id: string; status: Withdrawal["status"] }>(`/wallet/requests/${encodeURIComponent(id)}/${action}`, { method: "POST" }),
   getPaymentMethods: () => request<Record<string, string>>("/wallet/methods"),
@@ -315,7 +319,10 @@ export const api = {
       body: JSON.stringify({ uids }),
     }),
   getCheckCache: (uids: string[]) =>
-    request<{ cache: Record<string, unknown> }>(`/fb/cache?uids=${encodeURIComponent(uids.join(","))}`),
+    request<{ cache: Record<string, unknown> }>("/fb/cache", {
+      method: "POST",
+      body: JSON.stringify({ uids }),
+    }),
 
   adminStats: () => request<{ totalUsers: number; totalFiles: number }>("/admin/stats"),
   adminUsers: () => request<AdminUser[]>("/admin/users"),
@@ -338,7 +345,6 @@ export const api = {
   adminRestoreSnapshot: (fileId: string, index?: number) =>
     request<{ ok: boolean; seq: number; rows: Row[]; file: SheetFile }>(`/admin/file/${fileId}/restore-snapshot`, { method: "POST", body: JSON.stringify(index === undefined ? {} : { index }) }),
   adminFileLogs: (fileId: string) => request<unknown[]>(`/admin/file/${fileId}/logs`),
-  adminUndo: (fileId: string) => request<HistoryResult>(`/admin/file/${fileId}/undo`),
 
   adminDeleteUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}`, { method: "DELETE" }),
   adminPoolDiag: (key: string) => request<PoolDiag>(`/admin/pooldiag?key=${encodeURIComponent(key)}`),
@@ -348,16 +354,13 @@ export const api = {
     request<{ id: string; uid: string; amount: number; balance: number; title: string; direction: string }>(`/wallet/credit`, { method: "POST", body: JSON.stringify({ uid, amount, title, direction }) }),
 
   getPools: () => request<{ pools: PoolSummary[] }>("/pools"),
-  getPoolDetail: async (password: string, poolId: string): Promise<PoolDetail> => {
+  getPoolDetail: (password: string, poolId: string) => {
     const enc = (s: string) => encodeURIComponent(s);
-    try {
-      return await request<PoolDetail>(`/pools/${enc(password)}/${enc(poolId)}`);
-    } catch (e) {
-      if (password === "dgddigital" && isNotFound(e)) {
-        return request<PoolDetail>(`/pools/${enc(poolId)}`);
-      }
-      throw e;
-    }
+    return request<PoolDetail>(`/pools/${enc(password)}/${enc(poolId)}`);
+  },
+  getPoolView: (password: string, poolId: string) => {
+    const enc = (s: string) => encodeURIComponent(s);
+    return request<PoolViewResult>(`/pools/${enc(password)}/${enc(poolId)}/view`);
   },
   getPoolRows: async (password: string, poolId: string, opts?: { userId?: string; limit?: number; offset?: number }): Promise<PoolRowsResult> => {
     const enc = (s: string) => encodeURIComponent(s);
@@ -366,60 +369,24 @@ export const api = {
     if (opts?.limit) q.set("limit", String(opts.limit));
     if (opts?.offset) q.set("offset", String(opts.offset));
     const qs = q.toString() ? `?${q}` : "";
-    try {
-      return await request<PoolRowsResult>(`/pools/${enc(password)}/${enc(poolId)}/rows${qs}`);
-    } catch (e) {
-      if (password === "dgddigital" && isNotFound(e)) {
-        return request<PoolRowsResult>(`/pools/${enc(poolId)}/rows${qs}`);
-      }
-      throw e;
-    }
+    return request<PoolRowsResult>(`/pools/${enc(password)}/${enc(poolId)}/rows${qs}`);
   },
-  claimPool: async (password: string, poolId: string, body: { count: number | "all"; userId?: string; srcUid?: string | null; srcFileId?: string | null; verifiedOnly?: boolean; unverifiedOnly?: boolean }): Promise<PoolClaimResult> => {
+  claimPool: (password: string, poolId: string, body: { count: number | "all"; srcUid?: string | null; srcFileId?: string | null; verifiedOnly?: boolean; unverifiedOnly?: boolean }): Promise<PoolClaimResult> => {
     const enc = (s: string) => encodeURIComponent(s);
-    const payload: Record<string, unknown> = { ...body };
-    if (body.srcUid) { payload.srcUid = body.srcUid; payload.claimForUser = body.srcUid; }
-    if (body.srcFileId) payload.srcFileId = body.srcFileId;
-    try {
-      return await request<PoolClaimResult>(`/pools/${enc(password)}/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(payload) });
-    } catch (e) {
-      if (password === "dgddigital" && isNotFound(e)) {
-        return request<PoolClaimResult>(`/pools/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(payload) });
-      }
-      throw e;
-    }
+    return request<PoolClaimResult>(`/pools/${enc(password)}/${enc(poolId)}/claim`, { method: "POST", body: JSON.stringify(body) });
   },
-  holdPool: async (password: string, poolId: string, body: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; srcUid?: string | null; srcFileId?: string | null; verifiedOnly?: boolean; unverifiedOnly?: boolean }): Promise<HoldResult> => {
+  holdPool: (password: string, poolId: string, body: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; srcUid?: string | null; srcFileId?: string | null; verifiedOnly?: boolean; unverifiedOnly?: boolean }): Promise<HoldResult> => {
     const enc = (s: string) => encodeURIComponent(s);
-    const payload: Record<string, unknown> = { ...body };
-    if (body.srcUid) payload.srcUid = body.srcUid;
-    if (body.srcFileId) payload.srcFileId = body.srcFileId;
-    if (body.srcUids) payload.srcUids = body.srcUids;
-    if (body.srcFileIds) payload.srcFileIds = body.srcFileIds;
-    try {
-      return await request<HoldResult>(`/pools/${enc(password)}/${enc(poolId)}/hold`, { method: "POST", body: JSON.stringify(payload) });
-    } catch (e) {
-      if (password === "dgddigital" && isNotFound(e)) {
-        return request<HoldResult>(`/pools/${enc(poolId)}/hold`, { method: "POST", body: JSON.stringify(payload) });
-      }
-      throw e;
-    }
+    return request<HoldResult>(`/pools/${enc(password)}/${enc(poolId)}/hold`, { method: "POST", body: JSON.stringify(body) });
   },
   getHolds: (status?: string) => request<HoldRecord[]>(`/pools/holds${status ? `?status=${encodeURIComponent(status)}` : ""}`),
   approveHold: (id: string) => request<{ ok: boolean; status: string; approved?: number; dead?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/approve`, { method: "POST" }),
   rejectHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/reject`, { method: "POST" }),
   returnHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/return`, { method: "POST" }),
   getDownloads: () => request<unknown[]>("/pools/downloads"),
-  getUserFiles: async (password: string, poolId: string): Promise<PoolUserFilesResult> => {
+  getUserFiles: (password: string, poolId: string): Promise<PoolUserFilesResult> => {
     const enc = (s: string) => encodeURIComponent(s);
-    try {
-      return await request<PoolUserFilesResult>(`/pools/${enc(password)}/${enc(poolId)}/user-files`);
-    } catch (e) {
-      if (password === "dgddigital" && isNotFound(e)) {
-        return request<PoolUserFilesResult>(`/pools/${enc(poolId)}/user-files`);
-      }
-      throw e;
-    }
+    return request<PoolUserFilesResult>(`/pools/${enc(password)}/${enc(poolId)}/user-files`);
   },
   getVerifiedCounts: (password: string, poolId: string) => {
     const enc = (s: string) => encodeURIComponent(s);
@@ -440,6 +407,7 @@ export const api = {
     const enc = (s: string) => encodeURIComponent(s);
     return request<PoolPrice>(`/pools/${enc(password)}/${enc(poolId)}/price`);
   },
+  getPoolPrices: () => request<{ prices: PoolPrice[] }>("/pools/prices"),
   setPoolPrice: (password: string, poolId: string, price: number) => {
     const enc = (s: string) => encodeURIComponent(s);
     return request<PoolPrice>(`/pools/${enc(password)}/${enc(poolId)}/price`, { method: "PUT", body: JSON.stringify({ price }) });
@@ -492,7 +460,7 @@ export const api = {
       if (!res.ok) {
         let detail = "";
         try { const body = await res.json(); detail = typeof body?.error === "string" ? body.error : JSON.stringify(body); } catch { detail = await res.text().catch(() => ""); }
-        throw new Error(`${res.status} ${res.statusText}${detail ? ` - ${detail}` : ""}`);
+    throw new Error(`${res.status} ${res.statusText}${detail ? ` - ${detail}` : ""}`);
       }
       try { localStorage.setItem(PROXY_FLAG, "1"); } catch {}
       return res.json() as Promise<{ ok: boolean }>;

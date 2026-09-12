@@ -90,10 +90,12 @@ export default function SettingsView() {
 
   const fetchPrices = useCallback(async () => {
     const next: Record<string, number | null> = {};
-    await Promise.all(PASSWORDS.flatMap((pwd) => POOL_TABS.map(async (t) => {
-      try { next[cellKey(pwd, t.id)] = (await api.getPoolPrice(pwd, t.id)).price; }
-      catch { next[cellKey(pwd, t.id)] = null; }
-    })));
+    try {
+      const r = await api.getPoolPrices();
+      PASSWORDS.forEach((pwd) => POOL_TABS.forEach((t) => { const hit = r.prices.find((p) => p.password === pwd && p.poolId === t.id); next[cellKey(pwd, t.id)] = hit ? hit.price : null; }));
+    } catch {
+      PASSWORDS.forEach((pwd) => POOL_TABS.forEach((t) => { next[cellKey(pwd, t.id)] = null; }));
+    }
     setPrices(next);
     const cur = entryRef.current;
     setInputs((prev) => {

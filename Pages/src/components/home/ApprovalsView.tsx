@@ -116,9 +116,11 @@ export default function ApprovalsView() {
 
   const loadPrices = useCallback(async () => {
     const allPrices: Record<string, number | null> = {};
-    await Promise.all(PASSWORDS.flatMap((pwd) => POOL_TABS.map(async (t) => {
-      try { const pr = await api.getPoolPrice(pwd, t.id); allPrices[`${pwd}:${t.id}`] = pr.price; } catch { allPrices[`${pwd}:${t.id}`] = null; }
-    })));
+    try {
+      const r = await api.getPoolPrices();
+      for (const p of r.prices) if (p.password) allPrices[`${p.password}:${p.poolId}`] = p.price;
+    } catch {}
+    PASSWORDS.forEach((pwd) => POOL_TABS.forEach((t) => { if (allPrices[`${pwd}:${t.id}`] === undefined) allPrices[`${pwd}:${t.id}`] = null; }));
     setPrices(allPrices);
   }, []);
 

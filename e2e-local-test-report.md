@@ -71,6 +71,19 @@ bun scripts/e2e-local.ts down   # stop everything
 - `npm run typecheck` (Pages) → clean. `bun test sheetStore + filetypes` → **91 pass, 0 fail**.
 - Skills used: `xlsx` (fixtures), `webapp-testing`, `playwright-testing` (skills.sh) — see global registry.
 
+## Chaos + speed (2026-09-13)
+
+- Split: fast suite = `page-entry.spec.ts` (4 mobile tests) + `chaos.spec.ts` (5 hostile-env tests, `mode: parallel`) via `bun run test:e2e`; the 500-row scale test moved to `page-500.spec.ts` tagged `@deep` (`bun run test:e2e:deep`), so the default run drops from ~10 min to ~1-3 min and CI no longer types 1000 cells.
+- Shared helpers in `Pages/e2e/helpers.ts` (fixture loading, fake FB routes, double-tap paste, server convergence poll).
+- Chaos coverage (all assert the same field-by-field no-loss convergence, so a real loss still fails the test):
+  1. offline mid-edit -> reconnect;
+  2. CDP slow link (400ms latency / 50KB/s up-down);
+  3. backgrounded mid-edit (visibilitychange hidden -> visible);
+  4. 6x CPU throttling (low-end);
+  5. crash while offline -> reopen replays the IndexedDB mirror + flushes.
+- Store hardening these tests lock in: conflict refetches pad fresh rows to every journal row (no skipped high-row edits), failed/conflicted flushes retry within 1s (5s outbox pipe stays as backstop), journal + IDB mirror only clear on an accepted ack.
+- Deep test speed: auto per-paste UID/page sweeps off while typing (`ss_autoCheck=false`), one manual Check at the end.
+
 ## Live smoke (prod, owner-consented, minimal)
 
 - `Pages/e2e/live-smoke.spec.ts` — skipped unless `LIVE_SMOKE=1 SS_SESSION=<cookie>`

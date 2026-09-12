@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/page-skeleton";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
-const PASSWORDS = ["dgddigital", "L0VE@12345"] as const;
+const PASSWORDS = ["dgddigital", "Love@12345"] as const;
 const POOL_TABS = [
   { id: "cookies_only", label: "Cookies" },
   { id: "cookies_2fa", label: "2FA" },

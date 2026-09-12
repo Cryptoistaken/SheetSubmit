@@ -156,8 +156,8 @@ export default function FileCard({
   const cardLabel = `${file.name}, ${count} rows${selected ? ", selected" : ""}`;
   const badge = fileTypeDef(file.type).badge;
   const pw = file.password ?? "dgddigital";
-  const isCustom = pw !== "dgddigital" && pw !== "L0VE@12345";
-  const pwLabel = pw === "dgddigital" ? "dgd" : pw === "L0VE@12345" ? "L0VE" : pw.slice(0, 8);
+  const isCustom = pw !== "dgddigital" && pw !== "Love@12345";
+  const pwLabel = pw === "dgddigital" ? "dgd" : pw === "Love@12345" ? "Love" : pw.slice(0, 8);
   const pwTitle = pw;
   const _presetKind = (file.preset ?? file.poolKind) as string | undefined;
   const isPage = _presetKind === "page" || (!_presetKind && file.name.toLowerCase().startsWith("page"));

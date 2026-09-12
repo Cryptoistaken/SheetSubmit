@@ -3,7 +3,7 @@ import { assert, assertStatus, errorText, json, loadRows, request, session, wait
 // Duplicate checker: uploads the 2fa/cookie/Page fixtures as files under BOTH pool passwords,
 // re-uploads the 2fa rows a second time as a new file, then asks the pool rows API whether
 // it returns ALL accounts or only deduplicated ones. Cleans up (archive + purge) everything.
-const PASSWORDS = ["dgddigital", "L0VE@12345"];
+const PASSWORDS = ["dgddigital", "Love@12345"];
 const POOLS = ["cookies_only", "cookies_2fa", "page"] as const;
 const prefix = `${Date.now().toString().slice(-9)}`; // digits only — pool classify() requires c_user=<digits>
 const created: string[] = [];

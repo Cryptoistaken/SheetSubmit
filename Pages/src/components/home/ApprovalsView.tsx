@@ -29,7 +29,7 @@ const POOL_DL_COLS: Record<string, { key: string; label: string; width: number }
   ],
 };
 
-const PASSWORDS = ["dgddigital", "L0VE@12345"] as const;
+const PASSWORDS = ["dgddigital", "Love@12345"] as const;
 const POOL_TABS = [
   { id: "cookies_only", label: "Cookies" },
   { id: "cookies_2fa", label: "2FA" },

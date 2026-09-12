@@ -19,7 +19,7 @@ const req = (path: string, init?: RequestInit) => app.request(path, init, ENV);
 const PWD = "dgddigital";
 const POOL = "cookies_only";
 const OTHER_POOL = "page";
-const OTHER_PWD = "L0VE@12345";
+const OTHER_PWD = "Love@12345";
 const room = (pwd: string, pool: string) => `${pwd}:${pool}`;
 
 async function readData(reader: ReadableStreamDefaultReader<Uint8Array>, timeoutMs: number): Promise<any | null> {

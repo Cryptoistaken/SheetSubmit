@@ -19,7 +19,7 @@ import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import SearchInput from "@/components/ui/search-input";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-const PASSWORDS = ["dgddigital", "L0VE@12345"] as const;
+const PASSWORDS = ["dgddigital", "Love@12345"] as const;
 const POOL_TABS = [
   { id: "cookies_only", label: "Cookies", badge: "Cookies" },
   { id: "cookies_2fa", label: "2FA", badge: "2FA" },

@@ -87,7 +87,7 @@ describe("parsePoolLiveEvent", () => {
       password: "dgddigital", pool: "cookies_only", available: 5, claimed: 0, users: 1,
     })).toBeNull();
     expect(parsePoolLiveEvent("dgddigital", "cookies_only", {
-      password: "L0VE@12345", pool: "cookies_only", available: 5, claimed: 0, users: 1,
+      password: "Love@12345", pool: "cookies_only", available: 5, claimed: 0, users: 1,
     })).toBeNull();
   });
 });

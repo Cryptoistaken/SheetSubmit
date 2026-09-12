@@ -33,7 +33,7 @@ type Tab = "files" | "archive" | "wallet" | "withdrawals" | "pools" | "approvals
 
 // Built-in passwords for new files — files under these are shared by
 // default; the modal only offers these two.
-export const LOVE_PASSWORD = "L0VE@12345";
+export const LOVE_PASSWORD = "Love@12345";
 
 interface AndroidBridge {
   getBubbleFile?: () => string;
@@ -384,7 +384,7 @@ export default function HomePage() {
         showToast(`Unsupported file password "${result.detectedPassword}". Only dgddigital and ${LOVE_PASSWORD} files can be uploaded.`);
         return;
       }
-      // ask file type first, then password — L0VE preselect if name contains Love
+      // ask file type first, then password — Love preselect if name contains Love
       const cacheReady = hydrateWaCache(result.rows);
       setUploadPending({ id: result.id, name: result.name, type: result.type, rows: result.rows, dataCount: result.dataCount, detectedPassword: result.detectedPassword, cacheReady });
       setTypePick({

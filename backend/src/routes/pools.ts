@@ -5,7 +5,7 @@ import { rpc } from "../lib/do";
 import { publishDownloadStates } from "../lib/livePublish";
 export const pools = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 function admin(c: any) { return isAdmin(c.env, c.get("uid")); }
-const PASSWORDS = ["dgddigital", "L0VE@12345"];
+const PASSWORDS = ["dgddigital", "Love@12345"];
 const POOL_IDS = ["cookies_only", "cookies_2fa", "page"] as const;
 type PoolId = typeof POOL_IDS[number];
 const META: Record<PoolId, { label: string; badge: string; cols: string[]; filename: string; rule: string }> = {

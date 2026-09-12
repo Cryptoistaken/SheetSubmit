@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
-
+.playwright-artifacts-0
+.playwright
+package-lock.json
 # Build outputs
 dist/
 build/

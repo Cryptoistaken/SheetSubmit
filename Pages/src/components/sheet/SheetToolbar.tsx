@@ -339,9 +339,9 @@ export default function SheetToolbar() {
       <div className="check-split-wrap" data-check={checkRunning ? "checking" : ""}>
         <button
           className="check-split-main"
-          disabled={hasDups}
+          disabled={hasDups || checkRunning}
           title={archivedMode ? "Check UID liveness" : hasDups ? "Please remove duplicate rows first." : undefined}
-          onClick={() => void useSheetStore.getState().runCheck()}
+          onClick={() => { setCheckOpen(false); void useSheetStore.getState().runCheck(); }}
         >
           {checkRunning ? (
             <>
@@ -363,7 +363,7 @@ export default function SheetToolbar() {
             "Check"
           )}
         </button>
-        {archivedMode ? null : (
+        {archivedMode || checkRunning ? null : (
         <button
           ref={checkArrowRef}
           className={"check-split-arrow" + (checkOpen ? " open" : "")}

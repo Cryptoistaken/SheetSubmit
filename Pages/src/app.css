@@ -2436,6 +2436,7 @@ body.bubble-mode .sheet-more-menu {
     bottom: auto !important;
     right: 8px !important;
     max-height: calc(100vh - 56px) !important;
+    max-height: calc(100dvh - 56px) !important;
     overflow-y: auto !important;
 }
 
@@ -2555,7 +2556,6 @@ body.bubble-mode tr.add-row .add-col { font-size: 11px; }
     overflow-y: auto;
     overflow-wrap: anywhere;
 }
-.file-ctx-popup { max-width: min(140px, calc(100vw - 24px)); overflow: hidden; }
 .version-kebab-menu { max-width: min(180px, calc(100vw - 24px)); overflow-wrap: anywhere; }
 .modal-title, .download-opt-title, .home-fab-name, .file-card-name { overflow-wrap: anywhere; word-break: break-word; }
 
@@ -2577,7 +2577,7 @@ body.bubble-mode tr.add-row .add-col { font-size: 11px; }
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     max-width: 100%;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 6px;
 }
 .qeb-toolbar::-webkit-scrollbar { height: 4px; }
@@ -2591,7 +2591,7 @@ body.bubble-mode tr.add-row .add-col { font-size: 11px; }
     .login-wrap { padding: 16px; }
     .home-tabs { max-width: 100%; overflow-x: auto; }
     .view-switch { max-width: 100%; }
-    .qeb-toolbar { justify-content: flex-start; flex-wrap: wrap; }
+    .qeb-toolbar { justify-content: flex-start; flex-wrap: nowrap; }
     .sel-bar { padding-inline: 10px; }
     .modal-box,
     .download-opt-box { width: calc(100vw - 24px); }
@@ -2686,10 +2686,11 @@ table.grid { min-width: 0; }
 
 /* 10) Reduced-motion preserved for new animations */
 @media (prefers-reduced-motion: reduce) {
-    .qeb-bar, .sel-bar, .modal-box, .download-opt-box, .home-fab-menu, .sheet-more-menu, .check-dropdown, .gear-settings-panel, .file-ctx-popup {
+    .qeb-bar, .sel-bar, .modal-box, .download-opt-box, .home-fab-menu, .sheet-more-menu, .check-dropdown, .gear-settings-panel, .file-ctx-popup, .qeb-picker {
         animation: none !important;
         transition-duration: 0.01ms !important;
     }
+    .home-fab-menu, .qeb-picker{ animation:none; transition:none; }
 }
 
 /* 11) Typography audit — minimal additive fixes */
@@ -2704,4 +2705,136 @@ table.grid { min-width: 0; }
   .sel-bar { padding: 6px 8px; gap: 6px; }
   .sel-bar-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
   .sel-btn { flex: 1 1 auto; min-width: 0; justify-content: center; }
+}
+
+/* ── Adaptiveness: tokens + viewport + safe-area foundation (Task 1) ── */
+:root{ --tap-min:40px; }
+/* Shrink contract uses Tailwind built-ins (no new utilities):
+   rows = `flex min-w-0`, text = `flex-1 min-w-0 truncate`, keep = `shrink-0`,
+   2-line names = `line-clamp-2` (v4 core). Touch floor always with fallback: var(--tap-min,40px). */
+.topbar{ padding-top:max(0px,env(safe-area-inset-top)); } /* 0px on desktop = no height change */
+@media (orientation:landscape) and (max-width:480px){
+  /* NOTE: .topbar L/R lives in Task 2 Step 3 (single owner) — only FABs here.
+     Logical-only (no physical pair): matches RTL correctly, unlike the base :2610 pattern. */
+  .home-fab{ inset-inline-end:max(24px,env(safe-area-inset-right)); }
+  .view-switch-fab{ inset-inline-start:max(24px,env(safe-area-inset-left)); }
+}
+
+/* ── Adaptiveness Task 2: shell — never hide (topbar/sidebar/tabs) ── */
+/* Optional minimal rail (regulars/file pages, icons-only 40px). Merged single
+   rule: .sidebar-mini and .sidebar-minimal share the width (no duplicates). */
+.sidebar-mini,.sidebar-minimal{ width:40px; }
+/* landscape notch: shift rails right by inset (no width change, no clip): */
+.sidebar-mini,.sidebar-minimal{ margin-inline-start:env(safe-area-inset-left); }
+.sidebar-minimal button{ min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); }
+.rail-hit{ position:relative; min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); }
+.rail-hit::after{ content:""; position:absolute; inset:-4px -8px; } /* 40px+ hit both axes (trigger is size-6/24px) */
+.rail-grip{ opacity:.6; min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); } /* focusable separator: hit floor on wrapper, 3×32 bar stays inside */
+@media (hover:hover) and (pointer:fine){ .rail-grip{ opacity:0; } .group:hover .rail-grip{ opacity:.6; } }
+.rail-grip-bar{ width:3px; height:32px; }
+@media (max-width:480px){
+.topbar{ min-height:44px; height:auto; padding-left:max(8px,env(safe-area-inset-left)); padding-right:max(8px,env(safe-area-inset-right)); gap:6px; } /* height:auto (not fixed): enlarged fonts/zoom grow it; min keeps 44px */
+.topbar-l{ min-width:0; flex:1 1 auto; }
+.topbar-logo.shrinkable{ width:16px; height:16px; padding:12px; margin:-12px; box-sizing:content-box; } /* ::after does NOT render on <img> (replaced element) — padding-box trick instead: hit is 16+24=40px, margin keeps layout unchanged */
+.home-top-title.shrinkable{ font-size:12px; min-width:0; max-width:min(22vw,160px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topbar-crumb{ display:inline-flex; flex:1 1 auto; font-size:12px; gap:4px; min-width:0; }
+.topbar-crumb-current{ min-width:0; max-width:min(18vw,140px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sheet-title-btn{ display:none; font-size:12px; max-width:min(32vw,140px); min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); } /* min-width floor: short titles stay tappable; text still ellipsizes inside */ /* text yields infinitely via ellipsis (200%-zoom story: controls keep 40px, titles shrink to slivers, never push chrome off) */
+.sheet-title-btn.visible{ display:inline-flex; } /* state gate, NOT viewport hide: Topbar.tsx adds .visible on file pages TODAY (:223 back-btn gate, :239 sheet-title, :248 archived — verified pre-existing, gates untouched by this plan; sizes only). Same for .back-btn below. */
+.back-btn{ min-width:var(--tap-min,40px); min-height:var(--tap-min,40px); } /* .visible gate owned by Topbar.tsx on file pages — contextual like modal .open, keep gate. */
+.back-btn.visible{ display:inline-flex; } /* sizes alone don't un-hide base display:none (:338-339) — same state-gate pattern as sheet-title above. */
+.topbar-r{ flex:0 1 auto; min-width:0; gap:6px; }
+.check-split-main{ font-size:11px; padding:5px 8px; min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); }
+.check-split-arrow{ min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); }
+.profile-btn{ min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); } /* min- not fixed height: enlarged text/zoom grows it; inner pill inherits row height */
+}
+@media (max-width:360px){
+  .home-top-title.shrinkable{ max-width:16vw; font-size:11px; }
+  .topbar{ gap:4px; } .topbar-r{ gap:4px; }
+  .check-split-main{ font-size:10px; padding:4px 6px; }
+  .sheet-title-btn{ font-size:11px; max-width:28vw; }
+}
+#homeTabBar.admin-tabs .home-tabs[role="tablist"]{ display:flex; max-width:min(100%, calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right))); overflow-x:auto; gap:2px; padding:2px; margin:6px auto 0; }
+#homeTabBar.admin-tabs .home-tab{ padding:6px 8px; font-size:11px; gap:4px; min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); flex:0 0 auto; } /* 40px floor intentional cross-size — approved-only step */
+@media (max-width:360px){
+  #homeTabBar.admin-tabs .home-tab{ font-size:10px; padding:6px; }
+}
+@media (max-width:480px){
+  .home-tabs{ gap:2px; padding:2px; max-width:min(100%, calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right))); }
+  .home-tab{ padding:6px 8px; font-size:11px; min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); }
+}
+
+/* ── Adaptiveness Task 3: home / files / archive grids + menus ── */
+.file-menu-pop{ overflow-wrap:anywhere; margin-inline-end:env(safe-area-inset-right); max-height:min(320px,calc(100vh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); max-height:min(320px,calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); overflow-y:auto; } /* notch gutter backstop: inline `right` wins ties, margin shifts the box left without fighting it (portrait notch is top-only; this covers landscape) */
+@media (max-width:360px){
+  .file-card{ padding:10px; gap:6px; min-height:0; }
+  .file-card-actions{ top:5px; right:5px; }
+  .file-card-btn{ box-sizing:content-box; padding:8px; margin:-8px; } /* 24px visual, 40px hit (padding-box trick — transparent bg, margin keeps layout) */
+  .list-row .file-card-name{ min-width:0; flex:1; }
+  .files-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; } /* 2-col approved: densified cards fit 320px */
+}
+@media (max-width:380px){
+  .archived-banner{ flex-wrap:wrap; gap:8px; padding:8px 10px; margin:8px 8px 0; font-size:12px; }
+  .archived-banner button{ min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); } /* Restore action: same 40px sweep as Tasks 4-5 */
+}
+
+/* ── Adaptiveness Task 4: sheet — grid, toolbar, QEB, popups, overlays ── */
+/* Undo/more floor (all sizes — sole owner, no other task touches these selectors): */
+.undo-redo-btn,.sheet-more-btn{ min-width:var(--tap-min,40px); min-height:var(--tap-min,40px); }
+@media (max-width:380px){
+  th.corner, th.rh{ width:24px; min-width:24px; }
+  th.rh{ height:26px; font-size:10px; }
+  th.ch{ height:26px; font-size:10px; padding:0 4px; }
+  th.ch-dot{ width:26px; min-width:26px; height:26px; }
+  td.dc{ height:28px; font-size:12px; } /* data cells, NOT controls: exempt from 40px (FB bubble precedent: 22px rows). All CONTROLS (buttons/tabs/menus) keep 40px. */
+  .cell-inner{ padding:0 4px; }
+  td.dot-cell{ width:26px; min-width:26px; padding:0 2px; }
+  .row-dot{ width:6px; height:6px; border-radius:2px; }
+  tr.add-row td{ padding:12px 0; } /* tappable row: 12+12+~16 text = 40px hit */
+  /* hit is 40px via min floors (see note above); content-box background renders the 28px visual inside: */
+  .undo-redo-btn,.sheet-more-btn{ box-sizing:border-box; width:28px; height:28px; padding:6px; background-clip:content-box; min-width:var(--tap-min,40px); min-height:var(--tap-min,40px); }
+  .qeb-bar{ padding:4px max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left)); }
+  .qeb-formula-bar{ padding:7px 12px; border-radius:24px; }
+  /* hit is 40px via min floors; content-box background renders the visuals inside (28/30px): */
+  .qeb-icon-btn{ box-sizing:border-box; width:30px; height:30px; padding:5px; background-clip:content-box; border-radius:8px; min-width:var(--tap-min,40px); min-height:var(--tap-min,40px); }
+  .qeb-icon-btn svg{ width:16px; height:16px; }
+}
+
+/* Global input floors (all sizes, intentional — appended at end per Task 0 placement rule):
+   .qeb-input is already 16px today (app.css:1925), missing only touch height.
+   Every .modal-input (incl. AdminView :477-507 credit amount+title): number/typeless
+   types fall through the :2665 selector, so one rule covers all. */
+.qeb-input{ min-height:var(--tap-min,40px); }
+.modal-input{ font-size:max(16px,1em); min-height:var(--tap-min,40px); }
+
+/* position:fixed REQUIRED — TSX sets viewport coords (getBoundingClientRect) with no positioning today,
+   so left/top are dead until this lands. max-height pairs with overflow-y (no cap = no scroll): */
+.file-ctx-popup{ position:fixed; min-width:min(300px,calc(100vw - 8px - env(safe-area-inset-left) - env(safe-area-inset-right))); max-width:min(340px,calc(100vw - 8px - env(safe-area-inset-left) - env(safe-area-inset-right))); max-height:min(400px,calc(100vh - 8px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); max-height:min(400px,calc(100dvh - 8px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); overflow-y:auto; overflow-x:hidden; overflow-wrap:anywhere; }
+.sheet-more-menu{ min-width:min(160px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right))); max-width:min(240px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right))); }
+.check-dropdown{ min-width:min(150px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right))); max-width:min(220px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right))); }
+/* min and max deduct identical insets, so min (160/150) stays below max (240/220) at every width — ordering holds, no overflow. */
+.toast-wrap{ white-space:normal; max-width:calc(100vw - 32px - env(safe-area-inset-left) - env(safe-area-inset-right)); overflow-wrap:anywhere; text-align:center; }
+/* max-width caps below back it for notch (existing app.css:2532 uses [style*="width"]
+   (0,2,0) — match it or lose; appended at END per Task 0 so ties win): */
+.download-opt-box[style*="width"]{ max-width:calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)); }
+
+/* ── Adaptiveness Task 5: pools / approvals / settings / wallet ── */
+@media (max-width:360px){
+  .pool-card{ padding:10px; }
+  .pool-card-stat{ font-size:11px; }
+  .pool-switch button{ min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); }
+  .taker-cell input[name="custom-qty"]{ width:56px !important; } /* !important REQUIRED: inline width:72 (:389) beats sheets (font lives in Step 3b TSX hunk) */
+  .pool-card-sub{ flex-wrap:wrap; gap:4px 8px; font-size:11px; } /* ApprovalsView:245 */
+  .view-switch button{ padding:6px 8px; font-size:12px; min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); } /* plain rule suffices: slide-switch.tsx:56 proves NO inline minHeight on switch buttons */
+}
+@media (max-width:480px){
+  #homePaneFiles,#homePaneArchive,#homePaneAdmin,#homePanePools,#homePaneApprovals,#homePaneSettings,#homePaneWallet,#homePaneWithdrawals,#homePaneTools,#homePaneAnalysis{ padding:20px 14px !important; }
+  /* systemic floor: base .btn is ~32px (app.css:1355-1370) and no step owns every caller
+     (PoolLookup back/Look-up, Bubble Reset/Save, Settings Save-rate, Splitter Choose-file) → one rule: */
+  .btn{ min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); }
+  /* autocheck-toggle switches (SettingsView:261 + app.css:2155-2168, ~28px interactive role=switch): */
+  .autocheck-toggle{ min-height:var(--tap-min,40px); min-width:var(--tap-min,40px); }
+}
+@media (max-width:480px) and (orientation:landscape){
+  #homePaneFiles,#homePaneArchive,#homePaneAdmin,#homePanePools,#homePaneApprovals,#homePaneSettings,#homePaneWallet,#homePaneWithdrawals,#homePaneTools,#homePaneAnalysis{ padding-left:max(14px,env(safe-area-inset-left)) !important; padding-right:max(14px,env(safe-area-inset-right)) !important; }
 }

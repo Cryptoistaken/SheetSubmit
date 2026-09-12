@@ -343,6 +343,8 @@ export const api = {
   adminPoolDiag: (key: string) => request<PoolDiag>(`/admin/pooldiag?key=${encodeURIComponent(key)}`),
   adminBanUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}/ban`, { method: "POST" }),
   adminUnbanUser: (userId: string) => request<{ ok: boolean }>(`/admin/user/${userId}/unban`, { method: "POST" }),
+  adminCreditBalance: (uid: string, amount: number, title: string) =>
+    request<{ id: string; uid: string; amount: number; balance: number; title: string }>(`/api/wallet/credit`, { method: "POST", body: JSON.stringify({ uid, amount, title }) }),
 
   getPools: () => request<{ pools: PoolSummary[] }>("/pools"),
   getPoolDetail: async (password: string, poolId: string): Promise<PoolDetail> => {

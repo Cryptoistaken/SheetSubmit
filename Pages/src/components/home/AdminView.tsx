@@ -11,6 +11,7 @@ import { useProfileCache } from "@/stores/profileCache";
 import { fileTypeDef } from "@/lib/types";
 import type { AdminUser, ArchiveFile, SheetFile } from "@/lib/types";
 import { downloadXlsx } from "@/lib/xlsx";
+import { fmtMoney, useCurrency } from "@/lib/currency";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import EmptyState from "./EmptyState";
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
@@ -36,11 +37,17 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   const [renameFileId, setRenameFileId] = useState<string | null>(null);
   const [renameName, setRenameName] = useState("");
   const [userFileTab, setUserFileTab] = useState<"files" | "archive">("files");
+  const [creditOpen, setCreditOpen] = useState(false);
+  const [creditAmount, setCreditAmount] = useState("");
+  const [creditTitle, setCreditTitle] = useState("Manual credit");
+  const [creditBusy, setCreditBusy] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const renameRef = useModalA11y(!!renameFileId, () => setRenameFileId(null));
+  const creditRef = useModalA11y(creditOpen, () => setCreditOpen(false));
+  const [currency] = useCurrency();
 
   const loadList = useCallback(async () => {
     setListError(null);
@@ -155,6 +162,33 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     }
     setDetailUser({ ...detailUser, banned: false });
     void loadList();
+  };
+
+  const openCredit = () => {
+    setCreditAmount("");
+    setCreditTitle("Manual credit");
+    setCreditOpen(true);
+  };
+
+  const commitCredit = async () => {
+    if (!detailUser || creditBusy) return;
+    const amount = Math.round(Number(creditAmount) * 100) / 100;
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) {
+      showToast("Enter a valid amount.");
+      return;
+    }
+    const title = creditTitle.trim() || "Manual credit";
+    setCreditBusy(true);
+    try {
+      const res = await api.adminCreditBalance(detailUser.id, amount, title);
+      setCreditOpen(false);
+      await reloadDetail(detailUser.id);
+      showToast(`Credited ${fmtMoney(res.amount, currency)} to ${userName(detailUser)}.`);
+    } catch {
+      showToast("Unable to credit balance. Please try again.");
+    } finally {
+      setCreditBusy(false);
+    }
   };
 
   const removeFile = async (fileId: string) => {
@@ -282,10 +316,16 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
               <div className="admin-detail-meta">
                 {detailUser.fileCount || 0} files, {detailUser.archivedCount || 0} archived
               </div>
+              <div className="admin-detail-meta">
+                Balance: {fmtMoney(detailUser.balance ?? 0, currency)}
+              </div>
             </div>
             <div className="admin-detail-actions">
                 {!detailUser.isAdmin && detailUser.id !== me?.id ? (
                 <>
+                  <button type="button" className="btn btn-sm" onClick={openCredit}>
+                    Credit balance
+                  </button>
                   {detailUser.banned ? (
                     <button type="button" className="btn btn-sm" onClick={() => void unbanUser()}>
                       <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true"><title>ban</title><path fill="currentColor" d="M12 2c5.5 0 10 4.5 10 10s-4.5 10-10 10S2 17.5 2 12S6.5 2 12 2m0 2c-1.9 0-3.6.6-4.9 1.7l11.2 11.2c1-1.4 1.7-3.1 1.7-4.9c0-4.4-3.6-8-8-8m4.9 14.3L5.7 7.1C4.6 8.4 4 10.1 4 12c0 4.4 3.6 8 8 8c1.9 0 3.6-.6 4.9-1.7" /></svg>
@@ -397,6 +437,64 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
               </button>
               <button type="button" className="btn btn-primary" onClick={() => void commitRename()}>
                 Rename
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          className={`modal-overlay${creditOpen ? " open" : ""}`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setCreditOpen(false);
+          }}
+        >
+          <div ref={creditRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="admin-credit-title">
+            <div id="admin-credit-title" className="modal-title">Credit balance</div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text3)", fontWeight: 600, marginBottom: 4 }} htmlFor="admin-credit-amount">Amount</label>
+            <input
+              id="admin-credit-amount"
+              className="modal-input"
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="0.00"
+              aria-label="Credit amount"
+              value={creditAmount}
+              onChange={(e) => setCreditAmount(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void commitCredit();
+                } else if (e.key === "Escape") {
+                  setCreditOpen(false);
+                }
+              }}
+            />
+            <label style={{ display: "block", fontSize: 12, color: "var(--text3)", fontWeight: 600, marginBottom: 4, marginTop: 12 }} htmlFor="admin-credit-title-input">Title</label>
+            <input
+              id="admin-credit-title-input"
+              className="modal-input"
+              type="text"
+              aria-label="Credit title"
+              value={creditTitle}
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => setCreditTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void commitCredit();
+                } else if (e.key === "Escape") {
+                  setCreditOpen(false);
+                }
+              }}
+            />
+            <div className="modal-footer">
+              <button type="button" className="btn btn-ghost" onClick={() => setCreditOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary" disabled={creditBusy} onClick={() => void commitCredit()}>
+                {creditBusy ? "Crediting…" : "Credit"}
               </button>
             </div>
           </div>

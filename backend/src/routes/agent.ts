@@ -18,7 +18,7 @@ agent.get("/health", async (c) => {
 
 agent.get("/routes", (c) => c.json([
   "GET /api/health", "GET /api/worker/health",
-  "GET /api/wallet", "POST /api/wallet/withdraw", "GET /api/wallet/requests", "POST /api/wallet/requests/:id/:action",
+  "GET /api/wallet", "POST /api/wallet/withdraw", "GET /api/wallet/requests", "POST /api/wallet/requests/:id/:action", "POST /api/wallet/credit",
   "GET|PUT /api/wallet/methods",
   "GET /api/auth/me", "POST /api/auth/logout", "POST /api/auth/device/claim",
   "GET /api/auth/telegram/config", "POST /api/auth/telegram/verify",

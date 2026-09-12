@@ -730,19 +730,6 @@ export default function HomePage() {
               </button>
               );
             })}
-            {uploadPending?.detectedPassword && !["dgddigital", LOVE_PASSWORD].some((k) => normPoolPassword(k) === normPoolPassword(uploadPending.detectedPassword ?? "")) ? (
-              <button
-                className="file-card"
-                style={{ display: "flex", flexDirection: "row", gap: 12, textAlign: "left", padding: "14px 16px", minHeight: 56, justifyContent: "flex-start", alignItems: "center", borderColor: "var(--border2)" }}
-                onClick={() => { if (uploadPending?.detectedPassword) void doUploadWithPassword(uploadPending.detectedPassword); }}
-              >
-                <span style={{ display: "inline-flex", flexShrink: 0 }} aria-hidden="true"><PasswordIcon password={uploadPending.detectedPassword} size={18} aria-hidden="true" /></span>
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span className="file-card-name" style={{ fontSize: 13, fontWeight: 600 }}>{uploadPending.detectedPassword}</span>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: "var(--green)", background: "var(--green-bg)", padding: "1px 6px", borderRadius: 999 }}>Detected from file</span>
-                </span>
-              </button>
-            ) : null}
           </div>
         </div>
       </div>

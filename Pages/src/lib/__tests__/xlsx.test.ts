@@ -2,23 +2,23 @@ import { describe, expect, it, mock } from "bun:test";
 
 // xlsx seam: import/parse/build through the REAL xlsx lib (no mocks on the
 // format itself — a workbook written by buildXlsx must read back through
-// parseSheetRows/importXlsx). Only the api boundary (hydrateWaCache's
-// getWaCache) is stubbed. buildCustomRows/splitRows already have their own
+// parseSheetRows/importXlsx). Only the api boundary (hydrateCheckCache's
+// getCheckCache) is stubbed. buildCustomRows/splitRows already have their own
 // suites; download writers that touch fs/DOM are covered only on the
 // no-data path (returns false before any side effect).
-const waHarness: { cache: Record<string, unknown>; throw: boolean } = { cache: {}, throw: false };
+const checkHarness: { cache: Record<string, unknown>; throw: boolean } = { cache: {}, throw: false };
 
 mock.module("@/lib/api", () => ({
   api: {
-    getWaCache: async () => {
-      if (waHarness.throw) throw new Error("down");
-      return { cache: waHarness.cache };
+    getCheckCache: async () => {
+      if (checkHarness.throw) throw new Error("down");
+      return { cache: checkHarness.cache };
     },
   },
 }));
 
 const XLSX = await import("xlsx");
-const { importXlsx, buildXlsx, parseSheetRows, downloadSheetRows, hydrateWaCache, genId, todayStr } = await import("../xlsx");
+const { importXlsx, buildXlsx, parseSheetRows, downloadSheetRows, hydrateCheckCache, genId, todayStr } = await import("../xlsx");
 const { buildDownloadOpts } = await import("../downloadOpts");
 
 const COLS = [
@@ -137,11 +137,11 @@ describe("importXlsx", () => {
 
 describe("buildDownloadOpts", () => {
   const rows = [
-    { cookies: "c_user=1;", twofakey: "K".repeat(10), uid: "1", status: "good", wa_status: "eligible" },
-    { cookies: "c_user=2;", twofakey: "K".repeat(10), uid: "2", status: "good", wa_status: "" },
-    { cookies: "c_user=3;", twofakey: "", uid: "3", status: "good", wa_status: "" },
-    { cookies: "", twofakey: "K".repeat(10), uid: "", status: "good", wa_status: "" },
-    { cookies: "c_user=5;", twofakey: "", uid: "5", status: "bad", wa_status: "" },
+    { cookies: "c_user=1;", twofakey: "K".repeat(10), uid: "1", status: "good", check_status: "eligible" },
+    { cookies: "c_user=2;", twofakey: "K".repeat(10), uid: "2", status: "good", check_status: "" },
+    { cookies: "c_user=3;", twofakey: "", uid: "3", status: "good", check_status: "" },
+    { cookies: "", twofakey: "K".repeat(10), uid: "", status: "good", check_status: "" },
+    { cookies: "c_user=5;", twofakey: "", uid: "5", status: "bad", check_status: "" },
     { cookies: "", twofakey: "", uid: "", status: "" },
   ];
   const byKey = Object.fromEntries(buildDownloadOpts(rows, COLS).map((o) => [o.key, o]));
@@ -152,8 +152,8 @@ describe("buildDownloadOpts", () => {
     expect(byKey.combo.count).toBe(2);
     expect(byKey.onlycookie.count).toBe(1);
     expect(byKey.only2fa.count).toBe(1);
-    expect(byKey.wa.count).toBe(1);
-    expect(byKey["valid-nwa"].count).toBe(3);
+    expect(byKey.check.count).toBe(1);
+    expect(byKey["valid-nocheck"].count).toBe(3);
     expect(byKey.dead.count).toBe(1);
   });
 
@@ -162,7 +162,7 @@ describe("buildDownloadOpts", () => {
     expect(keys).toContain("all");
     expect(keys).toContain("valid");
     expect(keys).not.toContain("dead");
-    expect(keys).not.toContain("wa");
+    expect(keys).not.toContain("check");
   });
 
   it("filters select exactly the rows they count", () => {
@@ -177,38 +177,38 @@ describe("buildDownloadOpts", () => {
   });
 });
 
-describe("downloadSheetRows / hydrateWaCache", () => {
+describe("downloadSheetRows / hydrateCheckCache", () => {
   it("downloadSheetRows returns false without touching fs when nothing is downloadable", async () => {
     expect(await downloadSheetRows([{ cookies: "", twofakey: "", uid: "" }], COLS, "x")).toBe(false);
     expect(await downloadSheetRows([], COLS, "x")).toBe(false);
   });
 
-  it("hydrateWaCache fills eligible/ineligible rows from the cache", async () => {
-    waHarness.throw = false;
-    waHarness.cache = {
+  it("hydrateCheckCache fills eligible/ineligible rows from the cache", async () => {
+    checkHarness.throw = false;
+    checkHarness.cache = {
       "1": { status: "eligible", banReason: null, pageName: "P", linkedNumber: "N" },
       "2": { status: "ineligible", banReason: "b", pageName: null, linkedNumber: null },
       "3": { status: "unknown" },
     };
     const rows = [
-      { cookies: "", uid: "1", wa_status: "" },
-      { cookies: "c_user=2;", uid: "", wa_status: "" },
-      { cookies: "c_user=3;", uid: "", wa_status: "" },
+      { cookies: "", uid: "1", check_status: "" },
+      { cookies: "c_user=2;", uid: "", check_status: "" },
+      { cookies: "c_user=3;", uid: "", check_status: "" },
     ];
-    await hydrateWaCache(rows);
-    expect(rows[0].wa_status).toBe("eligible");
-    expect(rows[0].wa_page_name).toBe("P");
-    expect(rows[1].wa_status).toBe("ineligible");
-    expect(rows[1].wa_ban_reason).toBe("b");
-    expect(rows[2].wa_status).toBe("");
+    await hydrateCheckCache(rows);
+    expect(rows[0].check_status).toBe("eligible");
+    expect(rows[0].check_page_name).toBe("P");
+    expect(rows[1].check_status).toBe("ineligible");
+    expect(rows[1].check_ban_reason).toBe("b");
+    expect(rows[2].check_status).toBe("");
   });
 
-  it("hydrateWaCache swallows cache failures and leaves rows untouched", async () => {
-    waHarness.throw = true;
-    const rows = [{ cookies: "c_user=1;", uid: "1", wa_status: "" }];
-    await hydrateWaCache(rows);
-    expect(rows[0].wa_status).toBe("");
-    waHarness.throw = false;
+  it("hydrateCheckCache swallows cache failures and leaves rows untouched", async () => {
+    checkHarness.throw = true;
+    const rows = [{ cookies: "c_user=1;", uid: "1", check_status: "" }];
+    await hydrateCheckCache(rows);
+    expect(rows[0].check_status).toBe("");
+    checkHarness.throw = false;
   });
 });
 

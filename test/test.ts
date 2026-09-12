@@ -77,7 +77,7 @@ async function run() {
   const pageSimpleMissing = await request("/fb/page-simple", json({})); assertStatus(pageSimpleMissing, 400, "simple check missing cookie");
   const syntheticCookie = `c_user=${dupUid}; xs=invalid-test`;
   const pageSimple = await request<any>("/fb/page-simple", json({ cookie: syntheticCookie })); assertStatus(pageSimple, 200, "simple check contract"); assert(typeof pageSimple.body.eligible === "boolean" && "error" in pageSimple.body, "simple check response shape invalid");
-  const cache = await request<any>(`/wa/cache?uids=${dupUid}`); assertStatus(cache, 200, "simple check cache read"); assert(cache.body.cache && typeof cache.body.cache === "object", "simple check cache response invalid");
+  const cache = await request<any>(`/fb/cache?uids=${dupUid}`); assertStatus(cache, 200, "simple check cache read"); assert(cache.body.cache && typeof cache.body.cache === "object", "simple check cache response invalid");
   console.log(`PASS simple check contract eligible=${pageSimple.body.eligible}`);
 
   const poolReady = await waitFor(async () => { const page = await request<any>(`/pools/dgddigital/page/rows?fileId=${files[2].id}&limit=10`); return page.status === 200 && page.body.total >= 5; });

@@ -46,7 +46,7 @@ export const FILE_PRESET_NAMES: Record<FilePreset, string> = {
 };
 
 /** A grid row — cookie cells are plain string keys.
- * Augmentations: _hold?: boolean; _approved?: boolean; _dead?: boolean; wa_status?: string */
+ * Augmentations: _hold?: boolean; _approved?: boolean; _dead?: boolean; check_status?: string */
 export type Row = Record<string, any>;
 
 export const FILE_TYPE_DEFS: Record<FileType, FileTypeDef> = {
@@ -164,7 +164,7 @@ export interface CrossDupResult {
 
 export type ArchiveFile = SheetFile & { deletedAt?: number };
 
-export interface WaCacheEntry {
+export interface CheckCacheEntry {
   status: string | null;
   banReason: string | null;
   error: string | null;

@@ -6,6 +6,7 @@ import type {
 } from "react";
 import { parseStyles, GRID_PAGE, useSheetStore } from "@/stores/sheetStore";
 import { vibrate } from "@/lib/utils";
+import { checkStatusOf } from "@/lib/check";
 import type { ColumnDef, CrossDupEntry } from "@/lib/types";
 import { Check, Phone, Plus, TriangleAlert } from "lucide-react";
 
@@ -24,7 +25,7 @@ interface LogPopupState {
   logs: unknown[];
   label: string;
   crossInfo: CrossDupEntry[];
-  wa: { status: string; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null } | null;
+  check: { status: string; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null } | null;
   x: number;
   y: number;
 }
@@ -285,7 +286,7 @@ export default function SheetGrid() {
               logs: result?.logs ?? [],
               label: result?.label ?? String(rowIdx + 1),
               crossInfo: result?.crossInfo ?? [],
-              wa: result?.wa ?? null,
+              check: result?.check ?? null,
               x: Math.max(4, rect.right - 340),
               y: rect.bottom + 4,
             });
@@ -323,7 +324,7 @@ export default function SheetGrid() {
             logs: result?.logs ?? [],
             label: result?.label ?? String(rowIdx + 1),
             crossInfo: result?.crossInfo ?? [],
-            wa: result?.wa ?? null,
+              check: result?.check ?? null,
             x: Math.max(4, rect.right - 340),
             y: rect.bottom + 4,
           });
@@ -477,9 +478,9 @@ export default function SheetGrid() {
               ))}
             </div>
           ) : null}
-          {logPopup.wa ? (
+          {logPopup.check ? (
             <>
-              {logPopup.wa.status === "eligible" ? (
+              {logPopup.check.status === "eligible" ? (
                 <div
                   style={{
                     fontSize: 11,
@@ -492,9 +493,9 @@ export default function SheetGrid() {
                   }}
                 >
                   <Check size={12} strokeWidth={3} style={{ flexShrink: 0 }} />
-                  <span>Facebook Page{logPopup.wa.pageName ? `: ${logPopup.wa.pageName}` : ""}</span>
+                  <span>Facebook Page{logPopup.check.pageName ? `: ${logPopup.check.pageName}` : ""}</span>
                 </div>
-              ) : logPopup.wa.banReason ? (
+              ) : logPopup.check.banReason ? (
                 <div
                   style={{
                     fontSize: 11,
@@ -506,10 +507,10 @@ export default function SheetGrid() {
                   }}
                 >
                   <TriangleAlert size={12} style={{ flexShrink: 0 }} />
-                  <span>{logPopup.wa.banReason}</span>
+                  <span>{logPopup.check.banReason}</span>
                 </div>
               ) : null}
-              {logPopup.wa.linkedNumber ? (
+              {logPopup.check.linkedNumber ? (
                 <div
                   style={{
                     fontSize: 11,
@@ -521,7 +522,7 @@ export default function SheetGrid() {
                   }}
                 >
                   <Phone size={12} style={{ flexShrink: 0 }} />
-                  <span>{logPopup.wa.linkedNumber}</span>
+                  <span>{logPopup.check.linkedNumber}</span>
                 </div>
               ) : null}
             </>
@@ -627,7 +628,7 @@ const GridRow = memo(function GridRow({
       ? "d-red"
       : isDupRow
         ? "d-yellow"
-        : row?.wa_status === "eligible"
+        : checkStatusOf(row) === "eligible"
           ? "d-blue"
           : status === "good" || status === "done"
             ? "d-green"
@@ -642,7 +643,7 @@ const GridRow = memo(function GridRow({
         ? "Inactive account."
         : isDupRow
           ? "Duplicate row."
-          : row?.wa_status === "eligible"
+          : checkStatusOf(row) === "eligible"
             ? "Eligible for Facebook Page."
             : status === "good" || status === "done"
               ? "Valid account."
@@ -656,7 +657,7 @@ const GridRow = memo(function GridRow({
       ? "st-dead"
       : isDupRow
         ? "st-dup"
-        : row?.wa_status === "eligible"
+        : checkStatusOf(row) === "eligible"
           ? "st-eligible"
           : status === "good" || status === "done"
             ? "st-alive"

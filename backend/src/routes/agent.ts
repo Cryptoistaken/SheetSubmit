@@ -36,7 +36,7 @@ agent.get("/routes", (c) => c.json([
   "GET|PUT /api/pools/:password/:pool/price", "POST /api/pools/:password/:pool/claim|hold",
   "GET /api/admin/stats", "GET /api/admin/users", "GET /api/admin/users/search",
   "GET /api/admin/user/:id", "GET /api/admin/user/:id/archive",
-  "POST /api/fb/check", "POST /api/fb/page-simple", "POST /api/fb/page-advanced", "GET /api/wa/cache",
+  "POST /api/fb/check", "POST /api/fb/page-simple", "POST /api/fb/page-advanced", "GET /api/fb/cache",
   "GET /api/agent/health", "GET /api/agent/routes", "GET /api/agent/stats",
   "GET /api/agent/worker", "GET /api/agent/config",
 ]));

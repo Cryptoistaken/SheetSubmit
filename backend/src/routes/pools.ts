@@ -11,7 +11,7 @@ type PoolId = typeof POOL_IDS[number];
 const META: Record<PoolId, { label: string; badge: string; cols: string[]; filename: string; rule: string }> = {
   cookies_only: { label: "Cookies", badge: "Cookies", cols: ["cookies"], filename: "cookies_pool.xlsx", rule: "cookies valid, 2FA empty" },
   cookies_2fa: { label: "2FA", badge: "2FA", cols: ["cookies", "twofakey"], filename: "2fa_pool.xlsx", rule: "cookies + 2FA key" },
-  page: { label: "Page", badge: "Page", cols: ["cookies", "twofakey"], filename: "page_pool.xlsx", rule: 'cookies + 2FA + wa_status === "eligible"' },
+  page: { label: "Page", badge: "Page", cols: ["cookies", "twofakey"], filename: "page_pool.xlsx", rule: 'cookies + 2FA + check_status === "eligible"' },
 };
 const isPool = (v: string): v is PoolId => (POOL_IDS as readonly string[]).includes(v);
 

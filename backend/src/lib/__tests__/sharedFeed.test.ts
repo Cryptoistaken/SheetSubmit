@@ -22,7 +22,7 @@ describe("poolRowKey", () => {
 });
 
 describe("poolFeedSig", () => {
-  const row = { cookies: "c_user=1;", twofakey: "K", uid: "1", wa_status: "", status: "good" };
+  const row = { cookies: "c_user=1;", twofakey: "K", uid: "1", check_status: "", status: "good" };
 
   it("is stable for identical content", () => {
     expect(poolFeedSig({ ...row })).toBe(poolFeedSig({ ...row }));
@@ -33,7 +33,7 @@ describe("poolFeedSig", () => {
     expect(poolFeedSig({ ...row, cookies: "c_user=1; x=2" })).not.toBe(base);
     expect(poolFeedSig({ ...row, twofakey: "OTHER" })).not.toBe(base);
     expect(poolFeedSig({ ...row, uid: "2" })).not.toBe(base);
-    expect(poolFeedSig({ ...row, wa_status: "eligible" })).not.toBe(base);
+    expect(poolFeedSig({ ...row, check_status: "eligible" })).not.toBe(base);
     expect(poolFeedSig({ ...row, status: "bad" })).not.toBe(base);
   });
 
@@ -41,7 +41,7 @@ describe("poolFeedSig", () => {
     const base = poolFeedSig(row);
     expect(poolFeedSig({ ...row, extra_col: "whatever" })).toBe(base);
     expect(poolFeedSig({ cookies: "c_user=1;", twofakey: "K", uid: "1" })).toBe(
-      poolFeedSig({ cookies: "c_user=1;", twofakey: "K", uid: "1", wa_status: null, status: undefined }),
+      poolFeedSig({ cookies: "c_user=1;", twofakey: "K", uid: "1", check_status: null, status: undefined }),
     );
   });
 });

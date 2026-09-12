@@ -30,7 +30,7 @@ describe("isDataRow", () => {
   });
 
   it("still drops wa-only rows (no account identity, not user data)", () => {
-    expect(isDataRow({ cookies: "", twofakey: "", wa_status: "eligible" }, COLS)).toBe(false);
+    expect(isDataRow({ cookies: "", twofakey: "", check_status: "eligible" }, COLS)).toBe(false);
   });
 });
 

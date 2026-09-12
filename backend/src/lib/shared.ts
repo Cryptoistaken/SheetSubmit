@@ -32,7 +32,7 @@ export function poolRowKey(r: Row): string {
 
 /** Pool-relevant content signature — the only fields pool copies depend on. */
 export function poolFeedSig(r: Row): string {
-  return JSON.stringify([r.cookies ?? "", r.twofakey ?? "", r.uid ?? "", r.wa_status ?? "", r.status ?? ""]);
+  return JSON.stringify([r.cookies ?? "", r.twofakey ?? "", r.uid ?? "", r.check_status ?? r.wa_status ?? "", r.status ?? ""]);
 }
 
 /** Subset of newRows the pool actually needs: new keys + changed content.

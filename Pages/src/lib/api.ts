@@ -222,7 +222,7 @@ export interface PoolDiagRow { password: string; pool_id: string; state: string;
 export interface PoolDiagFound {
   fileId: string; idx: number; ownerId: string; archived: boolean;
   fileName: string | null; password: string; preset: string | null; poolEnabled: boolean;
-  uid: string; status: string; has2fa: boolean; wa: string; key: string; live: boolean; pool: string | null;
+  uid: string; status: string; has2fa: boolean; check: string; key: string; live: boolean; pool: string | null;
 }
 export interface PoolDiagBlocked { reason: string; password: string | null; pool_id: string | null; src_uid: string | null; hold_id: string | null; ts: number }
 export interface PoolDiag {
@@ -314,8 +314,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ uids }),
     }),
-  getWaCache: (uids: string[]) =>
-    request<{ cache: Record<string, unknown> }>(`/wa/cache?uids=${encodeURIComponent(uids.join(","))}`),
+  getCheckCache: (uids: string[]) =>
+    request<{ cache: Record<string, unknown> }>(`/fb/cache?uids=${encodeURIComponent(uids.join(","))}`),
 
   adminStats: () => request<{ totalUsers: number; totalFiles: number }>("/admin/stats"),
   adminUsers: () => request<AdminUser[]>("/admin/users"),

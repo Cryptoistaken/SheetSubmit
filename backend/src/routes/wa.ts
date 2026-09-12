@@ -10,9 +10,10 @@ const UA_IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebK
 const extractPages = (html: string) => { const pages: { name: string; type: string }[] = []; const re = /"identity_type":"FB_ADDITIONAL_PROFILE"[^}]*?"full_name":"([^"]+)"[^}]*?"identity_type_string":"([^"]+)"/g; let m: RegExpExecArray | null; while ((m = re.exec(html))) pages.push({ name: m[1], type: m[2] }); return pages; };
 const extractLinkedNumber = (html: string) => html.match(/"__typename":"XFBFXSettingsContactPoint"[^}]*?"navigation_row_subtitle":"([^"]+)"/)?.[1] ?? null;
 const challenged = (html: string) => html.includes("checkpointSubmitButton") || html.includes("m_login_email") || /checkpoint|login_attempt|force_login/i.test(html.substring(0, 5000));
-const waCacheKey = (uid: string, cuser: string) => `wa:${uid}:${cuser}`;
-async function waCacheSet(env: Env, uid: string, cuser: string, v: unknown) { await rpc(env.INDEX, "global", "metaSet", { k: waCacheKey(uid, cuser), v }).catch(() => {}); }
-async function waCacheDel(env: Env, uid: string, cuser: string) { await rpc(env.INDEX, "global", "metaDel", { k: waCacheKey(uid, cuser) }).catch(() => {}); }
+const checkCacheKey = (uid: string, cuser: string) => `check:${uid}:${cuser}`;
+const legacyCacheKey = (uid: string, cuser: string) => `wa:${uid}:${cuser}`;
+async function checkCacheSet(env: Env, uid: string, cuser: string, v: unknown) { await rpc(env.INDEX, "global", "metaSet", { k: checkCacheKey(uid, cuser), v }).catch(() => {}); }
+async function checkCacheDel(env: Env, uid: string, cuser: string) { await rpc(env.INDEX, "global", "metaDelMany", { keys: [checkCacheKey(uid, cuser), legacyCacheKey(uid, cuser)] }).catch(() => {}); }
 
 wa.post("/fb/check", async (c) => {
   const body = await c.req.json<{ uids?: unknown[] }>().catch(() => ({}) as { uids?: unknown[] }); const uids = [...new Set(Array.isArray(body.uids) ? body.uids.map(String).filter((v) => /^\d{5,20}$/.test(v)) : [])].slice(0, 500); if (!uids.length) return c.json({ error: "Invalid UIDs" }, 400); const checkUrl = c.env.CHECK_URL || "https://check.fb.tools/api/check/facebook"; try { const r = await fetch(checkUrl, { method: "POST", headers: { accept: "application/x-ndjson", "content-type": "application/json" }, signal: AbortSignal.timeout(10_000), body: JSON.stringify({ inputData: uids, userLang: "en", checkFriends: false }) }); if (!r.ok) return c.json({ error: `Upstream returned ${r.status}` }, 502); const text = await r.text(); if (text.length > 1_000_000) return c.json({ error: "Upstream response too large" }, 502); const valid: string[] = [], dead: string[] = []; for (const line of text.split("\n")) { try { const x = JSON.parse(line.slice(line.indexOf("{"))); const uid = String(x.data?.uid || x.data?.account || ""); if (!uid) continue; (x.data?.status?.name === "valid" ? valid : dead).push(uid); } catch {} } if (dead.length) { await rpc(c.env.POOLS, "global", "markDead", { dead }).catch((e: any) => console.error("markDead failed", e?.message ?? e)); void publishKeyStates(dead); } return c.json({ valid, dead, uncertain: [] }); } catch { return c.json({ error: "Service unavailable" }, 502); } });
@@ -29,7 +30,7 @@ wa.post("/fb/page-simple", async (c) => {
     const pages = extractPages(html);
     const linkedNumber = extractLinkedNumber(html);
     const cuser = cookie.match(/c_user=(\d+)/)?.[1] || "";
-    if (cuser) { if (pages.length) await waCacheSet(c.env, c.get("uid"), cuser, { status: "eligible", banReason: null, pageName: pages[0].name, linkedNumber, error: null, ts: Date.now() }); else await waCacheDel(c.env, c.get("uid"), cuser); }
+    if (cuser) { if (pages.length) await checkCacheSet(c.env, c.get("uid"), cuser, { status: "eligible", banReason: null, pageName: pages[0].name, linkedNumber, error: null, ts: Date.now() }); else await checkCacheDel(c.env, c.get("uid"), cuser); }
     return c.json({ eligible: pages.length > 0, banReason: null, linkedNumber, pageName: pages[0]?.name ?? null, error: null });
   } catch (e) { return fail(/abort|timeout|network|fetch/i.test(e instanceof Error ? `${e.name} ${e.message}` : String(e)) ? "Service unavailable" : String(e instanceof Error ? e.message : e)); }
 });
@@ -61,24 +62,26 @@ wa.post("/fb/page-advanced", async (c) => {
     const elig = json?.data?.xfb_is_page_eligible_for_wa_link;
     if (elig === undefined || elig === null) return fail("Unexpected response structure");
     const result = { eligible: elig?.is_eligible === true, banReason: elig?.ban_reason || null, linkedNumber: elig?.page_whatsapp_number || null, error: null };
-    if (cuser) { if (result.eligible) await waCacheSet(c.env, c.get("uid"), cuser, { status: "eligible", banReason: result.banReason, error: null, ts: Date.now() }); else if (result.error === null) await waCacheDel(c.env, c.get("uid"), cuser); }
+    if (cuser) { if (result.eligible) await checkCacheSet(c.env, c.get("uid"), cuser, { status: "eligible", banReason: result.banReason, error: null, ts: Date.now() }); else if (result.error === null) await checkCacheDel(c.env, c.get("uid"), cuser); }
     return c.json(result);
   } catch (e) { return fail(/abort|timeout|network|fetch/i.test(e instanceof Error ? `${e.name} ${e.message}` : String(e)) ? "Service unavailable" : String(e instanceof Error ? e.message : e)); }
 });
 
-// ponytail: WA cache served only when fresh+eligible, mirroring backend purge-on-read
-const WA_TTL = 86400_000;
-wa.get("/wa/cache", async (c) => {
+// check cache served only when fresh+eligible, mirroring backend purge-on-read
+// (reads check: keys with legacy wa: fallback; purges both prefixes when stale)
+const CHECK_TTL = 86400_000;
+wa.get("/fb/cache", async (c) => {
   const uids = (c.req.query("uids") || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 1000);
   const uid = c.get("uid");
-  const raw: Record<string, any> = uids.length ? await rpc(c.env.INDEX, "global", "metaGetMany", { keys: uids.map((u) => waCacheKey(uid, u)) }).catch(() => ({})) : {};
+  const keys = uids.flatMap((u) => [checkCacheKey(uid, u), legacyCacheKey(uid, u)]);
+  const raw: Record<string, any> = uids.length ? await rpc(c.env.INDEX, "global", "metaGetMany", { keys }).catch(() => ({})) : {};
   const cache: Record<string, unknown> = {};
   const stale: string[] = [];
   for (const u of uids) {
-    const v = raw[waCacheKey(uid, u)];
-    if (!v || v.status !== "eligible" || (v.ts && Date.now() - v.ts > WA_TTL)) { if (v) stale.push(u); continue; }
+    const v = raw[checkCacheKey(uid, u)] ?? raw[legacyCacheKey(uid, u)];
+    if (!v || v.status !== "eligible" || (v.ts && Date.now() - v.ts > CHECK_TTL)) { if (v) stale.push(u); continue; }
     cache[u] = { status: v.status ?? null, banReason: v.banReason ?? null, error: v.error ?? null, pageName: v.pageName ?? null, linkedNumber: v.linkedNumber ?? null, ts: v.ts ?? null };
   }
-  if (stale.length) await rpc(c.env.INDEX, "global", "metaDelMany", { keys: stale.map((u) => waCacheKey(uid, u)) }).catch(() => {});
+  if (stale.length) await rpc(c.env.INDEX, "global", "metaDelMany", { keys: stale.flatMap((u) => [checkCacheKey(uid, u), legacyCacheKey(uid, u)]) }).catch(() => {});
   return c.json({ cache });
 });

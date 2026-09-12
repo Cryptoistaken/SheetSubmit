@@ -66,7 +66,7 @@ async function buildPoolMessage(r: PoolCountRow, rows: PoolCountRow[]): Promise<
 
 /** One pool's current counts snapshot — same shape the rooms receive, so the
  * 15s poll fallback heals worker-side drift (wa/page sweeps only touch
- * data.wa_status, which moves the page verified split but no counters). */
+ * data.check_status, which moves the page verified split but no counters). */
 export async function poolCountsSnapshot(password: string, pool: string): Promise<PoolCountsMessage | null> {
   try {
     const all = (await rpc("pools", "global", "summaryAll", {})) as any[];

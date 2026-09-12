@@ -43,7 +43,7 @@ async function run() {
   console.log(`PASS /auth/me uid=${me.body.id} admin=${me.body.isAdmin}`);
 
   const [rows2fa, rowsCookie, rowsPage] = await Promise.all([loadRows("2fa.xlsx"), loadRows("cookie.xlsx"), loadRows("Page.xlsx")]);
-  rowsPage.forEach((r) => { r.wa_status = "eligible"; }); // strict routing: page pool only accepts wa-eligible (blue dot) rows
+  rowsPage.forEach((r) => { r.check_status = "eligible"; }); // strict routing: page pool only accepts check-eligible (blue dot) rows
   assert(rows2fa.length && rowsCookie.length && rowsPage.length, "fixtures: 2fa.xlsx / cookie.xlsx / Page.xlsx must each have rows");
   const [fa, fc, fp] = [tag(rows2fa, 0), tag(rowsCookie, 1), tag(rowsPage, 2)];
   const uniquePerPassword = new Set([...fa, ...fc, ...fp].map((r) => r.uid)).size;

@@ -1,10 +1,10 @@
 // Background worker — self-contained (Bun + Postgres, same DB as backend).
 // Jobs (each on its own interval, sequential):
 //   1. held-uid-check      — pending-approval monitoring: held rows whose UID checks dead → state='dead' (never paid)
-//   2. page-advanced       — WhatsApp eligibility for rows without eligible wa_status (writes data.wa_status + wa:{uid}:{cuser} cache)
-//   3. page-simple         — FB pages scrape for rows without wa_status (sets eligible + page name + cache)
+//   2. page-advanced       — WhatsApp eligibility for rows without eligible check_status (writes data.check_status + check:{uid}:{cuser} cache)
+//   3. page-simple         — FB pages scrape for rows without check_status (sets eligible + page name + cache)
 // Available pool rows are NOT background-monitored — they are killed by user checks (POST /fb/check → markDead).
-// Env: DATABASE_URL, REDIS_URL (optional), CHECK_URL, HELD_INTERVAL_MS (10min), WA_INTERVAL_MS (30min), PAGE_INTERVAL_MS (30min)
+// Env: DATABASE_URL, REDIS_URL (optional), CHECK_URL, HELD_INTERVAL_MS (10min), ADVANCED_INTERVAL_MS (30min, falls back to WA_INTERVAL_MS), SIMPLE_INTERVAL_MS (30min, falls back to PAGE_INTERVAL_MS)
 import postgres from "postgres";
 import { closeRedis, redisDel, redisDelPrefix, publishLiveEvent } from "./redis";
 
@@ -90,16 +90,18 @@ async function pageSimple(cookie: string): Promise<{ eligible: boolean; pageName
 
 type PoolRowRef = { password: string; pool_id: string; row_key: string; src_uid: string | null; cookies: string; cuser: string };
 async function rowsNeedingCheck(kind: "advanced" | "simple", limit: number): Promise<PoolRowRef[]> {
+  // COALESCE keeps pre-rename rows (wa_status/waStatus) readable; new writes use check_status.
   const q = kind === "advanced"
-    ? db`SELECT password,pool_id,row_key,src_uid,data->>'cookies' AS cookies FROM pool_rows WHERE state='available' AND data->>'cookies' LIKE '%c_user=%' AND (data->>'wa_status' IS NULL OR (data->>'wa_status' NOT IN ('eligible','ineligible'))) LIMIT ${limit}`
-    : db`SELECT password,pool_id,row_key,src_uid,data->>'cookies' AS cookies FROM pool_rows WHERE state='available' AND data->>'cookies' LIKE '%c_user=%' AND (data->>'wa_status' IS NULL OR data->>'wa_status' <> 'eligible') LIMIT ${limit}`;
+    ? db`SELECT password,pool_id,row_key,src_uid,data->>'cookies' AS cookies FROM pool_rows WHERE state='available' AND data->>'cookies' LIKE '%c_user=%' AND (COALESCE(data->>'check_status', data->>'wa_status', data->>'waStatus', '') IS NULL OR (COALESCE(data->>'check_status', data->>'wa_status', data->>'waStatus', '') NOT IN ('eligible','ineligible'))) LIMIT ${limit}`
+    : db`SELECT password,pool_id,row_key,src_uid,data->>'cookies' AS cookies FROM pool_rows WHERE state='available' AND data->>'cookies' LIKE '%c_user=%' AND (COALESCE(data->>'check_status', data->>'wa_status', data->>'waStatus', '') IS NULL OR COALESCE(data->>'check_status', data->>'wa_status', data->>'waStatus', '') <> 'eligible') LIMIT ${limit}`;
   const rows: any[] = await q;
   return rows.map((r) => ({ password: r.password, pool_id: r.pool_id, row_key: r.row_key, src_uid: r.src_uid, cookies: r.cookies, cuser: String(r.cookies || "").match(/c_user=(\d+)/)?.[1] || "" })).filter((r) => r.cuser);
 }
 async function applyResult(r: PoolRowRef, patch: Record<string, unknown>, cache: Record<string, unknown> | null) {
-  await db`UPDATE pool_rows SET data=data||${j(patch)}::jsonb WHERE password=${r.password} AND pool_id=${r.pool_id} AND row_key=${r.row_key}`;
+  // writes converge on check_*: merge the patch, then drop legacy wa_* keys
+  await db`UPDATE pool_rows SET data=(data||${j(patch)}::jsonb) - 'wa_status' - 'wa_ban_reason' - 'wa_page_name' - 'wa_linked_number' - 'waStatus' WHERE password=${r.password} AND pool_id=${r.pool_id} AND row_key=${r.row_key}`;
   await redisDelPrefix("ss:rpc:pools:");
-  if (r.src_uid && cache) { const k = `wa:${r.src_uid}:${r.cuser}`; await db`INSERT INTO meta(k,v) VALUES(${k},${j({ ...cache, ts: Date.now() })}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`; void redisDel(`ss:meta:${k}`); }
+  if (r.src_uid && cache) { const k = `check:${r.src_uid}:${r.cuser}`; await db`INSERT INTO meta(k,v) VALUES(${k},${j({ ...cache, ts: Date.now() })}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`; void redisDel(`ss:meta:${k}`); }
 }
 
 async function sweepAdvanced(limit: number) {
@@ -107,11 +109,11 @@ async function sweepAdvanced(limit: number) {
   for (const r of rows) {
     const res = await pageAdvanced(r.cookies);
     if (res.error) continue; // challenges/rate limits: leave row untouched, retry next sweep
-    const patch: Record<string, unknown> = { wa_status: res.eligible ? "eligible" : "ineligible" };
-    if (res.banReason) patch.wa_ban_reason = res.banReason;
-    if (res.linkedNumber) patch.wa_linked_number = res.linkedNumber;
+    const patch: Record<string, unknown> = { check_status: res.eligible ? "eligible" : "ineligible" };
+    if (res.banReason) patch.check_ban_reason = res.banReason;
+    if (res.linkedNumber) patch.check_linked_number = res.linkedNumber;
     await applyResult(r, patch, res.eligible ? { status: "eligible", banReason: res.banReason, error: null } : null);
-    if (!res.eligible && r.src_uid) { const k = `wa:${r.src_uid}:${r.cuser}`; await db`DELETE FROM meta WHERE k=${k}`; void redisDel(`ss:meta:${k}`); }
+    if (!res.eligible && r.src_uid) { const ck = `check:${r.src_uid}:${r.cuser}`, lk = `wa:${r.src_uid}:${r.cuser}`; await db`DELETE FROM meta WHERE k IN (${ck},${lk})`; void redisDel(`ss:meta:${ck}`); void redisDel(`ss:meta:${lk}`); }
   }
   console.log(`[worker:page-advanced] swept ${rows.length} row(s)`);
 }
@@ -122,16 +124,17 @@ async function sweepSimple(limit: number) {
     const res = await pageSimple(r.cookies);
     if (res.error) continue;
     if (!res.eligible) continue; // simple finds nothing → leave for advanced to decide
-    await applyResult(r, { wa_status: "eligible", ...(res.pageName ? { wa_page_name: res.pageName } : {}), ...(res.linkedNumber ? { wa_linked_number: res.linkedNumber } : {}) }, { status: "eligible", banReason: null, error: null, pageName: res.pageName, linkedNumber: res.linkedNumber });
+    await applyResult(r, { check_status: "eligible", ...(res.pageName ? { check_page_name: res.pageName } : {}), ...(res.linkedNumber ? { check_linked_number: res.linkedNumber } : {}) }, { status: "eligible", banReason: null, error: null, pageName: res.pageName, linkedNumber: res.linkedNumber });
   }
   console.log(`[worker:page-simple] swept ${rows.length} row(s)`);
 }
 
 const interval = (k: string, def: number) => Math.max(60_000, Number(Bun.env[k]) || def);
+const intervalNew = (nk: string, ok: string, def: number) => Math.max(60_000, Number(Bun.env[nk] ?? Bun.env[ok]) || def);
 const JOBS = [
   { name: "held-uid-check", every: interval("HELD_INTERVAL_MS", 600_000), limit: Number(Bun.env.UID_BATCH) || 500, run: (n: number) => checkUids(n) },
-  { name: "page-simple", every: interval("PAGE_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepSimple(n) },
-  { name: "page-advanced", every: interval("WA_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepAdvanced(n) },
+  { name: "page-simple", every: intervalNew("SIMPLE_INTERVAL_MS", "PAGE_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepSimple(n) },
+  { name: "page-advanced", every: intervalNew("ADVANCED_INTERVAL_MS", "WA_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepAdvanced(n) },
 ];
 
 // backend owns schema bootstrap (worker's build context has no /backend) — if tables are missing,

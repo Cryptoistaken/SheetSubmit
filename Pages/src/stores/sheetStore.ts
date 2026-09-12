@@ -9,14 +9,15 @@ import {
   type CrossDupEntry,
   type Row,
   type SheetFile,
-  type WaCacheEntry,
+  type CheckCacheEntry,
 } from "@/lib/types";
+import { checkStatusOf, applyCheckFields, CHECK_FIELDS } from "@/lib/check";
 import { getFileBehavior, isPageFile } from "@/features/filetypes";
 import { toast } from "@/lib/toast";
 import { mirrorPending, snapshotFile, applyMirror, idbGet, idbDel, mirrorKey, snapKey } from "@/lib/idb";
 import type { JournalMirror, FileSnapshot } from "@/lib/idb";
 import { vibrate } from "@/lib/utils";
-import { hydrateWaCache } from "@/lib/xlsx";
+import { hydrateCheckCache } from "@/lib/xlsx";
 import { poolRowKey } from "@/lib/live";
 import { IS_DESKTOP } from "@/lib/device";
 import { getCachedTOTP } from "@/features/filetypes/totp";
@@ -384,7 +385,7 @@ export interface SheetState {
     logs: unknown[];
     label: string;
     crossInfo: CrossDupEntry[];
-    wa: { status: string; banReason?: string | null } | null;
+    check: { status: string; banReason?: string | null } | null;
   } | null;
   toggleVisibleCol: (colKey: string) => void;
   runCheck: (triggerRowIdx?: number) => Promise<void>;
@@ -1797,15 +1798,15 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
             (e) => e.fileId !== s.fileId,
           )
         : [];
-    const wa = row.wa_status
+    const check = checkStatusOf(row)
       ? {
-          status: row.wa_status,
-          banReason: row.wa_ban_reason ?? undefined,
-          pageName: row.wa_page_name ?? undefined,
-          linkedNumber: row.wa_linked_number ?? undefined,
+          status: checkStatusOf(row),
+          banReason: (row.check_ban_reason ?? row.wa_ban_reason) ?? undefined,
+          pageName: (row.check_page_name ?? row.wa_page_name) ?? undefined,
+          linkedNumber: (row.check_linked_number ?? row.wa_linked_number) ?? undefined,
         }
       : null;
-    return { logs: result.logs, label: result.label, crossInfo, wa };
+    return { logs: result.logs, label: result.label, crossInfo, check };
   },
 
   toggleVisibleCol: (colKey) => {
@@ -2026,7 +2027,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       const live = row as Row & { _dead?: boolean; _hold?: boolean; _approved?: boolean };
       if (live._dead || live._hold || live._approved) return;
       if (!row.cookies || !/c_user=\d+/.test(row.cookies)) return;
-      if (row.wa_status === "eligible") return;
+      if (checkStatusOf(row) === "eligible") return;
       const cuser = extractCUser(row.cookies);
       if (mode === "auto-simple" && cuser && ledger) {
         const ent = ledger[cuser];
@@ -2040,6 +2041,23 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       checkRows.push({ row, uid, idx, cuser });
     });
     if (!checkRows.length) return;
+    // mergeSnap prefers the sweep result, then legacy wa_* keys, then the live
+    // row — with !== undefined so an explicit null (checked, no ban) survives
+    const mergeSnap = (base: Row, snap: Row): Row => {
+      const b = base as Record<string, unknown>;
+      const p = snap as Record<string, unknown>;
+      const pick = (nk: string, lk: string): unknown =>
+        p[nk] !== undefined ? p[nk] : p[lk] !== undefined ? p[lk] : b[nk] !== undefined ? b[nk] : b[lk];
+      return applyCheckFields(
+        { ...base },
+        {
+          status: (p.check_status ?? p.wa_status ?? b.check_status ?? b.wa_status) as unknown,
+          banReason: pick("check_ban_reason", "wa_ban_reason"),
+          pageName: pick("check_page_name", "wa_page_name"),
+          linkedNumber: pick("check_linked_number", "wa_linked_number"),
+        },
+      );
+    };
     const writeBack = () => {
       const cur = get();
       if (cur.rows === rowsRef) return rows.slice();
@@ -2048,13 +2066,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         if (!processed.has(i)) return r;
         const snap = rows[i];
         if (!snap) return r;
-        return {
-          ...r,
-          wa_status: snap.wa_status ?? r.wa_status,
-          wa_ban_reason: snap.wa_ban_reason !== undefined ? snap.wa_ban_reason : r.wa_ban_reason,
-          wa_page_name: snap.wa_page_name !== undefined ? snap.wa_page_name : r.wa_page_name,
-          wa_linked_number: snap.wa_linked_number !== undefined ? snap.wa_linked_number : r.wa_linked_number,
-        };
+        return mergeSnap(r, snap);
       });
     };
     const pushInstant = (idx: number, newRow: Row) => {
@@ -2063,22 +2075,22 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       const curRow = cur.rows[idx];
       if (!curRow) return;
       const out = cur.rows.slice();
-      out[idx] = { ...curRow, wa_status: newRow.wa_status, wa_ban_reason: newRow.wa_ban_reason, wa_page_name: newRow.wa_page_name, wa_linked_number: newRow.wa_linked_number };
+      out[idx] = mergeSnap(curRow, newRow);
       set({ rows: out });
     };
-    const isCleanMiss = (wa: unknown): boolean => {
-      if (!wa || typeof wa !== "object") return false;
-      const o = wa as Record<string, unknown>;
+    const isCleanMiss = (res: unknown): boolean => {
+      if (!res || typeof res !== "object") return false;
+      const o = res as Record<string, unknown>;
       return o.eligible === false && (o.error == null);
     };
     // cache-first for every mode, including manual-advanced
     {
-      let cache: Record<string, WaCacheEntry> = {};
+      let cache: Record<string, CheckCacheEntry> = {};
       try {
         const uids = checkRows.map((w) => w.uid).filter((u): u is string => !!u);
         if (uids.length) {
-          const res = await api.getWaCache(uids);
-          cache = (res?.cache as Record<string, WaCacheEntry>) ?? {};
+          const res = await api.getCheckCache(uids);
+          cache = (res?.cache as Record<string, CheckCacheEntry>) ?? {};
         }
       } catch {
         cache = {};
@@ -2088,10 +2100,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       for (const w of checkRows) {
         const hit = w.uid ? cache[w.uid] : null;
         if (hit && hit.status === "eligible") {
-          w.row.wa_status = "eligible";
-          w.row.wa_ban_reason = hit.banReason ?? null;
-          w.row.wa_page_name = hit.pageName ?? null;
-          w.row.wa_linked_number = hit.linkedNumber ?? null;
+          applyCheckFields(w.row, { status: "eligible", banReason: hit.banReason ?? null, pageName: hit.pageName ?? null, linkedNumber: hit.linkedNumber ?? null });
           if (ledger && w.cuser && ledger[w.cuser]) {
             delete ledger[w.cuser];
             ledgerDirty = true;
@@ -2109,13 +2118,12 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         if (get().fileId !== sweepFileId) return;
         const finalRows = writeBack();
         const cur = get();
-        const WA_FIELDS = ["wa_status", "wa_ban_reason", "wa_page_name", "wa_linked_number"] as const;
         const changed: { rowIdx: number; cols: Record<string, string> }[] = [];
         finalRows.forEach((row, i) => {
           const prev = s.rows[i] ?? {};
           const cols: Record<string, string> = {};
           let diff = false;
-          for (const k of WA_FIELDS) {
+          for (const k of CHECK_FIELDS) {
             const pv = (prev as Record<string, unknown>)[k];
             const nv = (row as Record<string, unknown>)[k];
             if (pv !== nv) {
@@ -2147,39 +2155,36 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       await Promise.all(
         batch.map(async (i) => {
           const w = live[i];
-          const apply = (wa_status: string, wa_ban_reason?: string | null, wa_page_name?: string | null, wa_linked_number?: string | null) => {
-            const newRow: Row = { ...w.row, wa_status };
-            if (wa_ban_reason !== undefined) newRow.wa_ban_reason = wa_ban_reason;
-            if (wa_page_name !== undefined) newRow.wa_page_name = wa_page_name;
-            if (wa_linked_number !== undefined) newRow.wa_linked_number = wa_linked_number;
+          const apply = (check_status: string, check_ban_reason?: string | null, check_page_name?: string | null, check_linked_number?: string | null) => {
+            const newRow: Row = applyCheckFields({ ...w.row }, { status: check_status, banReason: check_ban_reason, pageName: check_page_name, linkedNumber: check_linked_number });
             rows[w.idx] = newRow;
             live[i] = { ...w, row: newRow };
             pushInstant(w.idx, newRow);
           };
           if (mode === "manual-advanced") {
             try {
-              const wa = (await api.pageAdvanced(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
-              if (wa && wa.eligible === true) apply("eligible", wa.banReason ?? null, undefined, wa.linkedNumber ?? null);
-              else if (wa && wa.error) apply("error", wa.banReason ?? null, undefined, wa.linkedNumber ?? null);
-              else if (isCleanMiss(wa)) apply("ineligible", wa ? (wa as unknown as { banReason?: string | null }).banReason ?? null : null, undefined, wa ? (wa as unknown as { linkedNumber?: string | null }).linkedNumber ?? null : null);
-              else apply("error", wa ? (wa as unknown as { banReason?: string | null }).banReason ?? null : null, undefined, wa ? (wa as unknown as { linkedNumber?: string | null }).linkedNumber ?? null : null);
+              const res = (await api.pageAdvanced(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
+              if (res && res.eligible === true) apply("eligible", res.banReason ?? null, undefined, res.linkedNumber ?? null);
+              else if (res && res.error) apply("error", res.banReason ?? null, undefined, res.linkedNumber ?? null);
+              else if (isCleanMiss(res)) apply("ineligible", res ? (res as unknown as { banReason?: string | null }).banReason ?? null : null, undefined, res ? (res as unknown as { linkedNumber?: string | null }).linkedNumber ?? null : null);
+              else apply("error", res ? (res as unknown as { banReason?: string | null }).banReason ?? null : null, undefined, res ? (res as unknown as { linkedNumber?: string | null }).linkedNumber ?? null : null);
             } catch {
-              if (s.rows[w.idx]?.wa_status === "eligible") return;
+              if (checkStatusOf(s.rows[w.idx]) === "eligible") return;
               apply("error");
             }
             return;
           }
           // simple modes (auto-simple | manual-simple)
           try {
-            const wa = (await api.pageSimple(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null } | null;
-            if (wa && wa.eligible === true) {
-              apply("eligible", null, wa.pageName ?? null, wa.linkedNumber ?? null);
+            const res = (await api.pageSimple(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null } | null;
+            if (res && res.eligible === true) {
+              apply("eligible", null, res.pageName ?? null, res.linkedNumber ?? null);
               if (ledger && w.cuser && ledger[w.cuser]) {
                 delete ledger[w.cuser];
                 ledgerDirty = true;
               }
-            } else if (isCleanMiss(wa)) {
-              apply("ineligible", (wa as unknown as { banReason?: string | null }).banReason ?? null, (wa as unknown as { pageName?: string | null }).pageName ?? null, (wa as unknown as { linkedNumber?: string | null }).linkedNumber ?? null);
+            } else if (isCleanMiss(res)) {
+              apply("ineligible", (res as unknown as { banReason?: string | null }).banReason ?? null, (res as unknown as { pageName?: string | null }).pageName ?? null, (res as unknown as { linkedNumber?: string | null }).linkedNumber ?? null);
               if (ledger && w.cuser) {
                 const ent = ledger[w.cuser] ?? { s: 0, a: false };
                 // avoid double-count for same cuser in same sweep
@@ -2193,7 +2198,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
                   try {
                     const wa2 = (await api.pageAdvanced(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
                     if (wa2 && wa2.eligible === true) {
-                      const newRow: Row = { ...rows[w.idx], wa_status: "eligible", wa_ban_reason: wa2.banReason ?? null, wa_linked_number: wa2.linkedNumber ?? null };
+                      const newRow: Row = applyCheckFields({ ...rows[w.idx] }, { status: "eligible", banReason: wa2.banReason ?? null, linkedNumber: wa2.linkedNumber ?? null });
                       rows[w.idx] = newRow;
                       live[i] = { ...w, row: newRow };
                       pushInstant(w.idx, newRow);
@@ -2205,7 +2210,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
                       ledgerDirty = true;
                       apply("ineligible", wa2.banReason ?? null, undefined, wa2.linkedNumber ?? null);
                       // keep ineligible status from page miss, mark exhausted
-                      rows[w.idx] = { ...rows[w.idx], wa_status: "ineligible", wa_ban_reason: wa2.banReason ?? null, wa_linked_number: wa2.linkedNumber ?? null };
+                      rows[w.idx] = applyCheckFields({ ...rows[w.idx] }, { status: "ineligible", banReason: wa2.banReason ?? null, linkedNumber: wa2.linkedNumber ?? null });
                       pushInstant(w.idx, rows[w.idx]);
                     } else if (isCleanMiss(wa2)) {
                       ent.a = true;
@@ -2216,7 +2221,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
                       ledger[w.cuser] = ent;
                       ledgerDirty = true;
                       if (wa2 && wa2.error) {
-                        rows[w.idx] = { ...rows[w.idx], wa_status: "error" };
+                        rows[w.idx] = applyCheckFields({ ...rows[w.idx] }, { status: "error" });
                         pushInstant(w.idx, rows[w.idx]);
                       }
                     }
@@ -2232,9 +2237,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
               }
             } else {
               // null/undefined or error response -> error, no ledger increment
-              const ban = (wa as unknown as { banReason?: string | null } | null)?.banReason ?? null;
-              const pn = (wa as unknown as { pageName?: string | null } | null)?.pageName ?? null;
-              const ln = (wa as unknown as { linkedNumber?: string | null } | null)?.linkedNumber ?? null;
+              const ban = (res as unknown as { banReason?: string | null } | null)?.banReason ?? null;
+              const pn = (res as unknown as { pageName?: string | null } | null)?.pageName ?? null;
+              const ln = (res as unknown as { linkedNumber?: string | null } | null)?.linkedNumber ?? null;
               apply("error", ban, pn, ln);
             }
           } catch {
@@ -2255,13 +2260,12 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (get().fileId !== sweepFileId) return;
     const finalRows = writeBack();
     const cur = get();
-    const WA_FIELDS = ["wa_status", "wa_ban_reason", "wa_page_name", "wa_linked_number"] as const;
     const changed: { rowIdx: number; cols: Record<string, string> }[] = [];
     finalRows.forEach((row, i) => {
       const prev = s.rows[i] ?? {};
       const cols: Record<string, string> = {};
       let diff = false;
-      for (const k of WA_FIELDS) {
+      for (const k of CHECK_FIELDS) {
         const pv = (prev as Record<string, unknown>)[k];
         const nv = (row as Record<string, unknown>)[k];
         if (pv !== nv) {
@@ -2464,18 +2468,19 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (incoming.some((r) => r.cookies || r.uid)) {
       get().maybeAutoCheck(null, "cookies");
     }
-    // Cache-only WA hydration for re-uploaded rows: the new-file path hydrates
-    // before createFile, but in-sheet uploads land with blank wa_status until a
+    // Cache-only check hydration for re-uploaded rows: the new-file path hydrates
+    // before createFile, but in-sheet uploads land with blank check_status until a
     // live simple runs (green instead of blue). Fill cached eligibility
     // instantly — no live checks here, maybeAutoCheck above handles those.
     const hydrateFileId = s.fileId;
     const hydrateSnap = incoming.map((r) => ({ ...r }));
     void (async () => {
-      await hydrateWaCache(hydrateSnap);
+      await hydrateCheckCache(hydrateSnap);
       if (!hydrateFileId || get().fileId !== hydrateFileId) return;
       const hits = new Map<string, Row>();
       hydrateSnap.forEach((row) => {
-        if (row.wa_status !== "eligible" && row.wa_status !== "ineligible") return;
+        const st = checkStatusOf(row);
+        if (st !== "eligible" && st !== "ineligible") return;
         let uid = row.uid ?? null;
         if (!uid && row.cookies) {
           const m = row.cookies.match(/c_user=(\d+)/);
@@ -2486,7 +2491,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       if (!hits.size) return;
       const cur = get();
       if (cur.fileId !== hydrateFileId) return;
-      const WA_FIELDS = ["wa_status", "wa_ban_reason", "wa_page_name", "wa_linked_number"] as const;
       let touched = false;
       const finalRows = cur.rows.map((row) => {
         let uid = row.uid ?? null;
@@ -2496,21 +2500,24 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         }
         const hit = uid ? hits.get(uid) : undefined;
         if (!hit) return row;
+        const same = (nk: "check_ban_reason" | "check_page_name" | "check_linked_number", lk: "wa_ban_reason" | "wa_page_name" | "wa_linked_number") =>
+          ((row as Record<string, unknown>)[nk] ?? (row as Record<string, unknown>)[lk] ?? null) ===
+          ((hit as Record<string, unknown>)[nk] ?? (hit as Record<string, unknown>)[lk] ?? null);
         if (
-          row.wa_status === hit.wa_status &&
-          row.wa_ban_reason === hit.wa_ban_reason &&
-          row.wa_page_name === hit.wa_page_name &&
-          row.wa_linked_number === hit.wa_linked_number
+          checkStatusOf(row) === checkStatusOf(hit) &&
+          same("check_ban_reason", "wa_ban_reason") &&
+          same("check_page_name", "wa_page_name") &&
+          same("check_linked_number", "wa_linked_number")
         ) return row;
         touched = true;
-        return { ...row, wa_status: hit.wa_status, wa_ban_reason: hit.wa_ban_reason, wa_page_name: hit.wa_page_name, wa_linked_number: hit.wa_linked_number };
+        return applyCheckFields({ ...row }, { status: hit.check_status ?? hit.wa_status, banReason: hit.check_ban_reason ?? hit.wa_ban_reason, pageName: hit.check_page_name ?? hit.wa_page_name, linkedNumber: hit.check_linked_number ?? hit.wa_linked_number });
       });
       if (!touched) return;
       const changed: { rowIdx: number; cols: Record<string, string> }[] = [];
       finalRows.forEach((row, i) => {
         if (row === cur.rows[i]) return;
         const cols: Record<string, string> = {};
-        for (const k of WA_FIELDS) {
+        for (const k of CHECK_FIELDS) {
           const nv = (row as Record<string, unknown>)[k];
           cols[k] = nv == null ? "" : String(nv);
         }

@@ -1,4 +1,5 @@
 import type { Row } from "@/lib/types";
+import { applyCheckFields } from "@/lib/check";
 import { toast } from "@/lib/toast";
 import { api } from "@/lib/api";
 import { getCachedTOTP } from "./totp";
@@ -38,10 +39,7 @@ export function createFbCookieBehavior() {
         if (uid) {
           if (!row.uid) row.uid = uid;
         } else {
-          row.wa_status = "";
-          row.wa_ban_reason = null;
-          row.wa_page_name = null;
-          row.wa_linked_number = null;
+          applyCheckFields(row, { status: "", banReason: null, pageName: null, linkedNumber: null });
         }
       }
 
@@ -90,10 +88,7 @@ export function createFbCookieBehavior() {
           r.row.status = "good";
         } else if (data.dead.indexOf(r.uid) !== -1) {
           r.row.status = "bad";
-          r.row.wa_status = "";
-          r.row.wa_ban_reason = null;
-          r.row.wa_page_name = null;
-          r.row.wa_linked_number = null;
+          applyCheckFields(r.row, { status: "", banReason: null, pageName: null, linkedNumber: null });
         } else {
           r.row.status = "pending";
         }

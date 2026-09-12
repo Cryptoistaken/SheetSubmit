@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 
-// xlsx.ts imports `@/lib/api` (for hydrateWaCache). Mock it before importing so
+// xlsx.ts imports `@/lib/api` (for hydrateCheckCache). Mock it before importing so
 // nothing touches `window.APP_CONFIG`.
 mock.module("@/lib/api", () => ({
   api: {},

@@ -14,7 +14,7 @@ const fbCheckResults: { valid: string[]; dead: string[]; uncertain: string[] } =
 mock.module("@/lib/api", () => ({
   api: {
     fbCheck: async () => ({ ...fbCheckResults }),
-    getWaCache: async () => ({ cache: {} }),
+    getCheckCache: async () => ({ cache: {} }),
   },
 }));
 
@@ -90,7 +90,7 @@ describe("validateCell", () => {
   });
 
   it("passes unknown columns through", () => {
-    expect(validateCell("wa_status", "anything").valid).toBe(true);
+    expect(validateCell("check_status", "anything").valid).toBe(true);
   });
 });
 
@@ -184,14 +184,14 @@ describe("fb-cookie onCellChange", () => {
     expect(c2.rows[0].uid).toBe("manual");
   });
 
-  it("clears WA state when cookies lose their c_user", () => {
+  it("clears check state when cookies lose their c_user", () => {
     const c = ctx({
-      rows: [{ cookies: "xs=1", twofakey: "", uid: "", wa_status: "eligible", wa_ban_reason: "x", wa_page_name: "p", wa_linked_number: "n" }],
+      rows: [{ cookies: "xs=1", twofakey: "", uid: "", check_status: "eligible", check_ban_reason: "x", check_page_name: "p", check_linked_number: "n" }],
       value: "xs=1",
     });
     behavior.onCellChange(c);
-    expect(c.rows[0].wa_status).toBe("");
-    expect(c.rows[0].wa_page_name).toBeNull();
+    expect(c.rows[0].check_status).toBe("");
+    expect(c.rows[0].check_page_name).toBeNull();
   });
 
   it("flags invalid 2fa keys in the invalid set", () => {
@@ -244,14 +244,14 @@ describe("fb-cookie checkAccounts", () => {
     fbCheckResults.uncertain = ["3"];
     const rows = [
       { cookies: "c_user=1;", uid: "", status: "" },
-      { cookies: "c_user=2;", uid: "", status: "", wa_status: "eligible", wa_ban_reason: "b", wa_page_name: "p", wa_linked_number: "n" },
+      { cookies: "c_user=2;", uid: "", status: "", check_status: "eligible", check_ban_reason: "b", check_page_name: "p", check_linked_number: "n" },
       { cookies: "c_user=3;", uid: "", status: "" },
     ];
     const res = await behavior.checkAccounts(rows);
     expect(res).toEqual({ total: 3, valid: 1, dead: 1, uncertain: 1 });
     expect(rows[0].status).toBe("good");
     expect(rows[1].status).toBe("bad");
-    expect(rows[1].wa_status).toBe("");
+    expect(rows[1].check_status).toBe("");
     expect(rows[2].status).toBe("pending");
   });
 

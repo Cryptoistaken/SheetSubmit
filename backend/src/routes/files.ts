@@ -18,7 +18,7 @@ export const ldCounts = (rows: Row[]) => {
   for (const r of rows) {
     const s = String(r.status || "").toLowerCase();
     if (s === "good") live++; else if (s === "bad") dead++;
-    if (String(r.wa_status || "").toLowerCase() === "eligible") page++;
+    if (String((r as any).check_status ?? (r as any).wa_status ?? "").toLowerCase() === "eligible") page++;
     const k = String(r.uid || "").trim() || (String(r.cookies || "").match(/c_user=(\d+)/)?.[1] ?? "");
     if (k) keys.set(k, (keys.get(k) || 0) + 1);
   }

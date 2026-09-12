@@ -1,6 +1,7 @@
 import { api } from "./api";
+import { applyCheckFields } from "./check";
 import { exportCellValue, FILE_TYPE_DEFS } from "./types";
-import type { ColumnDef, FileType, Row, WaCacheEntry } from "./types";
+import type { ColumnDef, FileType, Row, CheckCacheEntry } from "./types";
 
 export function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -342,9 +343,9 @@ export async function downloadCustomRows(
   return true;
 }
 
-/** Pre-fill wa_status/wa_ban_reason from the ss:wa: cache (old hydrateWaCache,
- * used on home xlsx import so imported rows show WA state without re-checking). */
-export async function hydrateWaCache(rows: Row[]): Promise<void> {
+/** Pre-fill check_status/check_ban_reason from the check cache (used on home
+ * xlsx import so imported rows show check state without re-checking). */
+export async function hydrateCheckCache(rows: Row[]): Promise<void> {
   try {
     if (!rows || !rows.length) return;
     const uidArr: string[] = [];
@@ -357,8 +358,8 @@ export async function hydrateWaCache(rows: Row[]): Promise<void> {
       if (uid) uidArr.push(uid);
     });
     if (!uidArr.length) return;
-    const res = await api.getWaCache(uidArr);
-    const cache = (res?.cache ?? {}) as Record<string, WaCacheEntry>;
+    const res = await api.getCheckCache(uidArr);
+    const cache = (res?.cache ?? {}) as Record<string, CheckCacheEntry>;
     rows.forEach((row) => {
       let uid = row.uid ?? null;
       if (!uid && row.cookies) {
@@ -368,10 +369,7 @@ export async function hydrateWaCache(rows: Row[]): Promise<void> {
       const hit = uid ? cache[uid] : null;
       if (!hit || !hit.status) return;
       if (hit.status === "eligible" || hit.status === "ineligible") {
-        row.wa_status = hit.status;
-        row.wa_ban_reason = hit.banReason ?? null;
-        row.wa_page_name = hit.pageName ?? null;
-        row.wa_linked_number = hit.linkedNumber ?? null;
+        applyCheckFields(row, { status: hit.status, banReason: hit.banReason ?? null, pageName: hit.pageName ?? null, linkedNumber: hit.linkedNumber ?? null });
       }
     });
   } catch {

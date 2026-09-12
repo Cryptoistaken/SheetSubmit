@@ -1,4 +1,5 @@
 import type { ColumnDef, Row } from "./types";
+import { checkStatusOf } from "./check";
 
 export interface DownloadOpt {
   key: string;
@@ -15,8 +16,8 @@ export function buildDownloadOpts(rows: Row[], columns: ColumnDef[]): DownloadOp
   const dlCols = columns.filter((c) => c.key !== "uid");
   let total = 0;
   let active = 0;
-  let wa = 0;
-  let activeNoWa = 0;
+  let eligible = 0;
+  let activeNoCheck = 0;
   let combo = 0;
   let onlyCookie = 0;
   let only2fa = 0;
@@ -25,8 +26,8 @@ export function buildDownloadOpts(rows: Row[], columns: ColumnDef[]): DownloadOp
     const empty = dlCols.every((c) => !row[c.key]);
     if (!empty) total++;
     if (row.status === "good") active++;
-    if (row.wa_status === "eligible") wa++;
-    if (row.status === "good" && row.wa_status !== "eligible") activeNoWa++;
+    if (checkStatusOf(row) === "eligible") eligible++;
+    if (row.status === "good" && checkStatusOf(row) !== "eligible") activeNoCheck++;
     if (row.status === "good" && row.cookies && row.twofakey) combo++;
     if (row.status === "good" && row.cookies && !row.twofakey) onlyCookie++;
     if (row.status === "good" && row.twofakey && !row.cookies) only2fa++;
@@ -67,19 +68,19 @@ export function buildDownloadOpts(rows: Row[], columns: ColumnDef[]): DownloadOp
       suffix: " (Only 2FA)",
     },
     {
-      key: "wa",
+      key: "check",
       label: "FB Page",
       className: "btn-blue",
-      count: wa,
-      filter: (r) => r.wa_status === "eligible",
+      count: eligible,
+      filter: (r) => checkStatusOf(r) === "eligible",
       suffix: " (FB Page)",
     },
     {
-      key: "valid-nwa",
+      key: "valid-nocheck",
       label: "No Page",
       className: "btn-amber",
-      count: activeNoWa,
-      filter: (r) => r.status === "good" && r.wa_status !== "eligible",
+      count: activeNoCheck,
+      filter: (r) => r.status === "good" && checkStatusOf(r) !== "eligible",
       suffix: " (No Page)",
     },
     {

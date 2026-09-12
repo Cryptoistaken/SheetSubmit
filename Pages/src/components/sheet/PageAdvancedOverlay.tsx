@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useSheetStore } from "@/stores/sheetStore";
+import { checkStatusOf } from "@/lib/check";
 import { useToast } from "@/lib/toast";
 import { useModalA11y } from "@/hooks/useModalA11y";
 
@@ -14,8 +15,8 @@ export default function PageAdvancedOverlay({ open, onClose }: { open: boolean; 
   const [doneCounts, setDoneCounts] = useState<{ page: number; noPage: number } | null>(null);
 
   const isSkipped = (r: Record<string, unknown>) => Boolean(r._dead || r._hold || r._approved);
-  const pageCount = useMemo(() => rows.filter((r) => r.wa_status === "eligible").length, [rows]);
-  const noPageCount = useMemo(() => rows.filter((r) => r.status === "good" && r.wa_status !== "eligible" && !!r.cookies && /c_user=\d+/.test(r.cookies) && !isSkipped(r as unknown as Record<string, unknown>)).length, [rows]);
+  const pageCount = useMemo(() => rows.filter((r) => checkStatusOf(r) === "eligible").length, [rows]);
+  const noPageCount = useMemo(() => rows.filter((r) => r.status === "good" && checkStatusOf(r) !== "eligible" && !!r.cookies && /c_user=\d+/.test(r.cookies) && !isSkipped(r as unknown as Record<string, unknown>)).length, [rows]);
 
   const handleClose = () => { setCustom(false); setSel(new Set()); setPhase("idle"); setTargets([]); setDoneCounts(null); setRunning(false); onClose(); };
   const modalRef = useModalA11y(open, handleClose);
@@ -35,7 +36,7 @@ export default function PageAdvancedOverlay({ open, onClose }: { open: boolean; 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await useSheetStore.getState().runPageChecksAdvanced(filter as any);
       const after = useSheetStore.getState().rows;
-      const page = idxs.filter((i) => after[i]?.wa_status === "eligible").length;
+      const page = idxs.filter((i) => checkStatusOf(after[i]) === "eligible").length;
       setDoneCounts({ page, noPage: idxs.length - page });
       setPhase("done");
     } catch {
@@ -65,13 +66,13 @@ export default function PageAdvancedOverlay({ open, onClose }: { open: boolean; 
                 const uid = (r.uid as string) || (r.cookies?.match(/c_user=(\d+)/)?.[1] ?? "") || "";
                 const isChecking = phase === "checking";
                 // live dot from store: eligible monochrome, else gray; checking = pulse
-                const dotBg = isChecking ? "var(--grad-page)" : r.wa_status === "eligible" ? "var(--grad-page)" : "var(--text3)";
-                const dotCls = isChecking ? "row-dot d-spin" : r.wa_status === "eligible" ? "row-dot d-blue" : "row-dot";
+                const dotBg = isChecking ? "var(--grad-page)" : checkStatusOf(r) === "eligible" ? "var(--grad-page)" : "var(--text3)";
+                const dotCls = isChecking ? "row-dot d-spin" : checkStatusOf(r) === "eligible" ? "row-dot d-blue" : "row-dot";
                 return (
                   <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: "var(--r)", background: "var(--bg2)", border: "1px solid var(--border)" }}>
                     <span className={dotCls} aria-hidden="true" style={isChecking ? undefined : { background: dotBg, width: 8, height: 8 }} />
                     <span style={{ fontSize: 12, fontFamily: "var(--mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{uid ? uid.slice(-8) : r.cookies?.slice(-12) ?? ""} #{idx + 1}</span>
-                    <span style={{ fontSize: 11, color: isChecking ? "var(--blue)" : r.wa_status === "eligible" ? "var(--green)" : "var(--text3)", flexShrink: 0 }}>{isChecking ? "…" : r.wa_status === "eligible" ? "page" : "no page"}</span>
+                    <span style={{ fontSize: 11, color: isChecking ? "var(--blue)" : checkStatusOf(r) === "eligible" ? "var(--green)" : "var(--text3)", flexShrink: 0 }}>{isChecking ? "…" : checkStatusOf(r) === "eligible" ? "page" : "no page"}</span>
                   </div>
                 );
               })}
@@ -81,8 +82,8 @@ export default function PageAdvancedOverlay({ open, onClose }: { open: boolean; 
           </>
         ) : !custom ? (
           <>
-            <button className="download-opt-btn btn-blue" disabled={running} onClick={() => void run((r) => (r as Record<string,string>).wa_status === "eligible", pageCount ? "Checking Page rows…" : "No matching rows found.")}>Page <span className="opt-count">{pageCount}</span></button>
-            <button className="download-opt-btn btn-amber" disabled={running} onClick={() => void run((r) => (r as Record<string,string>).status === "good" && (r as Record<string,string>).wa_status !== "eligible" && !!(r as Record<string,string>).cookies && !isSkipped(r), noPageCount ? "Checking rows…" : "No rows found.")}>No Page <span className="opt-count">{noPageCount}</span></button>
+            <button className="download-opt-btn btn-blue" disabled={running} onClick={() => void run((r) => checkStatusOf(r as unknown as Record<string, unknown>) === "eligible", pageCount ? "Checking Page rows…" : "No matching rows found.")}>Page <span className="opt-count">{pageCount}</span></button>
+            <button className="download-opt-btn btn-amber" disabled={running} onClick={() => void run((r) => (r as Record<string,string>).status === "good" && checkStatusOf(r as unknown as Record<string, unknown>) !== "eligible" && !!(r as Record<string,string>).cookies && !isSkipped(r), noPageCount ? "Checking rows…" : "No rows found.")}>No Page <span className="opt-count">{noPageCount}</span></button>
             <button className="download-opt-btn primary" disabled={running} onClick={() => setCustom(true)} style={{ background: "var(--text)", borderColor: "transparent", color: "var(--bg)" }}>Custom <span className="opt-count">{rows.filter((r) => !!r.cookies && /c_user=\d+/.test(r.cookies)).length}</span></button>
             <button className="download-opt-cancel" onClick={handleClose}>Cancel</button>
           </>
@@ -93,7 +94,7 @@ export default function PageAdvancedOverlay({ open, onClose }: { open: boolean; 
                 if (!r.cookies || !/c_user=\d+/.test(r.cookies)) return null;
                 const checked = sel.has(idx);
                 const uid = (r.uid as string) || (r.cookies.match(/c_user=(\d+)/)?.[1] ?? "") || "";
-                const dot = r.wa_status === "eligible" ? "var(--grad-page)" : r.wa_status === "ineligible" ? "var(--text3)" : r.status === "good" ? "var(--grad-live)" : "var(--border2)";
+                const dot = checkStatusOf(r) === "eligible" ? "var(--grad-page)" : (r.check_status ?? r.wa_status) === "ineligible" ? "var(--text3)" : r.status === "good" ? "var(--grad-live)" : "var(--border2)";
                 return (
                   <div key={idx} role="checkbox" aria-checked={checked} tabIndex={0} onClick={() => toggle(idx)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(idx); } }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: "var(--r)", cursor: "pointer", background: checked ? "var(--blue-light)" : "transparent", border: checked ? "1px solid var(--blue)" : "1px solid transparent" }}>
                     <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: 2.5, border: "1.5px solid " + (checked ? "var(--blue)" : "var(--border2)"), background: checked ? "var(--grad-page)" : "var(--bg)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--bg)", fontSize: 10 }}>{checked ? "✓" : ""}</span>

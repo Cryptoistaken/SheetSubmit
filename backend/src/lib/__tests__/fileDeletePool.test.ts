@@ -93,7 +93,7 @@ describe.skipIf(!hasDb)("file delete pool ops", () => {
 // pool read filters out rows whose src_file_id belongs to an archived file
 // (NULL src_file_id rows stay), the add op refuses feeds for archived files
 // (mopping available husks — closes the feed/archive race), and re-uploaded
-// rows recover page-eligibility from the WA cache without ever overwriting an
+// rows recover page-eligibility from the check cache without ever overwriting an
 // explicit value or blanking stored eligibility on touch.
 const PX = "archpool";
 const FARCH = `farch-${run}-a`, FLIVE = `farch-${run}-live`, UAX = `uax-${run}`;
@@ -117,8 +117,8 @@ async function seedArch() {
       (${PX},'cookies_2fa',${KA3},${{} as any},'available',NULL,NULL,${now},NULL),
       (${PX},'cookies_2fa',${KA4},${{} as any},'claimed',${UAX},${FARCH},${now},${`hh-${run}`}),
       (${PX},'cookies_2fa',${KL4},${{} as any},'claimed',${UAX},${FLIVE},${now},${`hh-${run}`}),
-      (${PX},'page',${PA1},${{ wa_status: "eligible" } as any},'available',${UAX},${FARCH},${now},NULL),
-      (${PX},'page',${PA2},${{ wa_status: "eligible" } as any},'available',${UAX},${FLIVE},${now},NULL)`;
+      (${PX},'page',${PA1},${{ check_status: "eligible" } as any},'available',${UAX},${FARCH},${now},NULL),
+      (${PX},'page',${PA2},${{ check_status: "eligible" } as any},'available',${UAX},${FLIVE},${now},NULL)`;
   } finally {
     await sql.end();
   }
@@ -130,7 +130,7 @@ async function cleanupArch() {
   try {
     await sql`DELETE FROM pool_rows WHERE password=${PX}`;
     await sql`DELETE FROM file_index WHERE file_id IN (${FARCH},${FLIVE})`;
-    await sql`DELETE FROM meta WHERE k IN (${`wa:${UAX}:${CU1}`},${`wa:${UAX}:${CU2}`},${`wa:${UAX}:${CU4}`})`;
+    await sql`DELETE FROM meta WHERE k IN (${`check:${UAX}:${CU1}`},${`wa:${UAX}:${CU1}`},${`check:${UAX}:${CU2}`},${`wa:${UAX}:${CU2}`},${`check:${UAX}:${CU3}`},${`wa:${UAX}:${CU3}`},${`check:${UAX}:${CU4}`},${`wa:${UAX}:${CU4}`})`;
     await sql`DELETE FROM users WHERE user_id=${UAX}`;
   } finally {
     await sql.end();
@@ -183,32 +183,34 @@ describe.skipIf(!hasDb)("archived files never surface in pools", () => {
     expect(vc).toMatchObject({ totalAvailable: 1, verified: 1, unverified: 0 }); // PA1 husk gone, live PA2 stays
   }, 30_000);
 
-  it("add stamps blank wa_status from the WA cache, never overwrites explicit or stale", async () => {
+  it("add stamps blank check_status from the check cache (incl. legacy wa: fallback), never overwrites explicit or stale", async () => {
     await cleanupArch();
     await seedArch();
     const fresh = Date.now();
-    await repository("index", "global", "metaSet", { k: `wa:${UAX}:${CU1}`, v: { status: "eligible", banReason: null, pageName: "TestPage", linkedNumber: "8801", ts: fresh } });
+    await repository("index", "global", "metaSet", { k: `check:${UAX}:${CU1}`, v: { status: "eligible", banReason: null, pageName: "TestPage", linkedNumber: "8801", ts: fresh } });
     await repository("index", "global", "metaSet", { k: `wa:${UAX}:${CU2}`, v: { status: "eligible", ts: fresh } });
-    await repository("index", "global", "metaSet", { k: `wa:${UAX}:${CU4}`, v: { status: "eligible", ts: fresh - 2 * 86400000 } });
+    await repository("index", "global", "metaSet", { k: `wa:${UAX}:${CU3}`, v: { status: "eligible", ts: fresh } });
+    await repository("index", "global", "metaSet", { k: `check:${UAX}:${CU4}`, v: { status: "eligible", ts: fresh - 2 * 86400000 } });
     const out = (await repository("pools", PX, "add", {
-      rows: [feedRow(CU1), feedRow(CU2, { wa_status: "ineligible" }), feedRow(CU4)], srcUid: UAX, srcFileId: FLIVE, preset: "page",
+      rows: [feedRow(CU1), feedRow(CU2, { check_status: "ineligible" }), feedRow(CU3), feedRow(CU4)], srcUid: UAX, srcFileId: FLIVE, preset: "page",
     })) as { added: number };
-    expect(out.added).toBe(3);
-    const d = (await repository("pools", PX, "detail", { pool: "page" })) as { _key: string; wa_status?: string; wa_page_name?: string; wa_linked_number?: string }[];
+    expect(out.added).toBe(4);
+    const d = (await repository("pools", PX, "detail", { pool: "page" })) as { _key: string; check_status?: string; check_page_name?: string; check_linked_number?: string }[];
     const byKey = new Map(d.map((r) => [r._key, r]));
-    expect(byKey.get(CU1)).toMatchObject({ wa_status: "eligible", wa_page_name: "TestPage", wa_linked_number: "8801" });
-    expect(byKey.get(CU2)?.wa_status).toBe("ineligible");
-    expect(byKey.get(CU4)?.wa_status ?? "").not.toBe("eligible");
+    expect(byKey.get(CU1)).toMatchObject({ check_status: "eligible", check_page_name: "TestPage", check_linked_number: "8801" });
+    expect(byKey.get(CU2)?.check_status).toBe("ineligible"); // explicit value beats even a fresh cache hit
+    expect(byKey.get(CU3)?.check_status).toBe("eligible"); // legacy wa: cache key still fills new fields
+    expect(byKey.get(CU4)?.check_status ?? "").not.toBe("eligible");
   }, 30_000);
 
   it("touch keeps stored eligibility when a re-feed arrives blank", async () => {
     await cleanupArch();
     await seedArch();
-    const first = (await repository("pools", PX, "add", { rows: [feedRow(CU3, { wa_status: "eligible" })], srcUid: UAX, srcFileId: FLIVE, preset: "page" })) as { added: number };
+    const first = (await repository("pools", PX, "add", { rows: [feedRow(CU3, { check_status: "eligible" })], srcUid: UAX, srcFileId: FLIVE, preset: "page" })) as { added: number };
     expect(first.added).toBe(1);
     const second = (await repository("pools", PX, "add", { rows: [feedRow(CU3)], srcUid: UAX, srcFileId: FLIVE, preset: "page" })) as { added: number };
     expect(second.added).toBe(0);
-    const d = (await repository("pools", PX, "detail", { pool: "page" })) as { _key: string; wa_status?: string }[];
-    expect(d.find((r) => r._key === CU3)?.wa_status).toBe("eligible");
+    const d = (await repository("pools", PX, "detail", { pool: "page" })) as { _key: string; check_status?: string }[];
+    expect(d.find((r) => r._key === CU3)?.check_status).toBe("eligible");
   }, 30_000);
 });

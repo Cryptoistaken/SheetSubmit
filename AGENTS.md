@@ -26,7 +26,7 @@
                         #   PERFORMANCE.md — 62-entry inventory covering 64 handlers + per-API perf plan (bottleneck → fix → est. speedup), 002_perf.sql migration sketch, rollout order
   worker/                 # Railway background worker service (Bun + postgres.js + standard redis client + Postgres, self-contained; Root Directory=worker in dashboard, railway.toml deploy config w/ /health check, single replica). Set optional REDIS_URL alongside DATABASE_URL. /health listens on $PORT and fixed :3000 (backend dials worker.railway.internal:3000), hostname 0.0.0.0. Jobs on own intervals (30s tick, single-leader advisory lock):
                         #   held-uid-check first (pending-approval monitoring: dead UIDs → pool_rows.state='dead' + pool_blocked dead entry, default 10min + ss:live relay so watching sheets update; NO background check of available rows — they die via user checks, see wa.ts markDead),
-                        #   page-simple + page-advanced (eligibility sweeps → data.wa_status + wa:{src_uid}:{cuser} meta cache, 30min; env keeps PAGE_INTERVAL_MS + WA_INTERVAL_MS names). Env: DATABASE_URL, CHECK_URL, *_INTERVAL_MS, UID_BATCH, CHECK_BATCH, WORKER_TOKEN (gates /health error detail); .env template
+                        #   page-simple + page-advanced (eligibility sweeps → data.check_status + check:{src_uid}:{cuser} meta cache, 30min; legacy wa_status/wa: keys dual-read, new writes converge on check_*). Env: DATABASE_URL, CHECK_URL, SIMPLE_INTERVAL_MS (fallback PAGE_INTERVAL_MS), ADVANCED_INTERVAL_MS (fallback WA_INTERVAL_MS), UID_BATCH, CHECK_BATCH, WORKER_TOKEN (gates /health error detail); .env template
                         #   + HTTP GET /health (port 3000): {ok, startedAt, uptimeMs, jobs:[{name, everyMs, lastRunAt, lastRunAgoMs, lastError}]} — backend proxies it at GET /api/worker/health
   Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev; native Telegram Login SDK uses BotFather client 8667114953 and CI GitHub Maven credentials
@@ -39,7 +39,7 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 2.0.30; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.31; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
                       #   GET /api/worker/health (proxies worker.railway.internal:3000/health — proves worker connectivity from the public URL),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -83,8 +83,8 @@ src/routes/admin.ts       # admin stats, users, files and moderation routes
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist (feeds pools like the owner route),
                       #   DELETE /file/:id (admin archive) wipes the file's pool rows like owner archive; admin archive-restore re-feeds pools like owner restore,
                       #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore (re-feeds pools), DELETE /user/:id/archive/:fileId (held-block + pool wipe like owner purge), DELETE /user/:id (wipes all files + all their pool rows)
-src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows + live-publishes them), /fb/page-simple (cookie → owns FB pages?), /fb/page-advanced (cookie → WA-link eligible?) and WA cache routes
-                      #   GET /wa/cache?uids= (meta-backed, eligible-only, 24h TTL)
+src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows + live-publishes them), /fb/page-simple (cookie → owns FB pages?), /fb/page-advanced (cookie → WA-link eligible?) and check-cache routes
+                      #   GET /fb/cache?uids= (meta-backed, eligible-only, 24h TTL; check: keys with wa: fallback)
 src/routes/bot.ts         # Telegram webhook and bot routes
 src/routes/testAuth.ts    # TEST-ONLY POST /api/test/login (mints ss_session for Playwright e2e; 404s unless ALLOW_TEST_AUTH=1 — never set on prod)
 src/routes/agent.ts     # DEV-ONLY /api/agent/* introspection (health, routes, stats, worker proxy, config presence flags — read-only, no secret values; 404s unless ALLOW_AGENT_ACCESS=1 + AGENT_TOKEN — never set on prod)
@@ -134,7 +134,7 @@ public/config.js          # injected at runtime: window.APP_CONFIG={apiBase:""}
 public/sw.js              # service worker (chunk-error reload)
 functions/api/[[path]].ts # Pages Functions proxy → BACKEND_URL
 functions/webhook/[[path]].ts
-lib/__tests__/customDownload.test.ts, split.test.ts, idb.test.ts (IDB outbox mirror/snapshot/replay), rowguard.test.ts (isDataRow/replaceCapMessage/isPersistConflict + destructive call-site guards), xlsx.test.ts (build/parse round-trip, importXlsx, buildDownloadOpts, hydrateWaCache), apiClient.test.ts (request contract via mocked fetch)
+lib/__tests__/customDownload.test.ts, split.test.ts, idb.test.ts (IDB outbox mirror/snapshot/replay), rowguard.test.ts (isDataRow/replaceCapMessage/isPersistConflict + destructive call-site guards), xlsx.test.ts (build/parse round-trip, importXlsx, buildDownloadOpts, hydrateCheckCache), check.test.ts (checkStatusOf legacy fallback, applyCheckFields convergence, CHECK_FIELDS), apiClient.test.ts (request contract via mocked fetch)
 stores/__tests__/sheetStore.test.ts (api mock mirrors the live lib/api.ts surface — no version-history stubs; that API is gone), sheetStoreOffline.test.ts (offline snapshot open), liveStates.test.ts (flag patches), lib/__tests__/live.test.ts (stream client + poolRowKey)
 ```
 

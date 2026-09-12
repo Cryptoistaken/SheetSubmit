@@ -15,7 +15,7 @@ const check = (label: string, cond: boolean) => { console.log(`${cond ? "PASS" :
 const quirk = (text: string) => { console.log(`QUIRK ${text}`); quirks.push(text); };
 
 const uid = () => `${runId}${String(++seq).padStart(3, "0")}`;
-const row = (u: string, o: { two?: boolean; status?: string; eligible?: boolean } = {}) => ({ cookies: `datr=x${u}; c_user=${u}; xs=t`, twofakey: o.two ? "AAAA AAAA AAA" : "", uid: u, ...(o.status ? { status: o.status } : {}), ...(o.eligible ? { wa_status: "eligible" } : {}) });
+const row = (u: string, o: { two?: boolean; status?: string; eligible?: boolean } = {}) => ({ cookies: `datr=x${u}; c_user=${u}; xs=t`, twofakey: o.two ? "AAAA AAAA AAA" : "", uid: u, ...(o.status ? { status: o.status } : {}), ...(o.eligible ? { check_status: "eligible" } : {}) });
 
 async function create(sess: string, name: string, rows: any[], preset: string) {
   const res = await request("/files", json({ name: `pipe-${runId}-${name}`, type: "fb_cookie", preset, poolKind: preset, password: PWD, poolEnabled: true, rows, dataCount: rows.length }), sess);

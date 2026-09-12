@@ -26,7 +26,7 @@ import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { COLUMN_PRESETS, fileTypeDef, FILE_PRESET_NAMES } from "@/lib/types";
 import type { FilePreset, FileType, SheetFile } from "@/lib/types";
-import { downloadXlsx, genId, hydrateWaCache, importXlsx } from "@/lib/xlsx";
+import { downloadXlsx, genId, hydrateCheckCache, importXlsx } from "@/lib/xlsx";
 import { useBubbleStore } from "@/stores/bubbleStore";
 import { AnalysisIcon, ApprovalsIcon, ArchiveIcon, CookieIcon, ObsidianIcon, PageIcon, PasswordIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, TwoFaIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
 
@@ -393,7 +393,7 @@ export default function HomePage() {
         return;
       }
       // ask file type first, then password — Love preselect if name contains Love
-      const cacheReady = hydrateWaCache(result.rows);
+      const cacheReady = hydrateCheckCache(result.rows);
       setUploadPending({ id: result.id, name: result.name, type: result.type, rows: result.rows, dataCount: result.dataCount, detectedPassword: result.detectedPassword, cacheReady });
       setTypePick({
         has2fa: result.rows.some((r) => String(r.twofakey ?? "").trim() !== ""),

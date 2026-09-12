@@ -313,7 +313,7 @@ export default function PoolsView() {
       <div id="pools-panel-pool">
       {/* switches */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
-          <div className="pool-switch stretch" style={{ background: "#eef2ff", borderColor: "#ddd6fe" }}>
+          <div className="pool-switch stretch" style={{ background: "var(--bg3)", borderColor: "var(--border)" }}>
             {PASSWORDS.map((p) => (
               <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>
             ))}
@@ -400,7 +400,7 @@ export default function PoolsView() {
           </div>
           <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${effectiveN} × ${fmtMoney(unitPrice, priceCurrency)} = ${fmtMoney(effectiveN * unitPrice, priceCurrency)}` : "-"}</div>
         </div>
-        <button type="button" className="btn btn-primary" disabled={downloading || (cur === "page" ? !(verified ? verified.verified > 0 : totals.available > 0) : !totals.available)} onClick={() => void doHoldConfirm()} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,112,243,.22)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? (cur === "page" ? "All verified" : "All") : poolQty} from {poolMeta.label}</button>
+        <button type="button" className="btn btn-primary" disabled={downloading || (cur === "page" ? !(verified ? verified.verified > 0 : totals.available > 0) : !totals.available)} onClick={() => void doHoldConfirm()} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,0,0,.25)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? (cur === "page" ? "All verified" : "All") : poolQty} from {poolMeta.label}</button>
         <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>{cur === "page" ? "Page pool is verified-only. Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles." : "Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles."}</div>
       </div>
 

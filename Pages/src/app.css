@@ -16,10 +16,10 @@
     --border: #eaeaea;
     --border2: var(--input);
 
-    /* Brand — Vercel — aliased where byte-identical */
+    /* Brand — monochrome (black/white per theme, was Vercel blue) */
     --blue: var(--ring);
-    --blue-dark: #0060df;
-    --blue-light: rgba(0, 112, 243, 0.08);
+    --blue-dark: #333333;
+    --blue-light: var(--sel-bg);
     --red: var(--destructive);
     --red-bg: rgba(238, 0, 0, 0.08);
     --green: #229342;
@@ -43,7 +43,7 @@
     /* Indicator gradients — light theme (dark overrides below) */
     --grad-rows: linear-gradient(#525252 0%, #000000 100%);
     --grad-live: linear-gradient(color-mix(in srgb, #229342 55%, white) 0%, #229342 100%);
-    --grad-page: linear-gradient(oklch(0.640619 0.197547 260) 0%, oklch(0.5772 0.2324 260) 100%);
+    --grad-page: linear-gradient(#8a8a8a 0%, #000000 100%);
     --grad-dead: linear-gradient(#f87171 0%, #ee0000 100%);
     --grad-dup: linear-gradient(#fde047 0%, #eab308 100%);
     --grad-cross: linear-gradient(#fdba74 0%, #f6821f 100%);
@@ -98,7 +98,8 @@
     --text3: #666666;
     --border: #222222;
     --border2: var(--input);
-    --blue-light: rgba(0, 112, 243, 0.15);
+    --blue-dark: #ffffff;
+    --blue-light: var(--sel-bg);
     --red-bg: rgba(238, 0, 0, 0.15);
     --green-bg: rgba(34, 147, 66, 0.15);
     --yellow-bg: rgba(245, 166, 35, 0.15);
@@ -109,7 +110,7 @@
     --sel-border: rgba(255, 255, 255, 0.5);
     --grad-rows: #ededed;
     --grad-live: #229342;
-    --grad-page: #3b82f6;
+    --grad-page: #ededed;
     --grad-dead: #e33b2e;
     --grad-dup: #facc15;
     --grad-cross: #fb923c;
@@ -217,8 +218,8 @@ button, input, select, textarea {
     padding: 0 28px;
     border: none;
     border-radius: 22px;
-    background: var(--tg-blue);
-    color: #fff;
+    background: var(--text);
+    color: var(--bg);
     font-family: var(--sans);
     font-size: 16px;
     font-weight: 600;
@@ -251,7 +252,9 @@ button, input, select, textarea {
     height: 22px;
     margin-right: 4px;
     flex-shrink: 0;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none'%3E%3Cpath d='M2.81376 10.5943C7.36914 8.61002 10.406 7.30175 11.9245 6.66971C16.265 4.86489 17.1658 4.55143 17.7542 4.54094C17.8836 4.53874 18.1716 4.57072 18.3596 4.72281C18.5158 4.85097 18.5598 5.0243 18.5818 5.14588C18.6013 5.26745 18.6282 5.54454 18.6062 5.76083C18.3719 8.23138 17.3539 14.2266 16.8363 16.9938C16.619 18.1647 16.1869 18.5572 15.7695 18.5955C14.8613 18.679 14.1728 17.996 13.294 17.42C11.9196 16.5185 11.1433 15.9575 9.80793 15.0779C8.26505 14.0613 9.26594 13.5025 10.1448 12.5895C10.3743 12.3505 14.373 8.71426 14.4487 8.38445C14.4585 8.34319 14.4683 8.18939 14.3755 8.10834C14.2852 8.02705 14.1508 8.05488 14.0532 8.07685C13.914 8.1081 11.7193 9.56015 7.4618 12.4328C6.83928 12.861 6.27536 13.0697 5.76758 13.0587C5.21097 13.0468 4.13689 12.7433 3.3386 12.484C2.3621 12.166 1.5833 11.9977 1.65166 11.4575C1.68583 11.1763 2.07406 10.8884 2.81376 10.5943Z' fill='white'/%3E%3C/svg%3E") 50% 50% / 22px no-repeat;
+    background-color: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none'%3E%3Cpath d='M2.81376 10.5943C7.36914 8.61002 10.406 7.30175 11.9245 6.66971C16.265 4.86489 17.1658 4.55143 17.7542 4.54094C17.8836 4.53874 18.1716 4.57072 18.3596 4.72281C18.5158 4.85097 18.5598 5.0243 18.5818 5.14588C18.6013 5.26745 18.6282 5.54454 18.6062 5.76083C18.3719 8.23138 17.3539 14.2266 16.8363 16.9938C16.619 18.1647 16.1869 18.5572 15.7695 18.5955C14.8613 18.679 14.1728 17.996 13.294 17.42C11.9196 16.5185 11.1433 15.9575 9.80793 15.0779C8.26505 14.0613 9.26594 13.5025 10.1448 12.5895C10.3743 12.3505 14.373 8.71426 14.4487 8.38445C14.4585 8.34319 14.4683 8.18939 14.3755 8.10834C14.2852 8.02705 14.1508 8.05488 14.0532 8.07685C13.914 8.1081 11.7193 9.56015 7.4618 12.4328C6.83928 12.861 6.27536 13.0697 5.76758 13.0587C5.21097 13.0468 4.13689 12.7433 3.3386 12.484C2.3621 12.166 1.5833 11.9977 1.65166 11.4575C1.68583 11.1763 2.07406 10.8884 2.81376 10.5943Z' fill='white'/%3E%3C/svg%3E") 50% 50% / 22px no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none'%3E%3Cpath d='M2.81376 10.5943C7.36914 8.61002 10.406 7.30175 11.9245 6.66971C16.265 4.86489 17.1658 4.55143 17.7542 4.54094C17.8836 4.53874 18.1716 4.57072 18.3596 4.72281C18.5158 4.85097 18.5598 5.0243 18.5818 5.14588C18.6013 5.26745 18.6282 5.54454 18.6062 5.76083C18.3719 8.23138 17.3539 14.2266 16.8363 16.9938C16.619 18.1647 16.1869 18.5572 15.7695 18.5955C14.8613 18.679 14.1728 17.996 13.294 17.42C11.9196 16.5185 11.1433 15.9575 9.80793 15.0779C8.26505 14.0613 9.26594 13.5025 10.1448 12.5895C10.3743 12.3505 14.373 8.71426 14.4487 8.38445C14.4585 8.34319 14.4683 8.18939 14.3755 8.10834C14.2852 8.02705 14.1508 8.05488 14.0532 8.07685C13.914 8.1081 11.7193 9.56015 7.4618 12.4328C6.83928 12.861 6.27536 13.0697 5.76758 13.0587C5.21097 13.0468 4.13689 12.7433 3.3386 12.484C2.3621 12.166 1.5833 11.9977 1.65166 11.4575C1.68583 11.1763 2.07406 10.8884 2.81376 10.5943Z' fill='white'/%3E%3C/svg%3E") 50% 50% / 22px no-repeat;
 }
 .tg-login-button.is-loading {
     opacity: 0.65;
@@ -466,10 +469,10 @@ button, input, select, textarea {
     border-radius: 999px 0 0 999px;
 }
 .pill-balance:hover {
-    background: rgba(99,102,241,.08);
+    background: var(--bg3);
 }
 .pill-balance:focus-visible {
-    outline: 2px solid #6366f1;
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
 }
 .pill-avatar {
@@ -485,7 +488,7 @@ button, input, select, textarea {
     border-radius: 50%;
 }
 .pill-avatar:focus-visible {
-    outline: 2px solid #6366f1;
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
 }
 .pill-avatar .avatar-ring {
@@ -597,11 +600,11 @@ button, input, select, textarea {
 .home-tabs[role="toolbar"] .home-tab.sel-primary {
     background: var(--blue);
     border-color: transparent;
-    color: #fff;
+    color: var(--bg);
 }
 .home-tabs[role="toolbar"] .home-tab.sel-primary:hover {
     background: var(--blue-dark);
-    color: #fff;
+    color: var(--bg);
 }
 .home-tabs[role="toolbar"] .home-tab.sel-danger {
     background: var(--red);
@@ -1505,13 +1508,13 @@ button, input, select, textarea {
     white-space: nowrap;
 }
 .sel-btn.sel-btn-primary {
-    color: #fff;
+    color: var(--bg);
     background: var(--blue);
     border-color: var(--blue);
 }
 .sel-btn.sel-btn-primary:hover {
     background: var(--blue);
-    color: #fff;
+    color: var(--bg);
     filter: brightness(1.08);
 }
 .sel-btn:disabled {
@@ -1737,15 +1740,16 @@ table.grid td.dot-cell:hover {
    black cut across data cells only (never the number/dot cells). Row text
    follows the theme on every row. Dots always mean account status. */
 tr.row-hold.st-alive td.dc { background: var(--alive) !important; border-color: var(--alive) !important; color: var(--text) !important; }
-tr.row-hold.st-eligible td.dc { background: var(--blue) !important; border-color: var(--blue) !important; color: var(--text) !important; }
+tr.row-hold.st-eligible td.dc { background: var(--blue) !important; border-color: var(--blue) !important; color: var(--bg) !important; }
 tr.row-hold.st-dead td.dc { background: var(--dead) !important; border-color: var(--dead) !important; color: var(--text) !important; }
 tr.row-hold.st-dup td.dc { background: #ffa000 !important; border-color: #ffa000 !important; color: var(--text) !important; }
 tr.row-approved.st-alive td.dc, tr.row-approved.st-alive th.rh { background: var(--alive) !important; border-color: var(--alive) !important; color: var(--text) !important; }
-tr.row-approved.st-eligible td.dc, tr.row-approved.st-eligible th.rh { background: var(--blue) !important; border-color: var(--blue) !important; color: var(--text) !important; }
+tr.row-approved.st-eligible td.dc, tr.row-approved.st-eligible th.rh { background: var(--blue) !important; border-color: var(--blue) !important; color: var(--bg) !important; }
 tr.row-approved.st-dead td.dc, tr.row-approved.st-dead th.rh { background: var(--dead) !important; border-color: var(--dead) !important; color: var(--text) !important; }
 tr.row-approved.st-dup td.dc, tr.row-approved.st-dup th.rh { background: #ffa000 !important; border-color: #ffa000 !important; color: var(--text) !important; }
 tr.row-approved td.dc { position: relative; }
 tr.row-approved td.dc::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1.25px; background: #000; pointer-events: none; z-index: 1; }
+tr.row-approved.st-eligible td.dc::after { background: var(--bg); }
 /* cross-file duplicate: duplicated identity cells carry color + normal dot */
 .cell-xdup { background: var(--yellow) !important; border-color: var(--yellow) !important; color: var(--text) !important; }
 
@@ -1951,7 +1955,7 @@ th.rh:hover {
     content: '';
     width: 5px;
     height: 9px;
-    border: solid #fff;
+    border: solid var(--bg);
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);
     margin-top: -1px;
@@ -2051,7 +2055,7 @@ th.rh:hover {
     padding: 5px 10px;
     border: none;
     background: var(--blue);
-    color: #fff;
+    color: var(--bg);
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
@@ -2073,7 +2077,7 @@ th.rh:hover {
     justify-content: center;
     padding: 0 7px;
     background: var(--blue);
-    color: #fff;
+    color: var(--bg);
     border: none;
     cursor: pointer;
     transition: background 0.1s, transform 0.12s var(--ease-out);
@@ -2247,7 +2251,7 @@ body.is-touch table.grid td.dc { overflow: visible; }
 }
 
 .download-opt-btn.btn-blue {
-    color: #fff;
+    color: var(--bg);
     border-color: var(--blue);
     background: var(--blue);
 }

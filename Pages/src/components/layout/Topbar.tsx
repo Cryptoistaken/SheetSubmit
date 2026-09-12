@@ -277,7 +277,7 @@ export default function Topbar() {
         </DropdownMenuTrigger>
         </div>
         {user.isAdmin ? (
-          <span title="Verified" style={{ position: "absolute", right: 0, bottom: 0, width: 14, height: 14, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))", pointerEvents: "none" }}>
+          <span title="Verified" style={{ position: "absolute", right: 0, bottom: 0, width: 14, height: 14, display: "grid", placeItems: "center", color: "var(--text)", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))", pointerEvents: "none" }}>
             <VerifiedIcon size={14} />
           </span>
         ) : null}

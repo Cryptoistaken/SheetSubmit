@@ -176,7 +176,11 @@ export default function ArchiveView({
           <div className="home-tabs" role="toolbar" aria-label="Archived selection actions">
             <button type="button" className="home-tab sel-primary" aria-label={`Restore ${selected.size} files`} onClick={() => void restoreSelected()}>Restore</button>
             <button type="button" className="home-tab sel-danger" aria-label={`Delete ${selected.size} files forever`} onClick={() => void deleteSelected()}>Delete forever</button>
-            <button type="button" className="home-tab sel-primary" aria-label="Select all archived files" onClick={selectAll}>Select all</button>
+            {archived && archived.length > 0 && selected.size >= archived.length ? (
+              <button type="button" className="home-tab sel-primary" aria-label="Unselect all archived files" onClick={unselectAll}>Unselect all</button>
+            ) : (
+              <button type="button" className="home-tab sel-primary" aria-label="Select all archived files" onClick={selectAll}>Select all</button>
+            )}
           </div>,
           bar,
         );

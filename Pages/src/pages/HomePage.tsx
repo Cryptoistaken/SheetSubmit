@@ -396,7 +396,11 @@ export default function HomePage() {
         {tab === "files" && selectionMode ? (
           <div className="home-tabs" role="toolbar" aria-label="File selection actions">
               <button type="button" className="home-tab sel-danger" aria-label={`Move ${selected.size} files to archive`} onClick={() => void deleteSelected()}>Move to archive</button>
-            <button type="button" className="home-tab sel-primary" aria-label="Select all files" onClick={selectAll}>Select all</button>
+              {files && files.length > 0 && selected.size >= files.length ? (
+                <button type="button" className="home-tab sel-primary" aria-label="Unselect all files" onClick={unselectAll}>Unselect all</button>
+              ) : (
+                <button type="button" className="home-tab sel-primary" aria-label="Select all files" onClick={selectAll}>Select all</button>
+              )}
           </div>
         ) : tab === "archive" && archSel.size > 0 ? null : (
           <div className="home-tabs" role="tablist" aria-label="Home sections">

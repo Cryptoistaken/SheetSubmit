@@ -27,7 +27,7 @@ export default function ProfileAvatar({
         <AvatarFallback>{fallback}</AvatarFallback>
       </Avatar>
       {verified ? (
-        <span title="Verified" style={{ position: "absolute", right: -4, bottom: -4, width: badgeSize, height: badgeSize, display: "grid", placeItems: "center", color: "var(--text)", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))" }}>
+        <span title="Verified" style={{ position: "absolute", right: -4, bottom: -4, width: badgeSize, height: badgeSize, display: "grid", placeItems: "center", color: "#1d9bf0", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))", zIndex: 2 }}>
           <VerifiedIcon size={badgeSize} />
         </span>
       ) : null}

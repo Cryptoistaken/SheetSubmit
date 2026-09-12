@@ -165,6 +165,11 @@ export default function Sidebar() {
     setMode("expanded");
     saveMode("expanded");
   };
+  const hideRail = () => {
+    setHoverOpen(false);
+    setMode("hidden");
+    saveMode("hidden");
+  };
   // Drag release (and arrow keys): very narrow hides the rail, narrow snaps
   // to icons, wide persists as the custom expanded width. Near-default rounds
   // back to the default.
@@ -229,7 +234,7 @@ export default function Sidebar() {
     <aside
       onMouseLeave={() => setHoverOpen(false)}
       style={{ width: effWidth }}
-      className={cn("group relative flex shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background ease-out motion-reduce:transition-none", dragWidth == null && "transition-[width] duration-200")}
+      className={cn("relative flex shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background ease-out motion-reduce:transition-none", dragWidth == null && "transition-[width] duration-200")}
     >
       {/* Hover auto-expand covers everything except the footer trigger block
           below it — the footer is hover-dead (click only), the rest expands. */}
@@ -273,7 +278,7 @@ export default function Sidebar() {
             <ViewSwitch view={view} setViewMode={setViewMode} />
           </div>
         ) : null}
-        <div className={cn("flex items-center", effCollapsed ? "justify-center" : "justify-start")}>
+        <div className={cn("flex items-center", effCollapsed ? "justify-center" : "justify-between")}>
         <button
           type="button"
           onClick={toggleRail}
@@ -284,6 +289,17 @@ export default function Sidebar() {
         >
           <PanelTriggerIcon shifted={effCollapsed} />
         </button>
+        {!effCollapsed ? (
+          <button
+            type="button"
+            onClick={hideRail}
+            aria-label="Hide sidebar"
+            title="Hide sidebar"
+            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2-2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2m0 16H5V5h14zM17 8.4L13.4 12l3.6 3.6l-1.4 1.4l-3.6-3.6L8.4 17L7 15.6l3.6-3.6L7 8.4L8.4 7l3.6 3.6L15.6 7z" /></svg>
+          </button>
+        ) : null}
         </div>
       </div>
       <div
@@ -307,10 +323,7 @@ export default function Sidebar() {
       >
         <div
           aria-hidden="true"
-          className={cn(
-            "absolute right-[5px] top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-border transition-opacity",
-            dragWidth != null ? "opacity-100" : "opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
-          )}
+          className="absolute right-[5px] top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-border"
         />
       </div>
     </aside>

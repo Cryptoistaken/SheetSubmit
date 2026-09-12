@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -102,10 +102,11 @@ function tabForPath(path: string): string {
   return "files";
 }
 
-function NavButton({ active, collapsed, label, onClick, children }: { active: boolean; collapsed: boolean; label: string; onClick: () => void; children: ReactNode }) {
+function NavButton({ active, collapsed, label, onClick, children, buttonRef }: { active: boolean; collapsed: boolean; label: string; onClick: () => void; children: ReactNode; buttonRef?: (el: HTMLButtonElement | null) => void }) {
   return (
     <button
       type="button"
+      ref={buttonRef}
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       title={collapsed ? label : undefined}
@@ -116,7 +117,7 @@ function NavButton({ active, collapsed, label, onClick, children }: { active: bo
       )}
     >
       <span className="grid size-5 shrink-0 place-items-center" aria-hidden="true">{children}</span>
-      {!collapsed && <span className="truncate">{label}</span>}
+      <span className={cn("truncate transition-[max-width,opacity] duration-[var(--anim-med)] ease-[var(--ease-out)] motion-reduce:transition-none", collapsed ? "max-w-0 opacity-0" : "max-w-44 opacity-100")}>{label}</span>
     </button>
   );
 }
@@ -125,7 +126,7 @@ function PanelTriggerIcon({ shifted }: { shifted?: boolean }) {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="shrink-0">
       <path d="M21.25 6.72v10.56a2.97 2.97 0 0 1-2.97 2.97H5.72a2.97 2.97 0 0 1-2.97-2.97V6.72a2.97 2.97 0 0 1 2.97-2.97h12.56a2.97 2.97 0 0 1 2.97 2.97" />
-      <path d="M6.25 7.25v9.5" className={cn("transition-transform duration-200 ease-out motion-reduce:transition-none", shifted && "translate-x-[10.5px]")} />
+      <path d="M6.25 7.25v9.5" className={cn("transition-transform duration-[var(--anim-med)] ease-[var(--ease-out)] motion-reduce:transition-none", shifted && "translate-x-[10.5px]")} />
     </svg>
   );
 }
@@ -146,6 +147,18 @@ export default function Sidebar() {
   const [mode, setMode] = useState<RailMode>(loadMode);
   const [customWidth, setCustomWidth] = useState<number | null>(loadWidth);
   const [hoverOpen, setHoverOpen] = useState(false);
+  // Sliding active-item bar (same motion dialect as the view-switch thumb).
+  const btnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [ind, setInd] = useState<{ top: number; height: number; show: boolean }>({ top: 0, height: 0, show: false });
+  useEffect(() => {
+    if (!user) return;
+    const btn = btnRefs.current[tabForPath(location.pathname)];
+    const next = btn ? { top: btn.offsetTop, height: btn.offsetHeight, show: true } : null;
+    setInd((p) => {
+      const n = next ?? { top: p.top, height: p.height, show: false };
+      return p.top === n.top && p.height === n.height && p.show === n.show ? p : n;
+    });
+  });
   // Live width while edge-dragging (null otherwise).
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const dragStart = useRef<{ x: number; w: number } | null>(null);
@@ -158,10 +171,11 @@ export default function Sidebar() {
     : mode === "tight" ? TIGHT_W
     : MINI_W; // mini — hidden unmounts, so it never gets here
   const effWidth = dragWidth ?? (expandedNow ? (customWidth ?? DEFAULT_W) : restWidth);
+  const tab = tabForPath(location.pathname);
+  const adminItems = NAV_ADMIN.filter((i) => !i.adminOnly || user?.isAdmin);
 
   if (!user) return null;
 
-  const tab = tabForPath(location.pathname);
   // Footer trigger toggles expanded ↔ icons only. Drag/arrow stops below
   // that: tight (48), mini (36). Hidden comes only from the X button.
   const toggleRail = () => {
@@ -223,7 +237,6 @@ export default function Sidebar() {
     }
     setDragWidth(null);
   };
-  const adminItems = NAV_ADMIN.filter((i) => !i.adminOnly || user.isAdmin);
   // Mini stop (36px): footer compacts so the trigger still fits with padding.
   const miniFooter = effWidth < 44;
 
@@ -249,7 +262,7 @@ export default function Sidebar() {
     <aside
       onMouseLeave={() => setHoverOpen(false)}
       style={{ width: effWidth }}
-      className={cn("group relative flex shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background ease-out motion-reduce:transition-none", dragWidth == null && "transition-[width] duration-200")}
+      className={cn("group relative flex shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background ease-[var(--ease-out)] motion-reduce:transition-none", dragWidth == null && "transition-[width] duration-[var(--anim-med)]")}
     >
       {/* Hover auto-expand covers everything except the footer trigger block
           below it — the footer is hover-dead (click only), the rest expands. */}
@@ -258,16 +271,15 @@ export default function Sidebar() {
         <button type="button" onClick={() => navigate("/")} title="Sheet Submit — home" aria-label="Sheet Submit — home" className="grid size-8 shrink-0 place-items-center rounded-md hover:bg-muted">
           <img src="/logo.svg" className="size-5" alt="" aria-hidden="true" />
         </button>
-        {!effCollapsed && (
-          <button type="button" onClick={() => navigate("/")} className="min-w-0 flex-1 truncate text-left text-sm font-semibold tracking-tight">
-            Sheet Submit
-          </button>
-        )}
+        <button type="button" onClick={() => navigate("/")} tabIndex={effCollapsed ? -1 : 0} className={cn("min-w-0 truncate text-left text-sm font-semibold tracking-tight transition-[max-width,opacity] duration-[var(--anim-med)] ease-[var(--ease-out)] motion-reduce:transition-none", effCollapsed ? "max-w-0 flex-none opacity-0" : "max-w-44 flex-1 opacity-100")}>
+          Sheet Submit
+        </button>
       </div>
 
-      <nav aria-label="Primary" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+      <nav aria-label="Primary" className="relative flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+        <span aria-hidden="true" className="pointer-events-none absolute left-[3px] w-1 rounded-full bg-foreground transition-[top,height,opacity] duration-[var(--anim-med)] ease-[var(--ease-out)] motion-reduce:transition-none" style={{ top: ind.top, height: ind.height, opacity: ind.show ? 1 : 0 }} />
         {NAV_MAIN.map((item) => (
-          <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)}>
+          <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)} buttonRef={(el) => { btnRefs.current[item.key] = el; }}>
             {item.icon}
           </NavButton>
         ))}
@@ -278,7 +290,7 @@ export default function Sidebar() {
             )}
             {effCollapsed && <div className="mx-2 my-2 border-t border-border" aria-hidden="true" />}
             {adminItems.map((item) => (
-              <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)}>
+              <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)} buttonRef={(el) => { btnRefs.current[item.key] = el; }}>
                 {item.icon}
               </NavButton>
             ))}

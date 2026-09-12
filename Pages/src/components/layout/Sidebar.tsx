@@ -234,7 +234,7 @@ export default function Sidebar() {
     <aside
       onMouseLeave={() => setHoverOpen(false)}
       style={{ width: effWidth }}
-      className={cn("relative flex shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background ease-out motion-reduce:transition-none", dragWidth == null && "transition-[width] duration-200")}
+      className={cn("group relative flex shrink-0 flex-col overflow-hidden whitespace-nowrap border-r border-border bg-background ease-out motion-reduce:transition-none", dragWidth == null && "transition-[width] duration-200")}
     >
       {/* Hover auto-expand covers everything except the footer trigger block
           below it — the footer is hover-dead (click only), the rest expands. */}
@@ -323,7 +323,10 @@ export default function Sidebar() {
       >
         <div
           aria-hidden="true"
-          className="absolute right-[5px] top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-border"
+          className={cn(
+            "absolute right-[5px] top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-border transition-opacity",
+            dragWidth != null ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+          )}
         />
       </div>
     </aside>

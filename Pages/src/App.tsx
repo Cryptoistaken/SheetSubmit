@@ -13,6 +13,7 @@ import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNarrow } from "@/hooks/useNarrow";
 import { useTheme } from "@/lib/theme";
 import { lazyRetry } from "@/lib/lazyRetry";
 
@@ -56,6 +57,13 @@ function skeletonForPath(pathname: string): DetailedSkeletonVariant {
 
 function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
   const sheet = variant === "sheet";
+  // Mirror the responsive Layout shell: desktop non-file = sidebar only,
+  // mobile non-file = topbar only, file skeleton = topbar only, never both.
+  // useNarrow is reactive (matchMedia) and SPA-only, so no hydration concern.
+  const narrow = useNarrow(768);
+  const isDesktop = !narrow;
+  const showSidebar = !sheet && isDesktop;
+  const showTopbar = sheet || !isDesktop;
   // /approvals and /settings map to the "pools" variant in skeletonForPath, so the pools
   // branch below covers /pools, /approvals and /settings (same style + pane).
   const poolsLike = variant === "pools";
@@ -75,7 +83,7 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
           : "homePaneFiles";
   return (
     <div className="flex h-dvh flex-row">
-      {!sheet ? (
+      {showSidebar ? (
         <div className="flex w-12 shrink-0 flex-col gap-2 border-r border-border bg-background p-1 lg:w-60 lg:p-2" aria-hidden="true">
           <div className="flex items-center gap-2 px-2 py-2">
             <Skeleton className="size-5 rounded-sm" />
@@ -85,6 +93,7 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
         </div>
       ) : null}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {showTopbar ? (
       <header className={sheet ? undefined : "home-topbar"}>
         <div className="topbar" aria-hidden="true">
           <div className="topbar-l">
@@ -94,8 +103,9 @@ function LoadingShell({ variant }: { variant: DetailedSkeletonVariant }) {
           <Skeleton className="h-8 w-8 rounded-full" />
         </div>
       </header>
+      ) : null}
       <main id="main-content" className="flex flex-1 min-h-0 flex-col">
-        {!sheet ? (
+        {!sheet && !isDesktop ? (
           <div id="homeTabBar" aria-hidden="true">
             <div className="home-tabs">
               {Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-9 w-24 rounded-md" />)}
@@ -119,15 +129,18 @@ function Layout() {
   const { pathname } = useLocation();
   const { user } = useAuth();
   const variant = skeletonForPath(pathname);
-  // Admin-only sidebar rail, full height on the left (desktop and phones —
-  // same rail, tap the trigger on touch); the header sits only over the main
-  // column, never above the sidebar. Regulars get Topbar + tabs everywhere.
-  // Sheet pages keep the full Topbar on every size.
+  // Responsive shell (viewport breakpoint 768px via useNarrow): desktop
+  // non-file = sidebar only; mobile non-file = topbar only; file pages =
+  // topbar functional header, no sidebar at any width. Never both at once.
+  const narrow = useNarrow(768);
+  const isDesktop = !narrow;
   const isFilePage =
     pathname.startsWith("/file/") ||
     pathname.startsWith("/archive/") ||
     /\/admin\/user\/[^/]+\/file\/[^/]+/.test(pathname);
   const isAdmin = !!user?.isAdmin;
+  const showSidebar = !isFilePage && isDesktop;
+  const showTopbar = isFilePage || !isDesktop;
   return (
     <div className="flex h-dvh flex-row">
       <a
@@ -136,17 +149,19 @@ function Layout() {
       >
         Skip to content
       </a>
-      {isFilePage || !isAdmin ? <Sidebar minimal /> : <Sidebar />}
+      {showSidebar ? (isAdmin ? <Sidebar /> : <Sidebar minimal />) : null}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {isFilePage ? (
-          <header>
-            <Topbar />
-          </header>
-        ) : (
-          <header className={isAdmin ? "home-topbar admin" : "home-topbar"}>
-            <Topbar />
-          </header>
-        )}
+        {showTopbar ? (
+          isFilePage ? (
+            <header>
+              <Topbar />
+            </header>
+          ) : (
+            <header className={isAdmin ? "home-topbar admin" : "home-topbar"}>
+              <Topbar />
+            </header>
+          )
+        ) : null}
         <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col min-h-0 min-w-0 focus:outline-none">
           <Suspense fallback={<PageSkeleton variant={variant} className="min-h-0" sheetToolbar={variant !== "sheet"} />}>
             <Outlet />

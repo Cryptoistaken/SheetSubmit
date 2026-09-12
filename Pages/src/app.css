@@ -2838,3 +2838,13 @@ table.grid { min-width: 0; }
 @media (max-width:480px) and (orientation:landscape){
   #homePaneFiles,#homePaneArchive,#homePaneAdmin,#homePanePools,#homePaneApprovals,#homePaneSettings,#homePaneWallet,#homePaneWithdrawals,#homePaneTools,#homePaneAnalysis{ padding-left:max(14px,env(safe-area-inset-left)) !important; padding-right:max(14px,env(safe-area-inset-right)) !important; }
 }
+
+/* ── Responsive shell: desktop navigation is sidebar-only, so the home tab
+   strip (tablist) hides at desktop widths. Scoped to role="tablist" only —
+   the file selection toolbar (role="toolbar") and file content are untouched.
+   Placed last so it wins over the admin-tabs mobile rule above at equal
+   specificity. Mobile keeps the approved tabs behavior. */
+@media (min-width: 769px) {
+    #homeTabBar .home-tabs[role="tablist"],
+    #homeTabBar.admin-tabs .home-tabs[role="tablist"] { display: none; }
+}

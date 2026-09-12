@@ -3,7 +3,7 @@ import { useSheetStore } from "@/stores/sheetStore";
 import { useToast } from "@/lib/toast";
 import { useModalA11y } from "@/hooks/useModalA11y";
 
-export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function PageAdvancedOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
   const rows = useSheetStore((s) => s.rows);
   const showToast = useToast();
   const [custom, setCustom] = useState(false);
@@ -19,7 +19,7 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
 
   const handleClose = () => { setCustom(false); setSel(new Set()); setPhase("idle"); setTargets([]); setDoneCounts(null); setRunning(false); onClose(); };
   const modalRef = useModalA11y(open, handleClose);
-  const titleId = "wa-check-title";
+  const titleId = "page-advanced-title";
 
   if (!open) return null;
 
@@ -33,7 +33,7 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
     setDoneCounts(null);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await useSheetStore.getState().runWaChecksWaFiltered(filter as any);
+      await useSheetStore.getState().runPageChecksAdvanced(filter as any);
       const after = useSheetStore.getState().rows;
       const page = idxs.filter((i) => after[i]?.wa_status === "eligible").length;
       setDoneCounts({ page, noPage: idxs.length - page });
@@ -52,7 +52,7 @@ export default function WaCheckOverlay({ open, onClose }: { open: boolean; onClo
   return (
     <div ref={modalRef} className="download-opt-overlay" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className="download-opt-box" style={{ width: custom || isProgress ? 300 : 220 }}>
-        <div id={titleId} className="download-opt-title">{phase === "checking" ? "Checking…" : phase === "done" ? "Result" : "WA Check"}</div>
+        <div id={titleId} className="download-opt-title">{phase === "checking" ? "Checking…" : phase === "done" ? "Result" : "Advanced check"}</div>
         {isProgress ? (
           <>
             <div aria-live="polite" style={{ fontSize: 12, color: "var(--text2)", display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>

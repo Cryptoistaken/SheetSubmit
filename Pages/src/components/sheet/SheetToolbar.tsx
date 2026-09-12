@@ -17,7 +17,7 @@ import { isPageFile as isPageFileHelper } from "@/features/filetypes";
 const DownloadOverlay = lazy(() => import("./DownloadOverlay"));
 const CustomDownloadOverlay = lazy(() => import("./CustomDownloadOverlay"));
 const UploadOverlay = lazy(() => import("./UploadOverlay"));
-const WaCheckOverlay = lazy(() => import("./WaCheckOverlay"));
+const PageAdvancedOverlay = lazy(() => import("./PageAdvancedOverlay"));
 
 interface MenuPos {
   top: number;
@@ -70,15 +70,15 @@ export default function SheetToolbar() {
   const [autoCheckOn, setAutoCheckOn] = useState(
     () => localStorage.getItem("ss_autoCheck") !== "false",
   );
-  const [waCheckOn, setWaCheckOn] = useState(
-    () => localStorage.getItem("ss_waCheck") === "true",
+  const [simpleOn, setSimpleOn] = useState(
+    () => localStorage.getItem("ss_pageSimple") === "true",
   );
-  const [checkWaOn, setCheckWaOn] = useState(
-    () => localStorage.getItem("ss_checkWa") === "true",
+  const [advancedOn, setAdvancedOn] = useState(
+    () => localStorage.getItem("ss_pageAdvanced") === "true",
   );
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [customDlOpen, setCustomDlOpen] = useState(false);
-  const [waOpen, setWaOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [uploadRows, setUploadRows] = useState<Row[] | null>(null);
   const file = useSheetStore((s) => s.file);
   const isPageFile = isPageFileHelper(file);
@@ -408,47 +408,47 @@ export default function SheetToolbar() {
         </button>
         {isPageFile ? (
           <>
-            <div className="check-dropdown-label" style={{ marginTop: 8 }} id="check-page-label">
-              Page Check
+            <div className="check-dropdown-label" style={{ marginTop: 8 }} id="check-simple-label">
+              Simple check
             </div>
             <button
               role="switch"
-              aria-checked={waCheckOn}
-              aria-labelledby="check-page-label"
-              className={"autocheck-toggle" + (waCheckOn ? " on" : "")}
+              aria-checked={simpleOn}
+              aria-labelledby="check-simple-label"
+              className={"autocheck-toggle" + (simpleOn ? " on" : "")}
               onClick={() => {
-                const next = !waCheckOn;
-                setWaCheckOn(next);
-                localStorage.setItem("ss_waCheck", String(next));
+                const next = !simpleOn;
+                setSimpleOn(next);
+                localStorage.setItem("ss_pageSimple", String(next));
                 if (next) {
-                  setCheckWaOn(false);
-                  localStorage.setItem("ss_checkWa", "false");
+                  setAdvancedOn(false);
+                  localStorage.setItem("ss_pageAdvanced", "false");
                 }
               }}
             >
               <span className="autocheck-track" aria-hidden="true"></span>
-              Page Check
+              Simple check
             </button>
-            <div className="check-dropdown-label" style={{ marginTop: 8 }} id="check-wa-label">
-              WA Check
+            <div className="check-dropdown-label" style={{ marginTop: 8 }} id="check-advanced-label">
+              Advanced check
             </div>
             <button
               role="switch"
-              aria-checked={checkWaOn}
-              aria-labelledby="check-wa-label"
-              className={"autocheck-toggle" + (checkWaOn ? " on" : "")}
+              aria-checked={advancedOn}
+              aria-labelledby="check-advanced-label"
+              className={"autocheck-toggle" + (advancedOn ? " on" : "")}
               onClick={() => {
-                const next = !checkWaOn;
-                setCheckWaOn(next);
-                localStorage.setItem("ss_checkWa", String(next));
+                const next = !advancedOn;
+                setAdvancedOn(next);
+                localStorage.setItem("ss_pageAdvanced", String(next));
                 if (next) {
-                  setWaCheckOn(false);
-                  localStorage.setItem("ss_waCheck", "false");
+                  setSimpleOn(false);
+                  localStorage.setItem("ss_pageSimple", "false");
                 }
               }}
             >
               <span className="autocheck-track" aria-hidden="true"></span>
-              WA Check
+              Advanced check
             </button>
           </>
         ) : null}
@@ -548,7 +548,7 @@ export default function SheetToolbar() {
             className="sheet-more-item"
             onClick={() => {
               close();
-              setWaOpen(true);
+              setAdvancedOpen(true);
             }}
           >
             {/* shield-check icon — lucide */}
@@ -556,7 +556,7 @@ export default function SheetToolbar() {
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               <path d="M9 12l2 2 4-4" />
             </svg>
-            WA Check
+            Advanced check
           </button>
         ) : null}
         <button role="menuitem" className="sheet-more-item" onClick={() => startUpload(false)}>
@@ -727,9 +727,9 @@ export default function SheetToolbar() {
           <UploadOverlay rows={uploadRows} onClose={() => setUploadRows(null)} />
         </Suspense>
       ) : null}
-      {waOpen ? (
+      {advancedOpen ? (
         <Suspense fallback={null}>
-          <WaCheckOverlay open={waOpen} onClose={() => setWaOpen(false)} />
+          <PageAdvancedOverlay open={advancedOpen} onClose={() => setAdvancedOpen(false)} />
         </Suspense>
       ) : null}
     </>

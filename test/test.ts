@@ -74,11 +74,11 @@ async function run() {
   assertStatus(await request("/pools/dgddigital/page/price", { method: "PUT", body: JSON.stringify({ price: priceBefore.body.price }) }), 200, "pool price restore");
   console.log("PASS pool price update and restore");
 
-  const pageCheckMissing = await request("/fb/page-check", json({})); assertStatus(pageCheckMissing, 400, "page check missing cookie");
+  const pageSimpleMissing = await request("/fb/page-simple", json({})); assertStatus(pageSimpleMissing, 400, "simple check missing cookie");
   const syntheticCookie = `c_user=${dupUid}; xs=invalid-test`;
-  const pageCheck = await request<any>("/fb/page-check", json({ cookie: syntheticCookie })); assertStatus(pageCheck, 200, "page check contract"); assert(typeof pageCheck.body.eligible === "boolean" && "error" in pageCheck.body, "page check response shape invalid");
-  const cache = await request<any>(`/wa/cache?uids=${dupUid}`); assertStatus(cache, 200, "page check cache read"); assert(cache.body.cache && typeof cache.body.cache === "object", "page check cache response invalid");
-  console.log(`PASS page check contract eligible=${pageCheck.body.eligible}`);
+  const pageSimple = await request<any>("/fb/page-simple", json({ cookie: syntheticCookie })); assertStatus(pageSimple, 200, "simple check contract"); assert(typeof pageSimple.body.eligible === "boolean" && "error" in pageSimple.body, "simple check response shape invalid");
+  const cache = await request<any>(`/wa/cache?uids=${dupUid}`); assertStatus(cache, 200, "simple check cache read"); assert(cache.body.cache && typeof cache.body.cache === "object", "simple check cache response invalid");
+  console.log(`PASS simple check contract eligible=${pageSimple.body.eligible}`);
 
   const poolReady = await waitFor(async () => { const page = await request<any>(`/pools/dgddigital/page/rows?fileId=${files[2].id}&limit=10`); return page.status === 200 && page.body.total >= 5; });
   assert(poolReady, "pool feed did not become visible within 15 seconds");

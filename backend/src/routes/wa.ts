@@ -17,7 +17,7 @@ async function waCacheDel(env: Env, uid: string, cuser: string) { await rpc(env.
 wa.post("/fb/check", async (c) => {
   const body = await c.req.json<{ uids?: unknown[] }>().catch(() => ({}) as { uids?: unknown[] }); const uids = [...new Set(Array.isArray(body.uids) ? body.uids.map(String).filter((v) => /^\d{5,20}$/.test(v)) : [])].slice(0, 500); if (!uids.length) return c.json({ error: "Invalid UIDs" }, 400); const checkUrl = c.env.CHECK_URL || "https://check.fb.tools/api/check/facebook"; try { const r = await fetch(checkUrl, { method: "POST", headers: { accept: "application/x-ndjson", "content-type": "application/json" }, signal: AbortSignal.timeout(10_000), body: JSON.stringify({ inputData: uids, userLang: "en", checkFriends: false }) }); if (!r.ok) return c.json({ error: `Upstream returned ${r.status}` }, 502); const text = await r.text(); if (text.length > 1_000_000) return c.json({ error: "Upstream response too large" }, 502); const valid: string[] = [], dead: string[] = []; for (const line of text.split("\n")) { try { const x = JSON.parse(line.slice(line.indexOf("{"))); const uid = String(x.data?.uid || x.data?.account || ""); if (!uid) continue; (x.data?.status?.name === "valid" ? valid : dead).push(uid); } catch {} } if (dead.length) { await rpc(c.env.POOLS, "global", "markDead", { dead }).catch((e: any) => console.error("markDead failed", e?.message ?? e)); void publishKeyStates(dead); } return c.json({ valid, dead, uncertain: [] }); } catch { return c.json({ error: "Service unavailable" }, 502); } });
 
-wa.post("/fb/page-check", async (c) => {
+wa.post("/fb/page-simple", async (c) => {
   const { cookie } = await c.req.json<{ cookie?: string }>().catch(() => ({}) as { cookie?: string });
   if (!cookie) return c.json({ error: "Cookie required" }, 400);
   if (cookie.length > 50000) return c.json({ error: "Cookie too large" }, 400);
@@ -34,7 +34,7 @@ wa.post("/fb/page-check", async (c) => {
   } catch (e) { return fail(/abort|timeout|network|fetch/i.test(e instanceof Error ? `${e.name} ${e.message}` : String(e)) ? "Service unavailable" : String(e instanceof Error ? e.message : e)); }
 });
 
-wa.post("/fb/wa-check", async (c) => {
+wa.post("/fb/page-advanced", async (c) => {
   const { cookie } = await c.req.json<{ cookie?: string }>().catch(() => ({}) as { cookie?: string });
   if (!cookie) return c.json({ error: "Cookie required" }, 400);
   if (cookie.length > 50000) return c.json({ error: "Cookie too large" }, 400);

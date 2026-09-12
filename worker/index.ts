@@ -1,8 +1,8 @@
 // Background worker — self-contained (Bun + Postgres, same DB as backend).
 // Jobs (each on its own interval, sequential):
 //   1. held-uid-check      — pending-approval monitoring: held rows whose UID checks dead → state='dead' (never paid)
-//   2. wa-check            — WhatsApp eligibility for rows without eligible wa_status (writes data.wa_status + wa:{uid}:{cuser} cache)
-//   3. page-check          — FB pages scrape for rows without wa_status (sets eligible + page name + cache)
+//   2. page-advanced       — WhatsApp eligibility for rows without eligible wa_status (writes data.wa_status + wa:{uid}:{cuser} cache)
+//   3. page-simple         — FB pages scrape for rows without wa_status (sets eligible + page name + cache)
 // Available pool rows are NOT background-monitored — they are killed by user checks (POST /fb/check → markDead).
 // Env: DATABASE_URL, REDIS_URL (optional), CHECK_URL, HELD_INTERVAL_MS (10min), WA_INTERVAL_MS (30min), PAGE_INTERVAL_MS (30min)
 import postgres from "postgres";
@@ -49,8 +49,8 @@ async function checkUids(limit: number): Promise<number> {
   return dead.length;
 }
 
-// ── WA check: business.facebook.com scrape + GraphQL eligibility ──
-async function waCheck(cookie: string): Promise<{ eligible: boolean; banReason: string | null; linkedNumber: string | null; error: string | null }> {
+// ── Advanced check: business.facebook.com scrape + GraphQL eligibility ──
+async function pageAdvanced(cookie: string): Promise<{ eligible: boolean; banReason: string | null; linkedNumber: string | null; error: string | null }> {
   const fail = (error: string) => ({ eligible: false, banReason: null, linkedNumber: null, error });
   try {
     const pageRes = await fetch("https://business.facebook.com/latest/inbox/wec", { headers: { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", cookie, "sec-fetch-dest": "document", "sec-fetch-mode": "navigate", "sec-fetch-site": "none", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" }, signal: AbortSignal.timeout(15000) });
@@ -77,8 +77,8 @@ async function waCheck(cookie: string): Promise<{ eligible: boolean; banReason: 
   } catch (e) { return fail(/abort|timeout|network|fetch/i.test(e instanceof Error ? `${e.name} ${e.message}` : String(e)) ? "Service unavailable" : String(e instanceof Error ? e.message : e)); }
 }
 
-// ── Page check: accountscenter scrape → pages ──
-async function pageCheck(cookie: string): Promise<{ eligible: boolean; pageName: string | null; linkedNumber: string | null; error: string | null }> {
+// ── Simple check: accountscenter scrape → pages ──
+async function pageSimple(cookie: string): Promise<{ eligible: boolean; pageName: string | null; linkedNumber: string | null; error: string | null }> {
   try {
     const pageRes = await fetch("https://accountscenter.facebook.com/profiles", { headers: { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", cookie, "sec-ch-ua-mobile": "?1", "sec-ch-ua-platform": '"iOS"', "sec-fetch-dest": "document", "sec-fetch-mode": "navigate", "sec-fetch-site": "same-origin", "upgrade-insecure-requests": "1", "user-agent": UA_IOS }, signal: AbortSignal.timeout(20000), redirect: "follow" });
     const html = await pageRes.text();
@@ -89,8 +89,8 @@ async function pageCheck(cookie: string): Promise<{ eligible: boolean; pageName:
 }
 
 type PoolRowRef = { password: string; pool_id: string; row_key: string; src_uid: string | null; cookies: string; cuser: string };
-async function rowsNeedingCheck(kind: "wa" | "page", limit: number): Promise<PoolRowRef[]> {
-  const q = kind === "wa"
+async function rowsNeedingCheck(kind: "advanced" | "simple", limit: number): Promise<PoolRowRef[]> {
+  const q = kind === "advanced"
     ? db`SELECT password,pool_id,row_key,src_uid,data->>'cookies' AS cookies FROM pool_rows WHERE state='available' AND data->>'cookies' LIKE '%c_user=%' AND (data->>'wa_status' IS NULL OR (data->>'wa_status' NOT IN ('eligible','ineligible'))) LIMIT ${limit}`
     : db`SELECT password,pool_id,row_key,src_uid,data->>'cookies' AS cookies FROM pool_rows WHERE state='available' AND data->>'cookies' LIKE '%c_user=%' AND (data->>'wa_status' IS NULL OR data->>'wa_status' <> 'eligible') LIMIT ${limit}`;
   const rows: any[] = await q;
@@ -102,10 +102,10 @@ async function applyResult(r: PoolRowRef, patch: Record<string, unknown>, cache:
   if (r.src_uid && cache) { const k = `wa:${r.src_uid}:${r.cuser}`; await db`INSERT INTO meta(k,v) VALUES(${k},${j({ ...cache, ts: Date.now() })}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`; void redisDel(`ss:meta:${k}`); }
 }
 
-async function sweepWa(limit: number) {
-  const rows = await rowsNeedingCheck("wa", limit);
+async function sweepAdvanced(limit: number) {
+  const rows = await rowsNeedingCheck("advanced", limit);
   for (const r of rows) {
-    const res = await waCheck(r.cookies);
+    const res = await pageAdvanced(r.cookies);
     if (res.error) continue; // challenges/rate limits: leave row untouched, retry next sweep
     const patch: Record<string, unknown> = { wa_status: res.eligible ? "eligible" : "ineligible" };
     if (res.banReason) patch.wa_ban_reason = res.banReason;
@@ -113,25 +113,25 @@ async function sweepWa(limit: number) {
     await applyResult(r, patch, res.eligible ? { status: "eligible", banReason: res.banReason, error: null } : null);
     if (!res.eligible && r.src_uid) { const k = `wa:${r.src_uid}:${r.cuser}`; await db`DELETE FROM meta WHERE k=${k}`; void redisDel(`ss:meta:${k}`); }
   }
-  console.log(`[worker:wa-check] swept ${rows.length} row(s)`);
+  console.log(`[worker:page-advanced] swept ${rows.length} row(s)`);
 }
 
-async function sweepPages(limit: number) {
-  const rows = await rowsNeedingCheck("page", limit);
+async function sweepSimple(limit: number) {
+  const rows = await rowsNeedingCheck("simple", limit);
   for (const r of rows) {
-    const res = await pageCheck(r.cookies);
+    const res = await pageSimple(r.cookies);
     if (res.error) continue;
-    if (!res.eligible) continue; // page-check finds nothing → leave for wa-check to decide
+    if (!res.eligible) continue; // simple finds nothing → leave for advanced to decide
     await applyResult(r, { wa_status: "eligible", ...(res.pageName ? { wa_page_name: res.pageName } : {}), ...(res.linkedNumber ? { wa_linked_number: res.linkedNumber } : {}) }, { status: "eligible", banReason: null, error: null, pageName: res.pageName, linkedNumber: res.linkedNumber });
   }
-  console.log(`[worker:page-check] swept ${rows.length} row(s)`);
+  console.log(`[worker:page-simple] swept ${rows.length} row(s)`);
 }
 
 const interval = (k: string, def: number) => Math.max(60_000, Number(Bun.env[k]) || def);
 const JOBS = [
   { name: "held-uid-check", every: interval("HELD_INTERVAL_MS", 600_000), limit: Number(Bun.env.UID_BATCH) || 500, run: (n: number) => checkUids(n) },
-  { name: "page-check", every: interval("PAGE_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepPages(n) },
-  { name: "wa-check", every: interval("WA_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepWa(n) },
+  { name: "page-simple", every: interval("PAGE_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepSimple(n) },
+  { name: "page-advanced", every: interval("WA_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepAdvanced(n) },
 ];
 
 // backend owns schema bootstrap (worker's build context has no /backend) — if tables are missing,

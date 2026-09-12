@@ -299,13 +299,13 @@ export const api = {
     request<{ deleted: number }>("/archive/batch-delete", { method: "POST", body: JSON.stringify({ ids }) }),
   getCrossDups: (fileId?: string) =>
     request<CrossDupResult>(`/cross-dups${fileId ? `?fileId=${fileId}` : ""}`),
-  pageCheck: (cookie: string) =>
-    request<{ eligible?: boolean; error?: string | null; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null }>("/fb/page-check", {
+  pageSimple: (cookie: string) =>
+    request<{ eligible?: boolean; error?: string | null; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null }>("/fb/page-simple", {
       method: "POST",
       body: JSON.stringify({ cookie }),
     }),
-  waCheck: (cookie: string) =>
-    request<{ eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null }>("/fb/wa-check", {
+  pageAdvanced: (cookie: string) =>
+    request<{ eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null }>("/fb/page-advanced", {
       method: "POST",
       body: JSON.stringify({ cookie }),
     }),

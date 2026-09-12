@@ -21,8 +21,8 @@ import { poolRowKey } from "@/lib/live";
 import { IS_DESKTOP } from "@/lib/device";
 import { getCachedTOTP } from "@/features/filetypes/totp";
 
-// ── Page-check ledger (device only, per file, keyed by c_user) ──
-type LedgerEntry = { p: number; w: boolean };
+// ── Simple/advanced ledger (device only, per file, keyed by c_user) ──
+type LedgerEntry = { s: number; a: boolean };
 type Ledger = Record<string, LedgerEntry>;
 function ledgerKey(fileId: string): string {
   return `ss_pageLedger:${fileId}`;
@@ -388,11 +388,11 @@ export interface SheetState {
   } | null;
   toggleVisibleCol: (colKey: string) => void;
   runCheck: (triggerRowIdx?: number) => Promise<void>;
-  runWaChecks: () => Promise<void>;
-  runWaChecksFiltered: (filter: (row: Row, idx: number) => boolean) => Promise<void>;
-  runWaChecksWaFiltered: (filter: (row: Row, idx: number) => boolean) => Promise<void>;
+  runPageChecks: () => Promise<void>;
+  runPageChecksFiltered: (filter: (row: Row, idx: number) => boolean) => Promise<void>;
+  runPageChecksAdvanced: (filter: (row: Row, idx: number) => boolean) => Promise<void>;
   maybeAutoCheck: (rowIdx: number | null | undefined, colKey: string) => void;
-  _pageSweepCore?: (mode: "auto-page" | "manual-page" | "manual-wa", filter?: (row: Row, idx: number) => boolean, excludeIdx?: number | null) => Promise<void>;
+  _pageSweepCore?: (mode: "auto-simple" | "manual-simple" | "manual-advanced", filter?: (row: Row, idx: number) => boolean, excludeIdx?: number | null) => Promise<void>;
   restoreVersion: (v: number) => Promise<boolean>;
   applyRestore: (rows: Row[], seq: number, file?: SheetFile | null) => void;
   mergeRows: (incoming: Row[]) => void;
@@ -1835,31 +1835,31 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (!behavior?.checkAccounts) return;
     const uidOn = localStorage.getItem("ss_autoCheck") !== "false";
     const isPage = isPageFile(s.file);
-    const pageOn = localStorage.getItem("ss_waCheck") === "true";
-    const waOn = localStorage.getItem("ss_checkWa") === "true";
+    const simpleOn = localStorage.getItem("ss_pageSimple") === "true";
+    const advancedOn = localStorage.getItem("ss_pageAdvanced") === "true";
     // Archived viewer: Check always runs the UID check (toggle-independent),
-    // never page/WA sweeps.
+    // never simple/advanced sweeps.
     const shouldDoUid = uidOn || s.archivedMode;
-    // Archived viewer: UID-check only, never page/WA sweeps.
-    const shouldDispatchPageWa = !s.archivedMode && isPage && (pageOn || waOn);
-    if (!shouldDoUid && !shouldDispatchPageWa) return;
-    const dispatchPageWa = () => {
-      // Archived viewer: UID-check only, never page/WA sweeps.
+    // Archived viewer: UID-check only, never simple/advanced sweeps.
+    const shouldDispatchChecks = !s.archivedMode && isPage && (simpleOn || advancedOn);
+    if (!shouldDoUid && !shouldDispatchChecks) return;
+    const dispatchChecks = () => {
+      // Archived viewer: UID-check only, never simple/advanced sweeps.
       if (get().archivedMode) return;
       const curIsPage = isPageFile(get().file);
       if (!curIsPage) return;
-      const curPageOn = localStorage.getItem("ss_waCheck") === "true";
-      const curWaOn = localStorage.getItem("ss_checkWa") === "true";
+      const curSimpleOn = localStorage.getItem("ss_pageSimple") === "true";
+      const curAdvancedOn = localStorage.getItem("ss_pageAdvanced") === "true";
       const isAuto = triggerRowIdx != null;
       if (isAuto) {
-        if (curPageOn) void (get() as unknown as { _pageSweepCore: (m: string, f?: unknown, e?: unknown) => Promise<void> })._pageSweepCore("auto-page", undefined, triggerRowIdx);
+        if (curSimpleOn) void (get() as unknown as { _pageSweepCore: (m: string, f?: unknown, e?: unknown) => Promise<void> })._pageSweepCore("auto-simple", undefined, triggerRowIdx);
       } else {
-        if (curPageOn) void (get() as unknown as { _pageSweepCore: (m: string, f?: unknown, e?: unknown) => Promise<void> })._pageSweepCore("manual-page");
-        else if (curWaOn) void (get() as unknown as { _pageSweepCore: (m: string, f?: unknown, e?: unknown) => Promise<void> })._pageSweepCore("manual-wa");
+        if (curSimpleOn) void (get() as unknown as { _pageSweepCore: (m: string, f?: unknown, e?: unknown) => Promise<void> })._pageSweepCore("manual-simple");
+        else if (curAdvancedOn) void (get() as unknown as { _pageSweepCore: (m: string, f?: unknown, e?: unknown) => Promise<void> })._pageSweepCore("manual-advanced");
       }
     };
     if (!shouldDoUid) {
-      dispatchPageWa();
+      dispatchChecks();
       return;
     }
     const rows = s.rows.map((r) => ({ ...r }));
@@ -1890,7 +1890,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           }
         };
         if (get().pendingAutoCheck) {
-          dispatchPageWa();
+          dispatchChecks();
           doToast();
           set({ pendingAutoCheck: false });
           const pending = pendingAutoTriggerRow;
@@ -1901,7 +1901,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           return;
         }
         doToast();
-        dispatchPageWa();
+        dispatchChecks();
       };
       const changed: { rowIdx: number; cols: Record<string, string> }[] = [];
       rows.forEach((row, i) => {
@@ -1987,8 +1987,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (!behavior?.checkAccounts) return;
     if (colKey !== "cookies") return;
     const uidOn = localStorage.getItem("ss_autoCheck") !== "false";
-    const pageOn = isPageFile(s.file) && localStorage.getItem("ss_waCheck") === "true";
-    if (!uidOn && !pageOn) return;
+    const simpleOn = isPageFile(s.file) && localStorage.getItem("ss_pageSimple") === "true";
+    if (!uidOn && !simpleOn) return;
     const isBulk = rowIdx == null;
     const trigger = isBulk ? -1 : rowIdx;
     if (s.checkRunning) {
@@ -2001,7 +2001,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
 
   _pageSweepCore: async (mode, filter, excludeIdx) => {
     const s = get();
-    // Archived viewer: UID-check only, never page/WA sweeps.
+    // Archived viewer: UID-check only, never simple/advanced sweeps.
     if (s.archivedMode) return;
     if (s.file?.type !== "fb_cookie") return;
     if (!isPageFile(s.file)) return;
@@ -2010,40 +2010,40 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const rowsRef = s.rows;
     let ledger: Ledger | null = null;
     let ledgerDirty = false;
-    if (mode === "auto-page") {
+    if (mode === "auto-simple") {
       ledger = { ...loadLedger(sweepFileId) };
     }
-    const waInFlight = new Set<string>();
-    const waRows: { row: Row; uid: string | null; idx: number; cuser: string | null }[] = [];
+    const advInFlight = new Set<string>();
+    const checkRows: { row: Row; uid: string | null; idx: number; cuser: string | null }[] = [];
     rows.forEach((row, idx) => {
       if (filter && !filter(row, idx)) return;
       if (excludeIdx != null && idx === excludeIdx) return;
       const tf = (row.twofakey ?? "").trim();
       if (!tf || isNo2FAMark("twofakey", tf)) return;
       if (row.status !== "good") return;
-      // dead (live overlay), held or approved rows are never page-checked —
+      // dead (live overlay), held or approved rows are never simple-checked —
       // dead can't be eligible, sold/locked rows must keep their flags.
       const live = row as Row & { _dead?: boolean; _hold?: boolean; _approved?: boolean };
       if (live._dead || live._hold || live._approved) return;
       if (!row.cookies || !/c_user=\d+/.test(row.cookies)) return;
       if (row.wa_status === "eligible") return;
       const cuser = extractCUser(row.cookies);
-      if (mode === "auto-page" && cuser && ledger) {
+      if (mode === "auto-simple" && cuser && ledger) {
         const ent = ledger[cuser];
-        if (ent && (ent.p >= 3 || ent.w)) return;
+        if (ent && (ent.s >= 3 || ent.a)) return;
       }
       let uid = row.uid ?? null;
       if (!uid && row.cookies) {
         const m = row.cookies.match(/c_user=(\d+)/);
         if (m) uid = m[1];
       }
-      waRows.push({ row, uid, idx, cuser });
+      checkRows.push({ row, uid, idx, cuser });
     });
-    if (!waRows.length) return;
+    if (!checkRows.length) return;
     const writeBack = () => {
       const cur = get();
       if (cur.rows === rowsRef) return rows.slice();
-      const processed = new Set(waRows.map((w) => w.idx));
+      const processed = new Set(checkRows.map((w) => w.idx));
       return cur.rows.map((r, i) => {
         if (!processed.has(i)) return r;
         const snap = rows[i];
@@ -2071,11 +2071,11 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       const o = wa as Record<string, unknown>;
       return o.eligible === false && (o.error == null);
     };
-    // cache-first for every mode, including manual-wa
+    // cache-first for every mode, including manual-advanced
     {
       let cache: Record<string, WaCacheEntry> = {};
       try {
-        const uids = waRows.map((w) => w.uid).filter((u): u is string => !!u);
+        const uids = checkRows.map((w) => w.uid).filter((u): u is string => !!u);
         if (uids.length) {
           const res = await api.getWaCache(uids);
           cache = (res?.cache as Record<string, WaCacheEntry>) ?? {};
@@ -2084,8 +2084,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         cache = {};
       }
       if (get().fileId !== sweepFileId) return;
-      const remaining: typeof waRows = [];
-      for (const w of waRows) {
+      const remaining: typeof checkRows = [];
+      for (const w of checkRows) {
         const hit = w.uid ? cache[w.uid] : null;
         if (hit && hit.status === "eligible") {
           w.row.wa_status = "eligible";
@@ -2134,10 +2134,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         get().persist();
         return;
       }
-      waRows.length = 0;
-      waRows.push(...remaining);
+      checkRows.length = 0;
+      checkRows.push(...remaining);
     }
-    const live = waRows;
+    const live = checkRows;
     const concurrency = 3;
     let pos = 0;
     const nextBatch = async (): Promise<void> => {
@@ -2156,9 +2156,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
             live[i] = { ...w, row: newRow };
             pushInstant(w.idx, newRow);
           };
-          if (mode === "manual-wa") {
+          if (mode === "manual-advanced") {
             try {
-              const wa = (await api.waCheck(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
+              const wa = (await api.pageAdvanced(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
               if (wa && wa.eligible === true) apply("eligible", wa.banReason ?? null, undefined, wa.linkedNumber ?? null);
               else if (wa && wa.error) apply("error", wa.banReason ?? null, undefined, wa.linkedNumber ?? null);
               else if (isCleanMiss(wa)) apply("ineligible", wa ? (wa as unknown as { banReason?: string | null }).banReason ?? null : null, undefined, wa ? (wa as unknown as { linkedNumber?: string | null }).linkedNumber ?? null : null);
@@ -2169,9 +2169,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
             }
             return;
           }
-          // page modes (auto-page | manual-page)
+          // simple modes (auto-simple | manual-simple)
           try {
-            const wa = (await api.pageCheck(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null } | null;
+            const wa = (await api.pageSimple(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null } | null;
             if (wa && wa.eligible === true) {
               apply("eligible", null, wa.pageName ?? null, wa.linkedNumber ?? null);
               if (ledger && w.cuser && ledger[w.cuser]) {
@@ -2181,17 +2181,17 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
             } else if (isCleanMiss(wa)) {
               apply("ineligible", (wa as unknown as { banReason?: string | null }).banReason ?? null, (wa as unknown as { pageName?: string | null }).pageName ?? null, (wa as unknown as { linkedNumber?: string | null }).linkedNumber ?? null);
               if (ledger && w.cuser) {
-                const ent = ledger[w.cuser] ?? { p: 0, w: false };
+                const ent = ledger[w.cuser] ?? { s: 0, a: false };
                 // avoid double-count for same cuser in same sweep
-                if (waInFlight.has(w.cuser)) {
-                  ent.p = Math.max(ent.p, 1);
+                if (advInFlight.has(w.cuser)) {
+                  ent.s = Math.max(ent.s, 1);
                 } else {
-                  ent.p += 1;
+                  ent.s += 1;
                 }
-                if (ent.p >= 3 && !ent.w && !waInFlight.has(w.cuser)) {
-                  waInFlight.add(w.cuser);
+                if (ent.s >= 3 && !ent.a && !advInFlight.has(w.cuser)) {
+                  advInFlight.add(w.cuser);
                   try {
-                    const wa2 = (await api.waCheck(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
+                    const wa2 = (await api.pageAdvanced(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
                     if (wa2 && wa2.eligible === true) {
                       const newRow: Row = { ...rows[w.idx], wa_status: "eligible", wa_ban_reason: wa2.banReason ?? null, wa_linked_number: wa2.linkedNumber ?? null };
                       rows[w.idx] = newRow;
@@ -2200,7 +2200,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
                       delete ledger[w.cuser];
                       ledgerDirty = true;
                     } else if (wa2 && wa2.error) {
-                      ent.w = true;
+                      ent.a = true;
                       ledger[w.cuser] = ent;
                       ledgerDirty = true;
                       apply("ineligible", wa2.banReason ?? null, undefined, wa2.linkedNumber ?? null);
@@ -2208,11 +2208,11 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
                       rows[w.idx] = { ...rows[w.idx], wa_status: "ineligible", wa_ban_reason: wa2.banReason ?? null, wa_linked_number: wa2.linkedNumber ?? null };
                       pushInstant(w.idx, rows[w.idx]);
                     } else if (isCleanMiss(wa2)) {
-                      ent.w = true;
+                      ent.a = true;
                       ledger[w.cuser] = ent;
                       ledgerDirty = true;
                     } else {
-                      ent.w = true;
+                      ent.a = true;
                       ledger[w.cuser] = ent;
                       ledgerDirty = true;
                       if (wa2 && wa2.error) {
@@ -2221,7 +2221,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
                       }
                     }
                   } catch {
-                    ent.w = true;
+                    ent.a = true;
                     ledger[w.cuser] = ent;
                     ledgerDirty = true;
                   }
@@ -2280,24 +2280,24 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     get().persist();
   },
 
-  runWaChecks: async () => {
+  runPageChecks: async () => {
     const s = get();
-    // Archived viewer: UID-check only, no page/WA sweeps.
+    // Archived viewer: UID-check only, no simple/advanced sweeps.
     if (s.archivedMode) return;
     if (s.file?.type !== "fb_cookie") return;
-    await (get() as unknown as { _pageSweepCore: (m: string) => Promise<void> })._pageSweepCore("auto-page");
+    await (get() as unknown as { _pageSweepCore: (m: string) => Promise<void> })._pageSweepCore("auto-simple");
   },
 
-  runWaChecksFiltered: async (filter) => {
-    // Archived viewer: UID-check only, no page/WA sweeps.
+  runPageChecksFiltered: async (filter) => {
+    // Archived viewer: UID-check only, no simple/advanced sweeps.
     if (get().archivedMode) return;
-    await (get() as unknown as { _pageSweepCore: (m: string, f: unknown) => Promise<void> })._pageSweepCore("manual-page", filter as unknown as (row: Row, idx: number) => boolean);
+    await (get() as unknown as { _pageSweepCore: (m: string, f: unknown) => Promise<void> })._pageSweepCore("manual-simple", filter as unknown as (row: Row, idx: number) => boolean);
   },
 
-  runWaChecksWaFiltered: async (filter) => {
-    // Archived viewer: UID-check only, no page/WA sweeps.
+  runPageChecksAdvanced: async (filter) => {
+    // Archived viewer: UID-check only, no simple/advanced sweeps.
     if (get().archivedMode) return;
-    await (get() as unknown as { _pageSweepCore: (m: string, f: unknown) => Promise<void> })._pageSweepCore("manual-wa", filter as unknown as (row: Row, idx: number) => boolean);
+    await (get() as unknown as { _pageSweepCore: (m: string, f: unknown) => Promise<void> })._pageSweepCore("manual-advanced", filter as unknown as (row: Row, idx: number) => boolean);
   },
 
   restoreVersion: async () => {
@@ -2466,7 +2466,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     }
     // Cache-only WA hydration for re-uploaded rows: the new-file path hydrates
     // before createFile, but in-sheet uploads land with blank wa_status until a
-    // live page-check runs (green instead of blue). Fill cached eligibility
+    // live simple runs (green instead of blue). Fill cached eligibility
     // instantly — no live checks here, maybeAutoCheck above handles those.
     const hydrateFileId = s.fileId;
     const hydrateSnap = incoming.map((r) => ({ ...r }));

@@ -9,12 +9,35 @@ import { cn } from "@/lib/utils";
 import { useViewStore } from "@/stores/viewStore";
 
 const COLLAPSE_KEY = "ss_sidebar_collapsed";
+const MODE_KEY = "ss_sidebar_mode";
 const WIDTH_KEY = "ss_sidebar_width";
 const MIN_W = 64;
 const DEFAULT_W = 240;
 const MAX_W = 320;
-const SNAP_W = 120;
+const HIDE_BELOW = 88;
+const ICONS_BELOW = 160;
 const LABEL_W = 180;
+
+type RailMode = "expanded" | "icons" | "hidden";
+
+function loadMode(): RailMode {
+  try {
+    const m = localStorage.getItem(MODE_KEY);
+    if (m === "expanded" || m === "icons" || m === "hidden") return m;
+    if (localStorage.getItem(COLLAPSE_KEY) === "1") return "icons";
+  } catch {
+    // ignore
+  }
+  return "expanded";
+}
+
+function saveMode(m: RailMode) {
+  try {
+    localStorage.setItem(MODE_KEY, m);
+  } catch {
+    // ignore
+  }
+}
 
 const clampWidth = (w: number) => Math.min(MAX_W, Math.max(MIN_W, Math.round(w)));
 
@@ -93,68 +116,62 @@ function NavButton({ active, collapsed, label, onClick, children }: { active: bo
   );
 }
 
+function PanelTriggerIcon({ shifted }: { shifted?: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="shrink-0">
+      <path d="M21.25 6.72v10.56a2.97 2.97 0 0 1-2.97 2.97H5.72a2.97 2.97 0 0 1-2.97-2.97V6.72a2.97 2.97 0 0 1 2.97-2.97h12.56a2.97 2.97 0 0 1 2.97 2.97" />
+      <path d="M6.25 7.25v9.5" className={cn("transition-transform duration-200 ease-out motion-reduce:transition-none", shifted && "translate-x-[10.5px]")} />
+    </svg>
+  );
+}
+
 // Admin-only sidebar rail (regulars keep Topbar + tabs everywhere — the rail
 // would be overkill for their 4 sections). Same persistent rail on desktop
-// and phones; tap the footer trigger to collapse/expand (phones have no
-// hover). Sheet pages never mount this.
+// and phones with three states: expanded → icons → hidden (rail gone, only a
+// floating expand button stays). The footer trigger cycles the states; tap
+// works everywhere, hover-expand is desktop-only. Sheet pages never mount this.
 export default function Sidebar() {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const view = useViewStore((s) => s.view);
   const setViewMode = useViewStore((s) => s.setViewMode);
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(COLLAPSE_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
+  const [mode, setMode] = useState<RailMode>(loadMode);
   const [customWidth, setCustomWidth] = useState<number | null>(loadWidth);
-  // Hover-expand is desktop-only (touch has no hover); the footer trigger
-  // tap collapses/expands everywhere.
   const [hoverOpen, setHoverOpen] = useState(false);
   // Live width while edge-dragging (null otherwise).
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const dragStart = useRef<{ x: number; w: number } | null>(null);
 
-  const effCollapsed = dragWidth != null ? dragWidth < LABEL_W : collapsed && !hoverOpen;
-  const effWidth = dragWidth ?? (collapsed && !hoverOpen ? MIN_W : (customWidth ?? DEFAULT_W));
+  const effCollapsed = dragWidth != null ? dragWidth < LABEL_W : mode !== "expanded" && !hoverOpen;
+  const effWidth = dragWidth ?? (mode !== "expanded" && !hoverOpen ? MIN_W : (customWidth ?? DEFAULT_W));
 
   if (!user) return null;
 
   const tab = tabForPath(location.pathname);
-  const toggleCollapse = () => {
+  const cycleMode = () => {
     setHoverOpen(false);
-    setCollapsed((c) => {
-      const next = !c;
-      try {
-        localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
-      } catch {
-        // ignore
-      }
-      return next;
-    });
+    const next: RailMode = mode === "expanded" ? "icons" : mode === "icons" ? "hidden" : "expanded";
+    setMode(next);
+    saveMode(next);
   };
-  // Drag release (and arrow keys): narrow snaps to collapsed, wide persists
-  // as the custom expanded width. Near-default rounds back to the default.
+  // Drag release (and arrow keys): very narrow hides the rail, narrow snaps
+  // to icons, wide persists as the custom expanded width. Near-default rounds
+  // back to the default.
   const applyWidth = (w: number) => {
     const width = clampWidth(w);
-    try {
-      if (width < SNAP_W) {
-        setCollapsed(true);
-        localStorage.setItem(COLLAPSE_KEY, "1");
-        setCustomWidth(null);
-        saveWidth(null);
-      } else {
-        const custom = Math.abs(width - DEFAULT_W) < 4 ? null : width;
-        setCollapsed(false);
-        localStorage.setItem(COLLAPSE_KEY, "0");
-        setCustomWidth(custom);
-        saveWidth(custom);
-      }
-    } catch {
-      // ignore
+    if (width < HIDE_BELOW) {
+      setMode("hidden");
+      saveMode("hidden");
+    } else if (width < ICONS_BELOW) {
+      setMode("icons");
+      saveMode("icons");
+    } else {
+      const custom = Math.abs(width - DEFAULT_W) < 4 ? null : width;
+      setMode("expanded");
+      saveMode("expanded");
+      setCustomWidth(custom);
+      saveWidth(custom);
     }
   };
   const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -177,6 +194,24 @@ export default function Sidebar() {
   };
   const adminItems = NAV_ADMIN.filter((i) => !i.adminOnly || user.isAdmin);
 
+  // Hidden state: the whole rail (icons included) is gone — only a floating
+  // expand button stays at the bottom-left.
+  if (mode === "hidden") {
+    return (
+      <button
+        type="button"
+        onClick={cycleMode}
+        aria-label="Expand sidebar"
+        title="Expand sidebar"
+        className="fixed bottom-7 left-6 z-[200] grid size-10 shrink-0 cursor-pointer place-items-center rounded-xl border border-border bg-background text-muted-foreground shadow-lg transition-colors hover:text-foreground"
+      >
+        <PanelTriggerIcon />
+      </button>
+    );
+  }
+
+  const triggerLabel = mode === "expanded" ? "Collapse sidebar" : "Hide sidebar";
+
   return (
     <aside
       onMouseLeave={() => setHoverOpen(false)}
@@ -185,7 +220,7 @@ export default function Sidebar() {
     >
       {/* Hover auto-expand covers everything except the footer trigger block
           below it — the footer is hover-dead (click only), the rest expands. */}
-      <div onMouseEnter={() => { if (collapsed) setHoverOpen(true); }} className="flex min-h-0 flex-1 flex-col">
+      <div onMouseEnter={() => { if (mode !== "expanded") setHoverOpen(true); }} className="flex min-h-0 flex-1 flex-col">
       <div className={cn("flex h-12 shrink-0 items-center gap-2 border-b border-border px-3", effCollapsed && "justify-center px-0")}>
         <button type="button" onClick={() => navigate("/")} title="Sheet Submit — home" aria-label="Sheet Submit — home" className="grid size-8 shrink-0 place-items-center rounded-md hover:bg-muted">
           <img src="/logo.svg" className="size-5" alt="" aria-hidden="true" />
@@ -228,16 +263,13 @@ export default function Sidebar() {
         <div className={cn("flex items-center", effCollapsed ? "justify-center" : "justify-start")}>
         <button
           type="button"
-          onClick={toggleCollapse}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={cycleMode}
+          aria-expanded={mode === "expanded"}
+          aria-label={triggerLabel}
+          title={triggerLabel}
           className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="shrink-0">
-            <path d="M21.25 6.72v10.56a2.97 2.97 0 0 1-2.97 2.97H5.72a2.97 2.97 0 0 1-2.97-2.97V6.72a2.97 2.97 0 0 1 2.97-2.97h12.56a2.97 2.97 0 0 1 2.97 2.97" />
-            <path d="M6.25 7.25v9.5" className={cn("transition-transform duration-200 ease-out motion-reduce:transition-none", effCollapsed && "translate-x-[10.5px]")} />
-          </svg>
+          <PanelTriggerIcon shifted={effCollapsed} />
         </button>
         </div>
       </div>

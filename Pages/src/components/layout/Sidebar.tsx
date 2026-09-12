@@ -127,9 +127,10 @@ function PanelTriggerIcon({ shifted }: { shifted?: boolean }) {
 
 // Admin-only sidebar rail (regulars keep Topbar + tabs everywhere — the rail
 // would be overkill for their 4 sections). Same persistent rail on desktop
-// and phones with three states: expanded → icons → hidden (rail gone, only a
-// floating expand button stays). The footer trigger cycles the states; tap
-// works everywhere, hover-expand is desktop-only. Sheet pages never mount this.
+// and phones with three states: expanded ↔ icons via the footer trigger,
+// hidden (rail gone, only a floating expand button stays) via drag-narrow /
+// arrow keys. Tap works everywhere; hover-expand needs a real mouse.
+// Sheet pages never mount this.
 export default function Sidebar() {
   const { user } = useAuth();
   const location = useLocation();
@@ -149,11 +150,18 @@ export default function Sidebar() {
   if (!user) return null;
 
   const tab = tabForPath(location.pathname);
-  const cycleMode = () => {
+  // Footer trigger toggles expanded ↔ icons only — hidden is entered by
+  // dragging narrow / arrow keys, and the floating button leads back out.
+  const toggleRail = () => {
     setHoverOpen(false);
-    const next: RailMode = mode === "expanded" ? "icons" : mode === "icons" ? "hidden" : "expanded";
+    const next: RailMode = mode === "expanded" ? "icons" : "expanded";
     setMode(next);
     saveMode(next);
+  };
+  const expandRail = () => {
+    setHoverOpen(false);
+    setMode("expanded");
+    saveMode("expanded");
   };
   // Drag release (and arrow keys): very narrow hides the rail, narrow snaps
   // to icons, wide persists as the custom expanded width. Near-default rounds
@@ -186,11 +194,14 @@ export default function Sidebar() {
     setDragWidth(clampWidth(s.w + e.clientX - s.x));
   };
   const endDrag = () => {
+    const s = dragStart.current;
     dragStart.current = null;
-    if (dragWidth != null) {
+    // A press without a real move is a tap, not a resize — ignore it so a
+    // stray touch on the edge can't flip the rail state.
+    if (dragWidth != null && s != null && Math.abs(dragWidth - s.w) >= 6) {
       applyWidth(dragWidth);
-      setDragWidth(null);
     }
+    setDragWidth(null);
   };
   const adminItems = NAV_ADMIN.filter((i) => !i.adminOnly || user.isAdmin);
 
@@ -200,7 +211,7 @@ export default function Sidebar() {
     return (
       <button
         type="button"
-        onClick={cycleMode}
+        onClick={expandRail}
         aria-label="Expand sidebar"
         title="Expand sidebar"
         className="fixed bottom-7 left-6 z-[200] grid size-10 shrink-0 cursor-pointer place-items-center rounded-xl border border-border bg-background text-muted-foreground shadow-lg transition-colors hover:text-foreground"
@@ -210,7 +221,7 @@ export default function Sidebar() {
     );
   }
 
-  const triggerLabel = mode === "expanded" ? "Collapse sidebar" : "Hide sidebar";
+  const triggerLabel = mode === "expanded" ? "Collapse sidebar" : "Expand sidebar";
 
   return (
     <aside
@@ -220,7 +231,7 @@ export default function Sidebar() {
     >
       {/* Hover auto-expand covers everything except the footer trigger block
           below it — the footer is hover-dead (click only), the rest expands. */}
-      <div onMouseEnter={() => { if (mode !== "expanded") setHoverOpen(true); }} className="flex min-h-0 flex-1 flex-col">
+      <div onMouseEnter={() => { if (mode !== "expanded" && window.matchMedia("(hover: hover)").matches) setHoverOpen(true); }} className="flex min-h-0 flex-1 flex-col">
       <div className={cn("flex h-12 shrink-0 items-center gap-2 border-b border-border px-3", effCollapsed && "justify-center px-0")}>
         <button type="button" onClick={() => navigate("/")} title="Sheet Submit — home" aria-label="Sheet Submit — home" className="grid size-8 shrink-0 place-items-center rounded-md hover:bg-muted">
           <img src="/logo.svg" className="size-5" alt="" aria-hidden="true" />
@@ -263,7 +274,7 @@ export default function Sidebar() {
         <div className={cn("flex items-center", effCollapsed ? "justify-center" : "justify-start")}>
         <button
           type="button"
-          onClick={cycleMode}
+          onClick={toggleRail}
           aria-expanded={mode === "expanded"}
           aria-label={triggerLabel}
           title={triggerLabel}

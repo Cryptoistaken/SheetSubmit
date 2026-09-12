@@ -10,6 +10,7 @@ import { useModalA11y } from "@/hooks/useModalA11y";
 import { api, useConnStore } from "@/lib/api";
 import { loadBdtRate, useCurrency } from "@/lib/currency";
 import { useTheme } from "@/lib/theme";
+import { sweepClick } from "@/lib/utils";
 import { useToast } from "@/lib/toast";
 import { useBubbleStore } from "@/stores/bubbleStore";
 import { useSheetStore } from "@/stores/sheetStore";
@@ -259,7 +260,7 @@ export default function Topbar() {
         <span style={{ position: "relative", display: "inline-flex", flexShrink: 0, ...hideHome }}>
         <DropdownMenu>
         <div className={`profile-btn split${photoLoaded ? " loaded" : ""}`} role="group" aria-label="Account">
-        <button type="button" className="pill-balance" onClick={toggleCurrency} title={currency === "USD" ? "Show BDT" : "Show USDC"} aria-label={currency === "USD" ? `Balance ${balanceText} USDC - show BDT` : `Balance ${balanceText} BDT - show USDC`}>
+        <button type="button" className="pill-balance sweepable" onClick={(e) => { sweepClick(e); toggleCurrency(); }} title={currency === "USD" ? "Show BDT" : "Show USDC"} aria-label={currency === "USD" ? `Balance ${balanceText} USDC - show BDT` : `Balance ${balanceText} BDT - show USDC`}>
           <span className="profile-currency" aria-hidden="true">
             <span>{balanceText}</span>
             {currency === "USD" ? <img src="/usdc.svg" alt="" width={14} height={14} /> : <BdtIcon />}

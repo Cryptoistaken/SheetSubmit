@@ -33,7 +33,8 @@ function loadMode(): RailMode {
   } catch {
     // ignore
   }
-  return "expanded";
+  // first run: start collapsed (icons), never expanded
+  return "icons";
 }
 
 function saveMode(m: RailMode) {

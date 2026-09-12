@@ -11,7 +11,7 @@ import { useProfileCache } from "@/stores/profileCache";
 import { fileTypeDef } from "@/lib/types";
 import type { AdminUser, ArchiveFile, SheetFile } from "@/lib/types";
 import { downloadXlsx } from "@/lib/xlsx";
-import { fmtMoney, useCurrency } from "@/lib/currency";
+import { fmtMoney, inputToUsd, useCurrency, type Currency } from "@/lib/currency";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import EmptyState from "./EmptyState";
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
@@ -40,6 +40,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   const [creditOpen, setCreditOpen] = useState(false);
   const [creditAmount, setCreditAmount] = useState("");
   const [creditTitle, setCreditTitle] = useState("Manual credit");
+  const [creditCurrency, setCreditCurrency] = useState<Currency>("USD");
   const [creditBusy, setCreditBusy] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -167,14 +168,15 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   const openCredit = () => {
     setCreditAmount("");
     setCreditTitle("Manual credit");
+    setCreditCurrency(currency);
     setCreditOpen(true);
   };
 
   const commitCredit = async () => {
     if (!detailUser || creditBusy) return;
-    const amount = Math.round(Number(creditAmount) * 100) / 100;
+    const amount = Math.round(inputToUsd(creditAmount.trim(), creditCurrency) * 100) / 100;
     if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) {
-      showToast("Enter a valid amount.");
+      showToast(creditCurrency === "USD" ? "Enter a valid amount up to 100,000." : "Enter a valid amount.");
       return;
     }
     const title = creditTitle.trim() || "Manual credit";
@@ -183,9 +185,9 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       const res = await api.adminCreditBalance(detailUser.id, amount, title);
       setCreditOpen(false);
       await reloadDetail(detailUser.id);
-      showToast(`Credited ${fmtMoney(res.amount, currency)} to ${userName(detailUser)}.`);
-    } catch {
-      showToast("Unable to credit balance. Please try again.");
+      showToast(`Credited ${fmtMoney(res.amount, creditCurrency)} to ${userName(detailUser)}.`);
+    } catch (e) {
+      showToast(e instanceof Error && e.message ? e.message : "Unable to credit balance. Please try again.");
     } finally {
       setCreditBusy(false);
     }
@@ -450,7 +452,13 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
         >
           <div ref={creditRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="admin-credit-title">
             <div id="admin-credit-title" className="modal-title">Credit balance</div>
-            <label style={{ display: "block", fontSize: 12, color: "var(--text3)", fontWeight: 600, marginBottom: 4 }} htmlFor="admin-credit-amount">Amount</label>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4, marginTop: 12 }}>
+              <label style={{ fontSize: 12, color: "var(--text3)", fontWeight: 600 }} htmlFor="admin-credit-amount">Amount</label>
+              <div className="pool-switch" role="group" aria-label="Credit currency">
+                <button type="button" className={creditCurrency === "USD" ? "active" : ""} aria-pressed={creditCurrency === "USD"} onClick={() => setCreditCurrency("USD")}>USD</button>
+                <button type="button" className={creditCurrency === "BDT" ? "active" : ""} aria-pressed={creditCurrency === "BDT"} onClick={() => setCreditCurrency("BDT")}>BDT</button>
+              </div>
+            </div>
             <input
               id="admin-credit-amount"
               className="modal-input"

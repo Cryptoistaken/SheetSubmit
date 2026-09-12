@@ -44,16 +44,6 @@ instead of per-file `dupKeys` fan-out (≤40 files today). Est. **10–100x** on
 maintenance window, measure on staging first. If Railway forbids `pg_trgm`, keep the `ILIKE`
 search as-is. `wa_eligible` deliberately normalizes both `wa_status` and legacy `waStatus`.
 
-### R3. ETag/304 on file reads (old step 6)
-Backend: `ETag = max(updated_at)` (list) / `seq` (full) on `GET /api/files`,
-`GET /api/files/:id/full`. Needs the Pages half: send `If-None-Match`, skip render on 304.
-Est. 5–10x bytes on repeat loads. (`/api/bot/info` + `/api/auth/telegram/config` already have ETag.)
-
-### R4. Delete-user bulk (old #50)
-Today: `DELETE /api/admin/user/:id` lists files then wipes sequentially per file.
-Fix: collect file IDs, delete available pool rows by both `src_uid` and `src_file_id`,
-then delete the user so FK cascades clear files/sessions/wallets. Est. **10–50x** by file count.
-
 ### R5 (optional, later). `downloads.rows` full-copy slimming
 `downloads.rows` stores a full copy of claimed row JSONB. Schema evolution (store keys only,
 regenerate at download) cuts storage/transfer substantially. Chunk large `keys` arrays when
@@ -61,14 +51,13 @@ used with `ANY(...)`.
 
 ## Rollout order (each step independently shippable)
 1. R2 migration + cross-dups SQL.
-2. R3 ETag + Pages client change (only step touching `Pages/`).
-3. R4 delete-user bulk, then R5 if storage/transfer ever hurts.
+2. R5 if storage/transfer ever hurts.
 
 ## Verify
 - `bun run typecheck` in `backend/`.
 - `bun agent/timing.ts` before/after each step (needs `AGENT_TOKEN` + `BACKEND_URL` + test
-`SS_SESSION` in gitignored `agent/.env`); compare `srv:` (backend ms), not just totals.
-- Keep API responses byte-compatible so `Pages/` needs no change except R3.
+  `SS_SESSION` in gitignored `agent/.env`); compare `srv:` (backend ms), not just totals.
+- Keep API responses byte-compatible so `Pages/` needs no change.
 
 ## Landed (do not re-do)
 | Fix | Where | Live evidence |
@@ -84,6 +73,8 @@ used with `ANY(...)`.
 | admin single-user lookup (`adminUser`) | `pg.ts` + `routes/admin.ts` | — |
 | SQL pool pagination + verified counts + key projection | `rows`/`verifiedCounts`/`keys` ops | `srv` 6–22ms |
 | `Server-Timing: app;dur=N` on `/api/*` | `index.ts` | separates backend ms from network ms |
+| R3 ETag/304 on authed file reads (server-only, browser revalidates transparently via HTTP cache — no `Pages/` change needed) | `privateEtag` in `index.ts` on `/api/files` + `/api/files/*`: SHA-1 body ETag, `Cache-Control: private, no-cache`, CORS/CC headers preserved on the 304, JSON-only body guard (never buffers SSE) | tests: `filesEtag.test.ts` 4 specs (200→304 bodyless round trip, tag changes with content, scoping); live curl 200→304 with all headers intact; the SSE guard is pinned by the existing `live.test.ts` |
+| R4 delete-user bulk | `deleteUser` op in `pg.ts` rewrites the per-file admin loop as ONE tx: filesnap cleanup + `filetomb:` tombstones + `pool_rows` by `src_file_id`/`src_uid` + `file_index`/`users` deletes (FK cascades sessions/wallets/files) | `admin.ts` route is a one-liner; tests: `deleteUserBulk.test.ts` 2 specs (tombstones + cascades + idempotent); live use: 51 files/509 pool rows purged in one call, 0 orphans |
 | worker dual-port (`$PORT` + fixed `:3000`, `0.0.0.0`) | `worker/index.ts` | `/api/worker/health` 502 → 200 |
 | direct backend calls from prod web (`SameSite=None`) | `Pages/src/lib/api.ts`, `lib/session.ts` | front-vs-direct delta ±15ms |
 | agent door + `agent/` tools + dual-origin timing | `routes/agent.ts`, `agent/` | this file's numbers come from there |

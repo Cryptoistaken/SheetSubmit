@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context, Next } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { compress } from "hono/compress";
 import { etag } from "hono/etag";
@@ -20,7 +21,7 @@ import { logEvent, newReqId } from "./lib/log";
 
 export const app = new Hono<{ Bindings: Env; Variables: { uid: string; logCtx?: Record<string, unknown> } }>();
 // ponytail: manual bump on any backend route change — lets health checks confirm a deploy landed
-export const API_VERSION = "2.0.31";
+export const API_VERSION = "2.0.32";
 // ponytail: repository errors are plain Errors — map known client failures to typed
 // 4xx JSON instead of masking everything as 500. Unknown (incl. SQL internals) stays masked.
 const CLIENT_ERRORS: [RegExp, ContentfulStatusCode][] = [
@@ -79,7 +80,8 @@ app.use("/api/*", async (c, next) => {
     c.header("Vary", "Origin");
     c.header("Access-Control-Allow-Credentials", "true");
     c.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,HEAD,OPTIONS");
-    c.header("Access-Control-Allow-Headers", "Content-Type,Authorization,Cache-Control,Pragma,Priority");
+    c.header("Access-Control-Allow-Headers", "Content-Type,Authorization,Cache-Control,Pragma,Priority,If-None-Match");
+    c.header("Access-Control-Expose-Headers", "ETag");
     c.header("Access-Control-Max-Age", "86400");
   }
   if (c.req.method === "OPTIONS") {
@@ -89,7 +91,8 @@ app.use("/api/*", async (c, next) => {
       headers["Vary"] = "Origin";
       headers["Access-Control-Allow-Credentials"] = "true";
       headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,PATCH,HEAD,OPTIONS";
-      headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,Cache-Control,Pragma,Priority";
+      headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,Cache-Control,Pragma,Priority,If-None-Match";
+      headers["Access-Control-Expose-Headers"] = "ETag";
       headers["Access-Control-Max-Age"] = "86400";
     }
     return new Response(null, { status: 204, headers });
@@ -104,6 +107,32 @@ app.use("/api/*", compress());
 // ETag/304 only for public, low-churn endpoints — never on authed/user-specific routes
 app.use("/api/bot/info", etag());
 app.use("/api/auth/telegram/config", etag());
+// ponytail: hono's etag() rebuilds 304s with only ETag (CORS headers dropped),
+// but authed file reads are cross-origin in prod. Roll the 20-line equivalent
+// that keeps the headers on the 304; `private` + no-cache forces revalidation
+// and lets the browser serve the stored 200 on a match.
+const privateEtag = () => async (c: Context, next: Next) => {
+  await next();
+  if (c.req.method !== "GET" || c.res.status !== 200) return;
+  // never buffer streams (SSE /api/files/*/live) or xlsx blobs — JSON only
+  if (!(c.res.headers.get("content-type") || "").includes("application/json")) return;
+  const body = await c.res.clone().arrayBuffer();
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", body));
+  const tag = `"${Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("")}"`;
+  c.header("Cache-Control", "private, no-cache");
+  if (c.req.header("If-None-Match") === tag) {
+    const headers = new Headers({ ETag: tag, "Cache-Control": "private, no-cache" });
+    for (const k of ["Access-Control-Allow-Origin", "Access-Control-Allow-Credentials", "Vary"]) {
+      const v = c.res.headers.get(k);
+      if (v) headers.set(k, v);
+    }
+    c.res = new Response(null, { status: 304, headers });
+  } else {
+    c.res.headers.set("ETag", tag);
+  }
+};
+app.use("/api/files", privateEtag());
+app.use("/api/files/*", privateEtag());
 app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now(), version: API_VERSION }));
 // Pings the worker over Railway's internal network (WORKER_URL) so connectivity is verifiable from the public backend URL
 app.get("/api/worker/health", async (c) => {

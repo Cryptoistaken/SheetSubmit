@@ -16,8 +16,9 @@ import { agent } from "./routes/agent";
 import { agentDoorOpen } from "./lib/agent";
 import { verifyTelegramIdToken } from "./lib/telegramOidc";
 import { signSession as signSessionFn } from "./lib/session";
+import { logEvent, newReqId } from "./lib/log";
 
-export const app = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
+export const app = new Hono<{ Bindings: Env; Variables: { uid: string; logCtx?: Record<string, unknown> } }>();
 // ponytail: manual bump on any backend route change — lets health checks confirm a deploy landed
 export const API_VERSION = "2.0.31";
 // ponytail: repository errors are plain Errors — map known client failures to typed
@@ -31,11 +32,42 @@ const CLIENT_ERRORS: [RegExp, ContentfulStatusCode][] = [
 ];
 app.onError((err, c) => {
   const message = String((err as Error)?.message || "").slice(0, 256);
-  console.error(`[api-error] ${c.req.method} ${c.req.path} :: ${message || err}`);
+  // ponytail: no separate error line — the wide-event middleware below merges
+  // this into the single per-request event (logging-best-practices).
+  try {
+    c.set("logCtx", { ...(c.get("logCtx") ?? {}), error: message || String(err).slice(0, 256) });
+  } catch { /* context must never break error mapping */ }
   for (const [re, status] of CLIENT_ERRORS) if (re.test(message)) return c.json({ error: message }, status);
   return c.json({ error: "Internal server error" }, 500);
 });
 app.notFound((c) => c.json({ error: "not found" }, 404));
+// ponytail: one JSON wide event per API request (method/path/status/ms/uid) —
+app.use("/api/*", async (c, next) => {
+  const t = Date.now();
+  const req_id = newReqId();
+  try {
+    await next();
+  } finally {
+    let uid: string | undefined;
+    try {
+      uid = c.get("uid") || undefined;
+    } catch { /* unauthenticated */ }
+    let ctx: Record<string, unknown> = {};
+    try {
+      ctx = c.get("logCtx") ?? {};
+    } catch { /* never break the response path */ }
+    logEvent(c.res.status >= 500 ? "error" : "info", {
+      method: c.req.method,
+      path: c.req.path,
+      status: c.res.status,
+      duration_ms: Date.now() - t,
+      req_id,
+      version: API_VERSION,
+      ...(uid ? { uid } : {}),
+      ...ctx,
+    });
+  }
+});
 app.use("/api/*", async (c, next) => {
   const origin = c.req.header("Origin") || "";
   // ponytail: unconditional — an Origin-less first hit gets edge-cached; without

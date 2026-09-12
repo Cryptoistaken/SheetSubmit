@@ -37,6 +37,9 @@ release-fingerprint.txt
 tmp_artifact*/
 compare-*.html
 
+# Local adaptiveness plan (research doc — never commit)
+adaptiveness.plan.md
+
 # Re-include project .bat files hidden by global gitignore (*.bat)
 !redeploy.bat
 !android/gradlew.bat

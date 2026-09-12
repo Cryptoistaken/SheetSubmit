@@ -52,7 +52,7 @@ export default function PageAdvancedOverlay({ open, onClose }: { open: boolean; 
   const isProgress = phase === "checking" || phase === "done";
   return (
     <div ref={modalRef} className="download-opt-overlay" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
-      <div className="download-opt-box" style={{ width: custom || isProgress ? 300 : 220 }}>
+      <div className="download-opt-box" style={{ width: custom || isProgress ? "min(300px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)))" : "min(220px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)))" }}>
         <div id={titleId} className="download-opt-title">{phase === "checking" ? "Checking…" : phase === "done" ? "Result" : "Advanced check"}</div>
         {isProgress ? (
           <>

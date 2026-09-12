@@ -95,7 +95,11 @@ export default function FileCard({
     e.stopPropagation();
     if (!menuOpen) {
       const r = dotsRef.current!.getBoundingClientRect();
-      setMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+      // NOTE (RTL): physical right-math is intentional — menu anchors to the card's
+      // visual right edge in both directions; logical insets would mirror it wrongly.
+      // VERTICAL clamp (mirror of sheet popup): open upward when the 400px popup won't fit below.
+      const openUp = r.bottom + 4 + 400 > window.innerHeight - 8;
+      setMenuPos({ top: Math.max(4, openUp ? r.top - 400 : r.bottom + 4), right: Math.max(8, Math.min(window.innerWidth - r.right, window.innerWidth - 200 - 4)) });
     }
     setMenuOpen((o) => !o);
   };
@@ -232,7 +236,7 @@ export default function FileCard({
       {/* B: Name + Date + Badges (grid) OR Name + Date (list) */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 6, minWidth: 0, flex: list ? "none" : 1, overflow: "hidden" }}>
         <div style={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
-          <div className="file-card-name" dir="auto" style={{ unicodeBidi: "isolate" }}>{file.name}</div>
+          <div className="file-card-name" dir="auto" title={file.name} style={{ unicodeBidi: "isolate" }}>{file.name}</div>
           {tsStr ? <div style={{ fontSize: 10, color: "var(--text3)", whiteSpace: "nowrap", marginTop: 1 }}>{tsStr}</div> : null}
         </div>
         {!list ? (
@@ -284,7 +288,7 @@ export default function FileCard({
       ) : null}
 
       {menuOpen ? createPortal(
-        <div ref={menuRef} id={menuId} role="menu" aria-label={`Actions for ${file.name}`} style={{ position: "fixed", top: menuPos.top, right: menuPos.right, minWidth: 140, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-lg)", padding: 4, display: "flex", flexDirection: "column", zIndex: 1000 }}
+        <div ref={menuRef} id={menuId} role="menu" aria-label={`Actions for ${file.name}`} className="file-menu-pop" style={{ position: "fixed", top: menuPos.top, right: menuPos.right, minWidth: 140, maxWidth: "min(200px, calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)))", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "var(--shadow-lg)", padding: 4, display: "flex", flexDirection: "column", zIndex: 1000 }}
           onPointerDown={(e) => e.stopPropagation()}
           onPointerUp={(e) => e.stopPropagation()}
           onPointerMove={(e) => e.stopPropagation()}

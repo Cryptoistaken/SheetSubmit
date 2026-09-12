@@ -337,8 +337,8 @@ export default function SheetGrid() {
               label: result?.label ?? String(rowIdx + 1),
               crossInfo: result?.crossInfo ?? [],
               check: result?.check ?? null,
-              x: Math.max(4, rect.right - 340),
-              y: rect.bottom + 4,
+              x: Math.max(4, Math.min(rect.right - 340, window.innerWidth - Math.min(340, window.innerWidth - 8) - 4)),
+              y: Math.max(4, Math.min(rect.bottom + 4, window.innerHeight - 400 - 8)),
             });
           }
         }, 500);
@@ -375,8 +375,8 @@ export default function SheetGrid() {
             label: result?.label ?? String(rowIdx + 1),
             crossInfo: result?.crossInfo ?? [],
               check: result?.check ?? null,
-            x: Math.max(4, rect.right - 340),
-            y: rect.bottom + 4,
+            x: Math.max(4, Math.min(rect.right - 340, window.innerWidth - Math.min(340, window.innerWidth - 8) - 4)),
+            y: Math.max(4, Math.min(rect.bottom + 4, window.innerHeight - 400 - 8)),
           });
         }
       }, 500);
@@ -486,9 +486,7 @@ export default function SheetGrid() {
           style={{
             left: logPopup.x,
             top: logPopup.y,
-            width: 340,
-            maxHeight: "50vh",
-            overflowY: "auto",
+            width: "min(340px, calc(100vw - 8px - env(safe-area-inset-left) - env(safe-area-inset-right)))",
             padding: 10,
           }}
         >

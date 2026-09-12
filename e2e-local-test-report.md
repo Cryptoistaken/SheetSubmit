@@ -70,3 +70,13 @@ bun scripts/e2e-local.ts down   # stop everything
 - `npx playwright test e2e/page-entry.spec.ts --headed` → **5 passed** (local, ~8 min total).
 - `npm run typecheck` (Pages) → clean. `bun test sheetStore + filetypes` → **91 pass, 0 fail**.
 - Skills used: `xlsx` (fixtures), `webapp-testing`, `playwright-testing` (skills.sh) — see global registry.
+
+## Live smoke (prod, owner-consented, minimal)
+
+- `Pages/e2e/live-smoke.spec.ts` — skipped unless `LIVE_SMOKE=1 SS_SESSION=<cookie>`
+  with live `E2E_BASE_URL`. Uses a real user session cookie (env only, never committed).
+- Flow: pin same-origin proxy (`ss_api_proxy=1`, else prod web calls the backend
+  cross-origin and the cookie isn't sent) → home → create 1-row file → open →
+  double-tap paste → archive + purge → verify 404. **Never presses Check** (zero
+  FB/check-service calls), never takes pool rows; the 1 fake pool row lives seconds.
+- Verdict: green on live. Not for bulk: 500 fake rows would pollute shared pools.

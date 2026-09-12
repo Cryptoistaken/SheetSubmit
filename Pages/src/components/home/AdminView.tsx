@@ -466,6 +466,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
         >
           <div ref={creditRef} className="modal-box" role="dialog" aria-modal="true" aria-labelledby="admin-credit-title">
             <div id="admin-credit-title" className="modal-title">{creditMode === "credit" ? "Add balance" : "Reduce balance"}</div>
+            <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>Current balance: {fmtMoney(detailUser?.balance ?? 0, creditCurrency)}{creditMode === "debit" ? " — may go below zero." : ""}</div>
             <div style={{ marginTop: 12 }}>
               <SlideSwitch options={[{ value: "credit", label: "Add" }, { value: "debit", label: "Reduce" }] as const} value={creditMode} onChange={switchCreditMode} ariaLabel="Adjustment direction" />
             </div>
@@ -499,6 +500,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
               className="modal-input"
               type="text"
               aria-label="Credit title"
+              placeholder="e.g. Advance payment"
               value={creditTitle}
               onFocus={(e) => e.currentTarget.select()}
               onChange={(e) => setCreditTitle(e.target.value)}

@@ -47,7 +47,7 @@
                       #   POST /api/auth/device/claim {token} (deviceGet/Delete),
                       #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS, stores picture+phone),
                       #   GET /api/bot/info, ensureWebhook on first request
-                      #   + wallet routes: GET /api/wallet, POST /api/wallet/withdraw, GET /api/wallet/requests, POST /api/wallet/requests/:id/:action, POST /api/wallet/credit (admin manual add/reduce w/ title+direction → walletCredit op, debit guards insufficient balance, surfaced on the admin user detail page)
+                      #   + wallet routes: GET /api/wallet, POST /api/wallet/withdraw, GET /api/wallet/requests, POST /api/wallet/requests/:id/:action, POST /api/wallet/credit (admin manual add/reduce w/ free-text title+direction → walletCredit op, debits may drive balance negative e.g. advance payments, surfaced on the admin user detail page)
  lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, WORKER_URL, CHECK_URL, ALLOW_TEST_AUTH, TELEGRAM_LOGIN_CLIENT_ID)
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
   src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder (SameSite=None on https for direct cross-origin calls, Lax on http)

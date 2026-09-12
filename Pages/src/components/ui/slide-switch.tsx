@@ -12,12 +12,22 @@ export default function SlideSwitch<T extends string>({ options, value, onChange
   const thumbRef = useRef<HTMLSpanElement>(null);
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
   useEffect(() => {
-    const i = Math.max(0, options.findIndex((o) => o.value === value));
-    const thumb = thumbRef.current;
-    const btn = btnRefs.current[i];
-    if (thumb && btn) {
-      thumb.style.width = btn.offsetWidth + "px";
-      thumb.style.left = btn.offsetLeft + "px";
+    const update = () => {
+      const i = Math.max(0, options.findIndex((o) => o.value === value));
+      const thumb = thumbRef.current;
+      const btn = btnRefs.current[i];
+      if (thumb && btn && btn.offsetWidth > 0) {
+        thumb.style.width = btn.offsetWidth + "px";
+        thumb.style.left = btn.offsetLeft + "px";
+      }
+    };
+    update();
+    // mounted hidden (dialogs, inactive tabs) measures zero — reposition on resize
+    const root = thumbRef.current?.parentElement;
+    if (root && typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(update);
+      ro.observe(root);
+      return () => ro.disconnect();
     }
   }, [value, options]);
   const focusBtn = (i: number) => btnRefs.current[i]?.focus();

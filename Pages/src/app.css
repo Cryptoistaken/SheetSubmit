@@ -88,6 +88,7 @@
     /* Motion */
     --anim-fast: .12s;
     --anim-med: .18s;
+}
 
 /* ── Click sweep: light bar crossing the tapped button (same family as the
    login shine). Restart via sweepClick() in lib/utils. ── */
@@ -110,7 +111,6 @@
 @keyframes sweepX {
     from { left: -75%; }
     to { left: 125%; }
-}
 }
 
 /* ── Dark theme ── */

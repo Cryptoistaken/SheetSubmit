@@ -217,6 +217,7 @@ export interface DownloadDetail {
   groups: DownloadDetailGroup[];
 }
 export interface PoolPrice { poolId: string; password: string | null; price: number }
+export interface PoolFlags { types: Record<string, boolean>; passwords: Record<string, boolean> }
 export interface PoolDiagRow { password: string; pool_id: string; state: string; src_uid: string | null; src_file_id: string | null; inserted_at: number; claimed_by: string | null; hold_id: string | null }
 export interface PoolDiagFound {
   fileId: string; idx: number; ownerId: string; archived: boolean;
@@ -443,6 +444,9 @@ export const api = {
     const enc = (s: string) => encodeURIComponent(s);
     return request<PoolPrice>(`/pools/${enc(password)}/${enc(poolId)}/price`, { method: "PUT", body: JSON.stringify({ price }) });
   },
+  getPoolFlags: () => request<PoolFlags>("/pools/flags"),
+  setPoolFlags: (types: Record<string, boolean>, passwords: Record<string, boolean>) =>
+    request<PoolFlags>("/pools/flags", { method: "PUT", body: JSON.stringify({ types, passwords }) }),
 
   me: async (): Promise<{ user: User | null; expired: boolean; loginRequired: boolean }> => {
     let res: Response;

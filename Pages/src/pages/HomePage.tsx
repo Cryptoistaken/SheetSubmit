@@ -21,6 +21,7 @@ import PageSkeleton from "@/components/ui/page-skeleton";
 import { useModalA11y } from "@/hooks/useModalA11y";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
+import type { PoolFlags } from "@/lib/api";
 import { useConfirm } from "@/lib/confirm";
 import { useToast } from "@/lib/toast";
 import { COLUMN_PRESETS, fileTypeDef, FILE_PRESET_NAMES } from "@/lib/types";
@@ -345,6 +346,12 @@ export default function HomePage() {
   const createFile = async (preset: FilePreset) => openCreatePw("fb_cookie", preset);
 
   const [uploadPending, setUploadPending] = useState<null | { id: string; name: string; type: FileType; rows: import("@/lib/types").Row[]; dataCount: number; detectedPassword?: string; cacheReady: Promise<void> }>(null);
+  // pool availability flags (admin kill-switches; null = not loaded yet, treat as all on)
+  const [poolFlags, setPoolFlags] = useState<PoolFlags | null>(null);
+  useEffect(() => { api.getPoolFlags().then(setPoolFlags).catch(() => setPoolFlags(null)); }, []);
+  const presetPoolId = (preset: FilePreset) => preset === "cookie" ? "cookies_only" : preset === "combo" ? "cookies_2fa" : "page";
+  const presetOff = (preset: FilePreset) => poolFlags != null && poolFlags.types[presetPoolId(preset)] === false;
+  const poolPwOff = (pwd: string) => poolFlags != null && poolFlags.passwords[pwd] === false;
   const [typePick, setTypePick] = useState<null | { has2fa: boolean; pageHint: boolean }>(null);
   const typePickRef = useModalA11y(!!typePick, () => { setTypePick(null); setUploadPending(null); });
   const pwRef = useModalA11y(!!pwModal, () => { setPwModal(null); setUploadPending(null); });
@@ -635,7 +642,7 @@ export default function HomePage() {
         </div>
       ) : null}
 
-      {tab === "files" ? <Fab onCreate={createFile} onUpload={uploadFile} /> : null}
+      {tab === "files" ? <Fab onCreate={createFile} onUpload={uploadFile} disabledPresets={(["cookie", "combo", "page"] as FilePreset[]).filter(presetOff)} /> : null}
       {tab === "files" && !user?.isAdmin ? <ViewSwitch view={view} setViewMode={setViewMode} floating /> : null}
 
       <div
@@ -684,13 +691,14 @@ export default function HomePage() {
               { preset: "page" as FilePreset, name: "Page", desc: "full columns", Icon: PageIcon },
             ] as const).map((o) => {
               const detected = typePick && ((o.preset === "cookie" && !typePick.has2fa) || (o.preset === "combo" && typePick.has2fa) || (o.preset === "page" && typePick.pageHint));
-              const disabled = !!typePick?.has2fa && o.preset === "cookie";
+              const off = presetOff(o.preset);
+              const disabled = (!!typePick?.has2fa && o.preset === "cookie") || off;
               return (
                 <button
                   className="home-fab-item"
                   key={o.preset}
                   disabled={disabled}
-                  title={disabled ? "File has 2FA data - pick 2fa or Page" : undefined}
+                  title={off ? "Disabled by admin" : disabled ? "File has 2FA data - pick 2fa or Page" : undefined}
                   style={disabled ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
                   onClick={() => pickUploadType(o.preset)}
                 >
@@ -717,7 +725,7 @@ export default function HomePage() {
             {[
               { id: "dgddigital" },
               { id: LOVE_PASSWORD },
-            ].map((c) => {
+            ].filter((c) => !poolPwOff(c.id)).map((c) => {
               const isDetected = uploadPending?.detectedPassword === c.id;
               return (
               <button

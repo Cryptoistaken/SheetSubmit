@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, type PoolFlags } from "@/lib/api";
 import { fmtMoney, inputToUsd, useBdtRate, useCurrency, usdToInput, type Currency } from "@/lib/currency";
 import { useToast } from "@/lib/toast";
 import { CookieIcon, PageIcon, PasswordIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
@@ -38,6 +38,23 @@ export default function SettingsView() {
   // conversion rate draft (৳ per $1)
   const [rateInput, setRateInput] = useState("");
 
+  // pool availability flags (admin kill-switches: off stops new files, existing pulls free)
+  const [flags, setFlags] = useState<PoolFlags | null>(null);
+
+  const flipFlag = async (dim: "types" | "passwords", key: string) => {
+    if (!flags) return;
+    const prev = flags;
+    const next: PoolFlags = { ...flags, [dim]: { ...flags[dim], [key]: !flags[dim][key] } };
+    setFlags(next);
+    try {
+      setFlags(await api.setPoolFlags(next.types, next.passwords));
+      showToast(next[dim][key] ? "Pool turned on." : "Pool turned off. Existing files pull free of charge.");
+    } catch {
+      setFlags(prev);
+      showToast("Unable to save. Please try again.");
+    }
+  };
+
   // inputs are entered in the selected currency; stored/saved values are always USD
   const switchEntryCurrency = (c: Currency) => {
     const prev = entryRef.current;
@@ -74,6 +91,7 @@ export default function SettingsView() {
   }, []);
 
   useEffect(() => { void fetchPrices(); }, [fetchPrices]);
+  useEffect(() => { api.getPoolFlags().then(setFlags).catch(() => setFlags(null)); }, []);
 
   const maxFor = (cur: Currency) => (cur === "USD" ? 1000 : 1000 * rate);
 
@@ -190,6 +208,47 @@ export default function SettingsView() {
           </div>
         )}
         <Button disabled={prices === null} onClick={openConfirm} style={{ marginTop: 12 }}>Save all prices</Button>
+      </section>
+
+      {/* pool availability */}
+      <section style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg)", padding: "14px 16px" }}>
+        <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Pool availability</h3>
+        <p style={{ fontSize: 12, color: "var(--text3)", margin: "6px 0 0" }}>Turn off a file type or password to stop new files of that kind. Existing files stay visible and pull free of charge.</p>
+        {flags === null ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10, marginTop: 12 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>File types</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {POOL_TABS.map((t) => {
+                  const meta = POOL_META[t.id];
+                  const on = flags.types[t.id] !== false;
+                  return (
+                    <button key={t.id} type="button" role="switch" aria-checked={on} aria-label={`${meta.label} pool ${on ? "on" : "off"}`} className={"autocheck-toggle" + (on ? " on" : "")} onClick={() => void flipFlag("types", t.id)}>
+                      <span className="autocheck-track" aria-hidden="true"></span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><meta.Icon size={14} />{meta.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>Passwords</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {PASSWORDS.map((pwd) => {
+                  const on = flags.passwords[pwd] !== false;
+                  return (
+                    <button key={pwd} type="button" role="switch" aria-checked={on} aria-label={`${pwd} pool ${on ? "on" : "off"}`} className={"autocheck-toggle" + (on ? " on" : "")} onClick={() => void flipFlag("passwords", pwd)}>
+                      <span className="autocheck-track" aria-hidden="true"></span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><PasswordIcon password={pwd} size={14} />{pwd}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* conversion rate */}

@@ -9,9 +9,10 @@ import type { FilePreset } from "@/lib/types";
 interface FabProps {
   onCreate: (preset: FilePreset) => void;
   onUpload: (file: File) => void;
+  disabledPresets?: FilePreset[];
 }
 
-export default function Fab({ onCreate, onUpload }: FabProps) {
+export default function Fab({ onCreate, onUpload, disabledPresets = [] }: FabProps) {
   const [open, setOpen] = useState(false);
   const fabRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -79,7 +80,7 @@ export default function Fab({ onCreate, onUpload }: FabProps) {
           ["combo", "2fa", "cookies and 2fa and uid", TwoFaIcon],
           ["page", "Page", "full columns", PageIcon],
         ] as const).map(([preset, name, desc, Icon]) => (
-          <button role="menuitem" className="home-fab-item home-fab-subitem" key={preset} onClick={() => { setOpen(false); onCreate(preset); }}>
+          <button role="menuitem" className="home-fab-item home-fab-subitem" key={preset} disabled={disabledPresets.includes(preset)} title={disabledPresets.includes(preset) ? "Disabled by admin" : undefined} style={disabledPresets.includes(preset) ? { opacity: 0.45, cursor: "not-allowed" } : undefined} onClick={() => { setOpen(false); onCreate(preset); }}>
             <span className="home-fab-ic" aria-hidden="true" style={{ background: "var(--bg3)", color: "var(--text)" }}><Icon size={15} aria-hidden="true" /></span>
             <span>
               <span className="home-fab-name">{name}</span>

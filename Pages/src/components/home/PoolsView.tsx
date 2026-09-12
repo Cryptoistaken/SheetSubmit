@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router";
 import { ChevronDown, ExternalLink, MoreVertical } from "lucide-react";
 import { api } from "@/lib/api";
 import type { PoolDetail, PoolSummary, PoolUserFile, VerifiedCounts } from "@/lib/api";
+import type { PoolFlags } from "@/lib/api";
 import type { PoolLivePatch } from "@/lib/poolLive";
 import { usePoolLive } from "@/hooks/usePoolLive";
 import { fmtMoney, useCurrency } from "@/lib/currency";
@@ -82,6 +83,9 @@ export default function PoolsView() {
   // prices (read-only here — editing lives on the Settings page)
   const [prices, setPrices] = useState<Record<string, number | null>>({});
   const [priceCurrency] = useCurrency();
+  // availability flags: takes from an off combo are free (backend forces unit price 0)
+  const [poolFlags, setPoolFlags] = useState<PoolFlags | null>(null);
+  const comboOff = poolFlags != null && (poolFlags.types[cur] === false || poolFlags.passwords[curPwd] === false);
 
   const loadPrices = useCallback(async () => {
     const allPrices: Record<string, number | null> = {};
@@ -110,6 +114,7 @@ export default function PoolsView() {
   const refreshAll = useCallback(async () => { await Promise.all([load(), loadPrices()]); }, [load, loadPrices]);
 
   useEffect(() => { load(); loadPrices(); }, [load, loadPrices]);
+  useEffect(() => { api.getPoolFlags().then(setPoolFlags).catch(() => setPoolFlags(null)); }, []);
 
   useEffect(() => {
     const onFocus = () => { loadPrices(); };
@@ -399,10 +404,10 @@ export default function PoolsView() {
               <input name="custom-qty" placeholder={customFocused ? "" : "Custom"} aria-label="Custom quantity" inputMode="numeric" value={customQty} onChange={(e) => setCustomQty(e.target.value.replace(/\D/g, ""))} onFocus={(e) => { setCustomFocused(true); e.currentTarget.select(); }} onBlur={() => setCustomFocused(false)} style={{ width: 72, border: "none", padding: "6px 8px", fontSize: 13, textAlign: "center", outline: "none", background: customQty ? "var(--bg3)" : "var(--bg)", borderLeft: customFocused ? "1px solid var(--border2)" : "none", cursor: customQty || customFocused ? "text" : "pointer" }} />
             </span>
           </div>
-          <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${effectiveN} × ${fmtMoney(unitPrice, priceCurrency)} = ${fmtMoney(effectiveN * unitPrice, priceCurrency)}` : "-"}</div>
+          <div className="taker-cell"><small>Amount</small>{comboOff ? "Free" : unitPrice != null ? `${effectiveN} × ${fmtMoney(unitPrice, priceCurrency)} = ${fmtMoney(effectiveN * unitPrice, priceCurrency)}` : "-"}</div>
         </div>
         <button type="button" className="btn btn-primary" disabled={downloading || (cur === "page" ? !(verified ? verified.verified > 0 : totals.available > 0) : !totals.available)} onClick={() => void doHoldConfirm()} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,0,0,.25)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? (cur === "page" ? "All verified" : "All") : poolQty} from {poolMeta.label}</button>
-        <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>{cur === "page" ? "Page pool is verified-only. Take creates a hold. First approve/reject opens a 5-minute window to flip once; users are paid when it settles." : "Take creates a hold. First approve/reject opens a 5-minute window to flip once; users are paid when it settles."}</div>
+        <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>{cur === "page" ? "Page pool is verified-only. Take creates a hold. First approve/reject opens a 5-minute window to flip once; users are paid when it settles." : "Take creates a hold. First approve/reject opens a 5-minute window to flip once; users are paid when it settles."}{comboOff ? " This pool is turned off by admin: pulls are free of charge." : null}</div>
       </div>
 
       <button type="button" onClick={() => setUsersOpen((v) => !v)} aria-expanded={usersOpen} aria-controls="pool-users-panel" style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", marginTop: 16, marginBottom: 8, padding: 0, background: "none", border: 0, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>

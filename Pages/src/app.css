@@ -2146,7 +2146,7 @@ th.rh:hover {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
     transition: transform 0.2s var(--ease-out);
 }
-.autocheck-toggle.on .autocheck-track { background: var(--grad-page); border-color: transparent; }
+.autocheck-toggle.on .autocheck-track { background: var(--text); border-color: transparent; }
 .autocheck-toggle.on .autocheck-track::after { transform: translateX(16px); }
 
 /* ── Touch devices (port of old css/touch.css) ── */

@@ -593,6 +593,30 @@ button, input, select, textarea {
 .home-tab.sel-danger:hover { background: var(--red-bg); }
 .home-tab.sel-primary { color: var(--blue); }
 .home-tab.sel-primary:hover { background: var(--blue-light); }
+/* Multi-select toolbars act as primary actions — solid fills, not tinted text. */
+.home-tabs[role="toolbar"] .home-tab.sel-primary {
+    background: var(--blue);
+    border-color: transparent;
+    color: #fff;
+}
+.home-tabs[role="toolbar"] .home-tab.sel-primary:hover {
+    background: var(--blue-dark);
+    color: #fff;
+}
+.home-tabs[role="toolbar"] .home-tab.sel-danger {
+    background: var(--red);
+    border-color: transparent;
+    color: #fff;
+}
+.home-tabs[role="toolbar"] .home-tab.sel-danger:hover {
+    background: var(--red);
+    filter: brightness(0.92);
+    color: #fff;
+}
+.home-tabs[role="toolbar"] .home-tab.sel-primary:active,
+.home-tabs[role="toolbar"] .home-tab.sel-danger:active {
+    transform: scale(0.98);
+}
 .home-tab {
     display: inline-flex;
     align-items: center;

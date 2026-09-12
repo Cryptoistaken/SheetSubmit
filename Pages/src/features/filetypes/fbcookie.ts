@@ -26,7 +26,7 @@ export function createFbCookieBehavior() {
       const cellKey = ctx.rowIdx + ":" + ctx.colKey;
       if (!validation.valid) {
         ctx.invalidCells.add(cellKey);
-        toast(("Invalid: " + validation.msg).slice(0, 30));
+        toast(("Invalid value: " + validation.msg).slice(0, 60));
       } else {
         ctx.invalidCells.delete(cellKey);
       }
@@ -48,7 +48,7 @@ export function createFbCookieBehavior() {
       if (ctx.colKey === "uid" && ctx.value && row.cookies) {
         const extracted = _extractCUser(row.cookies);
         if (extracted && extracted !== ctx.value.trim()) {
-          toast("UID doesn't match cookie");
+          toast("UID does not match the cookie.");
         }
       }
     },
@@ -80,7 +80,7 @@ export function createFbCookieBehavior() {
           uidRows.push({ uid, row });
         }
       });
-      if (!uidRows.length) throw new Error("No UIDs found");
+      if (!uidRows.length) throw new Error("No UIDs found.");
 
       const uids = uidRows.map((r) => r.uid);
       const data = await api.fbCheck(uids);

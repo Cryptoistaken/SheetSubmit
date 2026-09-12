@@ -102,8 +102,8 @@ export default function SettingsView() {
 
   const openConfirm = () => {
     const errors = validatePrices();
-    if (errors.length) { showToast(`Invalid: ${errors.join(", ")}`); return; }
-    if (!priceChanges.length) { showToast("No changes to save"); return; }
+    if (errors.length) { showToast(`Please fix the following: ${errors.join(", ")}`); return; }
+    if (!priceChanges.length) { showToast("No changes to save."); return; }
     setConfirm(true);
   };
 
@@ -117,17 +117,17 @@ export default function SettingsView() {
       }));
       setPrices(updated);
       setConfirm(false);
-      showToast("Prices saved");
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); }
+      showToast("Prices saved successfully.");
+    } catch (e) { showToast("Request failed. " + (e instanceof Error ? e.message : String(e))); }
     finally { setSaving(false); }
   };
 
   const saveRate = () => {
     const v = Number(rateInput);
-    if (!rateInput.trim() || !Number.isFinite(v) || v <= 0 || v > 1_000_000) { showToast("Enter a rate above 0"); return; }
+    if (!rateInput.trim() || !Number.isFinite(v) || v <= 0 || v > 1_000_000) { showToast("Please enter a rate greater than 0."); return; }
     setRate(v);
     setRateInput("");
-    showToast(`Rate saved - $1 = ৳${v.toLocaleString("en-US")}`);
+    showToast(`Conversion rate saved. $1 = ৳${v.toLocaleString("en-US")}.`);
   };
 
   return (
@@ -147,7 +147,7 @@ export default function SettingsView() {
           </div>
         </div>
         <p style={{ fontSize: 12, color: "var(--text3)", margin: "6px 0 0" }}>
-          {entryCurrency === "USD" ? "Price per row in USD - 0 to 1000." : `Enter BDT per row - auto-converts to stored USD ($1 = ৳${rate.toLocaleString("en-US")}).`}
+          {entryCurrency === "USD" ? "Price per row in USD, from 0 to 1000." : `Enter BDT per row. Values convert to stored USD automatically ($1 = ৳${rate.toLocaleString("en-US")}).`}
         </p>
         {prices === null ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></div>
@@ -234,7 +234,7 @@ export default function SettingsView() {
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction disabled={saving} onClick={savePrices}>{saving ? "Saving…" : "OK"}</AlertDialogAction>
+            <AlertDialogAction disabled={saving} onClick={savePrices}>{saving ? "Saving…" : "Save changes"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

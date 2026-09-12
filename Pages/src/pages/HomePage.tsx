@@ -148,7 +148,7 @@ export default function HomePage() {
       setDupCounts(cd.counts ?? {});
     } catch {
       setFiles([]);
-      showToast("Couldn't load files");
+      showToast("Unable to load files. Please try again.");
     }
   }, [showToast]);
 
@@ -156,7 +156,7 @@ export default function HomePage() {
     try {
       setFiles(await api.getFiles());
     } catch {
-      showToast("Couldn't load files");
+      showToast("Unable to load files. Please try again.");
     }
   }, [showToast]);
 
@@ -186,7 +186,7 @@ export default function HomePage() {
     const f = files?.find((x) => x.id === id);
     if (!f) return;
     if (f.type !== "fb_cookie") {
-      showToast("Bubble: Facebook only");
+      showToast("Bubble mode supports Facebook files only.");
       return;
     }
     try {
@@ -202,17 +202,17 @@ export default function HomePage() {
     try {
       rows = await api.getRows(f.id);
     } catch {
-      showToast("Couldn't fetch rows");
+      showToast("Unable to load rows. Please try again.");
       return;
     }
     if (!rows || !rows.length) {
-      showToast("Add content first");
+      showToast("Please add content first.");
       return;
     }
     try {
       await downloadXlsx(rows, f.columns ?? fileTypeDef(f.type).columns, f.name);
     } catch {
-      showToast("Download failed");
+      showToast("Download failed. Please try again.");
     }
   };
 
@@ -225,7 +225,7 @@ export default function HomePage() {
         if (android.getBubbleFile?.() === f.id) {
           android.disableBubble?.();
           useBubbleStore.getState().setOn(false);
-          showToast("Bubble file archived");
+          showToast("Bubble file moved to archive.");
         }
       } catch {
         // bridge may be gone
@@ -235,11 +235,11 @@ export default function HomePage() {
       await api.deleteFile(f.id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      showToast(msg.includes(" - ") ? msg.split(" - ").slice(1).join(" - ").trim() : "Could not archive file. Check your connection.");
+      showToast(msg.includes(" - ") ? msg.split(" - ").slice(1).join(" - ").trim() : "Unable to archive file. Please check your connection and try again.");
       return;
     }
     loadFiles();
-    showToast("File archived");
+    showToast("File moved to archive.");
   };
 
   const openRename = (f: SheetFile) => {
@@ -255,19 +255,19 @@ export default function HomePage() {
   const commitRename = async () => {
     const name = renameName.trim();
     if (!name) {
-      showToast("Name cannot be empty");
+      showToast("Please enter a file name.");
       return;
     }
     if (!renameFileId) return;
     try {
       await api.updateFile(renameFileId, { name });
     } catch {
-      showToast("Couldn't rename");
+      showToast("Unable to rename. Please try again.");
       return;
     }
     closeRename();
     refreshFiles();
-    showToast("Renamed");
+    showToast("File renamed.");
   };
 
   const toggleSelect = (id: string) => {
@@ -297,12 +297,12 @@ export default function HomePage() {
       await Promise.all(ids.map((id) => api.deleteFile(id)));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      showToast(msg.includes(" - ") ? msg.split(" - ").slice(1).join(" - ").trim() : "Could not archive files. Check your connection.");
+      showToast(msg.includes(" - ") ? msg.split(" - ").slice(1).join(" - ").trim() : "Unable to archive files. Please check your connection and try again.");
       return;
     }
     setSelected(new Set());
     loadFiles();
-    showToast(ids.length + " file" + (ids.length > 1 ? "s" : "") + " archived");
+    showToast(ids.length + " file" + (ids.length > 1 ? "s" : "") + " moved to archive.");
   };
 
   const [pwModal, setPwModal] = useState<null | { type: FileType; preset: FilePreset; choice: string; custom: string }>(null);
@@ -335,10 +335,10 @@ export default function HomePage() {
     try {
       await api.createFile({ id, name: finalName, type, preset: pwModal.preset, poolKind: pwModal.preset, password, poolEnabled: true, columns });
     } catch {
-      showToast("Couldn't create file");
+      showToast("Unable to create file. Please try again.");
       return;
     }
-    showToast(fileTypeDef(type).label + " file created");
+    showToast(fileTypeDef(type).label + " file created.");
     loadFiles();
   };
 
@@ -366,10 +366,10 @@ export default function HomePage() {
     try {
       await api.createFile({ id, name, type, preset, poolKind: preset, password, poolEnabled: true, rows, dataCount, columns: COLUMN_PRESETS[preset] });
     } catch {
-      showToast("Couldn't import file");
+      showToast("Unable to import file. Please try again.");
       return;
     }
-    showToast("Imported " + dataCount + " rows");
+    showToast("Successfully imported " + dataCount + " rows.");
     loadFiles();
   };
 
@@ -386,7 +386,7 @@ export default function HomePage() {
         pageHint: result.name.toLowerCase().includes("page"),
       });
     } catch {
-      showToast("Couldn't import file");
+      showToast("Unable to import file. Please try again.");
     }
   };
 

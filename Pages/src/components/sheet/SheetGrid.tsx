@@ -401,7 +401,7 @@ export default function SheetGrid() {
                   }
                 }}
               >
-                <Plus size={14} style={{ display: "inline", verticalAlign: "-2px" }} /> Show more ({hiddenCount} more)
+                <Plus size={14} style={{ display: "inline", verticalAlign: "-2px" }} /> Show {hiddenCount} more rows.
               </td>
             </tr>
           )}
@@ -419,7 +419,7 @@ export default function SheetGrid() {
                 }
               }}
             >
-              + Add row
+              Add row
             </td>
           </tr>
         </tbody>
@@ -439,7 +439,7 @@ export default function SheetGrid() {
           }}
         >
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-            {logPopup.label} - {logPopup.logs.length} API call
+            {logPopup.label}. {logPopup.logs.length} API call
             {logPopup.logs.length > 1 ? "s" : ""}
           </div>
           {logPopup.crossInfo.length > 0 ? (
@@ -458,7 +458,7 @@ export default function SheetGrid() {
                   marginBottom: 4,
                 }}
               >
-                ⚠ Cross-file duplicate
+                Duplicate in another file
               </div>
               {logPopup.crossInfo.map((e, i) => (
                 <div
@@ -489,7 +489,7 @@ export default function SheetGrid() {
                   }}
                 >
                   <Check size={12} strokeWidth={3} style={{ flexShrink: 0 }} />
-                  <span>FB Page{logPopup.wa.pageName ? ` - ${logPopup.wa.pageName}` : ""}</span>
+                  <span>Facebook Page{logPopup.wa.pageName ? `: ${logPopup.wa.pageName}` : ""}</span>
                 </div>
               ) : logPopup.wa.banReason ? (
                 <div
@@ -525,7 +525,7 @@ export default function SheetGrid() {
           ) : null}
           {logPopup.logs.length === 0 ? (
             <div style={{ padding: "6px 0", color: "var(--text3)", fontSize: 12 }}>
-              No logs for this row
+              No activity for this row.
             </div>
           ) : (
             logPopup.logs.map((log, idx) => {
@@ -632,17 +632,17 @@ const GridRow = memo(function GridRow({
               ? "d-spin d-yellow"
               : "";
   const statusLabel = hold
-    ? "On hold by admin"
+    ? "On hold. Editing is locked."
     : approved
-      ? "Approved"
+      ? "Approved."
       : deadRow || status === "bad"
-        ? "Dead account"
+        ? "Inactive account."
         : isDupRow
-          ? "Duplicate row"
+          ? "Duplicate row."
           : row?.wa_status === "eligible"
-            ? "FB page eligible"
+            ? "Eligible for Facebook Page."
             : status === "good" || status === "done"
-              ? "Valid account"
+              ? "Valid account."
               : status === "pending"
                 ? "Checking…"
                 : "";

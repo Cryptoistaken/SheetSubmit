@@ -158,11 +158,11 @@ export default function ApprovalsView() {
       const ok = results.filter((r) => r.status === "fulfilled").length;
       const fail = results.length - ok;
       vibrate(20);
-      if (fail) showToast(`${action === "approve" ? "Approved" : "Returned"} ${ok}/${results.length} (${fail} failed)`);
-      else showToast(`${action === "approve" ? "Approved" : "Returned"} ${ok} hold${ok > 1 ? "s" : ""}`);
+      if (fail) showToast(`${action === "approve" ? "Approved" : "Returned"} ${ok} of ${results.length}. ${fail} failed.`);
+      else showToast(`${action === "approve" ? "Approved" : "Returned"} ${ok} hold${ok > 1 ? "s" : ""}.`);
       setApprSel([]);
       await refreshAll();
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); await loadHolds(); } finally { setBulkBusy(false); }
+    } catch (e) { showToast("Request failed. " + (e instanceof Error ? e.message : String(e))); await loadHolds(); } finally { setBulkBusy(false); }
   };
 
   const doApprove = async (id: string) => {
@@ -172,18 +172,18 @@ export default function ApprovalsView() {
       vibrate(20);
       const dead = Number((res as unknown as { dead?: number }).dead || 0);
       const n = Number((res as unknown as { approved?: number }).approved || 0);
-      showToast(dead ? `Approved ${n} - ${dead} dead, not paid` : "Approved - pays in 5 min");
+      showToast(dead ? `Approved ${n} rows. ${dead} were inactive and not paid.` : "Approved. Payment will be processed in 5 minutes.");
       await refreshAll();
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
+    } catch (e) { showToast("Request failed. " + (e instanceof Error ? e.message : String(e))); } finally { setHoldActing(null); }
   };
   const doReturn = async (id: string) => {
     setHoldActing(id);
     try {
       await api.returnHold(id);
       vibrate(20);
-      showToast("Rejected - rows returned");
+      showToast("Rejected. Rows have been returned.");
       await refreshAll();
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
+    } catch (e) { showToast("Request failed. " + (e instanceof Error ? e.message : String(e))); } finally { setHoldActing(null); }
   };
   const doDeleteHold = async (id: string) => {
     setHoldActing(id);
@@ -192,21 +192,21 @@ export default function ApprovalsView() {
       if (String(hold?.status || "").toUpperCase() === "APPROVED") {
         try {
           await api.revertDownload(id)
-        } catch (e) { showToast("Return failed: " + String(e instanceof Error ? e.message : e)); return; }
+        } catch (e) { showToast("Unable to return. " + (e instanceof Error ? e.message : String(e))); return; }
         try {
           await api.deleteDownload(id)
         } catch {
-          showToast("Returned (delete failed)");
+          showToast("Returned. Cleanup failed, please refresh.");
           await refreshAll();
           return;
         }
-        showToast("Approval deleted")
+        showToast("Approval deleted.")
       } else {
         await api.rejectHold(id)
-        showToast("Rejected - rows returned")
+        showToast("Rejected. Rows have been returned.")
       }
       await refreshAll()
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setHoldActing(null); }
+    } catch (e) { showToast("Request failed. " + (e instanceof Error ? e.message : String(e))); } finally { setHoldActing(null); }
   };
 
   const doDownloadHold = async (h: HoldRecord, opts?: { srcUid?: string; srcFileId?: string; name?: string; busyKey?: string }) => {
@@ -218,7 +218,7 @@ export default function ApprovalsView() {
       const rows = Array.isArray(data.rows) ? data.rows : [];
       await downloadXlsx(rows, POOL_DL_COLS[h.poolId] ?? POOL_DL_COLS.cookies_only, data.filename || opts?.name || h.filename || "download.xlsx");
       vibrate(20);
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDlBusyId(null); }
+    } catch (e) { showToast("Request failed. " + (e instanceof Error ? e.message : String(e))); } finally { setDlBusyId(null); }
   };
 
   const apprCounts: Record<ApprFilter, number> = { PENDING: 0, APPROVED: 0, REJECTED: 0 };
@@ -286,9 +286,9 @@ export default function ApprovalsView() {
       </div>
 
       {holdsLoading && holds === null ? <Skeleton className="h-20 w-full" /> : holdsError || holds === null ? (
-        <EmptyState title="Could not load approvals" sub="Check your connection and try again" action={{ label: "Retry", onClick: () => { void refreshAll(); } }} />
+        <EmptyState title="Unable to load approvals." sub="Please check your connection and try again." action={{ label: "Retry", onClick: () => { void refreshAll(); } }} />
       ) : apprShown.length === 0 ? (
-        <EmptyState title={`No ${apprFilter.toLowerCase()} approvals`} sub={apprFilter === "PENDING" ? "New takes appear here" : `Nothing ${apprFilter === "APPROVED" ? "approved" : "rejected"} yet`} />
+        <EmptyState title={`No ${apprFilter.toLowerCase()} approvals.`} sub={apprFilter === "PENDING" ? "New requests will appear here." : `Nothing ${apprFilter === "APPROVED" ? "approved" : "rejected"} yet.`} />
       ) : (
         <>
         {apprSel.length ? (
@@ -358,7 +358,7 @@ export default function ApprovalsView() {
                       {st !== "PENDING" ? <HoldToDeleteButton onConfirm={() => void doDeleteHold(h.id)} disabled={locked || holdActing === h.id} label="Delete" /> : null}
                     </div>
                     {apprLoading === h.id ? <Skeleton className="h-16 w-full" /> : !det || ownerUids.length === 0 ? (
-                      <div style={{ fontSize: 12, color: "var(--text3)", padding: "6px 2px" }}>{det ? "No owner breakdown for this approval" : "Could not load details"}</div>
+                      <div style={{ fontSize: 12, color: "var(--text3)", padding: "6px 2px" }}>{det ? "No owner details available for this approval." : "Unable to load details. Please try again."}</div>
                     ) : (
                       <div className="card-list">
                         {ownerUids.map((uid) => {

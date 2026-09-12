@@ -36,7 +36,7 @@ export async function importXlsx(
   const wb = XLSX.read(arrayBuffer, { type: "array" });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const json = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
-  if (json.length < 1) throw new Error("File is empty");
+  if (json.length < 1) throw new Error("The file is empty.");
   const headers = (json[0] || []).map((h) => String(h).toLowerCase().trim());
 
   let typeKey: FileType = "fb_cookie";
@@ -106,7 +106,7 @@ export async function importXlsx(
     }
   }
 
-  if (rows.length === 0) throw new Error("No data rows found");
+  if (rows.length === 0) throw new Error("No data rows found in this file.");
 
   let name = fileName.replace(/\.xlsx?$/i, "") || "Import " + todayStr();
   if (existingFiles.some((f) => f.name === name)) {
@@ -196,7 +196,7 @@ export async function parseSheetRows(
   const wb = XLSX.read(arrayBuffer, { type: "array" });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const json = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
-  if (json.length < 1) throw new Error("File is empty");
+  if (json.length < 1) throw new Error("The file is empty.");
   const headers = (json[0] || []).map((h) => String(h).toLowerCase().trim());
   let colMap: { key: string; idx: number }[];
   let dataStart: number;
@@ -228,7 +228,7 @@ export async function parseSheetRows(
     });
     if (hasData) rows.push(row);
   }
-  if (rows.length === 0) throw new Error("No data rows found");
+  if (rows.length === 0) throw new Error("No data rows found in this file.");
   return rows;
 }
 

@@ -659,7 +659,7 @@ describe("sheetStore data-integrity", () => {
       s = useSheetStore.getState();
       expect(s.rows[0].uid).toBe("333");
       expect(s.dupCells).toEqual(new Set());
-      expect(toasted).toContain("Duplicate in this file");
+      expect(toasted).toContain("This value already exists in this file.");
     } finally {
       setToastFn(null);
     }
@@ -917,7 +917,7 @@ describe("bubble user flow (as a user uses it)", () => {
       expect(s.rows[0].cookies ?? "").toBe("");
       expect(s.rows[0].twofakey ?? "").toBe("");
       expect(s.isDirty).toBe(false);
-      expect(toasted).toContain("Paste 2FA first");
+      expect(toasted).toContain("Please enter the 2FA key first.");
     } finally {
       setToastFn(null);
     }
@@ -1396,7 +1396,7 @@ describe("paste-duplicate block", () => {
       const s = useSheetStore.getState();
       expect(s.rows[0].uid).toBe("11");
       expect(s.isDirty).toBe(false);
-      expect(toasted).toContain("Duplicate in this file");
+      expect(toasted).toContain("This value already exists in this file.");
     } finally {
       setToastFn(null);
     }
@@ -1443,7 +1443,7 @@ describe("paste-duplicate block", () => {
       });
       useSheetStore.getState().commitCell(0, "twofakey", "KEYBBB");
       expect(useSheetStore.getState().rows[0].twofakey).toBe("KEYAAA");
-      expect(toasted).toContain("Duplicate in this file");
+      expect(toasted).toContain("This value already exists in this file.");
     } finally {
       setToastFn(null);
     }

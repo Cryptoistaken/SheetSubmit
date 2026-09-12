@@ -50,8 +50,8 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       setUsers(u);
       useProfileCache.getState().setProfiles(u as unknown[]);
     } catch {
-      setListError("Could not load users.");
-      showToast("Couldn't load users");
+      setListError("Unable to load users. Please try again.");
+      showToast("Unable to load users. Please try again.");
     }
   }, [showToast]);
 
@@ -64,8 +64,8 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
       setDetailArchived(a);
       useProfileCache.getState().setProfiles([u as unknown]);
     } catch {
-      setDetailError("Could not load user.");
-      showToast("Couldn't load user");
+      setDetailError("Unable to load user. Please try again.");
+      showToast("Unable to load user. Please try again.");
     } finally {
       setDetailLoading(false);
     }
@@ -107,7 +107,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
         try {
           setUsers(await api.adminSearchUsers(query));
         } catch {
-          showToast("Search failed");
+          showToast("Search failed. Please try again.");
           void loadList();
         }
       } else {
@@ -118,12 +118,12 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
 
   const deleteUser = async () => {
     if (!detailUser) return;
-    const ok = await confirm("Permanently delete this user and all their files?", "Delete User");
+    const ok = await confirm("Permanently delete this user and all their files? This cannot be undone.", "Delete User");
     if (!ok) return;
     try {
       await api.adminDeleteUser(detailUser.id);
     } catch {
-      showToast("Delete failed");
+      showToast("Unable to delete user. Please try again.");
       return;
     }
     showList();
@@ -131,12 +131,12 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
 
   const banUser = async () => {
     if (!detailUser) return;
-    const ok = await confirm("Ban this user?", "Ban");
+    const ok = await confirm("Ban this user? They will lose access immediately.", "Ban");
     if (!ok) return;
     try {
       await api.adminBanUser(detailUser.id);
     } catch {
-      showToast("Ban failed");
+      showToast("Unable to ban user. Please try again.");
       return;
     }
     setDetailUser({ ...detailUser, banned: true });
@@ -145,12 +145,12 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
 
   const unbanUser = async () => {
     if (!detailUser) return;
-    const ok = await confirm("Unban this user?", "Unban");
+    const ok = await confirm("Unban this user? Access will be restored.", "Unban");
     if (!ok) return;
     try {
       await api.adminUnbanUser(detailUser.id);
     } catch {
-      showToast("Unban failed");
+      showToast("Unable to unban user. Please try again.");
       return;
     }
     setDetailUser({ ...detailUser, banned: false });
@@ -163,7 +163,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     try {
       await api.adminDeleteFile(fileId);
     } catch {
-      showToast("Archive failed");
+      showToast("Unable to archive file. Please try again.");
       return;
     }
     if (detailUser) await reloadDetail(detailUser.id);
@@ -173,13 +173,13 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   const downloadFile = async (file: SheetFile) => {
     const rows = await api.adminFileRows(file.id);
     if (!rows || !rows.length) {
-      showToast("No data to download");
+      showToast("No data available to download.");
       return;
     }
     try {
       await downloadXlsx(rows, fileTypeDef(file.type).columns, file.name);
     } catch {
-      showToast("Download failed");
+      showToast("Unable to download file. Please try again.");
     }
   };
 
@@ -191,14 +191,14 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   const commitRename = async () => {
     const name = renameName.trim();
     if (!name) {
-      showToast("Enter a file name");
+      showToast("Please enter a file name.");
       return;
     }
     if (!renameFileId) return;
     try {
       await api.adminUpdateFile(renameFileId, { name });
     } catch {
-      showToast("Couldn't rename");
+      showToast("Unable to rename file. Please try again.");
       return;
     }
     setRenameFileId(null);
@@ -211,7 +211,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     try {
       await api.adminRestoreArchived(detailUser.id, fileId);
     } catch {
-      showToast("Restore failed");
+      showToast("Unable to restore file. Please try again.");
       return;
     }
     await reloadDetail(detailUser.id);
@@ -220,12 +220,12 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
 
   const deleteArchived = async (fileId: string) => {
     if (!detailUser) return;
-    const ok = await confirm("Permanently delete this file?", "Delete forever");
+    const ok = await confirm("Permanently delete this file? This cannot be undone.", "Delete forever");
     if (!ok) return;
     try {
       await api.adminDeleteArchived(detailUser.id, fileId);
     } catch {
-      showToast("Delete failed");
+      showToast("Unable to delete file. Please try again.");
       return;
     }
     void forgetFile(fileId).catch(() => {});
@@ -303,7 +303,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                   </button>
                 </>
               ) : detailUser.isAdmin ? (
-                <span style={{ fontSize: 12, color: "var(--text3)", fontWeight: 600 }}>Admin - no delete/ban</span>
+                <span style={{ fontSize: 12, color: "var(--text3)", fontWeight: 600 }}>Admin. Actions unavailable.</span>
               ) : null}
             </div>
           </div>
@@ -323,7 +323,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
 
         {detailLoading ? <PageSkeleton variant="admin-detail" /> : userFileTab === "files" ? (
           files.length === 0 ? (
-            <EmptyState title="No files" sub="This user has no files yet" />
+            <EmptyState title="No files." sub="This user has no files yet." />
           ) : (
             <div id="admin-files-panel" role="tabpanel" aria-labelledby="admin-tab-files" className={view === "list" ? "files-list" : "files-grid"}>
               {files.map((f) => (
@@ -342,7 +342,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
             </div>
           )
         ) : detailArchived.length === 0 ? (
-          <EmptyState title="No archived files" sub="Archived files appear here for 30 days" />
+          <EmptyState title="No archived files." sub="Archived files appear here for 30 days." />
         ) : (
           <div id="admin-archive-panel" role="tabpanel" aria-labelledby="admin-tab-archive" className={view === "list" ? "files-list" : "files-grid"}>
             {detailArchived.map((f) => {
@@ -438,7 +438,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
             )
           : users.length === 0
             ? (
-                <EmptyState title="No users found" sub={search.trim() ? "Try a different search" : "No users yet"} />
+                <EmptyState title="No users found." sub={search.trim() ? "Try a different search." : "No users yet."} />
               )
             : users.map((u) => {
                 const name = userName(u);
@@ -480,7 +480,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
                               borderRadius: 4,
                             }}
                           >
-                            BANNED
+                            Banned
                           </span>
                         ) : null}
                       </div>

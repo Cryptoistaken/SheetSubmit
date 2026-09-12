@@ -98,8 +98,8 @@ describe("importXlsx", () => {
   });
 
   it("rejects empty workbooks and header-only workbooks", async () => {
-    await expect(importXlsx(toBuf([]), "e.xlsx", [])).rejects.toThrow("File is empty");
-    await expect(importXlsx(toBuf([["cookies", "2fa key", "uid"]]), "h.xlsx", [])).rejects.toThrow("No data rows found");
+    await expect(importXlsx(toBuf([]), "e.xlsx", [])).rejects.toThrow("The file is empty.");
+    await expect(importXlsx(toBuf([["cookies", "2fa key", "uid"]]), "h.xlsx", [])).rejects.toThrow("No data rows found in this file.");
   });
 });
 

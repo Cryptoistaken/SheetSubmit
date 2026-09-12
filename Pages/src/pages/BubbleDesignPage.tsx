@@ -349,8 +349,8 @@ export default function BubbleDesignPage(){
         </div>
 
         <div style={{display:"flex",gap:8,marginTop:20}}>
-          <button className="btn btn-ghost" style={{flex:1}} onClick={()=>{ const n={...DEFAULT}; setState(n); persist(n); showToast("Reset to default"); }}>Reset</button>
-          <button className="btn btn-primary" style={{flex:1}} onClick={()=>{ persist(state); showToast(`Saved - ${state.icon} ${state.color} ${state.size}dp`); }}>Save</button>
+          <button className="btn btn-ghost" style={{flex:1}} onClick={()=>{ const n={...DEFAULT}; setState(n); persist(n); showToast("Settings reset to defaults."); }}>Reset</button>
+          <button className="btn btn-primary" style={{flex:1}} onClick={()=>{ persist(state); showToast("Design settings saved."); }}>Save</button>
         </div>
       </div>
     </div>

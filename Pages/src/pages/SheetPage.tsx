@@ -122,7 +122,7 @@ export default function SheetPage() {
     return (
       <div className="home-pane">
         <div className="empty-state">
-          <div className="empty-state-title">Could not open file</div>
+          <div className="empty-state-title">Unable to open file. Please try again.</div>
           <button
             className="btn btn-ghost"
             onClick={() => navigate(ownerId ? `/admin/user/${ownerId}` : "/")}

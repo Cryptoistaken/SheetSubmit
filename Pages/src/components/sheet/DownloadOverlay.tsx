@@ -46,7 +46,7 @@ export default function DownloadOverlay({
       if (!o) continue;
       try { const ok = await downloadSheetRows(rows, columns, fileName, o.filter, o.suffix); if (ok) n++; } catch {}
     }
-    if (!n) showToast("No data to download");
+    if (!n) showToast("No data available to download.");
     handleClose();
   };
 
@@ -84,9 +84,9 @@ export default function DownloadOverlay({
               if (inMulti) { toggle(o.key); return; }
               try {
                 const ok = await downloadSheetRows(rows, columns, fileName, o.filter, o.suffix);
-                if (!ok) showToast("No data to download");
+                if (!ok) showToast("No data available to download.");
               } catch {
-                showToast("Download failed");
+                showToast("Download failed. Please try again.");
               }
               handleClose();
             }}

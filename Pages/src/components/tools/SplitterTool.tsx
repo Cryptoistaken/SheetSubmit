@@ -47,7 +47,7 @@ export default function SplitterTool() {
       setCols(fileTypeDef(res.type).columns);
       setName(res.name);
     } catch (e) {
-      showToast((e as Error).message || "Couldn't parse file");
+      showToast((e as Error).message || "Unable to read file. Please try again.");
       setRows(null); setCols(null); setName("");
     } finally { setLoading(false); }
   };
@@ -59,30 +59,30 @@ export default function SplitterTool() {
     setLoading(true);
     try {
       const r = await api.getRows(id);
-      if (!r || !r.length) throw new Error("No rows found");
+      if (!r || !r.length) throw new Error("No rows found in this file.");
       const c = fileTypeDef(file.type).columns;
       const dl = c.filter((x) => x.key !== "uid");
       const filtered = r.filter((row) => dl.some((col) => row[col.key]));
-      if (!filtered.length) throw new Error("No rows found");
+      if (!filtered.length) throw new Error("No rows found in this file.");
       setRows(filtered);
       setCols(c);
       setName(file.name);
     } catch (e) {
-      showToast((e as Error).message || "Couldn't load file");
+      showToast((e as Error).message || "Unable to read file. Please try again.");
       setRows(null); setCols(null);
     } finally { setLoading(false); }
   };
 
   const doSplit = async () => {
-    if (!rows || !cols || !name) { showToast("Load a file first"); return; }
+    if (!rows || !cols || !name) { showToast("Please select a file first."); return; }
     const parts = effectiveN;
-    if (!Number.isFinite(parts) || parts < 1 || parts > 100) { showToast("Use 1-100 parts"); return; }
-    if (parts === 1) { showToast("Choose at least 2 parts."); return; }
+    if (!Number.isFinite(parts) || parts < 1 || parts > 100) { showToast("Please enter a number between 2 and 100."); return; }
+    if (parts === 1) { showToast("Please enter a number between 2 and 100."); return; }
     const dlCols = source === "existing" ? cols.filter((c) => c.key !== "uid") : cols;
     const dataRows = rows.filter((r) => dlCols.some((c) => r[c.key]));
-    if (!dataRows.length) { showToast("Empty file"); return; }
+    if (!dataRows.length) { showToast("The file is empty."); return; }
     const clamped = Math.min(parts, dataRows.length);
-    if (clamped !== parts) showToast(`Only ${dataRows.length} rows - splitting into ${clamped}`);
+    if (clamped !== parts) showToast(`Only ${dataRows.length} rows available. Splitting into ${clamped} parts.`);
     const chunks = splitRows(dataRows, clamped);
     const base = name.replace(/\.xlsx?$/i, "");
     try {
@@ -91,9 +91,9 @@ export default function SplitterTool() {
         // downloadXlsx adds .xlsx, name includes part + count
         await downloadXlsx(ch, dlCols, `${base} - Part ${i + 1} [${ch.length}]`);
       }
-      showToast(`Downloaded ${chunks.length} files`);
+      showToast(`Successfully downloaded ${chunks.length} files.`);
     } catch {
-      showToast("Download failed");
+      showToast("Download failed. Please try again.");
     }
   };
 
@@ -101,7 +101,7 @@ export default function SplitterTool() {
     <div>
       <button type="button" className="btn btn-ghost" style={{ marginBottom: 16 }} onClick={() => navigate("/tools")} aria-label="Back to Tools">← Tools</button>
       <h2 style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em" }}>Splitter</h2>
-      <p style={{ fontSize: 13, color: "var(--text3)", marginTop: 2, marginBottom: 16 }}>Split an xlsx into N equal parts</p>
+      <p style={{ fontSize: 13, color: "var(--text3)", marginTop: 2, marginBottom: 16 }}>Split a spreadsheet into equal parts</p>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }} role="group" aria-label="Source selection">
         <button type="button" className={`btn ${source === "upload" ? "btn-primary" : ""}`} aria-pressed={source === "upload"} aria-label="Upload xlsx" onClick={() => setSource("upload")}>Upload xlsx</button>
@@ -169,7 +169,7 @@ export default function SplitterTool() {
               style={{ flex: "1 1 96px", minWidth: 96, width: 96, textAlign: "center", fontWeight: 600, height: 38, alignSelf: "stretch", borderColor: customInvalid ? "var(--red)" : customTrim ? "var(--blue)" : undefined, background: customInvalid ? "var(--red-bg)" : customTrim ? "var(--blue-light)" : undefined, color: customInvalid ? "var(--red)" : customTrim ? "var(--blue)" : undefined }}
             />
           </div>
-          {customInvalid ? <div id="custom-error" role="alert" style={{ fontSize: 12, color: "var(--red)", marginBottom: 8 }}>Enter a number between 2 and 100</div> : null}
+          {customInvalid ? <div id="custom-error" role="alert" style={{ fontSize: 12, color: "var(--red)", marginBottom: 8 }}>Please enter a number between 2 and 100.</div> : null}
           {rows.length > 0 && Number.isFinite(effectiveN) && effectiveN >= 2 ? (
             <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "nowrap", overflow: "hidden" }}>
               {Array.from({ length: Math.min(effectiveN, Math.min(rows.length, 6)) }).map((_, i, arr) => {

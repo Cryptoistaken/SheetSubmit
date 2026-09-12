@@ -148,14 +148,14 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
             st.timer = setTimeout(run, 400);
           } else {
             st.retries = 0;
-            toast("Nothing copied");
+            toast("Nothing to copy.");
           }
           return;
         }
         st.retries = 0;
         const now = Date.now();
         if (st.lastText === t && now - st.lastAt < 15000) {
-          toast(looksLikeCookie(t) ? "Duplicate cookie" : "Duplicate 2FA");
+          toast(looksLikeCookie(t) ? "This cookie already exists." : "This 2FA key already exists.");
           return;
         }
         st.lastText = t;
@@ -169,18 +169,18 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
           finish();
         } else if (looksLikeKey(t)) {
           if (isCookieOnly) {
-            toast("No cookie or key");
+            toast("No cookie or key found.");
             finish();
             return;
           }
           // STRICT 2FA-first: the key anchors the row, the cookie completes
           // it. A cookie pasted before its key is refused by the store
-          // ("Paste 2FA first") so cookies can never leak onto keyless rows.
-          // The store decides placement and toasts ("Need cookie" if the row
-          // already has a key, "Need 2FA" if it already has a cookie).
+          // ("Please enter the 2FA key first.") so cookies can never leak onto keyless rows.
+          // The store decides placement and toasts ("Please enter the cookie." if the row
+          // already has a key, "Please enter the 2FA key first." if it already has a cookie).
           void useSheetStore.getState().bubbleSaveKey(t).finally(finish);
         } else {
-          toast("No cookie or key");
+          toast("No cookie or key found.");
           finish();
         }
       });
@@ -216,7 +216,7 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
 
   useEffect(() => {
     if (status === "ready" && fileType && fileType !== "fb_cookie") {
-      toast("Not a FB file");
+      toast("Bubble mode supports Facebook files only.");
     }
   }, [status, fileType]);
 
@@ -224,7 +224,7 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
     return (
       <div className="home-pane">
         <div className="empty-state">
-          <div className="empty-state-title">Failed to load bubble file</div>
+          <div className="empty-state-title">Unable to load file.</div>
         </div>
       </div>
     );

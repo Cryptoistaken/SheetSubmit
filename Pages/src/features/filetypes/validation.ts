@@ -7,21 +7,21 @@ export function validateCell(
   if (!value) return { valid: true };
   if (colKey === "cookies") {
     if (!value.match(/c_user=\d+/)) {
-      return { valid: false, msg: "Cookies must contain c_user=ID" };
+      return { valid: false, msg: "Cookie must include c_user=ID." };
     }
     return { valid: true };
   }
   if (colKey === "twofakey") {
     if (value === NO_2FA_MARK) return { valid: true };
     const cleaned = value.replace(/[\s\-]/g, "").toUpperCase();
-    if (cleaned.length < 10) return { valid: false, msg: "2FA key too short" };
+    if (cleaned.length < 10) return { valid: false, msg: "2FA key is too short." };
     if (!cleaned.match(/^[A-Z2-7]+$/)) {
-      return { valid: false, msg: "2FA key must be base32 (A-Z, 2-7)" };
+      return { valid: false, msg: "2FA key must use base32 characters (A–Z, 2–7)." };
     }
     return { valid: true };
   }
   if (colKey === "uid") {
-    if (!value.match(/^\d+$/)) return { valid: false, msg: "UID must be digits only" };
+    if (!value.match(/^\d+$/)) return { valid: false, msg: "UID must contain digits only." };
     return { valid: true };
   }
   return { valid: true };

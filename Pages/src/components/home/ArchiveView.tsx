@@ -51,7 +51,7 @@ export default function ArchiveView({
     try {
       await api.restoreFile(id);
     } catch {
-      showToast("Restore failed");
+      showToast("Unable to restore. Please try again.");
       return;
     }
     setSelected((prev) => {
@@ -63,12 +63,12 @@ export default function ArchiveView({
   };
 
   const deleteOne = async (id: string) => {
-    const ok = await confirm("Permanently delete this file?", "Delete forever");
+    const ok = await confirm("Permanently delete this file? This cannot be undone.", "Delete forever");
     if (!ok) return;
     try {
       await api.permanentDelete(id);
     } catch {
-      showToast("Delete failed");
+      showToast("Unable to delete. Please try again.");
       return;
     }
     // Drop durable local state too (outbox mirror + snapshot) — server purged.
@@ -113,20 +113,20 @@ export default function ArchiveView({
     });
     setSelected(new Set());
     load();
-    if (failed) showToast("Some restores failed");
+    if (failed) showToast("Some files could not be restored. Please try again.");
   };
 
   const deleteSelected = async () => {
     const ids = Array.from(selected);
     const ok = await confirm(
-      "Permanently delete " + plural(ids.length) + "?",
+      "Permanently delete " + plural(ids.length) + "? This cannot be undone.",
       "Delete forever",
     );
     if (!ok) return;
     const { failed } = await runBatched(ids, 20, async (b) => (await api.batchDelete(b)).deleted);
     setSelected(new Set());
     load();
-    if (failed) showToast("Some deletes failed");
+    if (failed) showToast("Some files could not be deleted. Please try again.");
   };
 
   if (archived === null) {
@@ -136,7 +136,7 @@ export default function ArchiveView({
   return (
     <>
       {archived.length === 0 ? (
-        <EmptyState title="No archived files" sub="Archived files appear here for 30 days" />
+        <EmptyState title="No archived files." sub="Archived files are kept here for 30 days." />
       ) : (
         <div className={view === "list" ? "files-list" : "files-grid"}>
           {[...archived].sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0)).map((f) => {

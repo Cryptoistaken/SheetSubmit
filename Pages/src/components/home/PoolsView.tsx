@@ -102,7 +102,7 @@ export default function PoolsView() {
       setDetail(d);
       try { useProfileCache.getState().setProfiles(d.users as unknown[]); } catch {}
       setUserFiles((uf as { users: never[] }).users ?? []);
-    } catch { setLoadFailed(true); showToast("Couldn't load pools"); }
+    } catch { setLoadFailed(true); showToast("Unable to load pools. Please try again."); }
   }, [cur, curPwd, showToast]);
 
   const refreshAll = useCallback(async () => { await Promise.all([load(), loadPrices()]); }, [load, loadPrices]);
@@ -222,11 +222,11 @@ export default function PoolsView() {
 
   const doHoldConfirm = async () => {
     const n = customQty ? Number(customQty) : poolQty === "all" ? (cur === "page" && verified ? verified.verified : totals.available) : (poolQty as number);
-    if (cur === "page" && verified && verified.verified === 0) return showToast("No verified rows");
-    if (!totals.available) return showToast("No rows available to claim");
-    if (!Number.isInteger(n) || n < 1) return showToast("Enter at least 1 row");
-    if (holdMode === "pick" && selectedUids.length === 0 && selectedFileIds.length === 0) { showToast("Pick at least 1 user"); return; }
-    if (holdMode === "pick" && pickAvail === 0) { showToast("Owners have no rows"); return; }
+    if (cur === "page" && verified && verified.verified === 0) return showToast("No verified rows available.");
+    if (!totals.available) return showToast("No rows available.");
+    if (!Number.isInteger(n) || n < 1) return showToast("Please enter at least 1 row.");
+    if (holdMode === "pick" && selectedUids.length === 0 && selectedFileIds.length === 0) { showToast("Please select at least one owner."); return; }
+    if (holdMode === "pick" && pickAvail === 0) { showToast("Selected owners have no available rows."); return; }
     setDownloading(true);
     try {
       const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: holdMode };
@@ -234,36 +234,36 @@ export default function PoolsView() {
       if (cur === "page") payload.verifiedOnly = true;
       const res = await api.holdPool(curPwd, cur, payload);
       const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? n;
-      if (!held) return showToast("No rows available to claim");
+      if (!held) return showToast("No rows available.");
       vibrate(20);
-      showToast(`Held ${held} from ${poolMeta.label} - ON HOLD`);
+      showToast(`Held ${held} rows from ${poolMeta.label}. Status: on hold.`);
       const holdId = (res as unknown as { holdId?: string; downloadId?: string }).holdId ?? (res as unknown as { downloadId?: string }).downloadId;
       await refreshAll();
       if (holdId) navigate(`/approvals?hold=${encodeURIComponent(holdId)}`);
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDownloading(false); }
+    } catch (e) { showToast("Request failed. " + (e instanceof Error ? e.message : String(e))); } finally { setDownloading(false); }
   };
 
   const doUserHold = async (u: PoolDetail["users"][number]) => {
     const n = customQty ? Number(customQty) : poolQty === "all" ? u.available : (poolQty as number);
-    if (cur === "page" && verified && verified.verified === 0) return showToast("No verified rows");
-    if (!Number.isInteger(n) || n < 1) return showToast("Set a quantity first");
+    if (cur === "page" && verified && verified.verified === 0) return showToast("No verified rows available.");
+    if (!Number.isInteger(n) || n < 1) return showToast("Please set a quantity first.");
     setDownloading(true);
     try {
       const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: "fifo", srcUids: [u.userId] };
       if (cur === "page") payload.verifiedOnly = true;
       const res = await api.holdPool(curPwd, cur, payload);
       const held = (res as unknown as { held?: number; claimed?: number }).held ?? (res as unknown as { claimed?: number }).claimed ?? 0;
-      if (!held) return showToast("No rows available to claim");
+      if (!held) return showToast("No rows available.");
       vibrate(20);
-      showToast(`Held ${held} from ${displayName(u).line1} - ON HOLD`);
+      showToast(`Held ${held} rows from ${displayName(u).line1}. Status: on hold.`);
       await refreshAll();
-    } catch (e) { showToast(String(e instanceof Error ? e.message : e)); } finally { setDownloading(false); }
+    } catch (e) { showToast("Request failed. " + (e instanceof Error ? e.message : String(e))); } finally { setDownloading(false); }
   };
 
   if (detail === null) {
     return loadFailed ? (
       <div style={{ padding: 24 }}>
-        <EmptyState title="Could not load pools" sub="Check your connection and try again" action={{ label: "Retry", onClick: () => { void load(); } }} />
+        <EmptyState title="Unable to load pools." sub="Please check your connection and try again." action={{ label: "Retry", onClick: () => { void load(); } }} />
       </div>
     ) : <PageSkeleton variant="pools" />;
   }
@@ -409,7 +409,7 @@ export default function PoolsView() {
 
       <div className="card-list">
         {filtered.length === 0 ? (
-          <EmptyState title="No owners yet" sub={search.trim() ? "No match for your search" : "Owners appear here when they push rows"} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
+          <EmptyState title="No owners yet." sub={search.trim() ? "No match for your search." : "Owners appear here when they push rows."} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
         ) : filtered.map((u) => {
           const d = displayName(u);
           const cachedName = String(cachedProfiles[u.userId]?.name ?? "").trim();

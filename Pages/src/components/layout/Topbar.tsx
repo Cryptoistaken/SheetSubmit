@@ -168,7 +168,7 @@ export default function Topbar() {
       if (st.adminMode) await api.adminUpdateFile(file.id, { name });
       else await api.updateFile(file.id, { name });
     } catch {
-      showToast("Couldn't rename");
+      showToast("Unable to rename. Please try again.");
       return;
     }
     useSheetStore.setState((s) => (s.file ? { file: { ...s.file, name } } : {}));
@@ -179,7 +179,7 @@ export default function Topbar() {
     api
       .logout()
       .then(() => { localStorage.removeItem("ss_had_session"); localStorage.removeItem("ss_auth_user"); sessionStorage.removeItem("ss_wallet_ts"); window.location.href = "/login"; })
-      .catch(() => showToast("Could not log out. Try again."));
+      .catch(() => showToast("Unable to log out. Please try again."));
   };
 
   return (

@@ -54,17 +54,17 @@ function formatTx(tx: WalletTransaction): { title: string; detail: string | null
     const fromDesc = (() => { const m = desc.match(/(\d+)\s+rows?/); return m ? rowsText(Number(m[1])) : null; })();
     const dead = Number(meta.dead ?? 0);
     return {
-      title: `Pool earning - ${pool}`,
+      title: `Pool earning: ${pool}`,
       detail: [fromMeta ?? fromDesc ? `${fromMeta ?? fromDesc} paid` : null, dead > 0 ? `${dead} expired` : null].filter(Boolean).join(" · ") || null,
     };
   }
-  if (/hold revert/i.test(desc) || /hold return/i.test(desc)) return { title: `Hold returned - ${pool}`, detail: null };
+  if (/hold revert/i.test(desc) || /hold return/i.test(desc)) return { title: `Hold returned: ${pool}`, detail: null };
   if (/withdrawal via/i.test(desc)) {
     const method = String(meta.method ?? desc.replace(/.*via\s+/i, "")).trim() || "Withdrawal";
     const acct = String(meta.account ?? "").trim();
-    return { title: `Withdrawal - ${method}`, detail: acct ? maskAccount(acct) : null };
+    return { title: `Withdrawal: ${method}`, detail: acct ? maskAccount(acct) : null };
   }
-  if (/withdrawal refund/i.test(desc)) return { title: "Withdrawal refunded", detail: "Declined payout returned to balance" };
+  if (/withdrawal refund/i.test(desc)) return { title: "Withdrawal refunded", detail: "Declined payout returned to balance." };
   const pretty = desc
     .replace(/(\d+)\s+rows\b/g, (_, n: string) => `${n} ${Number(n) === 1 ? "row" : "rows"}`)
     .replace(/\bcookies_only\b/g, "Cookies")
@@ -156,13 +156,13 @@ function UserWallet() {
   const [savedMethods, setSavedMethods] = useState<Record<string, string>>({});
   const [saveAccount, setSaveAccount] = useState(true);
   const [slideKey, setSlideKey] = useState(0);
-  const load = () => api.getWallet().then(setWallet).catch(() => showToast("Couldn't load wallet"));
+  const load = () => api.getWallet().then(setWallet).catch(() => showToast("Unable to load wallet. Please try again."));
   useEffect(() => { void load(); api.getPaymentMethods().then(setSavedMethods).catch(() => {}); }, []);
   useEffect(() => { setAccount(savedMethods[method] ?? ""); }, [method, savedMethods]);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const value = Number(amount);
-    if (!Number.isFinite(value) || value <= 0 || value > (wallet?.balance ?? 0) || !validAccount(method, account)) { showToast(value > (wallet?.balance ?? 0) ? "Amount too high" : "Check amount + account"); return; }
+    if (!Number.isFinite(value) || value <= 0 || value > (wallet?.balance ?? 0) || !validAccount(method, account)) { showToast(value > (wallet?.balance ?? 0) ? "Amount exceeds your available balance." : "Please check the amount and account details."); return; }
     setSending(true);
     try {
       await api.withdraw({ amount: value, method, account: account.trim() });
@@ -171,8 +171,8 @@ function UserWallet() {
         await api.setPaymentMethods(updated);
         setSavedMethods(updated);
       }
-      setAmount(""); setAccount(""); showToast("Withdrawal request sent"); await load();
-    } catch (error) { showToast(String(error).includes("insufficient") ? "Insufficient balance." : "Send failed - retry"); } finally { setSending(false); setSlideKey((k) => k + 1); }
+      setAmount(""); setAccount(""); showToast("Withdrawal request submitted successfully."); await load();
+    } catch (error) { showToast(String(error).includes("insufficient") ? "Insufficient balance." : "Unable to submit request. Please try again."); } finally { setSending(false); setSlideKey((k) => k + 1); }
   };
   if (!wallet) return <div className="p-6 text-sm text-muted-foreground">Loading wallet…</div>;
   const value = Number(amount);

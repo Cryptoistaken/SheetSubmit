@@ -29,7 +29,7 @@ export default function FileGrid({
   onToggleSelect,
 }: FileGridProps) {
   if (files.length === 0) {
-    return <EmptyState title="No files yet" sub="Tap the + button to create your first file" />;
+    return <EmptyState title="No files yet" sub="Select the + button to create your first file." />;
   }
   const sorted = [...files].sort((a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0));
   return (

@@ -59,11 +59,11 @@ export default function UploadOverlay({
               return;
             }
             const ok = await confirm(
-              "Replace ALL " +
+              "Replace all " +
                 n +
-                " rows? Your file currently holds " +
+                " rows? Your file currently has " +
                 currentCount +
-                " rows. Existing data will be permanently replaced. Continue?",
+                " rows. Existing data will be permanently replaced.",
               "Yes, replace",
             );
             if (!ok) return;

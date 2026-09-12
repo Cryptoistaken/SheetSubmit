@@ -116,7 +116,7 @@ export default function SheetToolbar() {
       }
       setUploadRows(rows);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Couldn't read file");
+      showToast(err instanceof Error ? err.message : "Unable to read file. Please try again.");
     }
   };
 
@@ -180,7 +180,7 @@ export default function SheetToolbar() {
     close();
     const s = useSheetStore.getState();
     if (!s.rows.length) {
-      showToast("Add content first");
+      showToast("Please add content first.");
       return;
     }
     const cols = s.columns;
@@ -194,12 +194,12 @@ export default function SheetToolbar() {
       }
     }
     if (!hasData) {
-      showToast("Add content first");
+      showToast("Please add content first.");
       return;
     }
     navigator.clipboard
       .writeText(lines.join("\n"))
-      .catch(() => showToast("Could not copy. Try again."));
+      .catch(() => showToast("Unable to copy. Please try again."));
   };
 
   const startUpload = (merge: boolean) => {
@@ -212,11 +212,11 @@ export default function SheetToolbar() {
     const s = useSheetStore.getState();
     const dead = s.rows.filter((r) => r.status === "bad").length;
     if (!dead) {
-      showToast("No dead rows");
+      showToast("No inactive rows to delete.");
       return;
     }
     const ok = await confirm(
-      `Delete ${dead} dead row${dead === 1 ? "" : "s"}?`,
+      `Delete ${dead} inactive row${dead === 1 ? "" : "s"}?`,
       "Delete",
     );
     if (ok) useSheetStore.getState().deleteDeadRows();
@@ -227,7 +227,7 @@ export default function SheetToolbar() {
     const st = useSheetStore.getState();
     if (!st.fileId) return;
     const ok = await confirm(
-      "Restore the last saved version? Rows added or changed since that save will be replaced (your current state stays in Undo).",
+      "Restore the last saved version? Unsaved changes will be replaced. Your current state will remain in Undo.",
       "Restore",
     );
     if (!ok) return;
@@ -236,10 +236,10 @@ export default function SheetToolbar() {
         ? await api.adminRestoreSnapshot(st.fileId)
         : await api.restoreSnapshot(st.fileId);
       useSheetStore.getState().applyRestore(res.rows ?? [], res.seq ?? st.lastSeq, res.file ?? st.file);
-      showToast("Restored (Undo kept)");
+      showToast("Previous version restored. Your changes remain in Undo.");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      showToast(msg.includes("no snapshot") ? "No earlier save to restore yet" : "Could not restore. Try again.");
+      showToast(msg.includes("no snapshot") ? "No earlier save to restore yet." : "Unable to restore. Please try again.");
     }
   };
 
@@ -273,12 +273,12 @@ export default function SheetToolbar() {
         
         if (st.adminMode) await api.adminPersist(fid, { rows: trimmed, action: "pool-enable" });
         else await api.persist(fid, { rows: trimmed, action: "pool-enable" });
-        showToast("Pooling on");
+        showToast("Pooling enabled.");
       } else {
         
       }
     } catch {
-      showToast("Pooling failed");
+      showToast("Unable to update pooling. Please try again.");
     }
   };
 
@@ -307,7 +307,7 @@ export default function SheetToolbar() {
         <button
           className="check-split-main"
           disabled={hasDups}
-          title={hasDups ? "Remove duplicate rows first" : undefined}
+          title={hasDups ? "Please remove duplicate rows first." : undefined}
           onClick={() => void useSheetStore.getState().runCheck()}
         >
           {checkRunning ? (
@@ -553,11 +553,11 @@ export default function SheetToolbar() {
         <button
           role="menuitem"
           className="sheet-more-item"
-          title="Compact - remove empty rows between used rows"
+          title="Compact the sheet by removing empty rows."
           aria-label="Compact rows"
           onClick={async () => {
             close();
-            const ok = await confirm("Remove empty rows between used rows?", "Compact");
+            const ok = await confirm("Remove empty rows between used rows to compact the sheet?", "Compact");
             if (!ok) return;
             useSheetStore.getState().removeEmptyRows();
           }}
@@ -594,7 +594,7 @@ export default function SheetToolbar() {
             <line x1="10" y1="11" x2="10" y2="17" />
             <line x1="14" y1="11" x2="14" y2="17" />
           </svg>
-          Delete Dead
+          Delete inactive
         </button>
         <button role="menuitem" className="sheet-more-item" onClick={() => void restoreSnapshot()}>
           <svg
@@ -628,7 +628,7 @@ export default function SheetToolbar() {
               }}
             >
               <span className={"col-toggle" + (poolOn ? " on" : "")}></span>
-              Pooling {poolOn ? "on" : "off"}
+              Pooling {poolOn ? "enabled" : "disabled"}
             </div>
             <div className="sheet-more-sep" role="separator"></div>
           </>

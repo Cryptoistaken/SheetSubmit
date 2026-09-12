@@ -47,7 +47,7 @@ export default function CellEditor() {
       className="qeb-input"
       type="text"
       aria-label="Cell value"
-      placeholder="Enter cell value"
+      placeholder="Enter value"
       autoComplete="off"
       autoCorrect="off"
       spellCheck={false}

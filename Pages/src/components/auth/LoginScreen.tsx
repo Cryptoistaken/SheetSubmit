@@ -79,7 +79,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
 
   async function completeLogin(idToken: string) {
     const res = await api.verifyTelegramLogin(idToken);
-    if (!res.ok) throw new Error("verification failed");
+    if (!res.ok) throw new Error("Verification failed. Please try again.");
     claimedDoneRef.current = true;
     localStorage.setItem(HAD_SESSION, "1");
     try { localStorage.setItem("ss_tg_done", String(Date.now())); } catch {}
@@ -131,17 +131,17 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
     setTgLoading(true);
     try {
       const TG = window.Telegram?.Login;
-      if (!TG) throw new Error("Telegram Login not ready");
+      if (!TG) throw new Error("Telegram login is not ready. Please try again.");
       const finish = async (data: any) => {
         if (data?.error) throw new Error(String(data.error));
         const idToken = data?.id_token;
-        if (typeof idToken !== "string" || !idToken) throw new Error("No id_token returned");
+        if (typeof idToken !== "string" || !idToken) throw new Error("Login is temporarily unavailable. Please try again later.");
         await completeLogin(idToken);
       };
       const options = { client_id: Number(tgClientId), scope: ["profile", "phone", "write"] };
-      if (!Number.isSafeInteger(options.client_id) || options.client_id <= 0) throw new Error("Invalid Telegram client ID");
+      if (!Number.isSafeInteger(options.client_id) || options.client_id <= 0) throw new Error("Login is temporarily unavailable. Please try again later.");
       await new Promise<void>((resolve, reject) => {
-        const timer = window.setTimeout(() => reject(new Error("Telegram login timed out")), 120000);
+        const timer = window.setTimeout(() => reject(new Error("Telegram login timed out.")), 120000);
         const callback = (data: unknown) => { clearTimeout(timer); finish(data).then(resolve).catch(reject); };
         try {
           if (TG.auth) TG.auth(options, callback);
@@ -162,7 +162,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
     <main id="loginScreen" aria-labelledby="login-title">
       <div className="login-wrap">
         <div className="login-card">
-          <h1 id="login-title" className="sr-only">Login to Sheet Submit</h1>
+          <h1 id="login-title" className="sr-only">Log in to SheetSubmit</h1>
           {notice && <p role="alert" aria-live="assertive" className="login-hint" style={{ color: "var(--red)", marginBottom: 12 }}>{notice}</p>}
           <button
             className={`tg-login-button${officialReady ? "" : " is-loading"}`}
@@ -175,8 +175,8 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
             <span>{tgLoading ? "Verifying…" : "Continue with Telegram"}</span>
           </button>
           {tgError && <p role="alert" className="login-hint" style={{ color: "var(--red)", marginTop: 8 }}>{tgError}</p>}
-          {isBubbleNext && !waiting && <p role="status" aria-live="polite" className="login-hint">Already logged in the app? This window continues automatically…</p>}
-          {waiting && <p role="status" aria-live="polite" className="login-hint">Logged in! Opening your workspace…</p>}
+          {isBubbleNext && !waiting && <p role="status" aria-live="polite" className="login-hint">Already logged in the app? This window will continue automatically…</p>}
+          {waiting && <p role="status" aria-live="polite" className="login-hint">Logged in. Opening your workspace…</p>}
         </div>
       </div>
     </main>

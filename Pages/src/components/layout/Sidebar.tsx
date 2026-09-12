@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -118,7 +118,7 @@ function NavButton({ active, collapsed, label, onClick, children }: { active: bo
       )}
     >
       <span className="grid size-5 shrink-0 place-items-center" aria-hidden="true">{children}</span>
-      <span data-nav-label className={cn("truncate transition-[max-width,opacity] duration-[var(--anim-med)] ease-[var(--ease-out)] motion-reduce:transition-none", collapsed ? "max-w-0 opacity-0" : "max-w-44 opacity-100")}>{label}</span>
+      <span className={cn("truncate transition-[max-width,opacity] duration-[var(--anim-med)] ease-[var(--ease-out)] motion-reduce:transition-none", collapsed ? "max-w-0 opacity-0" : "max-w-44 opacity-100")}>{label}</span>
     </button>
   );
 }
@@ -148,28 +148,6 @@ export default function Sidebar() {
   const [mode, setMode] = useState<RailMode>(loadMode);
   const [customWidth, setCustomWidth] = useState<number | null>(loadWidth);
   const [hoverOpen, setHoverOpen] = useState(false);
-  // Auto-fit: expanded width follows the longest nav label (never wider than
-  // the old default). A user drag-resize (customWidth) always wins.
-  const navRef = useRef<HTMLElement>(null);
-  const [autoWidth, setAutoWidth] = useState<number | null>(null);
-  const measureAuto = () => {
-    const nav = navRef.current;
-    if (!nav) return;
-    let max = 0;
-    nav.querySelectorAll("[data-nav-label]").forEach((el) => { max = Math.max(max, (el as HTMLElement).scrollWidth); });
-    if (max > 0) {
-      const next = Math.min(DEFAULT_W, Math.max(140, Math.ceil(max + 88)));
-      setAutoWidth((prev) => (prev === next ? prev : next));
-    }
-  };
-  useEffect(() => { measureAuto(); }, [user?.isAdmin]);
-  useEffect(() => {
-    let dead = false;
-    if (document.fonts) {
-      document.fonts.ready.then(() => { if (!dead) measureAuto(); }).catch(() => {});
-    }
-    return () => { dead = true; };
-  }, []);
   // Live width while edge-dragging (null otherwise).
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const dragStart = useRef<{ x: number; w: number } | null>(null);
@@ -181,7 +159,7 @@ export default function Sidebar() {
     : mode === "icons" ? MIN_W
     : mode === "tight" ? TIGHT_W
     : MINI_W; // mini — hidden unmounts, so it never gets here
-  const effWidth = dragWidth ?? (expandedNow ? (customWidth ?? autoWidth ?? DEFAULT_W) : restWidth);
+  const effWidth = dragWidth ?? (expandedNow ? (customWidth ?? DEFAULT_W) : restWidth);
   const tab = tabForPath(location.pathname);
   const adminItems = NAV_ADMIN.filter((i) => !i.adminOnly || user?.isAdmin);
 
@@ -287,7 +265,7 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <nav aria-label="Primary" ref={navRef} className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+      <nav aria-label="Primary" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {NAV_MAIN.map((item) => (
           <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)}>
             {item.icon}

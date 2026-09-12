@@ -39,7 +39,7 @@ const PoolTypeIcon = ({ poolId, size = 16 }: { poolId: string; size?: number }) 
 };
 export { PoolTypeIcon };
 
-// Owners list shows the name only (first two words) — never the username.
+// Users list shows the name only (first two words) — never the username.
 function shortOwnerName(name: string): string {
   return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).join(" ");
 }
@@ -227,8 +227,8 @@ export default function PoolsView() {
     if (cur === "page" && verified && verified.verified === 0) return showToast("No verified rows available.");
     if (!totals.available) return showToast("No rows available.");
     if (!Number.isInteger(n) || n < 1) return showToast("Please enter at least 1 row.");
-    if (holdMode === "pick" && selectedUids.length === 0 && selectedFileIds.length === 0) { showToast("Please select at least one owner."); return; }
-    if (holdMode === "pick" && pickAvail === 0) { showToast("Selected owners have no available rows."); return; }
+    if (holdMode === "pick" && selectedUids.length === 0 && selectedFileIds.length === 0) { showToast("Please select at least one user."); return; }
+    if (holdMode === "pick" && pickAvail === 0) { showToast("Selected users have no available rows."); return; }
     setDownloading(true);
     try {
       const payload: { count: number | "all"; mode: "fifo" | "pick"; srcUids?: string[]; srcFileIds?: string[]; verifiedOnly?: boolean; unverifiedOnly?: boolean } = { count: n as number | "all", mode: holdMode };
@@ -351,7 +351,7 @@ export default function PoolsView() {
           <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>held or claimed</div>
         </div>
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--rl)", padding: 14, background: "var(--bg)" }}>
-          <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Owners</div>
+          <div style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Users</div>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "var(--mono)", marginTop: 4 }}>{detail ? totals.users : "-"}</div>
           <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 6 }}>source users</div>
         </div>
@@ -372,7 +372,7 @@ export default function PoolsView() {
           <button type="button" aria-pressed={holdMode === "pick"} className={holdMode === "pick" ? "btn btn-primary" : "btn btn-ghost"} style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600, minHeight: 36 }} onClick={() => setHoldMode("pick")}>Pick users</button>
         </div>
         {holdMode === "fifo" ? (
-          <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>Oldest rows first across all owners.</div>
+          <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>Oldest rows first across all users.</div>
         ) : (
           <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button type="button" className="btn" style={{ padding: "6px 10px", fontSize: 12, minHeight: 36 }} onClick={selectAllPick}>All</button>
@@ -401,17 +401,17 @@ export default function PoolsView() {
           <div className="taker-cell"><small>Amount</small>{unitPrice != null ? `${effectiveN} × ${fmtMoney(unitPrice, priceCurrency)} = ${fmtMoney(effectiveN * unitPrice, priceCurrency)}` : "-"}</div>
         </div>
         <button type="button" className="btn btn-primary" disabled={downloading || (cur === "page" ? !(verified ? verified.verified > 0 : totals.available > 0) : !totals.available)} onClick={() => void doHoldConfirm()} style={{ width: "100%", marginTop: 12, padding: "12px 24px", fontSize: 15, fontWeight: 700, borderRadius: "var(--rl)", boxShadow: "0 2px 10px rgba(0,0,0,.25)", justifyContent: "center" }}>Take {customQty ? Number(customQty) || 0 : poolQty === "all" ? (cur === "page" ? "All verified" : "All") : poolQty} from {poolMeta.label}</button>
-        <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>{cur === "page" ? "Page pool is verified-only. Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles." : "Take creates a hold. First approve/reject opens a 5-minute window to flip once; owners are paid when it settles."}</div>
+        <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>{cur === "page" ? "Page pool is verified-only. Take creates a hold. First approve/reject opens a 5-minute window to flip once; users are paid when it settles." : "Take creates a hold. First approve/reject opens a 5-minute window to flip once; users are paid when it settles."}</div>
       </div>
 
       <div style={{ display: "flex", marginTop: 16, marginBottom: 8 }}>
-        <SearchInput placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search owners" containerStyle={{ width: "100%" }} />
+        <SearchInput placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search users" containerStyle={{ width: "100%" }} />
       </div>
-      <h2 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 8px" }}>Owners</h2>
+      <h2 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 8px" }}>Users</h2>
 
       <div className="card-list">
         {filtered.length === 0 ? (
-          <EmptyState title="No owners yet." sub={search.trim() ? "No match for your search." : "Owners appear here when they push rows."} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
+          <EmptyState title="No users yet." sub={search.trim() ? "No match for your search." : "Users appear here when they push rows."} action={search.trim() ? { label: "Clear search", onClick: () => setSearch("") } : undefined} />
         ) : filtered.map((u) => {
           const d = displayName(u);
           const cachedName = String(cachedProfiles[u.userId]?.name ?? "").trim();
@@ -444,7 +444,7 @@ export default function PoolsView() {
                       <DropdownMenuItem disabled={downloading} onSelect={() => void doUserHold(u)}>Take</DropdownMenuItem>
                       {holdMode === "pick" ? (
                         <DropdownMenuCheckboxItem checked={selectedUids.includes(u.userId)} onCheckedChange={() => toggleUid(u.userId)}>
-                          Select owner
+                          Select user
                         </DropdownMenuCheckboxItem>
                       ) : null}
                     </DropdownMenuContent>

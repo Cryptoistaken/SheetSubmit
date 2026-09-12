@@ -333,7 +333,7 @@ export default function ApprovalsView() {
                     <span title={poolLabel} style={{ flexShrink: 0, display: "inline-flex", color: "var(--text3)" }}><ApprPoolIcon poolId={h.poolId} size={16} /></span>
                   )}
                   {(h.srcUids ?? []).length ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, paddingLeft: 6 }} aria-label={`${(h.srcUids ?? []).length} owner${(h.srcUids ?? []).length > 1 ? "s" : ""}`}>
+                    <span style={{ display: "inline-flex", alignItems: "center", flexShrink: 0, paddingLeft: 6 }} aria-label={`${(h.srcUids ?? []).length} user${(h.srcUids ?? []).length > 1 ? "s" : ""}`}>
                       {(h.srcUids ?? []).slice(0, 3).map((uid) => (
                         <span key={uid} style={{ marginLeft: -6, border: "2px solid var(--bg)", borderRadius: "50%", display: "inline-flex", lineHeight: 0 }}><ProfileAvatar photoUrl={cachedProfiles[uid]?.photoUrl} fallback={ownerFallback(uid)} className="size-6 bg-(--bg3) text-(--text2)" /></span>
                       ))}
@@ -358,7 +358,7 @@ export default function ApprovalsView() {
                       {st !== "PENDING" ? <HoldToDeleteButton onConfirm={() => void doDeleteHold(h.id)} disabled={locked || holdActing === h.id} label="Delete" /> : null}
                     </div>
                     {apprLoading === h.id ? <Skeleton className="h-16 w-full" /> : !det || ownerUids.length === 0 ? (
-                      <div style={{ fontSize: 12, color: "var(--text3)", padding: "6px 2px" }}>{det ? "No owner details available for this approval." : "Unable to load details. Please try again."}</div>
+                      <div style={{ fontSize: 12, color: "var(--text3)", padding: "6px 2px" }}>{det ? "No user details available for this approval." : "Unable to load details. Please try again."}</div>
                     ) : (
                       <div className="card-list">
                         {ownerUids.map((uid) => {

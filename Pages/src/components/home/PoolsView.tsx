@@ -39,13 +39,14 @@ const PoolTypeIcon = ({ poolId, size = 16 }: { poolId: string; size?: number }) 
 };
 export { PoolTypeIcon };
 
+// Owners list shows the name only (first two words) — never the username.
+function shortOwnerName(name: string): string {
+  return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).join(" ");
+}
 function displayName(u: PoolDetail["users"][number]) {
   const raw: Record<string, unknown> = u as unknown as Record<string, unknown>;
   const n = String(raw["name"] ?? raw["displayName"] ?? "").trim();
-  const un = String(raw["username"] ?? "").trim();
-  if (n && un) return { line1: n, line2: "@" + un };
-  if (un) return { line1: "@" + un, line2: "" };
-  if (n) return { line1: n, line2: "" };
+  if (n) return { line1: shortOwnerName(n), line2: "" };
   return { line1: "#" + u.userId, line2: "" };
 }
 
@@ -176,8 +177,9 @@ export default function PoolsView() {
   const filtered = detail ? detail.users.filter((u) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
+    const raw = u as unknown as Record<string, unknown>;
     const d = displayName(u);
-    return [d.line1, d.line2, u.userId].some((s) => s.toLowerCase().includes(q));
+    return [d.line1, String(raw["name"] ?? raw["displayName"] ?? ""), String(raw["username"] ?? ""), u.userId].some((s) => s.toLowerCase().includes(q));
   }) : [];
 
   const go = (pwd: string, pid: string) => {
@@ -413,7 +415,7 @@ export default function PoolsView() {
         ) : filtered.map((u) => {
           const d = displayName(u);
           const cachedName = String(cachedProfiles[u.userId]?.name ?? "").trim();
-          const title = d.line1.startsWith("#") && cachedName ? cachedName : d.line1;
+          const title = d.line1.startsWith("#") && cachedName ? shortOwnerName(cachedName) : d.line1;
           const isAdmin = Boolean(u.isAdmin || cachedProfiles[u.userId]?.isAdmin);
           const expanded = expandedUser === u.userId;
           const uf = getUserFilesFor(u.userId);
@@ -423,7 +425,6 @@ export default function PoolsView() {
                 <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}><ProfileAvatar photoUrl={u.photoUrl ?? cachedProfiles[u.userId]?.photoUrl} fallback={title.charAt(0).toUpperCase()} className="size-9 bg-(--bg3) text-(--text2)" verified={isAdmin} /></span>
                 <div className="pool-card-info">
                   <div className="pool-card-name">{title}</div>
-                  {d.line2 ? <div className="pool-card-sub">{d.line2}</div> : null}
                 </div>
                 <div className="pool-card-stats">
                   {uf ? (<>

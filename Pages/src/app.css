@@ -827,8 +827,8 @@ button, input, select, textarea {
     color: var(--text);
 }
 .file-card.selected {
-    border-color: var(--blue) !important;
-    background: var(--blue-light) !important;
+    border-color: var(--text) !important;
+    background: var(--sel-bg) !important;
 }
 
 /* ── View switcher (grid / list) ── */

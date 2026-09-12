@@ -258,7 +258,8 @@ export default function FileCard({
         </div>
       )}
 
-      {/* E: More */}
+      {/* E: More — hidden in multi-select mode (taps toggle selection) */}
+      {selectionMode ? null : (
       <div className="file-card-actions">
         <button
           ref={dotsRef}
@@ -274,6 +275,7 @@ export default function FileCard({
           <MoreHorizontal size={14} aria-hidden="true" />
         </button>
       </div>
+      )}
 
       {daysLeft !== undefined ? (
         <span className="file-card-days" title="Days until permanent deletion">{daysLeft}d left</span>

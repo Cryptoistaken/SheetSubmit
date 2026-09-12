@@ -11,21 +11,24 @@ import { useViewStore } from "@/stores/viewStore";
 const COLLAPSE_KEY = "ss_sidebar_collapsed";
 const MODE_KEY = "ss_sidebar_mode";
 const WIDTH_KEY = "ss_sidebar_width";
-const MIN_W = 64;
+const MIN_W = 64; // icons stop (also the trigger toggle target)
+const TIGHT_W = 48; // drag-only stop inside the collapsed space
+const MINI_W = 36; // drag-only stop inside the collapsed space
 const DEFAULT_W = 240;
 const MAX_W = 320;
-// 64 = the icons rail itself: only a deliberate drag fully left hides it,
-// so the collapsed state gets real room (68–159px) before hidden.
-const HIDE_BELOW = 68;
+// Release bands: <42 mini (36) · <56 tight (48) · <160 icons (64).
+// Hidden is never a drag outcome — only the footer X button hides the rail.
+const MINI_BELOW = 42;
+const TIGHT_BELOW = 56;
 const ICONS_BELOW = 160;
 const LABEL_W = 180;
 
-type RailMode = "expanded" | "icons" | "hidden";
+type RailMode = "expanded" | "icons" | "tight" | "mini" | "hidden";
 
 function loadMode(): RailMode {
   try {
     const m = localStorage.getItem(MODE_KEY);
-    if (m === "expanded" || m === "icons" || m === "hidden") return m;
+    if (m === "expanded" || m === "icons" || m === "tight" || m === "mini" || m === "hidden") return m;
     if (localStorage.getItem(COLLAPSE_KEY) === "1") return "icons";
   } catch {
     // ignore
@@ -41,12 +44,12 @@ function saveMode(m: RailMode) {
   }
 }
 
-const clampWidth = (w: number) => Math.min(MAX_W, Math.max(MIN_W, Math.round(w)));
+const clampWidth = (w: number) => Math.min(MAX_W, Math.max(MINI_W, Math.round(w)));
 
 function loadWidth(): number | null {
   try {
     const raw = Number(localStorage.getItem(WIDTH_KEY));
-    if (Number.isFinite(raw) && raw >= MIN_W && raw <= MAX_W) return Math.round(raw);
+    if (Number.isFinite(raw) && raw >= MINI_W && raw <= MAX_W) return Math.round(raw);
   } catch {
     // ignore
   }
@@ -129,9 +132,10 @@ function PanelTriggerIcon({ shifted }: { shifted?: boolean }) {
 
 // Admin-only sidebar rail (regulars keep Topbar + tabs everywhere — the rail
 // would be overkill for their 4 sections). Same persistent rail on desktop
-// and phones with three states: expanded ↔ icons via the footer trigger,
-// hidden (rail gone, only a floating expand button stays) via drag-narrow /
-// arrow keys. Tap works everywhere; hover-expand needs a real mouse.
+// and phones: expanded ↔ icons via the footer trigger, drag-only stops at
+// tight (48) and mini (36) inside the collapsed space, hidden (rail gone,
+// only a floating expand button stays) only via the footer X button.
+// Tap works everywhere; hover-expand needs a real mouse.
 // Sheet pages never mount this.
 export default function Sidebar() {
   const { user } = useAuth();
@@ -146,14 +150,20 @@ export default function Sidebar() {
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const dragStart = useRef<{ x: number; w: number } | null>(null);
 
-  const effCollapsed = dragWidth != null ? dragWidth < LABEL_W : mode !== "expanded" && !hoverOpen;
-  const effWidth = dragWidth ?? (mode !== "expanded" && !hoverOpen ? MIN_W : (customWidth ?? DEFAULT_W));
+  // Hover (real mice only) always opens to the full width, whatever the mode.
+  const expandedNow = dragWidth != null ? dragWidth >= LABEL_W : mode === "expanded" || hoverOpen;
+  const effCollapsed = !expandedNow;
+  const restWidth = mode === "expanded" ? (customWidth ?? DEFAULT_W)
+    : mode === "icons" ? MIN_W
+    : mode === "tight" ? TIGHT_W
+    : MINI_W; // mini — hidden unmounts, so it never gets here
+  const effWidth = dragWidth ?? (expandedNow ? (customWidth ?? DEFAULT_W) : restWidth);
 
   if (!user) return null;
 
   const tab = tabForPath(location.pathname);
-  // Footer trigger toggles expanded ↔ icons only — hidden is entered by
-  // dragging narrow / arrow keys, and the floating button leads back out.
+  // Footer trigger toggles expanded ↔ icons only. Drag/arrow stops below
+  // that: tight (48), mini (36). Hidden comes only from the X button.
   const toggleRail = () => {
     setHoverOpen(false);
     const next: RailMode = mode === "expanded" ? "icons" : "expanded";
@@ -170,14 +180,17 @@ export default function Sidebar() {
     setMode("hidden");
     saveMode("hidden");
   };
-  // Drag release (and arrow keys): very narrow hides the rail, narrow snaps
-  // to icons, wide persists as the custom expanded width. Near-default rounds
-  // back to the default.
+  // Drag release (and arrow keys) snaps to mini (36) · tight (48) ·
+  // icons (64) · expanded. Wide persists as the custom expanded width;
+  // near-default rounds back to the default. Never hides — only X does that.
   const applyWidth = (w: number) => {
     const width = clampWidth(w);
-    if (width < HIDE_BELOW) {
-      setMode("hidden");
-      saveMode("hidden");
+    if (width < MINI_BELOW) {
+      setMode("mini");
+      saveMode("mini");
+    } else if (width < TIGHT_BELOW) {
+      setMode("tight");
+      saveMode("tight");
     } else if (width < ICONS_BELOW) {
       setMode("icons");
       saveMode("icons");
@@ -211,6 +224,8 @@ export default function Sidebar() {
     setDragWidth(null);
   };
   const adminItems = NAV_ADMIN.filter((i) => !i.adminOnly || user.isAdmin);
+  // Mini stop (36px): footer compacts so the trigger still fits with padding.
+  const miniFooter = effWidth < 44;
 
   // Hidden state: the whole rail (icons included) is gone — only a floating
   // expand button stays at the bottom-left.
@@ -272,7 +287,7 @@ export default function Sidebar() {
       </nav>
       </div>
 
-      <div className={cn("flex flex-col gap-1 border-t border-border p-2", effCollapsed && "items-center")}>
+      <div className={cn("flex flex-col gap-1 border-t border-border", miniFooter ? "p-1" : "p-2", effCollapsed && "items-center")}>
         {tab === "files" && !effCollapsed ? (
           <div className="flex justify-center">
             <ViewSwitch view={view} setViewMode={setViewMode} />
@@ -285,7 +300,7 @@ export default function Sidebar() {
           aria-expanded={mode === "expanded"}
           aria-label={triggerLabel}
           title={triggerLabel}
-          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          className={cn("flex shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset", miniFooter ? "size-6" : "size-8")}
         >
           <PanelTriggerIcon shifted={effCollapsed} />
         </button>
@@ -297,7 +312,7 @@ export default function Sidebar() {
             title="Hide sidebar"
             className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2-2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2m0 16H5V5h14zM17 8.4L13.4 12l3.6 3.6l-1.4 1.4l-3.6-3.6L8.4 17L7 15.6l3.6-3.6L7 8.4L8.4 7l3.6 3.6L15.6 7z" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2m-3.4 14L12 13.4L8.4 17L7 15.6l3.6-3.6L7 8.4L8.4 7l3.6 3.6L15.6 7L17 8.4L13.4 12l3.6 3.6z" /></svg>
           </button>
         ) : null}
         </div>
@@ -307,7 +322,7 @@ export default function Sidebar() {
         aria-orientation="vertical"
         aria-label="Resize sidebar"
         aria-valuenow={Math.round(effWidth)}
-        aria-valuemin={MIN_W}
+        aria-valuemin={MINI_W}
         aria-valuemax={MAX_W}
         tabIndex={0}
         onPointerDown={startDrag}
@@ -319,7 +334,7 @@ export default function Sidebar() {
           else if (e.key === "ArrowLeft") { e.preventDefault(); applyWidth(effWidth - 16); }
         }}
         title="Drag to resize"
-        className="absolute inset-y-0 right-0 z-10 w-6 cursor-ew-resize touch-none outline-none"
+        className={cn("absolute inset-y-0 right-0 z-10 cursor-ew-resize touch-none outline-none", miniFooter ? "w-3" : "w-6")}
       >
         <div
           aria-hidden="true"

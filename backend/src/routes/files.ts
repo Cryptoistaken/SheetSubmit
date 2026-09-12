@@ -148,7 +148,13 @@ archive.post("/batch-restore", async (c) => { const body = await c.req.json<{ id
    archive.post("/batch-delete", async (c) => { const body = await c.req.json<{ ids?: unknown }>().catch(() => ({ ids: undefined })); const ids = [...new Set(Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string") : [])]; if (!ids.length) return c.json({ error: "no ids" }, 400); if (ids.length > 20) return c.json({ error: "too many ids" }, 400); const archived = await rpc(c.env.INDEX, "global", "files", { uid: c.get("uid"), archived: 1 }) as SheetFile[]; const owned = archived.filter((f) => ids.includes(f.id)); if (!owned.length) return c.json({ deleted: 0 }); for (const f of owned) { let held = 0; try { held = (await filePoolCounts(c, f)).held; } catch { return c.json({ error: `${f.name}: could not verify hold state` }, 503); } if (held) return c.json({ error: `${f.name}: ${heldBlock(held).error}` }, 409); } for (const f of owned) { try { await rpc(c.env.FILES, f.id, "wipe", { uid: c.get("uid") }); } catch { return c.json({ error: `could not wipe ${f.name}` }, 503); } } await rpc(c.env.INDEX, "global", "batchPurge", { ids: owned.map((f) => f.id) });   await Promise.all(owned.map((f) => f.password ? removeFilePoolRows(c.env, f.password, f.id) : Promise.resolve())); return c.json({ deleted: owned.length }); });
 
 // ── Cross-file duplicates (mounted at /api/cross-dups) ──
-// ponytail: bounded projection via FileDO dupKeys; 50-subrequest cap ≈ 40 files/user
+// ponytail: ONE indexOp crossDups query (R2) — per-type file counts +
+// key groups in SQL, no per-file fan-out. Semantics match the old fan-out
+// exactly: only non-archived files; per file type, only types with >=2 files
+// (single-file types skipped even with internal dupes); dup = key seen >1
+// times in its type group; counts init 0 for ALL user files; ?fileId= picks
+// the target type from that file and filters dups to keys touching it
+// (counts NOT refiltered); without fileId dups is {}; >40 selected files 400s.
 export const crossDups = new Hono<{ Bindings: Env; Variables: { uid: string } }>();
 crossDups.use("/*", requireAuth);
 crossDups.get("/", async (c) => {
@@ -163,16 +169,11 @@ crossDups.get("/", async (c) => {
   for (const f of files) { (byType[f.type] ||= []).push(f); }
   const selected = Object.entries(byType).filter(([typeKey, tf]) => (!targetType || typeKey === targetType) && tf.length > 1).flatMap(([, tf]) => tf);
   if (selected.length > 40) return c.json({ error: "too many files" }, 400);
-  for (const typeKey in byType) {
-    if (targetType && typeKey !== targetType) continue;
-    const tf = byType[typeKey];
-    if (tf.length < 2) continue;
-    const uidMap: Record<string, { fileId: string; fileName: string; rowIdx: number }[]> = {};
-    const keysByFile = await Promise.all(tf.map((f) => rpc(c.env.FILES, f.id, "dupKeys", { limit: 10000 }) as Promise<{ k: string; i: number }[]>));
-    keysByFile.forEach((keys, i) => keys.forEach(({ k, i: ri }) => { const dk = k; if (!dk) return; (uidMap[dk] ||= []).push({ fileId: tf[i].id, fileName: tf[i].name, rowIdx: ri }); }));
-    for (const dk in uidMap) {
-      if (uidMap[dk].length > 1) { allDups[dk] = uidMap[dk]; for (const e of uidMap[dk]) counts[e.fileId]++; }
-    }
+  const groups = await rpc(c.env.INDEX, "global", "crossDups", { uid, type: targetType }) as { k: string; entries: { fileId: string; fileName: string; rowIdx: number }[] }[];
+  for (const { k, entries } of groups) {
+    if (!k || !Array.isArray(entries) || !entries.length) continue;
+    allDups[k] = entries;
+    for (const e of entries) counts[e.fileId]++;
   }
   if (fileId) { const filtered: typeof allDups = {}; for (const dk in allDups) if (allDups[dk].some((e) => e.fileId === fileId)) filtered[dk] = allDups[dk]; return c.json({ counts, dups: filtered }); }
   return c.json({ counts, dups: {} });

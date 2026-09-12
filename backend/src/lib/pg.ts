@@ -70,6 +70,30 @@ async function indexOp(op: string, a: any) {
     case "register": await db`INSERT INTO file_index(file_id,owner_id,archived,data) VALUES(${a.file.id},${a.uid},false,${j(a.file)}) ON CONFLICT(file_id) DO UPDATE SET owner_id=EXCLUDED.owner_id,archived=false,data=EXCLUDED.data,updated_at=now()`; return { ok: true };
     case "file": { const r: any = (await db`SELECT data,owner_id,archived FROM file_index WHERE file_id=${a.id}`)[0]; return r ? { ...r, data: typeof r.data === "string" ? r.data : JSON.stringify(r.data) } : null; }
     case "files": { const rows = a.archived === "all" ? await db`SELECT data FROM file_index WHERE owner_id=${a.uid}` : a.archived === 1 ? await db`SELECT data FROM file_index WHERE owner_id=${a.uid} AND archived=true` : await db`SELECT data FROM file_index WHERE owner_id=${a.uid} AND archived=false`; return rows.map((r: any) => json(r.data)); }
+    case "crossDups": {
+      // R2: one query replaces the per-file dupKeys fan-out — per-type file
+      // counts from file_index, key groups over file_rows JOIN file_index
+      // (same owner + non-archived filters, row_key IS NOT NULL), dup = key
+      // seen >1 times within a type that has >1 file. COALESCE on type keeps
+      // legacy typeless files grouped exactly like the old JS byType[f.type].
+      const uid = String(a.uid || ""), type = a.type == null ? null : String(a.type);
+      const rows: any[] = await db`
+        WITH type_counts AS (
+          SELECT COALESCE(data->>'type', '') AS type, COUNT(*) AS n
+          FROM file_index WHERE owner_id=${uid} AND archived=false GROUP BY COALESCE(data->>'type', '')
+        ),
+        groups AS (
+          SELECT COALESCE(f.data->>'type', '') AS type, r.row_key AS k,
+            jsonb_agg(jsonb_build_object('fileId', r.file_id, 'fileName', f.data->>'name', 'rowIdx', r.idx) ORDER BY r.file_id, r.idx) AS entries,
+            COUNT(*) AS n
+          FROM file_rows r JOIN file_index f ON f.file_id=r.file_id
+          WHERE f.owner_id=${uid} AND f.archived=false AND r.row_key IS NOT NULL
+          ${type == null ? db`` : db`AND COALESCE(f.data->>'type', '')=${type}`}
+          GROUP BY COALESCE(f.data->>'type', ''), r.row_key
+        )
+        SELECT g.k AS k, g.entries AS entries FROM groups g JOIN type_counts t ON t.type=g.type WHERE t.n>1 AND g.n>1`;
+      return rows.map((r: any) => ({ k: String(r.k), entries: json(r.entries) as { fileId: string; fileName: string; rowIdx: number }[] }));
+    }
     case "archive": await db`UPDATE file_index SET archived=${!!a.archived},data=${j(a.file)},updated_at=now() WHERE file_id=${a.id}`; return { ok: true };
     case "batchArchive": { const files = (a.files as SheetFile[]) || []; if (files.length > 40) throw new Error("too many files"); if (!files.length) return { ok: true }; await db`UPDATE file_index SET archived=false,data=s.d,updated_at=now() FROM jsonb_to_recordset(${j(files.map((f) => ({ id: f.id, d: f })))}::jsonb) AS s(id text,d jsonb) WHERE file_index.file_id=s.id`; return { ok: true }; }
     case "purge": await db`DELETE FROM file_index WHERE file_id=${a.id}`; return { ok: true };
@@ -170,7 +194,7 @@ async function fileOp(id: string, op: string, a: any) {
   if (op === "rows") return readRows();
   if (op === "full") { const r: any = (await db`SELECT seq FROM file_meta WHERE file_id=${id}`)[0]; return { rows: await readRows(), seq: Number(r?.seq || 0) }; }
   if (op === "counts") return counts(await readRows());
-  if (["keys", "dupKeys", "projection"].includes(op)) { const limit = Math.min(10000, Math.max(1, Number(a.limit) || 10000)); const krows: any[] = await db`SELECT idx AS i,COALESCE(NULLIF(data->>'uid',''),substring(data->>'cookies' from 'c_user=([0-9]+)')) AS k FROM file_rows WHERE file_id=${id} AND COALESCE(NULLIF(data->>'uid',''),substring(data->>'cookies' from 'c_user=([0-9]+)')) IS NOT NULL ORDER BY idx LIMIT ${limit}`; return krows.map((r: any) => ({ k: String(r.k), i: Number(r.i) })); }
+  if (["keys", "projection"].includes(op)) { const limit = Math.min(10000, Math.max(1, Number(a.limit) || 10000)); const krows: any[] = await db`SELECT idx AS i,row_key AS k FROM file_rows WHERE file_id=${id} AND row_key IS NOT NULL ORDER BY idx LIMIT ${limit}`; return krows.map((r: any) => ({ k: String(r.k), i: Number(r.i) })); }
   if (op === "wipe") return db.begin(async (tx: any) => {
     const rows = (await tx`SELECT data FROM file_rows WHERE file_id=${id}`).map((r: any) => json(r.data));
     // forensics tombstone (Fix #8): file_logs cascades away with file_index, so
@@ -389,7 +413,7 @@ async function poolOp(password: string, op: string, a: any) {
     if ((a.verifiedOnly || a.unverifiedOnly) && p !== "page") throw new Error("verified filters only for page pool");
     const limit = Math.min(1000, Math.max(1, Number(a.limit) || 100)), offset = Math.max(0, Number(a.offset) || 0);
     const user = String(a.userId || ""), file = String(a.fileId || "");
-    const eligibleFilter = a.verifiedOnly ? db`AND lower(COALESCE(data->>'check_status', data->>'wa_status', data->>'waStatus', '')) = 'eligible'` : a.unverifiedOnly ? db`AND lower(COALESCE(data->>'check_status', data->>'wa_status', data->>'waStatus', '')) <> 'eligible'` : db``;
+    const eligibleFilter = a.verifiedOnly ? db`AND wa_eligible` : a.unverifiedOnly ? db`AND NOT wa_eligible` : db``;
     const sourceFilter = db`${user ? db`AND src_uid=${user}` : db``} ${file ? db`AND src_file_id=${file}` : db``}`;
     const where = db`FROM pool_rows WHERE password=${password} AND pool_id=${p} AND state='available' AND (src_file_id IS NULL OR EXISTS (SELECT 1 FROM file_index WHERE file_id=pool_rows.src_file_id AND archived=false)) ${sourceFilter} ${eligibleFilter}`;
     const totalRow: any = (await db`SELECT COUNT(*) AS total ${where}`)[0];
@@ -397,7 +421,7 @@ async function poolOp(password: string, op: string, a: any) {
     return { total: Number(totalRow.total), rows: rows.map(rowOut), offset, limit };
   }
   if (op === "userFiles") { const rows: any[] = await db`SELECT src_uid,src_file_id,state,COUNT(*) n FROM pool_rows WHERE password=${password} AND pool_id=${p} AND src_uid IS NOT NULL AND state<>'dead' AND (src_file_id IS NULL OR EXISTS (SELECT 1 FROM file_index WHERE file_id=pool_rows.src_file_id AND archived=false)) GROUP BY src_uid,src_file_id,state`; const fids = [...new Set(rows.map((r: any) => r.src_file_id).filter(Boolean))] as string[]; const metas: any[] = fids.length ? await db`SELECT file_id,data->>'name' AS name,COALESCE((data->>'createdAt')::float8,0) AS created_at,COALESCE(data->>'preset',data->>'poolKind') AS preset FROM file_index WHERE file_id IN ${db(fids)} AND archived=false` : []; const fm = new Map(metas.map((m: any) => [m.file_id, m])); const users = new Map<string, any>(); let noSrcAvail = 0; for (const r of rows) { if (r.state === "available" && !r.src_uid) noSrcAvail += Number(r.n); const u = users.get(r.src_uid) || { userId: r.src_uid, files: [], totalAvailable: 0, totalClaimed: 0 }; const m = r.src_file_id ? fm.get(r.src_file_id) : null; const f = u.files.find((x: any) => x.fileId === (r.src_file_id || "_unknown")) || { fileId: r.src_file_id || "_unknown", name: m?.name || null, createdAt: m ? Number(m.created_at) || 0 : 0, preset: m?.preset || null, available: 0, claimed: 0 }; f[r.state] = Number(r.n); if (!u.files.includes(f)) u.files.push(f); u.totalAvailable += r.state === "available" ? Number(r.n) : 0; u.totalClaimed += r.state === "claimed" ? Number(r.n) : 0; users.set(r.src_uid, u); } return { users: [...users.values()], noSrcAvail }; }
-  if (op === "verifiedCounts") { const total: any = (await db`SELECT COUNT(*) n, COUNT(*) FILTER (WHERE LOWER(COALESCE(data->>'check_status', data->>'wa_status', data->>'waStatus', '')) = 'eligible') v FROM pool_rows WHERE password=${password} AND pool_id=${p} AND state='available' AND (src_file_id IS NULL OR EXISTS (SELECT 1 FROM file_index WHERE file_id=pool_rows.src_file_id AND archived=false))`)[0]; const totalN = Number(total.n), verified = Number(total.v); return { pool: p, verified, unverified: totalN - verified, totalAvailable: totalN, ...(p === "page" ? { totalCookies2faAvailable: totalN, unverifiedScanned: totalN } : {}), truncated: false, scanCap: totalN }; }
+  if (op === "verifiedCounts") { const total: any = (await db`SELECT COUNT(*) n, COUNT(*) FILTER (WHERE wa_eligible) v FROM pool_rows WHERE password=${password} AND pool_id=${p} AND state='available' AND (src_file_id IS NULL OR EXISTS (SELECT 1 FROM file_index WHERE file_id=pool_rows.src_file_id AND archived=false))`)[0]; const totalN = Number(total.n), verified = Number(total.v); return { pool: p, verified, unverified: totalN - verified, totalAvailable: totalN, ...(p === "page" ? { totalCookies2faAvailable: totalN, unverifiedScanned: totalN } : {}), truncated: false, scanCap: totalN }; }
   if (op === "downloads" || op === "holds") { const where = op === "holds" ? a.status ? db`AND status=${String(a.status).toUpperCase() === "PENDING" ? "HOLD" : String(a.status).toUpperCase()}` : db`AND status IN ('HOLD','APPROVED')` : db``; const rows = await db`SELECT * FROM downloads WHERE password=${password} ${where} ORDER BY ts DESC LIMIT 50`; const out = rows.map(downloadShape); return op === "holds" ? { holds: out, downloads: out } : { downloads: out }; }
   if (op === "download" || op === "downloadDetail") { const r: any = (await db`SELECT * FROM downloads WHERE password=${password} AND id=${a.id}`)[0]; if (!r) return null; const out = downloadShape(r); if (op === "download") return out;     const keys = (json(r.keys) || []) as string[]; if (!keys.length) return { ...out, groups: [] }; const grouped: any[] = await db`SELECT src_uid AS "srcUid",src_file_id AS "srcFileId",COUNT(*)::int AS count FROM pool_rows WHERE password=${password} AND pool_id=${r.pool_id} AND row_key IN ${db(keys)} GROUP BY src_uid,src_file_id`; const groups: any[] = grouped.map((g: any) => ({ srcUid: g.srcUid ?? null, srcFileId: g.srcFileId ?? null, count: Number(g.count) })); const missing = keys.length - groups.reduce((s: number, g: any) => s + g.count, 0); if (missing > 0) groups.push({ srcUid: null, srcFileId: null, count: missing }); const fids = [...new Set(groups.map((g: any) => g.srcFileId).filter(Boolean))] as string[]; const metas: any[] = fids.length ? await db`SELECT file_id,data->>'name' AS name,COALESCE((data->>'createdAt')::float8,0) AS created_at,COALESCE(data->>'preset',data->>'poolKind') AS preset FROM file_index WHERE file_id IN ${db(fids)}` : []; const fm = new Map(metas.map((m: any) => [m.file_id, m])); for (const g of groups) { const m: any = g.srcFileId ? fm.get(g.srcFileId) : null; if (m) { g.filename = m.name || null; g.createdAt = Number(m.created_at) || 0; g.preset = m.preset || null; } } return { ...out, groups }; }
   if (op === "downloadDelete") { const r: any = (await db`SELECT status,reverted FROM downloads WHERE password=${password} AND id=${a.id}`)[0]; if (!r) throw new Error("not found"); if (!r.reverted && !["REVERTED", "REJECTED"].includes(r.status)) throw new Error("active record cannot be deleted"); await db`DELETE FROM downloads WHERE password=${password} AND id=${a.id}`; return { ok: true }; }
@@ -433,7 +457,7 @@ async function allocate(password: string, op: string, pool: string, a: any) {
     const unit = off ? 0 : Number(((await tx`SELECT price FROM pool_settings WHERE password=${password} AND pool_id=${pool}`)[0]?.price ?? price(pool)));
     const { u, f } = poolFilters(a);
     // eligibility pushed into SQL (was: fetch up to 5000 + JS filter) and select+update folded into one CTE (was: 2 round trips)
-    const elig = a.verifiedOnly ? tx`AND LOWER(COALESCE(data->>'check_status', data->>'wa_status', data->>'waStatus', '')) = 'eligible'` : a.unverifiedOnly ? tx`AND LOWER(COALESCE(data->>'check_status', data->>'wa_status', data->>'waStatus', '')) <> 'eligible'` : tx``;
+    const elig = a.verifiedOnly ? tx`AND wa_eligible` : a.unverifiedOnly ? tx`AND NOT wa_eligible` : tx``;
     const src = !u.length && f.length === 1 ? tx`AND src_file_id=${f[0]}` : u.length && f.length ? tx`AND src_uid IN ${db(u)} AND src_file_id IN ${db(f)}` : u.length ? tx`AND src_uid IN ${db(u)}` : f.length ? tx`AND src_file_id IN ${db(f)}` : tx``;
     const rows: any[] = await tx`WITH selected AS (SELECT row_key FROM pool_rows WHERE password=${password} AND pool_id=${pool} AND state='available' ${src} ${elig} ORDER BY inserted_at,row_key LIMIT ${want} FOR UPDATE SKIP LOCKED) UPDATE pool_rows p SET state=${state},hold_id=${op === "hold" ? id : null},claimed_by=${a.uid},claimed_at=${now} FROM selected s WHERE p.password=${password} AND p.pool_id=${pool} AND p.row_key=s.row_key AND p.state='available' RETURNING p.row_key,p.data,p.src_uid`;
     if (!rows.length) return op === "hold" ? { claimed: 0, held: 0, count: 0, rows: [], holdId: null, downloadId: null, filename: null, status: "HOLD", unitPrice: price(pool), total: 0, mode: a.mode || "fifo" } : { claimed: 0, rows: [], downloadId: null, filename: a.filename || null, status: null, unitPrice: price(pool), total: 0, mode: "fifo" };

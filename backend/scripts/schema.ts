@@ -26,7 +26,7 @@ try {
     `;
      const indexes = await sql<{ indexname: string }[]>`
        SELECT indexname FROM pg_indexes WHERE schemaname='public'
-       AND indexname IN ('file_index_owner_archived_idx', 'sessions_exp_idx', 'withdrawals_status_idx', 'file_logs_recent_idx', 'pool_rows_fifo_idx', 'pool_rows_source_idx', 'pool_rows_eligible_fifo_idx', 'pool_rows_hold_idx', 'downloads_status_recent_idx', 'wallet_tx_user_idx', 'sessions_user_idx', 'meta_key_prefix_idx', 'file_rows_key_idx', 'pool_rows_held_idx', 'downloads_settle_idx', 'pool_rows_rowkey_idx', 'pool_blocked_ts_idx')
+       AND indexname IN ('file_index_owner_archived_idx', 'sessions_exp_idx', 'withdrawals_status_idx', 'file_logs_recent_idx', 'pool_rows_fifo_idx', 'pool_rows_source_idx', 'pool_rows_eligible_idx', 'pool_rows_hold_idx', 'downloads_status_recent_idx', 'wallet_tx_user_idx', 'sessions_user_idx', 'meta_key_prefix_idx', 'file_rows_rowkey_idx', 'pool_rows_held_idx', 'downloads_settle_idx', 'pool_rows_rowkey_idx', 'pool_blocked_ts_idx')
       `;
      const migration = await sql<{ version: number }[]>`SELECT version FROM schema_migrations WHERE version=1`;
        if (tables.length !== 16 || indexes.length !== 17 || migration.length !== 1) throw new Error(`schema verification failed: ${tables.length}/16 tables, ${indexes.length}/17 indexes, ${migration.length}/1 migrations`);

@@ -232,3 +232,15 @@ ON CONFLICT(row_key) DO NOTHING;
 INSERT INTO pool_blocked(row_key,reason,password,pool_id,src_uid,hold_id,ts)
 SELECT DISTINCT k,'sold',d.password,d.pool_id,NULL,d.id,d.ts FROM downloads d, jsonb_array_elements_text(d.keys) k WHERE d.status IN ('APPROVED','CLAIMED') AND d.reverted=false
 ON CONFLICT(row_key) DO NOTHING;
+
+-- 008: generated key/eligible columns (R2) — replaces the per-row
+-- lower(COALESCE(...)) eligibility recompute (pool_rows) and the
+-- expression key projection (file_rows) with STORED columns + new
+-- indexes. New index names only (never recreate the dropped names —
+-- this file re-runs on every boot, so DROP-then-CREATE would rebuild).
+ALTER TABLE pool_rows ADD COLUMN IF NOT EXISTS wa_eligible boolean GENERATED ALWAYS AS (lower(COALESCE(data->>'check_status', data->>'wa_status', data->>'waStatus', '')) = 'eligible') STORED;
+CREATE INDEX IF NOT EXISTS pool_rows_eligible_idx ON pool_rows (password, pool_id, state, wa_eligible, inserted_at, row_key) WHERE state = 'available';
+DROP INDEX IF EXISTS pool_rows_eligible_fifo_idx;
+ALTER TABLE file_rows ADD COLUMN IF NOT EXISTS row_key text GENERATED ALWAYS AS (COALESCE(NULLIF(data->>'uid',''), substring(data->>'cookies' from 'c_user=([0-9]+)'))) STORED;
+CREATE INDEX IF NOT EXISTS file_rows_rowkey_idx ON file_rows (file_id, row_key) WHERE row_key IS NOT NULL;
+DROP INDEX IF EXISTS file_rows_key_idx;

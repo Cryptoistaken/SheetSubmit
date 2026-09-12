@@ -278,9 +278,9 @@ export default function ApprovalsView() {
         {apprSel.length ? (
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "var(--rl)", background: "var(--bg3)" }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text2)", marginRight: "auto" }}>{apprSel.length} selected</span>
-            <button type="button" className="btn btn-primary" disabled={bulkBusy || apprFilter === "APPROVED"} onClick={() => void doBulk("approve")} style={{ minHeight: 36, fontWeight: 700 }}>Approve</button>
-            <button type="button" className="btn" disabled={bulkBusy || apprFilter === "REJECTED"} onClick={() => void doBulk("return")} style={{ minHeight: 36 }}>Return</button>
-            <button type="button" className="btn btn-ghost" disabled={bulkBusy} onClick={() => setApprSel([])} style={{ minHeight: 36 }}>Clear</button>
+            <button type="button" className="btn btn-primary" disabled={bulkBusy || apprFilter === "APPROVED"} onClick={() => void doBulk("approve")} style={{ minHeight: 40, fontWeight: 700 }}>Approve</button>
+            <button type="button" className="btn" disabled={bulkBusy || apprFilter === "REJECTED"} onClick={() => void doBulk("return")} style={{ minHeight: 40 }}>Return</button>
+            <button type="button" className="btn btn-ghost" disabled={bulkBusy} onClick={() => setApprSel([])} style={{ minHeight: 40 }}>Clear</button>
           </div>
         ) : null}
         <div className="card-list">
@@ -336,9 +336,9 @@ export default function ApprovalsView() {
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                     <span style={{ fontSize: 12, color: "var(--text3)", marginRight: "auto" }}>{qty} rows{price != null ? ` · ${fmtMoney(qty * price, priceCurrency)}` : ""}</span>
                     {left != null ? <span style={{ fontSize: 12, fontWeight: 600, color: locked ? "var(--text3)" : "var(--text2)" }}>{locked ? "Decision final" : `Revertable ${mmss(left)}`}</span> : null}
-                    <button type="button" className="btn btn-primary" disabled={st === "APPROVED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doApprove(h.id); }} style={{ minHeight: 36, fontWeight: 700 }}>{st === "APPROVED" ? "Approved" : "Approve"}</button>
-                    <button type="button" className="btn" disabled={st === "REJECTED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doReturn(h.id); }} style={{ minHeight: 36 }}>{st === "REJECTED" ? "Rejected" : "Reject"}</button>
-                      <button type="button" className="btn" disabled={dlBusyId === h.id} onClick={(e) => { e.stopPropagation(); void doDownloadHold(h); }} style={{ minHeight: 36 }}><Download size={14} aria-hidden /> All</button>
+                    <button type="button" className="btn btn-primary" disabled={st === "APPROVED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doApprove(h.id); }} style={{ minHeight: 40, fontWeight: 700 }}>{st === "APPROVED" ? "Approved" : "Approve"}</button>
+                    <button type="button" className="btn" disabled={st === "REJECTED" || locked || holdActing === h.id} onClick={(e) => { e.stopPropagation(); void doReturn(h.id); }} style={{ minHeight: 40 }}>{st === "REJECTED" ? "Rejected" : "Reject"}</button>
+                      <button type="button" className="btn" disabled={dlBusyId === h.id} onClick={(e) => { e.stopPropagation(); void doDownloadHold(h); }} style={{ minHeight: 40 }}><Download size={14} aria-hidden /> All</button>
                       {st !== "PENDING" ? <HoldToDeleteButton onConfirm={() => void doDeleteHold(h.id)} disabled={locked || holdActing === h.id} label="Delete" /> : null}
                     </div>
                     {apprLoading === h.id ? <Skeleton className="h-16 w-full" /> : !det || ownerUids.length === 0 ? (

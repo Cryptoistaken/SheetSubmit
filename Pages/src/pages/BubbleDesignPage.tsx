@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useToast } from "@/lib/toast";
+import { useNarrow } from "@/hooks/useNarrow";
 
 type IconId = "claude" | "claudeCode" | "claudeCodePlayful" | "pacman" | "logo" | "appIcon";
 interface BubbleCfg { icon: IconId; color: string; size: number; x: number | null; y: number | null; }
@@ -268,6 +269,7 @@ function persist(s:BubbleCfg){
 export default function BubbleDesignPage(){
   const navigate=useNavigate();
   const showToast=useToast();
+  const narrow=useNarrow(360);
   const [state,setState]=useState<BubbleCfg>(()=>loadState());
   const [customOpen,setCustomOpen]=useState(false);
   const [cpText,setCpText]=useState(state.color);
@@ -283,17 +285,17 @@ export default function BubbleDesignPage(){
   };
   return (
     <div style={{flex:1,overflowY:"auto",background:"var(--bg)"}}>
-      <div style={{maxWidth:960,margin:"0 auto",padding:"24px 24px 96px",width:"100%"}}>
+      <div style={{maxWidth:960,margin:"0 auto",paddingBlock:narrow ? "16px calc(96px + env(safe-area-inset-bottom))" : "24px 96px",paddingInline:narrow ? "max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right))" : "24px",width:"100%"}}>
         {/* Header — matches sheet header */}
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
-          <button className="btn btn-ghost" title="Back" aria-label="Back" onClick={()=>{ if(window.history.length>1) navigate(-1); else navigate("/"); }} style={{width:32,height:32,padding:0,justifyContent:"center"}}>
+          <button className="btn btn-ghost" title="Back" aria-label="Back" onClick={()=>{ if(window.history.length>1) navigate(-1); else navigate("/"); }} style={{minWidth:40,minHeight:40,padding:0,justifyContent:"center"}}>
             <span style={{fontSize:18,lineHeight:1}}>‹</span>
           </button>
           <h1 style={{fontSize:16,fontWeight:700,letterSpacing:"-0.02em",color:"var(--text)"}}>Bubble design</h1>
         </div>
 
         {/* Icon — same card as admin-stat-card / file-card */}
-        <div style={{border:"1px solid var(--border)",borderRadius:"var(--rl)",background:"var(--bg)",padding:16,marginBottom:12}}>
+        <div style={{border:"1px solid var(--border)",borderRadius:"var(--rl)",background:"var(--bg)",padding:narrow?12:16,marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:600,letterSpacing:"0.04em",textTransform:"uppercase",color:"var(--text3)",marginBottom:12}}>Icon</div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {([
@@ -301,10 +303,10 @@ export default function BubbleDesignPage(){
             ]).map(m=>(
               <button key={m.id} onClick={()=>update({icon:m.id})} title={m.label} aria-label={m.label}
                 style={{
-                  width:64,height:64,borderRadius:"var(--r)",border: m.id===state.icon ? "1.5px solid var(--text)" : "1px solid var(--border)",
+                  width:narrow?56:64,height:64,borderRadius:"var(--r)",border: m.id===state.icon ? "1.5px solid var(--text)" : "1px solid var(--border)",
                   background: m.id===state.icon ? "var(--bg2)" : "var(--bg)", display:"grid",placeItems:"center", cursor:"pointer", transition:"border-color 0.12s, background 0.12s"
                 }}>
-                <div style={{width:(m.id==="claudeCode"||m.id==="claudeCodePlayful")?40:28,height:(m.id==="claudeCode"||m.id==="claudeCodePlayful")?40:28,color:state.color,display:"grid",placeItems:"center",transform:(m.id==="claudeCode"||m.id==="claudeCodePlayful")?"scale(1.35)":"none",transformOrigin:"center"}} dangerouslySetInnerHTML={{__html: m.id==="claudeCodePlayful" ? CLAUDE_PLAYFUL_SVG : m.id==="claudeCode" ? CLAUDE_REG_SVG : (ICONS[m.id] ?? ICON_CLAUDE)}} />
+                <div style={{width:(m.id==="claudeCode"||m.id==="claudeCodePlayful")?40:narrow?24:28,height:(m.id==="claudeCode"||m.id==="claudeCodePlayful")?40:narrow?24:28,color:state.color,display:"grid",placeItems:"center",transform:(m.id==="claudeCode"||m.id==="claudeCodePlayful")?"scale(1.35)":"none",transformOrigin:"center"}} dangerouslySetInnerHTML={{__html: m.id==="claudeCodePlayful" ? CLAUDE_PLAYFUL_SVG : m.id==="claudeCode" ? CLAUDE_REG_SVG : (ICONS[m.id] ?? ICON_CLAUDE)}} />
               </button>
             ))}
           </div>
@@ -312,21 +314,21 @@ export default function BubbleDesignPage(){
         </div>
 
         {/* Color — Vercel minimal, no rounded, 2 lines wrap, bigger */}
-        <div style={{border:"1px solid var(--border)",borderRadius:"var(--rl)",background:"var(--bg)",padding:16,marginBottom:12}}>
+        <div style={{border:"1px solid var(--border)",borderRadius:"var(--rl)",background:"var(--bg)",padding:narrow?12:16,marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:600,letterSpacing:"0.04em",textTransform:"uppercase",color:"var(--text3)",marginBottom:12}}>Color</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(28px, 1fr))",gap:0}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(40px, 1fr))",gap:0}}>
             <button aria-label="Custom" title="Custom" onClick={()=>{ setCustomOpen(o=>!o); setCpText(state.color); }}
-              style={{height:38,display:"grid",placeItems:"center",background:"var(--bg)",border:"1px solid var(--border)",cursor:"pointer"}}>
+              style={{minHeight:40,minWidth:40,display:"grid",placeItems:"center",background:"var(--bg)",border:"1px solid var(--border)",cursor:"pointer"}}>
               <span style={{width:14,height:14,background:"conic-gradient(from 0deg,#ef4444,#f59e0b,#22c55e,#06b6d4,#8b5cf6,#ef4444)",border:"1px solid rgba(0,0,0,.12)",display:"block"}}/>
             </button>
             <button aria-label="Actual" title={`Actual ${ICON_TRUE[state.icon]}`} onClick={()=>update({color: ICON_TRUE[state.icon]})}
-              style={{height:38,display:"grid",placeItems:"center",background:ICON_TRUE[state.icon],border: ICON_TRUE[state.icon].toLowerCase()===state.color.toLowerCase() ? "1.5px solid var(--text)" : "1px solid rgba(0,0,0,0.06)",cursor:"pointer",outline: ICON_TRUE[state.icon].toLowerCase()===state.color.toLowerCase() ? "1px solid var(--text)" : "none",outlineOffset:-2}}>
+              style={{minHeight:40,minWidth:40,display:"grid",placeItems:"center",background:ICON_TRUE[state.icon],border: ICON_TRUE[state.icon].toLowerCase()===state.color.toLowerCase() ? "1.5px solid var(--text)" : "1px solid rgba(0,0,0,0.06)",cursor:"pointer",outline: ICON_TRUE[state.icon].toLowerCase()===state.color.toLowerCase() ? "1px solid var(--text)" : "none",outlineOffset:-2}}>
               <span style={{fontSize:10,fontWeight:800,color:"#fff",textShadow:"0 1px 2px rgba(0,0,0,.6)",lineHeight:1}}>A</span>
             </button>
             {COLORS.map(c=>(
               <button key={c} aria-label={c} title={c} onClick={()=>update({color:c.toLowerCase()})}
                 style={{
-                  height:38, background:c, cursor:"pointer",
+                  minHeight:40, minWidth:40, background:c, cursor:"pointer",
                   border: c.toLowerCase()===state.color.toLowerCase() ? "1.5px solid var(--text)" : "1px solid rgba(0,0,0,0.06)",
                   outline: c.toLowerCase()===state.color.toLowerCase() ? "1px solid var(--text)" : "none", outlineOffset:-2
                 }} />
@@ -334,15 +336,15 @@ export default function BubbleDesignPage(){
           </div>
           {customOpen && (
             <div style={{display:"flex",gap:8,alignItems:"center",marginTop:12}}>
-              <input type="color" value={/^#[0-9a-f]{6}$/i.test(cpText) ? cpText.toLowerCase() : state.color} onChange={e=>{ const v=e.target.value.toLowerCase(); setCpText(v); update({color:v}); }} style={{width:40,height:36,padding:3,border:"1px solid var(--border)",borderRadius:"var(--r)",background:"var(--bg)"}}/>
-              <input type="text" value={cpText} maxLength={7} spellCheck={false} onChange={e=>{ let v=e.target.value.trim(); if(!v.startsWith("#")) v="#"+v; v=v.toLowerCase(); setCpText(e.target.value); if(/^#[0-9a-f]{6}$/.test(v)){ update({color:v}); } }} placeholder="#ef4444" style={{flex:1,padding:"8px 10px",border:"1px solid var(--border)",borderRadius:"var(--r)",fontSize:13,fontFamily:"var(--mono)",background:"var(--bg)",color:"var(--text)"}}/>
+              <input type="color" value={/^#[0-9a-f]{6}$/i.test(cpText) ? cpText.toLowerCase() : state.color} onChange={e=>{ const v=e.target.value.toLowerCase(); setCpText(v); update({color:v}); }} style={{width:40,minHeight:40,padding:3,border:"1px solid var(--border)",borderRadius:"var(--r)",background:"var(--bg)"}}/>
+              <input type="text" value={cpText} maxLength={7} spellCheck={false} onChange={e=>{ let v=e.target.value.trim(); if(!v.startsWith("#")) v="#"+v; v=v.toLowerCase(); setCpText(e.target.value); if(/^#[0-9a-f]{6}$/.test(v)){ update({color:v}); } }} placeholder="#ef4444" style={{flex:1,padding:"8px 10px",border:"1px solid var(--border)",borderRadius:"var(--r)",fontSize:16,minHeight:40,fontFamily:"var(--mono)",background:"var(--bg)",color:"var(--text)"}}/>
               <button className="btn btn-primary btn-sm" onClick={applyCustom}>Use</button>
             </div>
           )}
         </div>
 
         {/* Size — same slider style as site */}
-        <div style={{border:"1px solid var(--border)",borderRadius:"var(--rl)",background:"var(--bg)",padding:16,marginBottom:12}}>
+        <div style={{border:"1px solid var(--border)",borderRadius:"var(--rl)",background:"var(--bg)",padding:narrow?12:16,marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:600,letterSpacing:"0.04em",textTransform:"uppercase",color:"var(--text3)",marginBottom:12}}>Size</div>
           <input type="range" min={36} max={84} step={2} value={state.size} onChange={e=>update({size:+e.target.value})} style={{width:"100%",accentColor:"var(--text)"}}/>
           <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--text3)",marginTop:8}}><span>Small</span><span style={{color:"var(--text)",fontFamily:"var(--mono)",fontWeight:600}}>{state.size} dp</span><span>Large</span></div>

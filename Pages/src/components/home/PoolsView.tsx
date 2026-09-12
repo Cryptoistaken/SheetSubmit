@@ -302,6 +302,11 @@ export default function PoolsView() {
           .taker-row{flex-direction:column}
           .taker-cell{min-width:0}
         }
+        @media (max-width:639px){
+          .pools-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px}
+          .pool-card{flex-wrap:wrap;gap:8px;padding:10px 12px}
+          .taker-cell{min-width:0;padding:6px 8px;font-size:12px}
+        }
       `}</style>
 
       <div id="pools-panel-pool">
@@ -352,15 +357,15 @@ export default function PoolsView() {
       <div style={{ marginTop: 16, border: "1px solid var(--border2)", borderRadius: "var(--rl)", background: "var(--bg)", padding: "12px 14px" }}>
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--text3)" }}>Taker card</div>
         <div role="group" aria-label="Take mode" style={{ marginTop: 10, display: "inline-flex", border: "1px solid var(--border)", borderRadius: 8, padding: 3, gap: 3, background: "var(--bg3)" }}>
-          <button type="button" aria-pressed={holdMode === "fifo"} className={holdMode === "fifo" ? "btn btn-primary" : "btn btn-ghost"} style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600, minHeight: 36 }} onClick={() => setHoldMode("fifo")}>Pool FIFO</button>
-          <button type="button" aria-pressed={holdMode === "pick"} className={holdMode === "pick" ? "btn btn-primary" : "btn btn-ghost"} style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600, minHeight: 36 }} onClick={() => setHoldMode("pick")}>Pick users</button>
+          <button type="button" aria-pressed={holdMode === "fifo"} className={holdMode === "fifo" ? "btn btn-primary" : "btn btn-ghost"} style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600, minHeight: 40, minWidth: 40 }} onClick={() => setHoldMode("fifo")}>Pool FIFO</button>
+          <button type="button" aria-pressed={holdMode === "pick"} className={holdMode === "pick" ? "btn btn-primary" : "btn btn-ghost"} style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600, minHeight: 40, minWidth: 40 }} onClick={() => setHoldMode("pick")}>Pick users</button>
         </div>
         {holdMode === "fifo" ? (
           <div style={{ marginTop: 8, fontSize: 12, color: "var(--text3)" }}>Oldest rows first across all users.</div>
         ) : (
           <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button type="button" className="btn" style={{ padding: "6px 10px", fontSize: 12, minHeight: 36 }} onClick={selectAllPick}>All</button>
-            <button type="button" className="btn" style={{ padding: "6px 10px", fontSize: 12, minHeight: 36 }} onClick={clearPick}>Clear</button>
+            <button type="button" className="btn" style={{ padding: "6px 10px", fontSize: 12, minHeight: 40, minWidth: 40 }} onClick={selectAllPick}>All</button>
+            <button type="button" className="btn" style={{ padding: "6px 10px", fontSize: 12, minHeight: 40, minWidth: 40 }} onClick={clearPick}>Clear</button>
             <span style={{ fontSize: 12, color: "var(--text3)" }}>{selectedUids.length} selected{selectedFileIds.length ? ` · ${selectedFileIds.length} files` : ""}</span>
           </div>
         )}
@@ -376,10 +381,10 @@ export default function PoolsView() {
             <small>Quantity</small>
             <span style={{ display: "inline-flex", border: "1px solid var(--border2)", borderRadius: 6, overflow: "hidden", background: "var(--bg)", maxWidth: "100%" }}>
               {[10, 50, 100].map((n) => (
-                <button key={n} onClick={() => { setPoolQty(n); setCustomQty(""); }} style={{ padding: "7px 10px", fontSize: 13, fontWeight: 600, background: poolQty === n && !customQty ? "var(--text)" : "var(--bg)", color: poolQty === n && !customQty ? "var(--bg)" : "var(--text2)", border: "none", borderRight: "1px solid var(--border)", cursor: "pointer", minHeight: 36 }}>{n}</button>
+                <button key={n} onClick={() => { setPoolQty(n); setCustomQty(""); }} style={{ padding: "7px 10px", fontSize: 13, fontWeight: 600, background: poolQty === n && !customQty ? "var(--text)" : "var(--bg)", color: poolQty === n && !customQty ? "var(--bg)" : "var(--text2)", border: "none", borderRight: "1px solid var(--border)", cursor: "pointer", minHeight: 40, minWidth: 40 }}>{n}</button>
               ))}
-              <button onClick={() => { setPoolQty("all"); setCustomQty(""); }} style={{ padding: "7px 10px", fontSize: 13, fontWeight: 600, background: poolQty === "all" && !customQty ? "var(--text)" : "var(--bg)", color: poolQty === "all" && !customQty ? "var(--bg)" : "var(--text2)", border: "none", borderRight: "1px solid var(--border)", cursor: "pointer", minHeight: 36 }}>All</button>
-              <input name="custom-qty" placeholder={customFocused ? "" : "Custom"} aria-label="Custom quantity" inputMode="numeric" value={customQty} onChange={(e) => setCustomQty(e.target.value.replace(/\D/g, ""))} onFocus={(e) => { setCustomFocused(true); e.currentTarget.select(); }} onBlur={() => setCustomFocused(false)} style={{ width: 72, border: "none", padding: "6px 8px", fontSize: 13, textAlign: "center", outline: "none", background: customQty ? "var(--bg3)" : "var(--bg)", borderLeft: customFocused ? "1px solid var(--border2)" : "none", cursor: customQty || customFocused ? "text" : "pointer" }} />
+              <button onClick={() => { setPoolQty("all"); setCustomQty(""); }} style={{ padding: "7px 10px", fontSize: 13, fontWeight: 600, background: poolQty === "all" && !customQty ? "var(--text)" : "var(--bg)", color: poolQty === "all" && !customQty ? "var(--bg)" : "var(--text2)", border: "none", borderRight: "1px solid var(--border)", cursor: "pointer", minHeight: 40, minWidth: 40 }}>All</button>
+              <input name="custom-qty" placeholder={customFocused ? "" : "Custom"} aria-label="Custom quantity" inputMode="numeric" value={customQty} onChange={(e) => setCustomQty(e.target.value.replace(/\D/g, ""))} onFocus={(e) => { setCustomFocused(true); e.currentTarget.select(); }} onBlur={() => setCustomFocused(false)} style={{ width: 72, border: "none", padding: "6px 8px", fontSize: 16, minHeight: 40, textAlign: "center", outline: "none", background: customQty ? "var(--bg3)" : "var(--bg)", borderLeft: customFocused ? "1px solid var(--border2)" : "none", cursor: customQty || customFocused ? "text" : "pointer" }} />
             </span>
           </div>
           <div className="taker-cell"><small>Amount</small>{comboOff ? "Free" : unitPrice != null ? `${effectiveN} × ${fmtMoney(unitPrice, priceCurrency)} = ${fmtMoney(effectiveN * unitPrice, priceCurrency)}` : "-"}</div>

@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api, type PoolFlags } from "@/lib/api";
+import { useNarrow } from "@/hooks/useNarrow";
 import { fmtMoney, inputToUsd, useBdtRate, useCurrency, usdToInput, type Currency } from "@/lib/currency";
 import { useToast } from "@/lib/toast";
 import { CookieIcon, PageIcon, PasswordIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
@@ -25,6 +26,7 @@ const cellKey = (pwd: string, pid: string) => `${pwd}:${pid}`;
 
 export default function SettingsView() {
   const showToast = useToast();
+  const narrow = useNarrow(360);
   const [entryCurrency, setEntryCurrency] = useCurrency();
   const [rate, setRate] = useBdtRate();
   const entryRef = useRef<Currency>(entryCurrency);
@@ -211,7 +213,7 @@ export default function SettingsView() {
                           type="number" min={0} max={maxFor(entryCurrency)} step={0.01}
                           value={raw}
                           onChange={(e) => setInputs((p) => ({ ...p, [k]: e.target.value }))}
-                          style={{ height: 36, borderRadius: 6, border: "1px solid var(--border2)", background: "var(--bg)", padding: "6px 10px", fontSize: 13 }}
+                          style={{ height: 36, borderRadius: 6, border: "1px solid var(--border2)", background: "var(--bg)", padding: "6px 10px", fontSize: 16, minHeight: 40 }}
                         />
                         {other ? <span style={{ fontSize: 11, color: "var(--text3)" }}>≈ {other}</span> : null}
                       </label>
@@ -232,7 +234,7 @@ export default function SettingsView() {
         {flags === null ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.4fr) repeat(3,minmax(0,1fr))", gap: "10px 8px", marginTop: 12, alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: narrow ? "minmax(0,1.2fr) repeat(3,minmax(0,1fr))" : "minmax(0,1.4fr) repeat(3,minmax(0,1fr))", gap: narrow ? "8px 4px" : "10px 8px", marginTop: 12, alignItems: "center" }}>
             <span />
             {POOL_TABS.map((t) => {
               const meta = POOL_META[t.id];
@@ -241,7 +243,7 @@ export default function SettingsView() {
               return (
                 <span key={t.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontSize: 11, fontWeight: 700, color: "var(--text2)", textAlign: "center" }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><meta.Icon size={13} />{meta.label}</span>
-                  <button type="button" className="btn btn-ghost btn-sm" style={{ height: 22, fontSize: 10, padding: "0 8px" }} aria-pressed={allOn} title={`${allOn ? "Turn off" : "Turn on"} ${meta.label} for all passwords`} onClick={() => flipLine(keys, `${meta.label} for all passwords`)}>{allOn ? "All on" : "All off"}</button>
+                  <button type="button" className="btn btn-ghost btn-sm" style={{ minHeight: 40, minWidth: 40, fontSize: 10, padding: "0 8px" }} aria-pressed={allOn} title={`${allOn ? "Turn off" : "Turn on"} ${meta.label} for all passwords`} onClick={() => flipLine(keys, `${meta.label} for all passwords`)}>{allOn ? "All on" : "All off"}</button>
                 </span>
               );
             })}
@@ -253,7 +255,7 @@ export default function SettingsView() {
                   <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "var(--text2)", minWidth: 0 }}>
                     <PasswordIcon password={pwd} size={14} />
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pwd}</span>
-                    <button type="button" className="btn btn-ghost btn-sm" style={{ height: 22, fontSize: 10, padding: "0 8px", flexShrink: 0 }} aria-pressed={allOn} title={`${allOn ? "Turn off" : "Turn on"} all types for ${pwd}`} onClick={() => flipLine(keys, `All types for ${pwd}`)}>{allOn ? "All on" : "All off"}</button>
+                    <button type="button" className="btn btn-ghost btn-sm" style={{ minHeight: 40, minWidth: 40, fontSize: 10, padding: "0 8px", flexShrink: 0 }} aria-pressed={allOn} title={`${allOn ? "Turn off" : "Turn on"} all types for ${pwd}`} onClick={() => flipLine(keys, `All types for ${pwd}`)}>{allOn ? "All on" : "All off"}</button>
                   </span>
                   {POOL_TABS.map((t) => {
                     const meta = POOL_META[t.id];
@@ -287,7 +289,7 @@ export default function SettingsView() {
             value={rateInput}
             onChange={(e) => setRateInput(e.target.value.replace(/[^0-9.]/g, ""))}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveRate(); } }}
-            style={{ height: 36, width: 160, borderRadius: 6, border: "1px solid var(--border2)", background: "var(--bg)", padding: "6px 10px", fontSize: 13 }}
+            style={{ height: 36, width: 160, borderRadius: 6, border: "1px solid var(--border2)", background: "var(--bg)", padding: "6px 10px", fontSize: 16, minHeight: 40 }}
           />
           <Button variant="outline" onClick={saveRate}>Save rate</Button>
         </div>

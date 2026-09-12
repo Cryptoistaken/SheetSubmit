@@ -161,7 +161,7 @@ export default function HomePage() {
   }, [showToast]);
 
   useEffect(() => {
-    if ((tab === "admin" || tab === "analysis" || tab === "tools" || tab === "pools" || tab === "approvals" || tab === "settings") && !user?.isAdmin) {
+    if ((tab === "admin" || tab === "analysis" || tab === "tools" || tab === "pools" || tab === "approvals" || tab === "settings" || tab === "withdrawals") && !user?.isAdmin) {
       navigate("/", { replace: true });
     }
   }, [tab, user, navigate]);
@@ -422,15 +422,17 @@ export default function HomePage() {
           <WalletIcon size={14} aria-hidden="true" />
           Wallet
         </button>
-        <button
-          className={`home-tab${tab === "withdrawals" ? " active" : ""}`}
-          role="tab"
-          aria-selected={tab === "withdrawals"}
-          onClick={() => goTab("/withdrawals")}
-        >
-          <img src="/withdrawal-icon.svg" alt="" aria-hidden="true" width={15.4} height={15.4} />
-          Withdrawals
-        </button>
+        {user?.isAdmin ? (
+          <button
+            className={`home-tab${tab === "withdrawals" ? " active" : ""}`}
+            role="tab"
+            aria-selected={tab === "withdrawals"}
+            onClick={() => goTab("/withdrawals")}
+          >
+            <img src="/withdrawal-icon.svg" alt="" aria-hidden="true" width={15.4} height={15.4} />
+            Withdrawals
+          </button>
+        ) : null}
         {user?.isAdmin ? (
           <button
             className={`home-tab${tab === "admin" ? " active" : ""}`}
@@ -565,7 +567,7 @@ export default function HomePage() {
         </div>
       ) : null}
 
-      {tab === "withdrawals" ? (
+      {tab === "withdrawals" && user?.isAdmin ? (
         <div className="home-pane" id="homePaneWithdrawals" style={{ padding: "32px 24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
           <Suspense fallback={<PageSkeleton variant="files" />}><WithdrawalsView /></Suspense>
         </div>

@@ -156,9 +156,11 @@ export default function FileCard({
   const cardLabel = `${file.name}, ${count} rows${selected ? ", selected" : ""}`;
   const badge = fileTypeDef(file.type).badge;
   const pw = file.password ?? "dgddigital";
-  const isCustom = pw !== "dgddigital" && pw !== "Love@12345";
-  const pwLabel = pw === "dgddigital" ? "dgd" : pw === "Love@12345" ? "Love" : pw.slice(0, 8);
-  const pwTitle = pw;
+  // legacy spelling (files created before the rename) shows the Love badge too
+  const pwDisp = pw === "L0VE@12345" ? "Love@12345" : pw;
+  const isCustom = pwDisp !== "dgddigital" && pwDisp !== "Love@12345";
+  const pwLabel = pwDisp === "dgddigital" ? "dgd" : pwDisp === "Love@12345" ? "Love" : pwDisp.slice(0, 8);
+  const pwTitle = pwDisp;
   const _presetKind = (file.preset ?? file.poolKind) as string | undefined;
   const isPage = _presetKind === "page" || (!_presetKind && file.name.toLowerCase().startsWith("page"));
 
@@ -191,7 +193,7 @@ export default function FileCard({
 
   const pwBadge = (
     <span className="file-type-badge" style={{ fontSize: 10, padding: "2px 6px", maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={pwTitle}>
-      {isCustom ? pwLabel : <PasswordIcon password={pw} size={12} />}
+      {isCustom ? pwLabel : <PasswordIcon password={pwDisp} size={12} />}
     </span>
   );
   const fbBadge = (

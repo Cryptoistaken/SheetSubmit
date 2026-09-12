@@ -284,7 +284,7 @@ export default function PoolsView() {
         .pool-card{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--rl);background:var(--bg);cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s}
         @media(hover:hover){.pool-card:hover{border-color:var(--text3);box-shadow:var(--shadow-md);transform:translateY(-1px)}}
         .pool-card:active{transform:scale(.99)}
-        .pool-card.expanded{border-color:var(--blue);background:var(--blue-light)}
+        .pool-card.expanded{border-color:var(--text);background:var(--sel-bg)}
         .pool-card-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
         .pool-card-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);display:flex;align-items:center;gap:8px}
         .pool-card-sub{font-size:12px;color:var(--text3);display:flex;align-items:center;gap:8px}

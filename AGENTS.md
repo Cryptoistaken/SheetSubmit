@@ -151,7 +151,7 @@ stores/__tests__/sheetStore.test.ts (api mock mirrors the live lib/api.ts surfac
 
 ## Rules
 1. **Production isolation** — test bot token only, own Railway project. Never touch prod.
-2. Use tokens/CSS variables for colors — no hardcoded hex.
+2. Use tokens/CSS variables for colors — no hardcoded hex. Theme accent is monochrome (black/white) — never blue.
 3. **Android — NEVER build locally, CI only.**
 4. Pages auto-deploy on git push; backend deploys through Railway. No CI deploy step.
 5. No versioning — save increments `seq` counter in meta. Undo/redo is client-side only (Zustand in-memory).

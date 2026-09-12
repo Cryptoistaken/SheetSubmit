@@ -31,6 +31,7 @@
   Pages/                  # React SPA (Vite)
   android/                # CI-only wrapper (never build locally). Config.java BASE_URL = https://sheetsubmit.pages.dev; native Telegram Login SDK uses BotFather client 8667114953 and CI GitHub Maven credentials
   backend/scripts/schema.ts # DB bootstrap/verify (bun scripts/schema.ts bootstrap|verify)
+  scripts/e2e-local.ts # local e2e stack helper: bun scripts/e2e-local.ts up|status|test|down (test DB + backend :3001 + web :8080, npm-run headed Page spec)
   test/                   # test fixture xlsx files (2fa.xlsx, cookie.xlsx, Page.xlsx)
   Pages/e2e/              # Playwright browser tests (auth.ts cookie-injection login, smoke.spec.ts) — `bun run test:e2e`, needs backend ALLOW_TEST_AUTH=1 + test DB, never prod; CI e2e job in .github/workflows/ci.yml
   agent/                  # dev debugging tools (call.ts authed caller, health.ts backend+worker sweep, timing.ts dual-origin latency sweep, users.ts TEST-user mint/verify/delete via POST /api/test/login (needs ALLOW_TEST_AUTH=1, aborts on closed door — never prod), pipeline.ts end-to-end run on behalf of minted users: upload→pool→price→hold→approve→wallet (+optional --with-routing suite, --wait-settle); needs --admin-uid in dev ADMIN_IDS, rowloss.ts API row-loss regression (stale-base 409, uid/status round-trip, snapshot index restore, 500-cap refusal, purge tombstone)) — secrets from gitignored agent/.env (AGENT_TOKEN + BACKEND_URL + FRONT_URL + SS_SESSION), real env overrides; never commit tokens

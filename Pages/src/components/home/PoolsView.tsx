@@ -15,6 +15,7 @@ import { vibrate } from "@/lib/utils";
 import { CookieIcon, FileTypeIcon, PageIcon, PasswordIcon, TwoFaIcon } from "@/components/icons/FileTypeIcons";
 import { FacebookIcon } from "@/components/icons/FacebookIcon";
 import EmptyState from "./EmptyState";
+import SlideSwitch from "@/components/ui/slide-switch";
 import PageSkeleton, { Skeleton } from "@/components/ui/page-skeleton";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import SearchInput from "@/components/ui/search-input";
@@ -279,12 +280,6 @@ export default function PoolsView() {
   return (
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
       <style>{`
-        .pool-switch{display:inline-flex;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px;max-width:100%;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-        .pool-switch::-webkit-scrollbar{display:none}
-        .pool-switch button{padding:7px 14px;border-radius:6px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;min-height:36px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0}
-        .pool-switch button.active{background:var(--bg);border-color:var(--border2);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.04)}
-        .pool-switch.stretch{flex:1 1 260px;min-width:0}
-        .pool-switch.stretch button{flex:1 1 0;justify-content:center;min-width:0;padding-left:8px;padding-right:8px}
         .badge{font-size:11px;font-weight:600;letter-spacing:.02em;padding:2px 7px;border-radius:999px;border:1px solid var(--border);background:var(--bg3);color:var(--text2)}
         .card-list{display:flex;flex-direction:column;gap:8px}
         .pool-card{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--rl);background:var(--bg);cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s}
@@ -319,22 +314,12 @@ export default function PoolsView() {
       <div id="pools-panel-pool">
       {/* switches */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "center" }}>
-          <div className="pool-switch stretch" style={{ background: "var(--bg3)", borderColor: "var(--border)" }}>
-            {PASSWORDS.map((p) => (
-              <button key={p} className={curPwd === p ? "active" : ""} onClick={() => go(p, cur)}><PasswordIcon password={p} size={14} />{p}</button>
-            ))}
-          </div>
-          <div className="pool-switch stretch">
-            {POOL_TABS.map((t) => {
-              const meta = POOL_META[t.id];
-              const Icon = meta.Icon;
-              return (
-                <button key={t.id} className={cur === t.id ? "active" : ""} onClick={() => go(curPwd, t.id)}>
-                  <Icon size={14} style={{ flexShrink: 0 }} /><span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{t.label}</span> <span className="badge" style={{ marginLeft: 2 }}>{poolCounts[t.id] ?? 0}</span>
-                </button>
-              );
-            })}
-          </div>
+          <SlideSwitch stretch ariaLabel="Password" value={curPwd} onChange={(p) => go(p, cur)} options={PASSWORDS.map((p) => ({ value: p, label: (<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><PasswordIcon password={p} size={14} />{p}</span>) }))} />
+          <SlideSwitch stretch ariaLabel="Pool" value={cur} onChange={(t) => go(curPwd, t)} options={POOL_TABS.map((t) => {
+            const meta = POOL_META[t.id];
+            const Icon = meta.Icon;
+            return { value: t.id, label: (<span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}><Icon size={14} style={{ flexShrink: 0 }} /><span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{t.label}</span> <span className="badge" style={{ marginLeft: 2 }}>{poolCounts[t.id] ?? 0}</span></span>) };
+          })} />
       </div>
 
       {/* stats */}

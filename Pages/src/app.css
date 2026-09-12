@@ -1991,13 +1991,14 @@ th.rh:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.1s, color 0.1s;
+    transition: background var(--anim-fast), color var(--anim-fast), transform var(--anim-fast) var(--ease-out);
     flex-shrink: 0;
     padding: 0;
     letter-spacing: 2px;
 }
 
 .sheet-more-btn:hover { background: var(--bg3); color: var(--text); border-color: var(--border); }
+.sheet-more-btn:active { transform: scale(0.93); }
 
 .sheet-more-menu {
     position: fixed;
@@ -2012,6 +2013,9 @@ th.rh:hover {
 }
 
 .sheet-more-menu.open { display: block; animation: smIn 0.12s var(--ease-out); }
+.sheet-more-item:active {
+    transform: scale(0.98);
+}
 
 .sheet-more-item {
     display: flex;
@@ -2023,7 +2027,7 @@ th.rh:hover {
     border-radius: 4px;
     cursor: pointer;
     color: var(--text);
-    transition: background 0.08s;
+    transition: background 0.08s, transform var(--anim-fast) var(--ease-out);
     white-space: nowrap;
     width: 100%;
     border: none;

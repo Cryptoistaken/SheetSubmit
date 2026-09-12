@@ -1,4 +1,5 @@
 import { Download, LogOutIcon, MessageCircle, Palette, RefreshCw } from "lucide-react";
+import logoUrl from "@/assets/logo.svg";
 import { FileTypeIcon, VerifiedIcon } from "@/components/icons/FileTypeIcons";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -193,7 +194,7 @@ export default function Topbar() {
     <div className="topbar">
       <div className="topbar-l">
         <img
-          src="/logo.svg"
+          src={logoUrl}
           className="topbar-logo"
           alt="Logo"
           style={hideHome}

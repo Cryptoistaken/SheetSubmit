@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 import { AnalysisIcon, ApprovalsIcon, ArchiveIcon, RabbitmqIcon, RedisIcon, ReplitPoolsIcon, WakuIcon, WalletIcon } from "@/components/icons/FileTypeIcons";
+import logoUrl from "@/assets/logo.svg";
 import ViewSwitch from "@/components/home/ViewSwitch";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
@@ -270,7 +271,7 @@ export default function Sidebar() {
       <div onMouseEnter={() => { if (mode !== "expanded" && window.matchMedia("(hover: hover)").matches) setHoverOpen(true); }} className="flex min-h-0 flex-1 flex-col">
       <div className={cn("flex h-12 shrink-0 items-center gap-2 border-b border-border px-3", effCollapsed && "justify-center px-0")}>
         <button type="button" onClick={() => navigate("/")} title="Sheet Submit — home" aria-label="Sheet Submit — home" className="grid size-8 shrink-0 place-items-center rounded-md hover:bg-muted">
-          <img src="/logo.svg" className="size-5" alt="" aria-hidden="true" />
+          <img src={logoUrl} className="size-5" alt="" aria-hidden="true" />
         </button>
         <button type="button" onClick={() => navigate("/")} tabIndex={effCollapsed ? -1 : 0} className={cn("min-w-0 truncate text-left text-sm font-semibold tracking-tight transition-[max-width,opacity] duration-[var(--anim-med)] ease-[var(--ease-out)] motion-reduce:transition-none", effCollapsed ? "max-w-0 flex-none opacity-0" : "max-w-44 flex-1 opacity-100")}>
           Sheet Submit

@@ -414,6 +414,7 @@ export default function SheetGrid() {
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onScroll={() => setLogPopup(null)}
     >
       <table className="grid" role="grid" cellSpacing={0} cellPadding={0}>

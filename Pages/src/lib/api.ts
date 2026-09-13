@@ -425,9 +425,12 @@ export const api = {
       throw e;
     }
     if (res.status === 401 || res.status === 403) {
-      // ponytail: backend marks definitive auth failures — caller must NOT retry, go to login
+      // ponytail: backend marks definitive auth failures — caller must NOT retry, go to login.
+      // Anything without the explicit marker (proxy/WAF HTML, transient edge errors) is
+      // rethrown so AuthContext's retry + cached-user path handles it instead of a logout.
       const body = await res.json().catch(() => ({}) as { error?: string; loginRequired?: boolean });
-      return { user: null, expired: body?.error === "session_expired", loginRequired: body?.loginRequired !== false };
+      if (body?.loginRequired !== true) throw new Error(`${res.status} ${res.statusText}`);
+      return { user: null, expired: body?.error === "session_expired", loginRequired: true };
     }
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const raw = (await res.json()) as any;

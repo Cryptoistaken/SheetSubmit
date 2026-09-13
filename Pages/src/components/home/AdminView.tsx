@@ -9,9 +9,9 @@ import { useToast } from "@/lib/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfileCache } from "@/stores/profileCache";
 import { fileTypeDef } from "@/lib/types";
-import type { AdminUser, ArchiveFile, SheetFile } from "@/lib/types";
+import type { AdminUser, ArchiveFile, Row, SheetFile } from "@/lib/types";
 import { downloadXlsx } from "@/lib/xlsx";
-import { fmtMoney, inputToUsd, useCurrency, type Currency } from "@/lib/currency";
+import { fmtMoney, inputToUsd, usdToInput, useCurrency, type Currency } from "@/lib/currency";
 import ProfileAvatar from "@/components/profile/ProfileAvatar";
 import SlideSwitch from "@/components/ui/slide-switch";
 import EmptyState from "./EmptyState";
@@ -175,6 +175,15 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
     setCreditOpen(true);
   };
 
+  const switchCreditCurrency = (c: Currency) => {
+    if (c === creditCurrency) return;
+    setCreditAmount((raw) => {
+      if (!raw.trim() || !Number.isFinite(Number(raw))) return raw;
+      return usdToInput(inputToUsd(raw, creditCurrency), c);
+    });
+    setCreditCurrency(c);
+  };
+
   const switchCreditMode = (mode: "credit" | "debit") => {
     setCreditMode(mode);
     const want = mode === "credit" ? "Manual credit" : "Manual debit";
@@ -218,7 +227,13 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
   };
 
   const downloadFile = async (file: SheetFile) => {
-    const rows = await api.adminFileRows(file.id);
+    let rows: Row[];
+    try {
+      rows = await api.adminFileRows(file.id);
+    } catch {
+      showToast("Unable to load rows. Please try again.");
+      return;
+    }
     if (!rows || !rows.length) {
       showToast("No data available to download.");
       return;
@@ -472,7 +487,7 @@ export default function AdminView({ initialUserId, view = "grid" }: { initialUse
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4, marginTop: 12 }}>
               <label style={{ fontSize: 12, color: "var(--text3)", fontWeight: 600 }} htmlFor="admin-credit-amount">Amount</label>
-              <SlideSwitch options={[{ value: "USD", label: "USD" }, { value: "BDT", label: "BDT" }] as const} value={creditCurrency} onChange={setCreditCurrency} ariaLabel="Credit currency" />
+              <SlideSwitch options={[{ value: "USD", label: "USD" }, { value: "BDT", label: "BDT" }] as const} value={creditCurrency} onChange={switchCreditCurrency} ariaLabel="Credit currency" />
             </div>
             <input
               id="admin-credit-amount"

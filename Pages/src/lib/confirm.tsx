@@ -22,6 +22,7 @@ const ConfirmContext = createContext<ConfirmContextValue | null>(null);
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ConfirmState | null>(null);
   const queueRef = useRef<ConfirmRequest[]>([]);
+  const actionResult = useRef<boolean | null>(null);
 
   const close = useCallback((result: boolean) => {
     const next = queueRef.current.shift();
@@ -41,7 +42,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   return (
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
-      <AlertDialog open={!!state} onOpenChange={(o) => { if (!o) close(false) }}>
+      <AlertDialog open={!!state} onOpenChange={(o) => { if (!o) { const r = actionResult.current === true; actionResult.current = null; close(r); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -49,7 +50,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => close(true)}>{state?.okText ?? "Delete"}</AlertDialogAction>
+            <AlertDialogAction variant="destructive" onClick={() => { actionResult.current = true; }}>{state?.okText ?? "Delete"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

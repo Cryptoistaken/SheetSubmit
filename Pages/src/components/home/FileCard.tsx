@@ -84,6 +84,7 @@ export default function FileCard({
     const t = e.touches[0];
     if (Math.hypot(t.clientX - p.x, t.clientY - p.y) > 10) cancelLongPress();
   };
+  useEffect(() => cancelLongPress, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
@@ -109,9 +110,12 @@ export default function FileCard({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.stopPropagation(); setMenuOpen(false); dotsRef.current?.focus(); }
     };
+    const onScroll = () => setMenuOpen(false);
     document.addEventListener("click", onDoc);
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("click", onDoc); document.removeEventListener("keydown", onKey); };
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => { document.removeEventListener("click", onDoc); document.removeEventListener("keydown", onKey); window.removeEventListener("scroll", onScroll, true); window.removeEventListener("resize", onScroll); };
   }, [menuOpen]);
 
   useEffect(() => {

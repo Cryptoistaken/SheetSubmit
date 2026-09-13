@@ -198,15 +198,25 @@ function UserWallet() {
     ridRef.current = { key: payloadKey, id: requestId };
     setSending(true);
     try {
-      await api.withdraw({ amount: value, method, account: account.trim(), requestId });
-      ridRef.current = null;
-      if (saveAccount && account.trim() !== (savedMethods[method] ?? "")) {
-        const updated = { ...savedMethods, [method]: account.trim() };
-        await api.setPaymentMethods(updated);
-        setSavedMethods(updated);
+      try {
+        await api.withdraw({ amount: value, method, account: account.trim(), requestId });
+      } catch (error) {
+        // keep ridRef so an identical retry reuses the same requestId (idempotent)
+        showToast(String(error).includes("insufficient") ? "Insufficient balance." : "Unable to submit request. Please try again.");
+        return;
       }
+      if (saveAccount && account.trim() !== (savedMethods[method] ?? "")) {
+        try {
+          const updated = { ...savedMethods, [method]: account.trim() };
+          await api.setPaymentMethods(updated);
+          setSavedMethods(updated);
+        } catch {
+          // the withdrawal is already accepted — a failed method save is not a failed request
+        }
+      }
+      ridRef.current = null;
       setAmount(""); setAccount(""); showToast("Withdrawal request submitted successfully."); await load();
-    } catch (error) { showToast(String(error).includes("insufficient") ? "Insufficient balance." : "Unable to submit request. Please try again."); } finally { setSending(false); setSlideKey((k) => k + 1); }
+    } finally { setSending(false); setSlideKey((k) => k + 1); }
   };
   if (!wallet) return <div className="p-6 text-sm text-muted-foreground">Loading wallet…</div>;
   const value = Number(amount);

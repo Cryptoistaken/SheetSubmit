@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ChevronDown, ExternalLink, MoreVertical } from "lucide-react";
 import { api } from "@/lib/api";
@@ -80,6 +80,7 @@ export default function PoolsView() {
   const [selectedUids, setSelectedUids] = useState<string[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
+  const filesReq = useRef(0);
 
   // prices (read-only here — editing lives on the Settings page)
   const [prices, setPrices] = useState<Record<string, number | null>>({});
@@ -126,7 +127,7 @@ export default function PoolsView() {
   }, [loadPrices]);
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
-  useEffect(() => { setSelectedUids([]); setSelectedFileIds([]); }, [cur, curPwd]);
+  useEffect(() => { filesReq.current++; setUserFiles(null); setSelectedUids([]); setSelectedFileIds([]); }, [cur, curPwd]);
 
   // Live pool counts: patch badges + totals + verified split + users[]
   // in place on every push — never a full load(). Keyed on (curPwd, cur).
@@ -192,9 +193,10 @@ export default function PoolsView() {
     if (expandedUser === userId) { setExpandedUser(null); return; }
     setExpandedUser(userId);
     if (!userFiles?.find((x) => x.userId === userId)) {
+      const req = ++filesReq.current;
       setLoadingFiles(true);
-      try { const uf = await api.getUserFiles(curPwd, cur); setUserFiles(uf.users); } catch {}
-      setLoadingFiles(false);
+      try { const uf = await api.getUserFiles(curPwd, cur); if (req === filesReq.current) setUserFiles(uf.users); } catch {}
+      if (req === filesReq.current) setLoadingFiles(false);
     }
   };
 

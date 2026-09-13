@@ -302,7 +302,7 @@ export default function ApprovalsView() {
             const locked = !!h.settled || (h.actionCount ?? 0) >= 2 || left === 0;
             return (
               <div key={h.id} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                <div className={`pool-card ${open ? "expanded" : ""}`} onClick={() => toggleApproval(h)} aria-expanded={open}>
+                <div className={`pool-card ${open ? "expanded" : ""}`} onClick={() => toggleApproval(h)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleApproval(h); } }} aria-expanded={open}>
                   <input type="checkbox" aria-label={`Select ${h.filename}`} checked={apprSel.includes(h.id)} onChange={() => setApprSel((prev) => prev.includes(h.id) ? prev.filter((x) => x !== h.id) : [...prev, h.id])} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, flexShrink: 0 }} />
                   {fileIds.length ? (
                     <AvatarGroup className="shrink-0" aria-label={`${fileIds.length} file${fileIds.length > 1 ? "s" : ""} in this approval`}>
@@ -353,7 +353,7 @@ export default function ApprovalsView() {
                           const userOpen = apprUserOpen === uid;
                           return (
                             <div key={uid} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                              <div className={`pool-card ${userOpen ? "expanded" : ""}`} style={{ padding: "8px 12px" }} onClick={() => setApprUserOpen(userOpen ? null : uid)} aria-expanded={userOpen}>
+                              <div className={`pool-card ${userOpen ? "expanded" : ""}`} style={{ padding: "8px 12px" }} onClick={() => setApprUserOpen(userOpen ? null : uid)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setApprUserOpen(userOpen ? null : uid); } }} aria-expanded={userOpen}>
                                 <span className={`expand-icon ${userOpen ? "open" : ""}`} style={{ color: "var(--text3)", flexShrink: 0, display: "inline-flex" }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden><path d="M9 18l6-6-6-6" /></svg></span>
                                 <ProfileAvatar photoUrl={profile?.photoUrl} fallback={label.charAt(0).toUpperCase()} className="size-8 bg-(--bg3) text-(--text2)" verified={profile?.isAdmin} />
                                 <div className="pool-card-info">

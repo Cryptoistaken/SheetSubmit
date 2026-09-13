@@ -22,6 +22,7 @@ export default function ArchiveView({
   view?: "grid" | "list";
 }) {
   const [archived, setArchived] = useState<ArchiveFile[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const showToast = useToast();
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -29,9 +30,9 @@ export default function ArchiveView({
   const load = useCallback(() => {
     api
       .getArchive()
-      .then(setArchived)
-      .catch(() => setArchived([]));
-  }, []);
+      .then((d) => { setArchived(d); setLoadFailed(false); })
+      .catch(() => { setLoadFailed(true); showToast("Unable to load archived files. Please try again."); });
+  }, [showToast]);
 
   useEffect(() => {
     load();
@@ -132,6 +133,9 @@ export default function ArchiveView({
   };
 
   if (archived === null) {
+    if (loadFailed) {
+      return <EmptyState title="Unable to load archived files." sub="Please check your connection and try again." action={{ label: "Retry", onClick: load }} />;
+    }
     return <PageSkeleton variant="archive" />;
   }
 

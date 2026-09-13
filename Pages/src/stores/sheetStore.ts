@@ -544,7 +544,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         redoBase: redoStack.length,
         isDirty: !!resumed,
         changeJournal: resumed?.journal ?? [],
-        lastSeq: full.seq ?? 0,
+        lastSeq: resumed?.structural ? resumed.base : (full.seq ?? 0),
         dirtyStructural: resumed?.structural ?? false,
         selectedCell: null,
         draft: "",
@@ -595,7 +595,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           redoBase: 0,
           isDirty: !!resumed,
           changeJournal: resumed?.journal ?? [],
-          lastSeq: snap.seq,
+          lastSeq: resumed?.structural ? resumed.base : snap.seq,
           dirtyStructural: resumed?.structural ?? false,
           selectedCell: null,
           draft: "",
@@ -1099,7 +1099,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
             undoBase: cur.undoStack.length,
             redoBase: cur.redoStack.length,
           });
-          void snapshotFile(s.fileId, trimmed, resp?.seq ?? s.lastSeq).catch(() => {});
+          void snapshotFile(s.fileId, trimmed, resp?.seq ?? s.lastSeq, cur.file ?? s.file).catch(() => {});
           syncMirror(s.fileId);
           trimMemoryRows();
         } else if (cur.fileId === s.fileId && resp) {
@@ -1133,7 +1133,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
               undoBase: cur.undoStack.length,
               redoBase: cur.redoStack.length,
             });
-            void snapshotFile(s.fileId, cur.rows, resp.seq).catch(() => {});
+            void snapshotFile(s.fileId, cur.rows, resp.seq, cur.file ?? s.file).catch(() => {});
             syncMirror(s.fileId);
             trimMemoryRows();
           } else if (cur.fileId === s.fileId && resp) {
@@ -1381,6 +1381,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (!sc) return;
     set({ draft: text });
     get().commitCell(sc.rowIdx, sc.colIdx, text);
+    set({ draft: String(get().rows[sc.rowIdx]?.[sc.colIdx] ?? "") });
   },
 
   quickEditClear: () => {
@@ -1916,6 +1917,12 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     set({ checkRunning: true });
     try {
       const result = await behavior.checkAccounts(rows);
+      const afterCheck = get();
+      if (afterCheck.fileId !== s.fileId || afterCheck.structuralVersion !== s.structuralVersion) {
+        set({ checkRunning: false, pendingAutoCheck: false });
+        pendingAutoTriggerRow = null;
+        return;
+      }
       const showSummary = () => {
         const doToast = () => {
           if (
@@ -1936,7 +1943,6 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           }
         };
         if (get().pendingAutoCheck) {
-          dispatchChecks();
           doToast();
           set({ pendingAutoCheck: false });
           const pending = pendingAutoTriggerRow;
@@ -2387,6 +2393,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       dirtyStructural: false,
       ...recomputeMarks(padded, s.crossDups, s.columns),
     });
+    if (s.fileId) syncMirror(s.fileId);
   },
 
   mergeRows: (incoming) => {
@@ -2723,14 +2730,16 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     }
     const isCookieOnly = !fileColumns(s.file).some((c) => c.key === "twofakey");
     const idx = get().bubbleGetActiveRow();
-    if (!isCookieOnly && s.rows[idx].cookies && !s.rows[idx].twofakey) {
+    const activeRow = get().rows[idx];
+    if (!activeRow) return;
+    if (!isCookieOnly && activeRow.cookies && !activeRow.twofakey) {
       // Row already has a cookie and still needs its key — this second cookie
       // paste was NOT saved (it's a cookie, not a 2FA key). Keep it short:
       // the bubble popup has no room for a long toast.
       toast("Please enter the 2FA key first.");
       return;
     }
-    if (!isCookieOnly && !s.rows[idx].twofakey) {
+    if (!isCookieOnly && !activeRow.twofakey) {
       // STRICT 2FA-first: a cookie never opens a row. The key anchors the
       // account first, the cookie completes it — otherwise cookies leak onto
       // keyless rows and accounts get mismatched. (Cookie-only files have no
@@ -2738,7 +2747,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       toast("Please enter the 2FA key first.");
       return;
     }
-    const rows = s.rows.slice();
+    const rows = get().rows.slice();
     rows[idx] = { ...rows[idx], cookies: text };
     const newInvalid = new Set(s.invalidCells);
     const behavior = getFileBehavior(s.file?.type ?? "fb_cookie");
@@ -2800,13 +2809,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       return;
     }
     const idx = get().bubbleGetActiveRow();
-    if (s.rows[idx].twofakey) {
+    if (get().rows[idx]?.twofakey) {
       // Row already has a key — a different key paste belongs to another row,
       // which still needs its cookie first.
       toast("Please enter the cookie.");
       return;
     }
-    const rows = s.rows.slice();
+    const rows = get().rows.slice();
     rows[idx] = { ...rows[idx], twofakey: key };
     const newInvalid = new Set(s.invalidCells);
     const behavior = getFileBehavior(s.file?.type ?? "fb_cookie");
@@ -2949,13 +2958,13 @@ function syncMirror(fileId: string) {
 async function resumeLocal(
   id: string,
   serverRows: Row[],
-): Promise<{ rows: Row[]; journal: AppendOp[]; structural: boolean } | null> {
+): Promise<{ rows: Row[]; journal: AppendOp[]; structural: boolean; base: number } | null> {
   try {
     const mirror = await idbGet<JournalMirror>(mirrorKey(id));
     if (!mirror || (!mirror.structural && !mirror.journal.length)) return null;
     const resumed = applyMirror(serverRows, mirror);
     if (!resumed.dirty) return null;
-    return { rows: resumed.rows as Row[], journal: resumed.journal as AppendOp[], structural: mirror.structural };
+    return { rows: resumed.rows as Row[], journal: resumed.journal as AppendOp[], structural: mirror.structural, base: Number(mirror.base) || 0 };
   } catch {
     return null;
   }

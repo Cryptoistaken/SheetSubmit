@@ -29,6 +29,8 @@ export function HoldToDeleteButton({ onConfirm, disabled, label = "Hold to delet
     timerRef.current = window.setTimeout(() => { clear(); onConfirm() }, holdMs)
   }, [disabled, holdMs, onConfirm, clear, tick])
 
+  React.useEffect(() => clear, [clear])
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (disabled) return
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onConfirm() }

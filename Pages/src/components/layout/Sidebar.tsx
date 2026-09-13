@@ -114,7 +114,7 @@ function NavButton({ active, collapsed, label, onClick, children }: { active: bo
       className={cn(
         "flex w-full items-center gap-3 rounded-md px-3 py-2 text-[13px] font-semibold transition-colors",
         active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-        collapsed && "justify-center px-0",
+        collapsed && "justify-center gap-0 px-0",
       )}
     >
       <span className="grid size-5 shrink-0 place-items-center" aria-hidden="true">{children}</span>
@@ -238,7 +238,7 @@ export default function Sidebar() {
         onClick={expandRail}
         aria-label="Expand sidebar"
         title="Expand sidebar"
-        className="fixed bottom-7 left-6 z-[200] grid size-10 shrink-0 cursor-pointer place-items-center rounded-xl border border-border bg-background text-muted-foreground shadow-lg transition-colors hover:text-foreground"
+        className="sidebar-expand-fab fixed left-6 z-[200] grid size-10 shrink-0 cursor-pointer place-items-center rounded-xl border border-border bg-background text-muted-foreground shadow-lg transition-colors hover:text-foreground"
       >
         <PanelTriggerIcon />
       </button>
@@ -256,7 +256,7 @@ export default function Sidebar() {
       {/* Hover auto-expand covers everything except the footer trigger block
           below it — the footer is hover-dead (click only), the rest expands. */}
       <div onMouseEnter={() => { if (mode !== "expanded" && window.matchMedia("(hover: hover)").matches) setHoverOpen(true); }} className="flex min-h-0 flex-1 flex-col">
-      <div className={cn("flex h-12 shrink-0 items-center gap-2 border-b border-border px-3", effCollapsed && "justify-center px-0")}>
+      <div className={cn("flex h-12 shrink-0 items-center gap-2 border-b border-border px-3", effCollapsed && "justify-center gap-0 px-0")}>
         <button type="button" onClick={() => navigate("/")} title="Sheet Submit — home" aria-label="Sheet Submit — home" className="grid size-8 shrink-0 place-items-center rounded-md hover:bg-muted">
           <img src={logoUrl} className="size-5" alt="" aria-hidden="true" />
         </button>
@@ -276,7 +276,7 @@ export default function Sidebar() {
             {!effCollapsed && (
               <p className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Admin</p>
             )}
-            {effCollapsed && <div className="mx-2 my-2 border-t border-border" aria-hidden="true" />}
+            {effCollapsed && <div className="mx-auto my-2 h-px w-5 bg-border" aria-hidden="true" />}
             {adminItems.map((item) => (
               <NavButton key={item.key} active={tab === item.key} collapsed={effCollapsed} label={item.label} onClick={() => navigate(item.to)}>
                 {item.icon}

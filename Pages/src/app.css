@@ -2613,6 +2613,7 @@ table.grid { min-width: 0; }
 .toast-wrap { bottom: max(18px, env(safe-area-inset-bottom)); }
 .sheet-wrap { padding-bottom: calc(140px + env(safe-area-inset-bottom)); }
 .home-fab-menu { bottom: max(84px, calc(72px + env(safe-area-inset-bottom))); right: 24px; inset-inline-end: 24px; }
+.sidebar-expand-fab { bottom: max(28px, calc(16px + env(safe-area-inset-bottom))); }
 
 /* 6) 40px+ touch targets — only list/menu primary actions (toolbar/card icons keep original size to avoid overlap) */
 .btn,

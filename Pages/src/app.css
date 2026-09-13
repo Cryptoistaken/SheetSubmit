@@ -43,7 +43,7 @@
     /* Indicator gradients — light theme (dark overrides below) */
     --grad-rows: linear-gradient(#525252 0%, #000000 100%);
     --grad-live: linear-gradient(color-mix(in srgb, #229342 55%, white) 0%, #229342 100%);
-    --grad-page: linear-gradient(#8a8a8a 0%, #000000 100%);
+    --grad-page: linear-gradient(oklch(0.640619 0.197547 260) 0%, oklch(0.5772 0.2324 260) 100%);
     --grad-dead: linear-gradient(#f87171 0%, #ee0000 100%);
     --grad-dup: linear-gradient(#fde047 0%, #eab308 100%);
     --grad-cross: linear-gradient(#fdba74 0%, #f6821f 100%);
@@ -137,7 +137,7 @@
     --sel-border: rgba(255, 255, 255, 0.5);
     --grad-rows: #ededed;
     --grad-live: #229342;
-    --grad-page: #ededed;
+    --grad-page: #3b82f6;
     --grad-dead: #e33b2e;
     --grad-dup: #facc15;
     --grad-cross: #fb923c;

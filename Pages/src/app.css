@@ -2555,7 +2555,7 @@ body.bubble-mode tr.add-row .add-col { font-size: 11px; }
     overflow-y: auto;
     overflow-wrap: anywhere;
 }
-.file-ctx-popup { max-width: min(140px, calc(100vw - 24px)); overflow: hidden; }
+.file-ctx-popup { position: fixed; z-index: 600; background: var(--bg); border: 1px solid var(--border); border-radius: var(--rl); box-shadow: var(--shadow-lg); max-width: calc(100vw - 24px); overflow: hidden; }
 .version-kebab-menu { max-width: min(180px, calc(100vw - 24px)); overflow-wrap: anywhere; }
 .modal-title, .download-opt-title, .home-fab-name, .file-card-name { overflow-wrap: anywhere; word-break: break-word; }
 

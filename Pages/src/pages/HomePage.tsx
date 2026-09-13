@@ -294,15 +294,16 @@ export default function HomePage() {
       "Archive",
     );
     if (!ok) return;
-    try {
-      await Promise.all(ids.map((id) => api.deleteFile(id)));
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      showToast(msg.includes(" - ") ? msg.split(" - ").slice(1).join(" - ").trim() : "Unable to archive files. Please check your connection and try again.");
-      return;
-    }
+    const results = await Promise.allSettled(ids.map((id) => api.deleteFile(id)));
+    const failed = results.filter((r) => r.status === "rejected").length;
     setSelected(new Set());
     loadFiles();
+    if (failed) {
+      const first = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+      const msg = first?.reason instanceof Error ? first.reason.message : "";
+      showToast(msg.includes(" - ") ? msg.split(" - ").slice(1).join(" - ").trim() : failed + " file" + (failed > 1 ? "s" : "") + " could not be archived. Please check your connection and try again.");
+      return;
+    }
     showToast(ids.length + " file" + (ids.length > 1 ? "s" : "") + " moved to archive.");
   };
 

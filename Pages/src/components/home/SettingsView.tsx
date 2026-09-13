@@ -138,14 +138,14 @@ export default function SettingsView() {
   const savePrices = async () => {
     setSaving(true);
     try {
+      const results = await Promise.allSettled(priceChanges.map(async (c) => ({ key: c.key, price: (await api.setPoolPrice(c.pwd, c.pid, c.next)).price })));
       const updated = { ...(prices ?? {}) };
-      await Promise.all(priceChanges.map(async (c) => {
-        try { updated[c.key] = (await api.setPoolPrice(c.pwd, c.pid, c.next)).price; }
-        catch { /* keep old on failure */ }
-      }));
+      let failed = 0;
+      results.forEach((r) => { if (r.status === "fulfilled") updated[r.value.key] = r.value.price; else failed++; });
       setPrices(updated);
       setConfirm(false);
-      showToast("Prices saved successfully.");
+      if (failed) showToast(`${priceChanges.length - failed} of ${priceChanges.length} prices saved. ${failed} failed — please try again.`);
+      else showToast("Prices saved successfully.");
     } catch (e) { showToast("Request failed. " + (e instanceof Error ? e.message : String(e))); }
     finally { setSaving(false); }
   };

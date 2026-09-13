@@ -63,14 +63,6 @@ export default function SettingsView() {
     void saveCombos({ ...flags.combos, [k]: !on }, on ? "Pool turned off. Existing files pull free of charge." : "Pool turned on.");
   };
 
-  const flipLine = (keys: string[], label: string) => {
-    if (!flags) return;
-    const allOn = keys.every((k) => flags.combos[k] !== false);
-    const combos = { ...flags.combos };
-    keys.forEach((k) => { combos[k] = !allOn; });
-    void saveCombos(combos, allOn ? `${label} turned off.` : `${label} turned on.`);
-  };
-
   // inputs are entered in the selected currency; stored/saved values are always USD
   const switchEntryCurrency = (c: Currency) => {
     const prev = entryRef.current;
@@ -236,24 +228,18 @@ export default function SettingsView() {
             <span />
             {POOL_TABS.map((t) => {
               const meta = POOL_META[t.id];
-              const keys = PASSWORDS.map((pwd) => comboKey(pwd, t.id));
-              const allOn = keys.every((k) => flags.combos[k] !== false);
               return (
                 <span key={t.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontSize: 11, fontWeight: 700, color: "var(--text2)", textAlign: "center" }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><meta.Icon size={13} />{meta.label}</span>
-                  <button type="button" className="btn btn-ghost btn-sm" style={{ height: 22, fontSize: 10, padding: "0 8px" }} aria-pressed={allOn} title={`${allOn ? "Turn off" : "Turn on"} ${meta.label} for all passwords`} onClick={() => flipLine(keys, `${meta.label} for all passwords`)}>{allOn ? "All on" : "All off"}</button>
                 </span>
               );
             })}
             {PASSWORDS.map((pwd) => {
-              const keys = POOL_TABS.map((t) => comboKey(pwd, t.id));
-              const allOn = keys.every((k) => flags.combos[k] !== false);
               return (
                 <Fragment key={pwd}>
                   <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "var(--text2)", minWidth: 0 }}>
                     <PasswordIcon password={pwd} size={14} />
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pwd}</span>
-                    <button type="button" className="btn btn-ghost btn-sm" style={{ height: 22, fontSize: 10, padding: "0 8px", flexShrink: 0 }} aria-pressed={allOn} title={`${allOn ? "Turn off" : "Turn on"} all types for ${pwd}`} onClick={() => flipLine(keys, `All types for ${pwd}`)}>{allOn ? "All on" : "All off"}</button>
+                    <span className="max-sm:hidden" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pwd}</span>
                   </span>
                   {POOL_TABS.map((t) => {
                     const meta = POOL_META[t.id];

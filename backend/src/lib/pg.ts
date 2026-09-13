@@ -484,14 +484,6 @@ async function transition(password: string, op: string, a: any) {
         ? await tx`UPDATE pool_rows SET state='available',hold_id=NULL,claimed_by=NULL,claimed_at=NULL WHERE password=${password} AND pool_id=${d.pool_id} AND state='held' AND hold_id=${d.id} AND row_key IN ${db(keys)} RETURNING src_uid`
         : await tx`UPDATE pool_rows SET state='available',hold_id=NULL,claimed_by=NULL,claimed_at=NULL WHERE password=${password} AND pool_id=${d.pool_id} AND state IN ('held','claimed') AND (hold_id IS NULL OR hold_id=${d.id}) AND row_key IN ${db(keys)} RETURNING src_uid`;
       const reverted = revertedRows.length;
-      const debit = new Map<string, number>();
-      if (d.status === "APPROVED") for (const row of revertedRows) { if (row.src_uid) debit.set(String(row.src_uid), (debit.get(String(row.src_uid)) || 0) + unit); }
-      for (const [uid, amount] of debit) {
-        const updated: any[] = await tx`UPDATE wallets SET balance=balance-${amount} WHERE user_id=${uid} AND balance>=${amount} RETURNING balance`;
-        if (!updated.length) throw new Error("insufficient wallet balance for revert");
-        const r: any = updated[0];
-        await tx`INSERT INTO wallet_transactions(id,user_id,type,amount,balance_after,description,meta,created_at) VALUES(${crypto.randomUUID()},${uid},'DEBIT',${amount},${Number(r.balance)},${`Hold returned - ${poolLabel(d.pool_id)}`},${j({ pool_id: d.pool_id, download_id: d.id })},${now})`;
-      }
       await tx`UPDATE downloads SET reverted=true,status='REVERTED' WHERE password=${password} AND id=${d.id}`;
       return { ok: true, reverted, id: d.id, status: "REVERTED" };
     }

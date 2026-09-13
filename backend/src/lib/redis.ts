@@ -38,8 +38,9 @@ export async function rateLimit(key: string, limit: number, windowSec: number): 
   try {
     const c = await getClient();
     if (!c) return true;
-    const res: any = await c.multi().incr(key).expire(key, windowSec).exec();
-    return Number(res?.[0] ?? 1) <= limit;
+    const n = Number(await c.incr(key));
+    if (n === 1) await c.expire(key, windowSec);
+    return n <= limit;
   } catch { return true; }
 }
 

@@ -148,7 +148,7 @@ export default function HomePage() {
       setFiles(fs);
       setDupCounts(cd.counts ?? {});
     } catch {
-      setFiles([]);
+      setFiles((prev) => prev ?? []);
       showToast("Unable to load files. Please try again.");
     }
   }, [showToast]);
@@ -295,12 +295,13 @@ export default function HomePage() {
     );
     if (!ok) return;
     const results = await Promise.allSettled(ids.map((id) => api.deleteFile(id)));
-    const failed = results.filter((r) => r.status === "rejected").length;
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    const failed = rejected.length;
     setSelected(new Set());
     loadFiles();
     if (failed) {
-      const first = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
-      const msg = first?.reason instanceof Error ? first.reason.message : "";
+      const reason = rejected[0]?.reason;
+      const msg = reason instanceof Error ? reason.message : "";
       showToast(msg.includes(" - ") ? msg.split(" - ").slice(1).join(" - ").trim() : failed + " file" + (failed > 1 ? "s" : "") + " could not be archived. Please check your connection and try again.");
       return;
     }

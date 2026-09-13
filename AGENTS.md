@@ -40,7 +40,7 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 2.0.34; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.35; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
                       #   + privateEtag (SHA-1 conditional GET + Cache-Control: private, no-cache) on GET /api/files + /api/files/* — JSON only (never buffers SSE/xlsx), CORS headers kept on the 304, browsers revalidate via If-None-Match automatically,
                       #   body-size guard caps chunked bodies without Content-Length too (clone-read stream, 413 over 4MB),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -91,8 +91,8 @@ src/routes/admin.ts       # admin stats, users, files and moderation routes
                       #   POST /file/:id/restore-snapshot re-feeds pools correctly (passes the file object),
                       #   DELETE /file/:id (admin archive) wipes the file's pool rows like owner archive; admin archive-restore re-feeds pools like owner restore,
                       #   POST /user/:id/:action (ban|unban), POST /user/:id/archive/:fileId/restore (re-feeds pools), DELETE /user/:id/archive/:fileId (held-block + pool wipe like owner purge), DELETE /user/:id (ONE tx bulk purge via deleteUser op: filetomb meta + snapshot cleanup + pool_rows by src_uid/src_file_id + FK cascades)
-src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows + live-publishes them), /fb/page-simple (cookie → owns FB pages?), /fb/page-advanced (cookie → WA-link eligible?) and check-cache routes
-                      #   GET /fb/cache?uids= + POST /fb/cache {uids} (meta-backed, eligible-only, 24h TTL; check: keys with wa: fallback); failures carry additive code (invalid_uids/invalid_cookie/session_challenge/not_eligible/invalid_page/upstream_error/service_unavailable/rate_limited); per-uid limits: check 60/60s, page-simple 30/60s, page-advanced 30/60s, cache 60/60s
+src/routes/wa.ts          # POST /fb/check (user liveness checks; dead uids → pools markDead op, kills their available pool rows + live-publishes them), /fb/page-simple (cookie → owns FB pages?), /fb/page-advanced (cookie → WA-link eligible? + page name from GraphQL data.page) and check-cache routes — eligible REQUIRES a page name on both (nameless → ineligible, never served from cache)
+                      #   GET /fb/cache?uids= + POST /fb/cache {uids} (meta-backed, eligible-only, 24h TTL; check: keys with wa: fallback; nameless eligible entries purged, not served); failures carry additive code (invalid_uids/invalid_cookie/session_challenge/not_eligible/invalid_page/upstream_error/service_unavailable/rate_limited); per-uid limits: check 60/60s, page-simple 30/60s, page-advanced 30/60s, cache 60/60s
 src/routes/bot.ts         # Telegram webhook and bot routes
 src/routes/testAuth.ts    # TEST-ONLY POST /api/test/login (mints ss_session for Playwright e2e; 404s unless ALLOW_TEST_AUTH=1 — never set on prod)
 src/routes/agent.ts     # DEV-ONLY /api/agent/* introspection (health, routes, stats, worker proxy via shared fetchWorkerHealth, config presence flags — read-only, no secret values; route map covers wallet/balance, pools prices/view, live routes, admin file routes, fb cache POST; 404s unless ALLOW_AGENT_ACCESS=1 + AGENT_TOKEN — never set on prod)

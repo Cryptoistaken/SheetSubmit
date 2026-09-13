@@ -50,8 +50,8 @@ async function checkUids(limit: number): Promise<number> {
 }
 
 // ── Advanced check: business.facebook.com scrape + GraphQL eligibility ──
-async function pageAdvanced(cookie: string): Promise<{ eligible: boolean; banReason: string | null; linkedNumber: string | null; error: string | null }> {
-  const fail = (error: string) => ({ eligible: false, banReason: null, linkedNumber: null, error });
+async function pageAdvanced(cookie: string): Promise<{ eligible: boolean; banReason: string | null; linkedNumber: string | null; pageName: string | null; error: string | null }> {
+  const fail = (error: string) => ({ eligible: false, banReason: null, linkedNumber: null, pageName: null, error });
   try {
     const pageRes = await fetch("https://business.facebook.com/latest/inbox/wec", { headers: { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", cookie, "sec-fetch-dest": "document", "sec-fetch-mode": "navigate", "sec-fetch-site": "none", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" }, signal: AbortSignal.timeout(15000) });
     const html = await pageRes.text();
@@ -73,7 +73,8 @@ async function pageAdvanced(cookie: string): Promise<{ eligible: boolean; banRea
     let json: any; try { json = JSON.parse(text.replace(/^for\s*\(;;\)\s*;?\s*/, "")); } catch { return fail("Invalid GraphQL JSON"); }
     const elig = json?.data?.xfb_is_page_eligible_for_wa_link;
     if (elig === undefined || elig === null) return fail("Unexpected response structure");
-    return { eligible: elig?.is_eligible === true, banReason: elig?.ban_reason || null, linkedNumber: elig?.page_whatsapp_number || null, error: null };
+    const rawName = (json?.data?.page as { name?: unknown } | null | undefined)?.name; const pageName = typeof rawName === "string" && rawName.trim() ? rawName : null;
+    return { eligible: elig?.is_eligible === true && !!pageName, banReason: elig?.ban_reason || null, linkedNumber: elig?.page_whatsapp_number || null, pageName, error: null };
   } catch (e) { return fail(/abort|timeout|network|fetch/i.test(e instanceof Error ? `${e.name} ${e.message}` : String(e)) ? "Service unavailable" : String(e instanceof Error ? e.message : e)); }
 }
 
@@ -84,7 +85,8 @@ async function pageSimple(cookie: string): Promise<{ eligible: boolean; pageName
     const html = await pageRes.text();
     if (challenged(html)) return { eligible: false, pageName: null, linkedNumber: null, error: "Session requires 2FA or login challenge" };
     const pages = extractPages(html);
-    return { eligible: pages.length > 0, pageName: pages[0]?.name ?? null, linkedNumber: extractLinkedNumber(html), error: null };
+    const pageName = pages[0]?.name ?? null;
+    return { eligible: pages.length > 0 && !!pageName, pageName, linkedNumber: extractLinkedNumber(html), error: null };
   } catch (e) { return { eligible: false, pageName: null, linkedNumber: null, error: /abort|timeout|network|fetch/i.test(e instanceof Error ? `${e.name} ${e.message}` : String(e)) ? "Service unavailable" : String(e instanceof Error ? e.message : e) }; }
 }
 
@@ -111,8 +113,9 @@ async function sweepAdvanced(limit: number) {
     if (res.error) continue; // challenges/rate limits: leave row untouched, retry next sweep
     const patch: Record<string, unknown> = { check_status: res.eligible ? "eligible" : "ineligible" };
     if (res.banReason) patch.check_ban_reason = res.banReason;
+    if (res.pageName) patch.check_page_name = res.pageName;
     if (res.linkedNumber) patch.check_linked_number = res.linkedNumber;
-    await applyResult(r, patch, res.eligible ? { status: "eligible", banReason: res.banReason, error: null } : null);
+    await applyResult(r, patch, res.eligible ? { status: "eligible", banReason: res.banReason, pageName: res.pageName, linkedNumber: res.linkedNumber, error: null } : null);
     if (!res.eligible && r.src_uid) { const ck = `check:${r.src_uid}:${r.cuser}`, lk = `wa:${r.src_uid}:${r.cuser}`; await db`DELETE FROM meta WHERE k IN (${ck},${lk})`; void redisDel(`ss:meta:${ck}`); void redisDel(`ss:meta:${lk}`); }
   }
   console.log(`[worker:page-advanced] swept ${rows.length} row(s)`);

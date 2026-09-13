@@ -2215,8 +2215,8 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           };
           if (mode === "manual-advanced") {
             try {
-              const res = (await api.pageAdvanced(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
-              if (res && res.eligible === true) apply("eligible", res.banReason ?? null, undefined, res.linkedNumber ?? null);
+              const res = (await api.pageAdvanced(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null } | null;
+              if (res && res.eligible === true) apply("eligible", res.banReason ?? null, res.pageName ?? null, res.linkedNumber ?? null);
               else if (res && res.error) apply("error", res.banReason ?? null, undefined, res.linkedNumber ?? null);
               else if (isCleanMiss(res)) apply("ineligible", res ? (res as unknown as { banReason?: string | null }).banReason ?? null : null, undefined, res ? (res as unknown as { linkedNumber?: string | null }).linkedNumber ?? null : null);
               else apply("error", res ? (res as unknown as { banReason?: string | null }).banReason ?? null : null, undefined, res ? (res as unknown as { linkedNumber?: string | null }).linkedNumber ?? null : null);
@@ -2248,9 +2248,9 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
                 if (ent.s >= 3 && !ent.a && !advInFlight.has(w.cuser)) {
                   advInFlight.add(w.cuser);
                   try {
-                    const wa2 = (await api.pageAdvanced(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; linkedNumber?: string | null } | null;
+                    const wa2 = (await api.pageAdvanced(w.row.cookies ?? "")) as { eligible?: boolean; error?: string | null; banReason?: string | null; pageName?: string | null; linkedNumber?: string | null } | null;
                     if (wa2 && wa2.eligible === true) {
-                      const newRow: Row = applyCheckFields({ ...rows[w.idx] }, { status: "eligible", banReason: wa2.banReason ?? null, linkedNumber: wa2.linkedNumber ?? null });
+                      const newRow: Row = applyCheckFields({ ...rows[w.idx] }, { status: "eligible", banReason: wa2.banReason ?? null, pageName: wa2.pageName ?? null, linkedNumber: wa2.linkedNumber ?? null });
                       rows[w.idx] = newRow;
                       live[i] = { ...w, row: newRow };
                       pushInstant(w.idx, newRow);

@@ -142,6 +142,8 @@ export default function Topbar() {
     return () => { cancelled = true; };
   }, [location.pathname]);
 
+  const archivedMode = useSheetStore((s) => s.archivedMode);
+
   if (!user) return null;
 
   const ringColor = conn.cls === "ok" ? "var(--green)" : conn.cls === "err" ? "var(--red)" : "var(--text3)";
@@ -149,7 +151,6 @@ export default function Topbar() {
   const balanceText = currency === "USD" ? fmtBalance(balanceUsd) : fmtBalance(balanceUsd * loadBdtRate());
   const toggleCurrency = () => setCurrency(currency === "USD" ? "BDT" : "USD");
   const displayName = ((user.firstName ?? "") + " " + (user.lastName ?? "")).trim();
-  const archivedMode = useSheetStore((s) => s.archivedMode);
   const fileName = file
     ? file.name.length > 10
       ? file.name.substring(0, 10) + "..."

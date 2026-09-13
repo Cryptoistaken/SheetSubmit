@@ -70,6 +70,8 @@ interface Harness {
   simpleCalls: string[];
   advancedCalls: string[];
   getCheckCacheCalls: string[][];
+  fbCheckCalls: string[][];
+  nextFbCheck: ((uids: string[]) => unknown) | null;
   nextPageSimple: ((cookie: string) => unknown) | null;
   nextPageAdvanced: ((cookie: string) => unknown) | null;
   checkCache: Record<string, unknown>;
@@ -87,6 +89,8 @@ const harness: Harness = {
   simpleCalls: [],
   advancedCalls: [],
   getCheckCacheCalls: [],
+  fbCheckCalls: [],
+  nextFbCheck: null,
   nextPageSimple: null,
   nextPageAdvanced: null,
   checkCache: {},
@@ -132,7 +136,11 @@ mock.module("@/lib/api", () => ({
       if (harness.nextPersist) return harness.nextPersist.promise;
       return { ok: true };
     },
-    fbCheck: async () => ({ valid: [], dead: [], uncertain: [] }),
+    fbCheck: async (uids: string[]) => {
+      harness.fbCheckCalls.push(uids);
+      if (harness.nextFbCheck) return harness.nextFbCheck(uids) as { valid: string[]; dead: string[]; uncertain: string[] };
+      return { valid: [], dead: [], uncertain: [] };
+    },
     getCheckCache: async (uids: string[]) => {
       harness.getCheckCacheCalls.push(uids);
       return { cache: harness.checkCache as Record<string, unknown> };
@@ -209,6 +217,8 @@ function resetStore(): void {
   harness.simpleCalls = [];
   harness.advancedCalls = [];
   harness.getCheckCacheCalls = [];
+  harness.fbCheckCalls = [];
+  harness.nextFbCheck = null;
   harness.nextPageSimple = null;
   harness.nextPageAdvanced = null;
   harness.checkCache = {};
@@ -553,6 +563,72 @@ describe("sheetStore data-integrity", () => {
     expect(useSheetStore.getState().isDirty).toBe(false);
   });
 
+  it("dead re-check with unchanged rows sends no append (null vs empty-string phantom diff)", async () => {
+    await openTestFile();
+    useSheetStore.setState({
+      rows: [
+        { cookies: "c_user=303;", uid: "303", twofakey: "", status: "bad", check_status: "", check_ban_reason: "", check_page_name: "", check_linked_number: "" },
+      ],
+    });
+    // Dead verdict clears check fields with null in memory; stored rows carry "".
+    // A re-check must not mistake null-vs-"" for a change and append identical ops.
+    harness.nextFbCheck = async (uids: string[]) => ({ valid: [], dead: uids, uncertain: [] });
+
+    await useSheetStore.getState().runCheck();
+    await useSheetStore.getState().flushPersist();
+
+    expect(harness.fbCheckCalls.length).toBe(1);
+    expect(harness.appendCalls.length).toBe(0);
+    expect(harness.persistCalls.length).toBe(0);
+    expect(useSheetStore.getState().isDirty).toBe(false);
+
+    // Second identical click -> still nothing sent.
+    await useSheetStore.getState().runCheck();
+    await useSheetStore.getState().flushPersist();
+    expect(harness.fbCheckCalls.length).toBe(2);
+    expect(harness.appendCalls.length).toBe(0);
+    expect(harness.persistCalls.length).toBe(0);
+    expect(useSheetStore.getState().isDirty).toBe(false);
+  });
+
+  it("advanced re-check over server-loaded rows sends no append when verdict is unchanged", async () => {
+    await openTestFile();
+    // Rows as loaded from the server carry "" (wire form); a fresh sweep
+    // writes null in memory. Same verdict -> no append, but the check runs.
+    useSheetStore.setState({
+      rows: [
+        { cookies: "c_user=404;", uid: "404", twofakey: "JBSWY3DPEHPK3PXP", status: "good", check_status: "ineligible", check_ban_reason: "", check_page_name: "", check_linked_number: "" },
+      ],
+    });
+    harness.nextPageAdvanced = () => ({ eligible: false, error: null });
+
+    await useSheetStore.getState().runPageChecksAdvanced(() => true);
+    await useSheetStore.getState().flushPersist();
+
+    expect(harness.advancedCalls.length).toBe(1);
+    expect(harness.appendCalls.length).toBe(0);
+    expect(harness.persistCalls.length).toBe(0);
+    expect(useSheetStore.getState().isDirty).toBe(false);
+  });
+
+  it("auto-simple re-check over server-loaded rows sends no append when verdict is unchanged", async () => {
+    await openTestFile();
+    useSheetStore.setState({
+      rows: [
+        { cookies: "c_user=505;", uid: "505", twofakey: "JBSWY3DPEHPK3PXP", status: "good", check_status: "ineligible", check_ban_reason: "", check_page_name: "", check_linked_number: "" },
+      ],
+    });
+    harness.nextPageSimple = () => ({ eligible: false, error: null });
+
+    await useSheetStore.getState().runPageChecks();
+    await useSheetStore.getState().flushPersist();
+
+    expect(harness.simpleCalls.length).toBe(1);
+    expect(harness.appendCalls.length).toBe(0);
+    expect(harness.persistCalls.length).toBe(0);
+    expect(useSheetStore.getState().isDirty).toBe(false);
+  });
+
   it("simple check flushes changed statuses as one delta append after all accounts finish; identical re-check sends nothing", async () => {
     await openTestFile();
     useSheetStore.setState({
@@ -575,9 +651,6 @@ describe("sheetStore data-integrity", () => {
         rowIdx: 0,
         cols: {
           check_status: "ineligible",
-          check_ban_reason: "",
-          check_page_name: "",
-          check_linked_number: "",
         },
       },
     ]);

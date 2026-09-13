@@ -3,11 +3,17 @@ import { useSheetStore } from "@/stores/sheetStore";
 
 export function usePersist(): void {
   useEffect(() => {
-    const flush = () => {
+    const commitAndFlush = () => {
+      // An open editor holds text only in memory (draft): commit it into the
+      // journal first, or a kill loses it — flush alone can't see it.
+      useSheetStore.getState().commitQuickEdit();
       void useSheetStore.getState().flushPersist(undefined, true);
     };
+    const flush = () => {
+      commitAndFlush();
+    };
     const onVis = () => {
-      if (document.visibilityState === "hidden") flush();
+      if (document.visibilityState === "hidden") commitAndFlush();
       else {
         // back online / back in tab with pending edits → sync now.
         const st = useSheetStore.getState();

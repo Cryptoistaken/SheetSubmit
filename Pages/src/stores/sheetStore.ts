@@ -1957,9 +1957,13 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         new Set([...Object.keys(prev), ...Object.keys(row)]).forEach((k) => {
           const pv = (prev as Record<string, unknown>)[k];
           const nv = (row as Record<string, unknown>)[k];
-          if (pv !== nv) {
+          // Compare wire values: null/undefined persist as "", so raw
+          // null-vs-"" (e.g. dead-row check fields) is not a change.
+          const pvs = pv == null ? "" : String(pv);
+          const nvs = nv == null ? "" : String(nv);
+          if (pvs !== nvs) {
             diff = true;
-            cols[k] = nv == null ? "" : String(nv);
+            cols[k] = nvs;
           }
         });
         if (diff) changed.push({ rowIdx: i, cols });
@@ -2171,9 +2175,12 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
           for (const k of CHECK_FIELDS) {
             const pv = (prev as Record<string, unknown>)[k];
             const nv = (row as Record<string, unknown>)[k];
-            if (pv !== nv) {
+            // Wire-form compare: null/undefined persist as "".
+            const pvs = pv == null ? "" : String(pv);
+            const nvs = nv == null ? "" : String(nv);
+            if (pvs !== nvs) {
               diff = true;
-              cols[k] = nv == null ? "" : String(nv);
+              cols[k] = nvs;
             }
           }
           if (diff) {
@@ -2313,9 +2320,12 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       for (const k of CHECK_FIELDS) {
         const pv = (prev as Record<string, unknown>)[k];
         const nv = (row as Record<string, unknown>)[k];
-        if (pv !== nv) {
+        // Wire-form compare: null/undefined persist as "".
+        const pvs = pv == null ? "" : String(pv);
+        const nvs = nv == null ? "" : String(nv);
+        if (pvs !== nvs) {
           diff = true;
-          cols[k] = nv == null ? "" : String(nv);
+          cols[k] = nvs;
         }
       }
       if (diff) {

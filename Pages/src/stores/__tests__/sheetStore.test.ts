@@ -823,7 +823,7 @@ describe("sheetStore data-integrity", () => {
 });
 
 describe("bubble user flow (as a user uses it)", () => {
-  it("key + cookie saves in strict 2FA-first order, copies the code, and advances", async () => {
+  it("key + cookie saves in either order (key first here), copies the code, and advances", async () => {
     await openTestFile();
     const writes: string[] = [];
     const hadNav = "navigator" in globalThis;
@@ -1003,7 +1003,7 @@ describe("bubble user flow (as a user uses it)", () => {
     expect(rows[0].cookies).toBe("c_user=1; a=b");
   });
 
-  it("2FA-first: a key saves onto an empty row and waits for its cookie", async () => {
+  it("key-first: a key saves onto an empty row and waits for its cookie", async () => {
     await openTestFile();
     await useSheetStore.getState().bubbleSaveKey("JBSWY3DPEHPK3PXP");
     let s = useSheetStore.getState();
@@ -1033,7 +1033,7 @@ describe("bubble user flow (as a user uses it)", () => {
     await new Promise((r) => setTimeout(r, 20));
   });
 
-  it("2FA-first: a second key never overwrites the waiting key", async () => {
+  it("a second key never overwrites the waiting key", async () => {
     await openTestFile();
     await useSheetStore.getState().bubbleSaveKey("JBSWY3DPEHPK3PXP");
     await useSheetStore.getState().bubbleSaveKey("ABCDEFGHIJ234567");
@@ -1043,36 +1043,51 @@ describe("bubble user flow (as a user uses it)", () => {
     await new Promise((r) => setTimeout(r, 20));
   });
 
-  it("cookie before any key is refused (strict 2FA-first)", async () => {
+  it("cookie first anchors the row, then the key completes it (independent order)", async () => {
     const { setToastFn } = await import("@/lib/toast");
     const toasted: string[] = [];
     setToastFn((m: string) => { toasted.push(m); });
     try {
       await openTestFile();
       useSheetStore.getState().bubbleSaveCookie("c_user=555; x=y;");
-      const s = useSheetStore.getState();
-      // Nothing saved — no row is anchored without its key first.
-      expect(s.rows[0].cookies ?? "").toBe("");
+      let s = useSheetStore.getState();
+      // The cookie anchors the keyless row — it waits for its 2FA key now.
+      expect(s.rows[0].cookies).toContain("c_user=555");
       expect(s.rows[0].twofakey ?? "").toBe("");
-      expect(s.isDirty).toBe(false);
-      expect(toasted).toContain("Please enter the 2FA key first.");
+      expect(s.bubbleActiveRow).toBe(0);
+      expect(s.isDirty).toBe(true);
+      expect(toasted).toContain("Please enter the 2FA key.");
+      // The key completes the cookie-anchored row and advances.
+      await useSheetStore.getState().bubbleSaveKey("JBSWY3DPEHPK3PXP");
+      s = useSheetStore.getState();
+      expect(s.rows[0].twofakey).toBe("JBSWY3DPEHPK3PXP");
+      expect(s.rows[0].cookies).toContain("c_user=555");
+      expect(s.bubbleActiveRow).toBe(1);
     } finally {
       setToastFn(null);
     }
     await new Promise((r) => setTimeout(r, 20));
   });
 
-  it("second cookie onto a legacy cookie-only row is refused", async () => {
-    await openTestFile();
-    useSheetStore.setState({
-      rows: [{ cookies: "c_user=556; x=y;", uid: "", twofakey: "" }],
-      bubbleActiveRow: 0,
-    });
-    useSheetStore.getState().bubbleSaveCookie("c_user=557; x=y;");
-    const s = useSheetStore.getState();
-    expect(s.rows[0].cookies).toContain("c_user=556");
-    expect(s.rows[0].cookies).not.toContain("c_user=557");
-    expect(s.bubbleActiveRow).toBe(0);
+  it("second cookie onto a row already holding its cookie is refused", async () => {
+    const { setToastFn } = await import("@/lib/toast");
+    const toasted: string[] = [];
+    setToastFn((m: string) => { toasted.push(m); });
+    try {
+      await openTestFile();
+      useSheetStore.setState({
+        rows: [{ cookies: "c_user=556; x=y;", uid: "", twofakey: "" }],
+        bubbleActiveRow: 0,
+      });
+      useSheetStore.getState().bubbleSaveCookie("c_user=557; x=y;");
+      const s = useSheetStore.getState();
+      expect(s.rows[0].cookies).toContain("c_user=556");
+      expect(s.rows[0].cookies).not.toContain("c_user=557");
+      expect(s.bubbleActiveRow).toBe(0);
+      expect(toasted).toContain("Please enter the 2FA key.");
+    } finally {
+      setToastFn(null);
+    }
     await new Promise((r) => setTimeout(r, 20));
   });
 });

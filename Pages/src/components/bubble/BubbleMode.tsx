@@ -173,11 +173,11 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
             finish();
             return;
           }
-          // STRICT 2FA-first: the key anchors the row, the cookie completes
-          // it. A cookie pasted before its key is refused by the store
-          // ("Please enter the 2FA key first.") so cookies can never leak onto keyless rows.
-          // The store decides placement and toasts ("Please enter the cookie." if the row
-          // already has a key, "Please enter the 2FA key first." if it already has a cookie).
+          // Independent order: whichever part arrives first anchors the row —
+          // cookie or key — and the second completes it; the row only advances
+          // once both are in ("Please enter the cookie." when a key lands on a
+          // key-only row, "Please enter the 2FA key." when a second cookie
+          // lands on a cookie-only row).
           void useSheetStore.getState().bubbleSaveKey(t).finally(finish);
         } else {
           toast("No cookie or key found.");
@@ -216,7 +216,7 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
 
   useEffect(() => {
     if (status === "ready" && fileType && fileType !== "fb_cookie") {
-      toast("Bubble mode supports Facebook files only.");
+      toast("Facebook files only.");
     }
   }, [status, fileType]);
 

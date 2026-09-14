@@ -2732,19 +2732,12 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const idx = get().bubbleGetActiveRow();
     const activeRow = get().rows[idx];
     if (!activeRow) return;
-    if (!isCookieOnly && activeRow.cookies && !activeRow.twofakey) {
-      // Row already has a cookie and still needs its key — this second cookie
-      // paste was NOT saved (it's a cookie, not a 2FA key). Keep it short:
-      // the bubble popup has no room for a long toast.
-      toast("Please enter the 2FA key first.");
-      return;
-    }
-    if (!isCookieOnly && !activeRow.twofakey) {
-      // STRICT 2FA-first: a cookie never opens a row. The key anchors the
-      // account first, the cookie completes it — otherwise cookies leak onto
-      // keyless rows and accounts get mismatched. (Cookie-only files have no
-      // key slot, so they keep the direct cookie flow above.)
-      toast("Please enter the 2FA key first.");
+    if (!isCookieOnly && activeRow.cookies) {
+      // Independent order: a cookie anchors a keyless row (saved below), so a
+      // row that already has its cookie and is still active is waiting for its
+      // key — this second cookie belongs to another account and was NOT saved.
+      // Keep it short: the bubble popup has no room for a long toast.
+      toast("Please enter the 2FA key.");
       return;
     }
     const rows = get().rows.slice();
@@ -2778,7 +2771,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       return;
     }
     const complete = !!rows[idx].twofakey;
-    if (!complete) toast("Please enter the 2FA key first.");
+    if (!complete) toast("Please enter the 2FA key.");
     set({
       rows,
       isDirty: true,
@@ -2801,7 +2794,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     // optional — normalizeBubbleKey already stripped them). Anything else is
     // refused so non-key blobs can never leak into the key slot.
     if (!/^[A-Z2-7]{10,32}$/.test(key)) {
-      toast("Invalid 2FA key. Please check and try again.");
+      toast("Invalid 2FA key.");
       return;
     }
     if (bubbleKeyIndex(s.rows).has(key)) {
@@ -2811,7 +2804,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     const idx = get().bubbleGetActiveRow();
     if (get().rows[idx]?.twofakey) {
       // Row already has a key — a different key paste belongs to another row,
-      // which still needs its cookie first.
+      // which still needs its cookie.
       toast("Please enter the cookie.");
       return;
     }

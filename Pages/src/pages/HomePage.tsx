@@ -187,7 +187,7 @@ export default function HomePage() {
     const f = files?.find((x) => x.id === id);
     if (!f) return;
     if (f.type !== "fb_cookie") {
-      showToast("Bubble mode supports Facebook files only.");
+      showToast("Facebook files only.");
       return;
     }
     try {

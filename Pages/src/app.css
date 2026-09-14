@@ -2471,6 +2471,20 @@ body.bubble-mode .row-dot { width: 6px; height: 6px; }
 body.bubble-mode tr.add-row td { height: 22px; }
 body.bubble-mode tr.add-row .add-col { font-size: 11px; }
 
+/* Toasts must fit the mini window: wrap instead of overflowing the panel. */
+body.bubble-mode .toast-wrap {
+    white-space: normal;
+    max-width: calc(100vw - 16px);
+}
+body.bubble-mode .toast {
+    font-size: 11px;
+    padding: 6px 10px;
+    line-height: 1.3;
+    text-align: center;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
 
 
 

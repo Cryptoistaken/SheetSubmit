@@ -845,7 +845,11 @@ describe("bubble user flow (as a user uses it)", () => {
       await new Promise((r) => setTimeout(r, 0));
       s = useSheetStore.getState();
       expect(s.bubbleActiveRow).toBe(0);
-      await new Promise((r) => setTimeout(r, 0));
+      // crypto.subtle resolves asynchronously — poll instead of betting on a
+      // fixed number of ticks (flakes on slow devices otherwise).
+      for (let i = 0; i < 100 && writes.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
       s = useSheetStore.getState();
       expect(writes).toHaveLength(1);
       expect(writes[0]).toMatch(/^\d{6}$/);

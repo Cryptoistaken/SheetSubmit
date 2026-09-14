@@ -2852,9 +2852,10 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
     if (isCookieOnly) return;
     const idx = s.bubbleActiveRow >= 0 ? s.bubbleActiveRow : s.bubbleGetActiveRow();
     const row = s.rows[idx];
-    // STRICT 2FA-first: skip marks the key slot even before the cookie lands,
-    // so no-2FA accounts still anchor their row first. It never overwrites a
-    // real key or marker.
+    // Skip marks the key slot whether or not the cookie has landed yet, so a
+    // no-2FA account completes once its cookie arrives (cookie-first or
+    // key-first, same independent order). It never overwrites a real key or
+    // an existing marker.
     const canSkip = !!row && !row.twofakey;
     if (canSkip) {
       const rows = s.rows.slice();

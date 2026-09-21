@@ -2,6 +2,7 @@ import { serve } from "bun";
 import { app, startBackgroundTasks } from "./index";
 import type { Env } from "./lib/shared";
 import { bootstrapDatabase, closeDatabase } from "./lib/pg";
+import { maybeRefillFromBackup } from "./lib/backup";
 import { closeRedis, subscribeLiveEvents } from "./lib/redis";
 import { isLiveStreamPathname, parseLiveEvent } from "./lib/live";
 import { publishKeyStates } from "./lib/livePublish";
@@ -22,6 +23,7 @@ const env: Env = {
   ALLOW_TEST_AUTH: Bun.env.ALLOW_TEST_AUTH,
   TELEGRAM_LOGIN_CLIENT_ID: Bun.env.TELEGRAM_LOGIN_CLIENT_ID,
   REDIS_URL: Bun.env.REDIS_URL,
+  BACKUP_DATABASE_URL: Bun.env.BACKUP_DATABASE_URL,
   AGENT_TOKEN: Bun.env.AGENT_TOKEN,
   ALLOW_AGENT_ACCESS: Bun.env.ALLOW_AGENT_ACCESS,
 };
@@ -29,6 +31,13 @@ const env: Env = {
 if (!env.DATABASE_URL) throw new Error("DATABASE_URL is required");
 const port = Number(Bun.env.PORT || 3000);
 await bootstrapDatabase();
+// Fresh redeploy onto an empty Railway Postgres refills from the standby
+// copy (no-op unless BACKUP_DATABASE_URL is set and primary is empty).
+try {
+  console.log(`[backup] boot: ${await maybeRefillFromBackup()}`);
+} catch (e) {
+  console.log(`[backup] boot: refill-error:${String((e as Error)?.message ?? e).slice(0, 120)}`);
+}
 startBackgroundTasks(env);
 // worker → rooms relay: held-uid-check deaths arrive on the live channel
 // (fail-open — without REDIS_URL this simply never fires and clients resync

@@ -66,6 +66,7 @@ export interface Env {
   ALLOW_TEST_AUTH?: string;
   TELEGRAM_LOGIN_CLIENT_ID?: string;
   REDIS_URL?: string;
+  BACKUP_DATABASE_URL?: string;
   AGENT_TOKEN?: string;
   ALLOW_AGENT_ACCESS?: string;
 }

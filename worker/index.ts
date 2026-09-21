@@ -4,9 +4,10 @@
 //   2. page-advanced       — WhatsApp eligibility for rows without eligible check_status (writes data.check_status + check:{uid}:{cuser} cache)
 //   3. page-simple         — FB pages scrape for rows without check_status (sets eligible + page name + cache)
 // Available pool rows are NOT background-monitored — they are killed by user checks (POST /fb/check → markDead).
-// Env: DATABASE_URL, REDIS_URL (optional), CHECK_URL, HELD_INTERVAL_MS (10min), ADVANCED_INTERVAL_MS (30min, falls back to WA_INTERVAL_MS), SIMPLE_INTERVAL_MS (30min, falls back to PAGE_INTERVAL_MS)
+// Env: DATABASE_URL, REDIS_URL (optional), CHECK_URL, BACKUP_DATABASE_URL (optional standby copy), BACKUP_INTERVAL_MS (30min), HELD_INTERVAL_MS (10min), ADVANCED_INTERVAL_MS (30min, falls back to WA_INTERVAL_MS), SIMPLE_INTERVAL_MS (30min, falls back to PAGE_INTERVAL_MS)
 import postgres from "postgres";
 import { closeRedis, redisDel, redisDelPrefix, publishLiveEvent } from "./redis";
+import { syncToBackup } from "./backup";
 
 if (!Bun.env.DATABASE_URL) throw new Error("DATABASE_URL is required for worker");
 const db = postgres(Bun.env.DATABASE_URL || "", { max: 2, idle_timeout: 20, connect_timeout: 10 });
@@ -138,6 +139,7 @@ const JOBS = [
   { name: "held-uid-check", every: interval("HELD_INTERVAL_MS", 600_000), limit: Number(Bun.env.UID_BATCH) || 500, run: (n: number) => checkUids(n) },
   { name: "page-simple", every: intervalNew("SIMPLE_INTERVAL_MS", "PAGE_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepSimple(n) },
   { name: "page-advanced", every: intervalNew("ADVANCED_INTERVAL_MS", "WA_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepAdvanced(n) },
+  { name: "backup-sync", every: interval("BACKUP_INTERVAL_MS", 1_800_000), limit: 0, run: () => syncToBackup(db).then((s) => { if (s !== "backup-off" && s !== "backup-synced") console.log(`[worker:backup-sync] ${s}`); }) },
 ];
 
 // backend owns schema bootstrap (worker's build context has no /backend) — if tables are missing,

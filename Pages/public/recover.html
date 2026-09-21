@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Download backup</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:#fff;color:#000;min-height:100vh;min-height:100dvh;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{text-align:center;max-width:320px}
+button{font:inherit;font-size:15px;font-weight:700;color:#fff;background:#000;border:0;border-radius:10px;padding:14px 28px;width:100%}
+button:disabled{opacity:.4}
+p{font-size:13px;color:#666;margin:14px 0 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <button id="go">Download backup</button>
+  <p id="msg">Saved files come as CSV, one per file.</p>
+</div>
+<script>
+var btn = document.getElementById('go');
+var msg = document.getElementById('msg');
+function say(t) { msg.textContent = t; }
+btn.onclick = function() {
+  btn.disabled = true;
+  say('Reading files...');
+  try {
+    if (!window.indexedDB) { say('No backup found.'); btn.disabled = false; return; }
+    var req = indexedDB.open('ss', 1);
+    req.onerror = function() { say('Cannot open storage.'); btn.disabled = false; };
+    req.onsuccess = function() {
+      var db = req.result;
+      if (!db.objectStoreNames.contains('kv')) { say('No backup found.'); btn.disabled = false; return; }
+      var cur = db.transaction('kv', 'readonly').objectStore('kv').openCursor();
+      var found = [];
+      cur.onsuccess = function(e) {
+        var c = e.target.result;
+        if (c) {
+          if (typeof c.key === 'string' && c.key.indexOf('s:') === 0) found.push(c.value);
+          c.continue();
+        } else { done(); }
+      };
+      cur.onerror = function() { say('Read failed.'); btn.disabled = false; };
+      function done() {
+        if (!found.length) { say('No backup found.'); btn.disabled = false; return; }
+        var cols = ['cookies', 'twofakey', 'uid'];
+        var esc = function(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
+        found.forEach(function(snap, i) {
+          var name = (snap.file && snap.file.name ? snap.file.name : 'file-' + (i + 1)).replace(/[\\/:*?"<>|]/g, '-');
+          var lines = [cols.join(',')];
+          (snap.rows || []).forEach(function(r) {
+            if (!r || (!r.cookies && !r.twofakey && !r.uid)) return;
+            lines.push(cols.map(function(k) { return esc(r[k]); }).join(','));
+          });
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+          a.download = name + '.csv';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        });
+        say('Saved ' + found.length + ' file(s).');
+        btn.disabled = false;
+      }
+    };
+  } catch (x) { say('Read failed.'); btn.disabled = false; }
+};
+</script>
+</body>
+</html>

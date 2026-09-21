@@ -61,7 +61,7 @@ agent.get("/worker", async (c) => {
 agent.get("/config", (c) => c.json({
   databaseUrl: !!c.env.DATABASE_URL, redisUrl: !!c.env.REDIS_URL, sessionSecret: !!c.env.SESSION_SECRET,
   tgBotToken: !!c.env.TG_BOT_TOKEN, adminIds: !!c.env.ADMIN_IDS, tgWebhookSecret: !!c.env.TG_WEBHOOK_SECRET,
-  backendUrl: !!c.env.BACKEND_URL, frontendUrl: !!c.env.FRONTEND_URL, workerUrl: !!c.env.WORKER_URL,
+  backendUrl: !!c.env.BACKEND_URL, frontendUrl: !!c.env.FRONTEND_URL, workerInProcess: true,
   checkUrl: !!c.env.CHECK_URL, telegramLogin: !!c.env.TELEGRAM_LOGIN_CLIENT_ID,
   allowTestAuth: c.env.ALLOW_TEST_AUTH === "1", agentDoor: true,
 }));

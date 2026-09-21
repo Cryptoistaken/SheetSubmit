@@ -1,4 +1,4 @@
-// Background worker — self-contained (Bun + Postgres, same DB as backend).
+// Background jobs — merged in-process (was a separate Railway worker service).
 // Jobs (each on its own interval, sequential):
 //   1. held-uid-check      — pending-approval monitoring: held rows whose UID checks dead → state='dead' (never paid)
 //   2. page-advanced       — WhatsApp eligibility for rows without eligible check_status (writes data.check_status + check:{uid}:{cuser} cache)
@@ -7,7 +7,7 @@
 // Env: DATABASE_URL, REDIS_URL (optional), CHECK_URL, BACKUP_DATABASE_URL (optional standby copy), BACKUP_INTERVAL_MS (30min), HELD_INTERVAL_MS (10min), ADVANCED_INTERVAL_MS (30min, falls back to WA_INTERVAL_MS), SIMPLE_INTERVAL_MS (30min, falls back to PAGE_INTERVAL_MS)
 import postgres from "postgres";
 import { closeRedis, redisDel, redisDelPrefix, publishLiveEvent } from "./redis";
-import { syncToBackup } from "./backup";
+import { syncToBackup } from "../lib/backup";
 
 if (!Bun.env.DATABASE_URL) throw new Error("DATABASE_URL is required for worker");
 const db = postgres(Bun.env.DATABASE_URL || "", { max: 2, idle_timeout: 20, connect_timeout: 10 });
@@ -139,61 +139,56 @@ const JOBS = [
   { name: "held-uid-check", every: interval("HELD_INTERVAL_MS", 600_000), limit: Number(Bun.env.UID_BATCH) || 500, run: (n: number) => checkUids(n) },
   { name: "page-simple", every: intervalNew("SIMPLE_INTERVAL_MS", "PAGE_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepSimple(n) },
   { name: "page-advanced", every: intervalNew("ADVANCED_INTERVAL_MS", "WA_INTERVAL_MS", 1_800_000), limit: Number(Bun.env.CHECK_BATCH) || 25, run: (n: number) => sweepAdvanced(n) },
-  { name: "backup-sync", every: interval("BACKUP_INTERVAL_MS", 1_800_000), limit: 0, run: () => syncToBackup(db).then((s) => { if (s !== "backup-off" && s !== "backup-synced") console.log(`[worker:backup-sync] ${s}`); }) },
+  { name: "backup-sync", every: interval("BACKUP_INTERVAL_MS", 1_800_000), limit: 0, run: () => syncToBackup().then((st) => { if (st !== "backup-off" && st !== "backup-synced") console.log(`[worker:backup-sync] ${st}`); }) },
 ];
 
-// backend owns schema bootstrap (worker's build context has no /backend) — if tables are missing,
-// jobs fail harmlessly and retry each tick until the backend has bootstrapped the database
-console.log(`[worker] started — jobs: ${JOBS.map((j) => `${j.name}@${j.every / 1000}s`).join(", ")}`);
+// merged: the backend owns schema bootstrap + process lifecycle. Jobs fail
+// harmlessly and retry each tick until tables exist.
+const startedAt = Date.now();
 const last = new Map<string, number>();
 const lastError = new Map<string, string>();
-// tiny HTTP API so the backend (WORKER_URL) and Railway health checks can confirm the worker is alive
-const startedAt = Date.now();
 let stopping = false;
-process.once("SIGTERM", () => { stopping = true; console.log("[worker] SIGTERM — finishing current tick"); });
-process.once("SIGINT", () => { stopping = true; console.log("[worker] SIGINT — finishing current tick"); });
-// ponytail: Railway sets a dynamic $PORT, but the backend dials worker.railway.internal:3000 —
-// serve both so neither side needs to know the other's port. 0.0.0.0 or private-net dials fail.
-const healthFetch = (req: Request) => {
-  const url = new URL(req.url);
-  if (url.pathname !== "/health") return new Response("not found", { status: 404 });
-  const token = Bun.env.WORKER_TOKEN;
-  const detailed = !token || req.headers.get("authorization") === `Bearer ${token}`;
-  return Response.json({
+process.once("SIGTERM", () => { stopping = true; });
+process.once("SIGINT", () => { stopping = true; });
+
+export function getWorkerStats() {
+  return {
     ok: true,
+    inProcess: true,
     startedAt,
     uptimeMs: Date.now() - startedAt,
-    jobs: JOBS.map((jn) => ({ name: jn.name, everyMs: jn.every, lastRunAt: last.get(jn.name) ?? null, lastRunAgoMs: last.has(jn.name) ? Date.now() - (last.get(jn.name) as number) : null, lastError: detailed ? (lastError.get(jn.name) ?? null) : undefined })),
-  });
-};
-const publicPort = Number(Bun.env.PORT) || 3000;
-Bun.serve({ port: publicPort, hostname: "0.0.0.0", fetch: healthFetch });
-if (publicPort !== 3000) Bun.serve({ port: 3000, hostname: "0.0.0.0", fetch: healthFetch });
-for (;;) {
-  if (stopping) { await db.end().catch(() => {}); await closeRedis().catch(() => {}); break; }
-  // single-leader: only one replica sweeps at a time; losers skip the tick
-  let leader = false;
-  try {
-    const r: any[] = await db`SELECT pg_try_advisory_lock(918273645) AS locked`;
-    leader = !!r[0]?.locked;
-  } catch { leader = true; }
-  if (!leader) { await new Promise((r) => setTimeout(r, 30_000)); continue; }
-  try {
-    // held-uid-check first: dead held rows must stop being payable ASAP, don't let slow sweeps starve it
-    const heldJob = JOBS[0];
-    if ((last.get(heldJob.name) ?? 0) + heldJob.every <= Date.now()) {
-      last.set(heldJob.name, Date.now());
-      try { await heldJob.run(heldJob.limit); lastError.delete(heldJob.name); } catch (e) { lastError.set(heldJob.name, String((e as Error)?.message ?? e).slice(0, 200)); console.error(`[worker:${heldJob.name}]`, (e as Error)?.message ?? e); }
+    jobs: JOBS.map((jn) => ({ name: jn.name, everyMs: jn.every, lastRunAt: last.get(jn.name) ?? null, lastRunAgoMs: last.has(jn.name) ? Date.now() - (last.get(jn.name) as number) : null, lastError: lastError.get(jn.name) ?? null })),
+  };
+}
+
+export async function startWorkerJobs() {
+  console.log(`[worker] started in-process — jobs: ${JOBS.map((j) => `${j.name}@${j.every / 1000}s`).join(", ")}`);
+  for (;;) {
+    if (stopping) break;
+    // single-leader: only one replica sweeps at a time; losers skip the tick
+    let leader = false;
+    try {
+      const r: any[] = await db`SELECT pg_try_advisory_lock(918273645) AS locked`;
+      leader = !!r[0]?.locked;
+    } catch { leader = true; }
+    if (!leader) { await new Promise((r) => setTimeout(r, 30_000)); continue; }
+    try {
+      // held-uid-check first: dead held rows must stop being payable ASAP, don't let slow sweeps starve it
+      const heldJob = JOBS[0];
+      if ((last.get(heldJob.name) ?? 0) + heldJob.every <= Date.now()) {
+        last.set(heldJob.name, Date.now());
+        try { await heldJob.run(heldJob.limit); lastError.delete(heldJob.name); } catch (e) { lastError.set(heldJob.name, String((e as Error)?.message ?? e).slice(0, 200)); console.error(`[worker:${heldJob.name}]`, (e as Error)?.message ?? e); }
+      }
+      for (const job of JOBS.slice(1)) {
+        if (stopping) break;
+        const due = (last.get(job.name) ?? 0) + job.every <= Date.now();
+        if (!due) continue;
+        last.set(job.name, Date.now());
+        try { await job.run(job.limit); lastError.delete(job.name); } catch (e) { lastError.set(job.name, String((e as Error)?.message ?? e).slice(0, 200)); console.error(`[worker:${job.name}]`, (e as Error)?.message ?? e); }
+      }
+    } finally {
+      try { await db`SELECT pg_advisory_unlock(918273645)`; } catch {}
     }
-    for (const job of JOBS.slice(1)) {
-      if (stopping) break;
-      const due = (last.get(job.name) ?? 0) + job.every <= Date.now();
-      if (!due) continue;
-      last.set(job.name, Date.now());
-      try { await job.run(job.limit); lastError.delete(job.name); } catch (e) { lastError.set(job.name, String((e as Error)?.message ?? e).slice(0, 200)); console.error(`[worker:${job.name}]`, (e as Error)?.message ?? e); }
-    }
-  } finally {
-    try { await db`SELECT pg_advisory_unlock(918273645)`; } catch {}
+    await new Promise((r) => setTimeout(r, 30_000));
   }
-  await new Promise((r) => setTimeout(r, 30_000));
 }

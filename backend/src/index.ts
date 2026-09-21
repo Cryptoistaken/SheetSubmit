@@ -8,6 +8,7 @@ import { requireAuth, isAdmin, cookie, verifySession, evictSessions } from "./li
 import { rpc } from "./lib/do";
 import { rateLimit } from "./lib/redis";
 import { fetchWorkerHealth } from "./lib/workerHealth";
+import { startWorkerJobs } from "./worker/runner";
 import { files, archive, crossDups } from "./routes/files";
 import { live } from "./routes/live";
 import { pools } from "./routes/pools";
@@ -152,7 +153,7 @@ const privateEtag = () => async (c: Context, next: Next) => {
 app.use("/api/files", privateEtag());
 app.use("/api/files/*", privateEtag());
 app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now(), version: API_VERSION }));
-// Pings the worker over Railway's internal network (WORKER_URL) so connectivity is verifiable from the public backend URL
+// Reports the in-process worker loop stats so scheduling is verifiable from the public backend URL
 app.get("/api/worker/health", async (c) => {
   const r = await fetchWorkerHealth(c.env);
   return r.ok ? c.json({ ok: true, worker: r.worker }) : c.json({ ok: false, worker: null, error: r.error }, r.status);
@@ -211,4 +212,6 @@ export function startBackgroundTasks(env: Env) {
   if (!webhookChecked) { webhookChecked = true; void ensureWebhook(env).catch((error) => console.error("webhook check failed", error)); }
   // pay out holds whose 5-minute revert window closed (see settleHolds in pg.ts) + drop expired sessions (getSession already ignores them; uses sessions_exp_idx, max 1000/tick)
   if (!settleTimer) settleTimer = setInterval(() => { void rpc(env.INDEX, "global", "settleHolds", {}).catch((error) => console.error("hold settle failed", error)); void rpc(env.INDEX, "global", "sessionCleanup", {}).catch((error) => console.error("session cleanup failed", error)); }, 30_000);
+  // merged worker loop (sweeps + backup sync) runs in-process, fire-and-forget
+  void startWorkerJobs().catch((error) => console.error("worker loop failed", error));
 }

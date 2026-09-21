@@ -163,6 +163,8 @@ export function getWorkerStats() {
 
 export async function startWorkerJobs() {
   console.log(`[worker] started in-process — jobs: ${JOBS.map((j) => `${j.name}@${j.every / 1000}s`).join(", ")}`);
+  // Slow tick so Neon can suspend between sweeps (5min idle timeout).
+  const tickMs = Math.max(60_000, Number(Bun.env.WORKER_TICK_MS) || 600_000);
   for (;;) {
     if (stopping) break;
     // single-leader: only one replica sweeps at a time; losers skip the tick
@@ -171,7 +173,7 @@ export async function startWorkerJobs() {
       const r: any[] = await db`SELECT pg_try_advisory_lock(918273645) AS locked`;
       leader = !!r[0]?.locked;
     } catch { leader = true; }
-    if (!leader) { await new Promise((r) => setTimeout(r, 30_000)); continue; }
+    if (!leader) { await new Promise((r) => setTimeout(r, tickMs)); continue; }
     try {
       // held-uid-check first: dead held rows must stop being payable ASAP, don't let slow sweeps starve it
       const heldJob = JOBS[0];
@@ -189,6 +191,6 @@ export async function startWorkerJobs() {
     } finally {
       try { await db`SELECT pg_advisory_unlock(918273645)`; } catch {}
     }
-    await new Promise((r) => setTimeout(r, 30_000));
+    await new Promise((r) => setTimeout(r, tickMs));
   }
 }

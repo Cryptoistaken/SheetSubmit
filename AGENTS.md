@@ -23,7 +23,7 @@
     generate-keystore.yml # one-time Android keystore generator (password via workflow input, never uploaded/logged)
     ci.yml                # backend/Pages typecheck+lint+test on push/PR
   backend/                # Railway Hono/Bun service backed by Postgres; src/server.ts is the HTTP entrypoint; railway.toml deploy config; .env local-only template; optional REDIS_URL enables safe read-through caching
-  backend/src/worker/     # merged background jobs (was Railway worker service; runs in-process via startWorkerJobs). Same jobs/intervals (30s tick, single-leader advisory lock):
+  backend/src/worker/     # merged background jobs (was Railway worker service; runs in-process via startWorkerJobs). Same jobs/intervals (10min tick via WORKER_TICK_MS, single-leader advisory lock):
                         #   held-uid-check first (pending-approval monitoring: dead UIDs → pool_rows.state='dead' + pool_blocked dead entry, default 10min + ss:live relay so watching sheets update; NO background check of available rows — they die via user checks, see wa.ts markDead),
                         #   page-simple + page-advanced (eligibility sweeps → data.check_status + check:{src_uid}:{cuser} meta cache, 30min; legacy wa_status/wa: keys dual-read, new writes converge on check_*). Env: DATABASE_URL, CHECK_URL, SIMPLE_INTERVAL_MS (fallback PAGE_INTERVAL_MS), ADVANCED_INTERVAL_MS (fallback WA_INTERVAL_MS), UID_BATCH, CHECK_BATCH, WORKER_TOKEN (gates /health error detail); .env template
                         #   + stats via GET /api/worker/health (in-process getWorkerStats: {ok, startedAt, uptimeMs, jobs:[{name, everyMs, lastRunAt, lastRunAgoMs, lastError}]})

@@ -211,7 +211,8 @@ export function startBackgroundTasks(env: Env) {
   if (agentDoorOpen(env)) console.warn("[agent] DEV DOOR OPEN — unset ALLOW_AGENT_ACCESS before prod");
   if (!webhookChecked) { webhookChecked = true; void ensureWebhook(env).catch((error) => console.error("webhook check failed", error)); }
   // pay out holds whose 5-minute revert window closed (see settleHolds in pg.ts) + drop expired sessions (getSession already ignores them; uses sessions_exp_idx, max 1000/tick)
-  if (!settleTimer) settleTimer = setInterval(() => { void rpc(env.INDEX, "global", "settleHolds", {}).catch((error) => console.error("hold settle failed", error)); void rpc(env.INDEX, "global", "sessionCleanup", {}).catch((error) => console.error("session cleanup failed", error)); }, 30_000);
+  // 10min cadence so Neon can suspend between runs (settle payouts may lag up to ~15min)
+  if (!settleTimer) settleTimer = setInterval(() => { void rpc(env.INDEX, "global", "settleHolds", {}).catch((error) => console.error("hold settle failed", error)); void rpc(env.INDEX, "global", "sessionCleanup", {}).catch((error) => console.error("session cleanup failed", error)); }, 600_000);
   // merged worker loop (sweeps + backup sync) runs in-process, fire-and-forget
   void startWorkerJobs().catch((error) => console.error("worker loop failed", error));
 }

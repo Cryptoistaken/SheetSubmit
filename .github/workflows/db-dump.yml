@@ -1,0 +1,47 @@
+name: DB dump to R2
+
+# Nightly logical backup of the standby copy (BACKUP_DATABASE_URL, so the
+# primary is never loaded). Keeps 30 daily dumps in R2.
+#
+# Required repo secrets:
+#   BACKUP_DATABASE_URL, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID,
+#   R2_SECRET_ACCESS_KEY, R2_BUCKET
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install postgres client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+
+      - name: Dump standby
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          if [ -z "$BACKUP_DATABASE_URL" ]; then echo "::error::BACKUP_DATABASE_URL secret is not set"; exit 1; fi
+          STAMP=$(date -u +%Y%m%d-%H%M)
+          pg_dump "$BACKUP_DATABASE_URL" --no-owner --no-acl | gzip -9 > "standby-$STAMP.sql.gz"
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+
+      - name: Upload to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          pip install -q awscli
+          EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_DEFAULT_REGION=auto
+          aws --endpoint-url "$EP" s3 cp "standby-$STAMP.sql.gz" "s3://$R2_BUCKET/dumps/standby-$STAMP.sql.gz"
+          # prune beyond newest 30
+          OLD=$(aws --endpoint-url "$EP" s3api list-objects-v2 --bucket "$R2_BUCKET" --prefix dumps/standby- --query 'sort_by(Contents, &Key)[0:-30].Key' --output text)
+          for K in $OLD; do
+            [ "$K" = "None" ] && break
+            aws --endpoint-url "$EP" s3 rm "s3://$R2_BUCKET/$K"
+          done

@@ -175,7 +175,7 @@ public class RecoveryActivity extends Activity {
             } catch (Exception ignored) {
             }
         }
-        if (entries.isEmpty()) return "No files found.";
+        if (entries.isEmpty()) return "No backup found.";
         try {
             String label = RecoveryExport.saveZipToDownloads(this, entries);
             return "Saved " + label + " (" + entries.size() + " files)";
@@ -198,7 +198,7 @@ public class RecoveryActivity extends Activity {
             "req.onerror=function(){err('Cannot open storage.')};" +
             "req.onsuccess=function(){" +
             "var db=req.result;" +
-            "if(db.objectStoreNames&&!db.objectStoreNames.contains('kv')){err('No files found.');return;}" +
+            "if(db.objectStoreNames&&!db.objectStoreNames.contains('kv')){err('No backup found.');return;}" +
             "try{" +
             "var tx=db.transaction('kv','readonly');" +
             "var st=tx.objectStore('kv');" +

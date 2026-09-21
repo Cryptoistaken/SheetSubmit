@@ -393,6 +393,16 @@ public class MainActivity extends Activity {
             }
 
             @JavascriptInterface
+            public void openBotLogin() {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        openExternal("https://t.me/" + Config.BOT_USERNAME + "?start=login_" + did);
+                    }
+                });
+            }
+
+            @JavascriptInterface
             public boolean isTelegramLoginAvailable() {
                 return true;
             }
@@ -525,17 +535,23 @@ public class MainActivity extends Activity {
     }
 
     private void checkDeviceLogin() {
-        final String pollUrl = Config.HOME_URL + "/api/auth/device?token=" + did;
+        final String claimUrl = Config.HOME_URL + "/api/auth/device/claim";
         new Thread(new Runnable() {
             @Override
             public void run() {
                 HttpURLConnection conn = null;
                 try {
-                    URL u = new URL(pollUrl);
+                    URL u = new URL(claimUrl);
                     conn = (HttpURLConnection) u.openConnection();
                     conn.setConnectTimeout(5000);
                     conn.setReadTimeout(5000);
-                    conn.setRequestMethod("GET");
+                    conn.setRequestMethod("POST");
+                    conn.setRequestProperty("Content-Type", "application/json");
+                    conn.setDoOutput(true);
+                    byte[] body = new JSONObject().put("token", did).toString().getBytes("UTF-8");
+                    OutputStream os = conn.getOutputStream();
+                    os.write(body);
+                    os.close();
                     int code = conn.getResponseCode();
                     if (code != 200) return;
                     InputStream is = conn.getInputStream();
@@ -565,7 +581,7 @@ public class MainActivity extends Activity {
     private void applySession(String sessionId) {
         if (sessionApplied) return;
         sessionApplied = true;
-        String cookie = "session=" + sessionId + "; Path=/; HttpOnly; Max-Age=2592000";
+        String cookie = "ss_session=" + sessionId + "; Path=/; HttpOnly; Max-Age=2592000";
         CookieManager cm = CookieManager.getInstance();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             cm.setCookie(Config.HOME_URL, cookie, new ValueCallback<Boolean>() {

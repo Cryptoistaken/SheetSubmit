@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 declare global {
   interface Window {
     Telegram?: { Login?: { init?: (opts: Record<string, unknown>, cb: (data: unknown) => void) => void; open?: (cb?: (data: unknown) => void) => void; auth?: (opts: Record<string, unknown>, cb: (data: unknown) => void) => void } };
-    Android?: { isTelegramLoginAvailable?: () => boolean; startTelegramLogin?: () => void };
+    Android?: { isTelegramLoginAvailable?: () => boolean; startTelegramLogin?: () => void; openBotLogin?: () => void };
   }
 }
 
@@ -23,6 +23,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
   const [tgReady, setTgReady] = useState(false);
   const [tgLoading, setTgLoading] = useState(false);
   const [tgError, setTgError] = useState<string | null>(null);
+  const [botSent, setBotSent] = useState(false);
 
   const isAndroidApp = typeof window.Android?.startTelegramLogin === "function";
 
@@ -120,6 +121,17 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
     return () => window.removeEventListener("storage", onStorage);
   }, [isAndroidApp, next]);
 
+  function handleBotLogin() {
+    if (claimedDoneRef.current || waiting) return;
+    if (window.Android?.openBotLogin) {
+      setTgError(null);
+      window.Android.openBotLogin();
+      setBotSent(true);
+    } else {
+      setTgError("Please update the app to the latest version, then try again.");
+    }
+  }
+
   async function handleTelegramLogin() {
     if (claimedDoneRef.current || waiting) return;
     if (window.Android?.isTelegramLoginAvailable?.()) {
@@ -175,6 +187,16 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
             <span>{tgLoading ? "Verifying…" : "Continue with Telegram"}</span>
           </button>
           {tgError && <p role="alert" className="login-hint" style={{ color: "var(--red)", marginTop: 8 }}>{tgError}</p>}
+          {isAndroidApp && !waiting && (
+            <button
+              className="tg-login-button"
+              onClick={handleBotLogin}
+              type="button"
+              style={{ marginTop: 8 }}
+            >
+              <span>{botSent ? "Opened Telegram — tap Login there, then return here" : "Having trouble? Log in via bot"}</span>
+            </button>
+          )}
           {isBubbleNext && !waiting && <p role="status" aria-live="polite" className="login-hint">Already logged in the app? This window will continue automatically…</p>}
           {waiting && <p role="status" aria-live="polite" className="login-hint">Logged in. Opening your workspace…</p>}
         </div>

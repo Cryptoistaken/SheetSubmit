@@ -4,7 +4,9 @@ import postgres from "postgres";
 // Postgres (e.g. Neon free) holds a live copy via BACKUP_DATABASE_URL.
 // Sync is strictly primary -> backup on an interval; the reverse happens
 // only once at boot when the primary is empty (fresh redeploy refill).
-// Unset BACKUP_DATABASE_URL = feature off, today's behavior unchanged.
+// Unset BACKUP_DATABASE_URL (or equal to DATABASE_URL) = feature off,
+// today's behavior unchanged. Same-URL is a no-op so a self-copy can
+// never TRUNCATE the live DB onto itself.
 
 // Parents first: only users + file_index are REFERENCES targets.
 export const BACKUP_TABLES = [
@@ -44,9 +46,12 @@ function primaryDb() {
 function standbyDb() {
   if (standby !== undefined) return standby;
   const url = Bun.env.BACKUP_DATABASE_URL || "";
-  standby = url
-    ? postgres(url, { max: 2, idle_timeout: 20, connect_timeout: 10 })
-    : null;
+  // Same-URL = self-copy would TRUNCATE the live DB onto itself: stay off.
+  if (!url || url === (Bun.env.DATABASE_URL || "")) {
+    standby = null;
+    return standby;
+  }
+  standby = postgres(url, { max: 2, idle_timeout: 20, connect_timeout: 10 });
   return standby;
 }
 

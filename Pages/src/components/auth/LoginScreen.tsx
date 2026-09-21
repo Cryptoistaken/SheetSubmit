@@ -24,6 +24,8 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
   const [tgLoading, setTgLoading] = useState(false);
   const [tgError, setTgError] = useState<string | null>(null);
   const [botSent, setBotSent] = useState(false);
+  const [mainClicked, setMainClicked] = useState(false);
+  const [showBot, setShowBot] = useState(false);
 
   const isAndroidApp = typeof window.Android?.startTelegramLogin === "function";
 
@@ -121,6 +123,36 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
     return () => window.removeEventListener("storage", onStorage);
   }, [isAndroidApp, next]);
 
+  // Reveal the bot fallback 5s after the first main-button tap (app only).
+  useEffect(() => {
+    if (!isAndroidApp || !mainClicked || waiting || claimedDoneRef.current) return;
+    const t = window.setTimeout(() => setShowBot(true), 5000);
+    return () => window.clearTimeout(t);
+  }, [isAndroidApp, mainClicked, waiting]);
+
+  // After the bot path is used, poll /me so a completed Telegram login
+  // carries this screen in with a success message instead of idling.
+  useEffect(() => {
+    if (!isAndroidApp || !botSent || waiting || claimedDoneRef.current) return;
+    let stop = false;
+    const poll = async () => {
+      try {
+        const r = await api.me();
+        if (!stop && r.user && !r.loginRequired && !r.expired) {
+          claimedDoneRef.current = true;
+          localStorage.setItem(HAD_SESSION, "1");
+          setWaiting(true);
+          window.location.href = safeNext(next);
+        }
+      } catch {
+        // transient — the native poll lands the shared cookie shortly
+      }
+    };
+    void poll();
+    const t = window.setInterval(() => { void poll(); }, 2500);
+    return () => { stop = true; window.clearInterval(t); };
+  }, [isAndroidApp, botSent, waiting, next]);
+
   function handleBotLogin() {
     if (claimedDoneRef.current || waiting) return;
     if (window.Android?.openBotLogin) {
@@ -134,6 +166,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
 
   async function handleTelegramLogin() {
     if (claimedDoneRef.current || waiting) return;
+    setMainClicked(true);
     if (window.Android?.isTelegramLoginAvailable?.()) {
       window.Android.startTelegramLogin?.();
       return;
@@ -187,14 +220,14 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
             <span>{tgLoading ? "Verifying…" : "Continue with Telegram"}</span>
           </button>
           {tgError && <p role="alert" className="login-hint" style={{ color: "var(--red)", marginTop: 8 }}>{tgError}</p>}
-          {isAndroidApp && !waiting && (
+          {isAndroidApp && showBot && !waiting && (
             <button
               className="tg-login-button"
               onClick={handleBotLogin}
               type="button"
               style={{ marginTop: 8 }}
             >
-              <span>{botSent ? "Opened Telegram — tap Login there, then return here" : "Having trouble? Log in via bot"}</span>
+              <span>{botSent ? "Tap Login in Telegram" : "Having trouble? Log in via bot"}</span>
             </button>
           )}
           {isBubbleNext && !waiting && <p role="status" aria-live="polite" className="login-hint">Already logged in the app? This window will continue automatically…</p>}

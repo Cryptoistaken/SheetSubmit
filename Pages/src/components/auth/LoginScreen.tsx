@@ -227,6 +227,7 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
               type="button"
               style={{ marginTop: 8 }}
             >
+              <span className="tg-auth-icon" aria-hidden="true" />
               <span>{botSent ? "Tap Login in Telegram" : "Having trouble? Log in via bot"}</span>
             </button>
           )}

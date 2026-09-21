@@ -221,15 +221,9 @@ export default function LoginScreen({ notice, next }: { notice?: string; next?: 
           </button>
           {tgError && <p role="alert" className="login-hint" style={{ color: "var(--red)", marginTop: 8 }}>{tgError}</p>}
           {isAndroidApp && showBot && !waiting && (
-            <button
-              className="tg-login-button"
-              onClick={handleBotLogin}
-              type="button"
-              style={{ marginTop: 8 }}
-            >
-              <span className="tg-auth-icon" aria-hidden="true" />
-              <span>{botSent ? "Tap Login in Telegram" : "Having trouble? Log in via bot"}</span>
-            </button>
+            <p className="login-hint" style={{ marginTop: 8 }}>
+              {botSent ? "Tap Login in Telegram" : (<>Having trouble? <button type="button" onClick={handleBotLogin} style={{ background: "none", border: "none", padding: 0, font: "inherit", color: "inherit", textDecoration: "underline", cursor: "pointer" }}>Log in via bot</button></>)}
+            </p>
           )}
           {isBubbleNext && !waiting && <p role="status" aria-live="polite" className="login-hint">Already logged in the app? This window will continue automatically…</p>}
           {waiting && <p role="status" aria-live="polite" className="login-hint">Logged in. Opening your workspace…</p>}

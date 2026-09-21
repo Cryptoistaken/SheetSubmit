@@ -1,7 +1,7 @@
 import postgres from "postgres";
 
-// Standby-copy backup: Railway Postgres stays primary (fast), an external
-// Postgres (e.g. Neon free) holds a live copy via BACKUP_DATABASE_URL.
+// Standby-copy backup: DATABASE_URL (Neon) is primary, BACKUP_DATABASE_URL
+// (Aiven Postgres) holds a live copy.
 // Sync is strictly primary -> backup on an interval; the reverse happens
 // only once at boot when the primary is empty (fresh redeploy refill).
 // Unset BACKUP_DATABASE_URL (or equal to DATABASE_URL) = feature off,

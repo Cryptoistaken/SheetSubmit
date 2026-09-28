@@ -76,11 +76,14 @@ describe.skipIf(!hasDb)("admin analysis", () => {
     expect(j.missing).toEqual(["NEON_PROJECT_ID"]);
   }, 30_000);
 
-  it("neon-usage surfaces the upstream status instead of a bare 502", async () => {
+  it("neon-usage surfaces the upstream status instead of a bare error", async () => {
     const ck = await cookieFor(ADMIN);
     const env: any = { ...ENV2, NEON_API_KEY: "definitely-not-a-real-key", NEON_PROJECT_ID: "pid-does-not-exist" };
     const r = await app.request("/api/admin/neon-usage", { headers: { Cookie: ck } }, env);
-    expect(r.status).toBe(502);
+    // 200 on purpose: these are soft outcomes the client renders. A 5xx would
+    // be caught by the caller and collapse into a blank, uninformative tile —
+    // exactly the dead end these diagnostics exist to remove.
+    expect(r.status).toBe(200);
     const j: any = await r.json();
     // 401/403 (bad key) and an outage are different fixes; the UI needs to say
     // which one it hit.

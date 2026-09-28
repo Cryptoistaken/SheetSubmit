@@ -55,8 +55,11 @@ admin.get("/neon-usage", async (c) => {
     const r = await fetch(`https://console.neon.tech/api/v2/projects/${encodeURIComponent(projectId)}`, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" }, signal: ctl.signal });
     // Pass the upstream status through: 401/403 means the key is wrong or
     // expired, which is a different fix from an outage, and the status code
-    // itself leaks nothing.
-    if (!r.ok) return c.json({ error: "neon api unavailable", status: r.status }, 502);
+    // itself leaks nothing. 200, not 502 — "I could not read your usage" is a
+    // successful answer to the question asked, and the client renders it.
+    // (A 5xx here is swallowed by the caller's .catch into a blank tile, which
+    // is the one thing these diagnostics exist to prevent.)
+    if (!r.ok) return c.json({ error: "neon api unavailable", status: r.status });
     const p = ((await r.json()) as any)?.project ?? {};
     const con = p.consumption ?? p.current_consumption ?? {};
     const des = p.default_endpoint_settings ?? {};
@@ -76,9 +79,9 @@ admin.get("/neon-usage", async (c) => {
     // same silent failure the api.neon.tech outage caused. Say so instead.
     const measured = [body.computeTimeSeconds, body.activeTimeSeconds, body.dataTransferBytes, body.writtenDataBytes, body.syntheticStorageSize];
     if (!measured.some((v) => typeof v === "number")) {
-      return c.json({ error: "neon api returned an unrecognised payload" }, 502);
+      return c.json({ error: "neon api returned an unrecognised payload" });
     }
     return c.json(body);
-  } catch { return c.json({ error: "neon api unavailable" }, 502); }
+  } catch { return c.json({ error: "neon api unavailable" }); }
   finally { clearTimeout(t); }
 });

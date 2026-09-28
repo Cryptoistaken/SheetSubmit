@@ -45,10 +45,12 @@ admin.get("/neon-usage", async (c) => {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 10_000);
   try {
-    const r = await fetch(`https://api.neon.tech/v2/projects/${encodeURIComponent(projectId)}`, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" }, signal: ctl.signal });
+    // ponytail: console.neon.tech/api/v2 — api.neon.tech no longer resolves (no DNS record).
+    const r = await fetch(`https://console.neon.tech/api/v2/projects/${encodeURIComponent(projectId)}`, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" }, signal: ctl.signal });
     if (!r.ok) return c.json({ error: "neon api unavailable" }, 502);
     const p = ((await r.json()) as any)?.project ?? {};
     const con = p.consumption ?? p.current_consumption ?? {};
+    const des = p.default_endpoint_settings ?? {};
     return c.json({
       configured: true,
       computeTimeSeconds: pick(con.compute_time_seconds, p.compute_time_seconds),
@@ -56,9 +58,9 @@ admin.get("/neon-usage", async (c) => {
       dataTransferBytes: pick(con.data_transfer_bytes, p.data_transfer_bytes),
       writtenDataBytes: pick(con.written_data_bytes, p.written_data_bytes),
       syntheticStorageSize: pick(con.synthetic_storage_size, p.synthetic_storage_size),
-      period: con.period ?? (con.from ? { from: con.from, to: con.to ?? null } : null),
-      plan: pick(p.plan, p.subscription_plan, p.subscription?.plan),
-      autoscaling: pick(p.autoscaling, p.settings?.autoscaling),
+      period: p.consumption_period_start ? { from: p.consumption_period_start, to: p.consumption_period_end ?? null } : null,
+      plan: pick(p.owner?.subscription_type, p.plan),
+      autoscaling: des.autoscaling_limit_min_cu == null && des.autoscaling_limit_max_cu == null ? null : { min_compute_units: des.autoscaling_limit_min_cu, max_compute_units: des.autoscaling_limit_max_cu },
     });
   } catch { return c.json({ error: "neon api unavailable" }, 502); }
   finally { clearTimeout(t); }

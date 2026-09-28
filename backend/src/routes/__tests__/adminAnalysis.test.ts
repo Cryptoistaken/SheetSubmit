@@ -58,4 +58,21 @@ describe.skipIf(!hasDb)("admin analysis", () => {
     expect(r.status).toBe(200);
     expect((await r.json()) as any).toEqual({ configured: false });
   }, 30_000);
+
+  // guards the host + field mapping: api.neon.tech stopped resolving, which
+  // silently turned the cost tracker into "not configured" forever.
+  it("neon usage maps the live /api/v2 project shape", async () => {
+    const key = process.env.NEON_API_KEY, projectId = process.env.NEON_PROJECT_ID;
+    if (!key || !projectId) return;
+    const r = await fetch(`https://console.neon.tech/api/v2/projects/${projectId}`, { headers: { Authorization: `Bearer ${key}` } });
+    if (!r.ok) return;
+    const p: any = ((await r.json()) as any).project;
+    expect(p).toBeDefined();
+    const des = p.default_endpoint_settings ?? {};
+    expect(typeof p.compute_time_seconds).toBe("number");
+    expect(typeof p.synthetic_storage_size).toBe("number");
+    expect(p.consumption_period_start).toBeString();
+    expect(des.autoscaling_limit_min_cu).toBeNumber();
+    expect(des.autoscaling_limit_max_cu).toBeNumber();
+  }, 30_000);
 });

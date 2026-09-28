@@ -52,11 +52,40 @@ describe.skipIf(!hasDb)("admin analysis", () => {
     }
   }, 30_000);
 
-  it("admin neon-usage → 200 configured:false without env", async () => {
+  it("admin neon-usage → 200 configured:false naming the absent vars", async () => {
     const ck = await cookieFor(ADMIN);
     const r = await app.request("/api/admin/neon-usage", { headers: { Cookie: ck } }, ENV2);
     expect(r.status).toBe(200);
-    expect((await r.json()) as any).toEqual({ configured: false });
+    // A bare {configured:false} is a dead end when the var is in fact set on
+    // another service, so the route names what is missing (never its value).
+    const j: any = await r.json();
+    expect(j.configured).toBe(false);
+    expect(j.missing).toEqual(["NEON_API_KEY", "NEON_PROJECT_ID"]);
+  }, 30_000);
+
+  it("neon-usage reports only the half that is set", async () => {
+    const ck = await cookieFor(ADMIN);
+    const onlyProject: any = { ...ENV2, NEON_API_KEY: "   ", NEON_PROJECT_ID: "pid-123" };
+    // A whitespace-only key is trimmed to empty and reported as missing, not
+    // sent upstream as a blank bearer token.
+    const blank = await app.request("/api/admin/neon-usage", { headers: { Cookie: ck } }, onlyProject);
+    expect(((await blank.json()) as any).missing).toEqual(["NEON_API_KEY"]);
+
+    const onlyKey: any = { ...ENV2, NEON_API_KEY: "secret" };
+    const j: any = await (await app.request("/api/admin/neon-usage", { headers: { Cookie: ck } }, onlyKey)).json();
+    expect(j.missing).toEqual(["NEON_PROJECT_ID"]);
+  }, 30_000);
+
+  it("neon-usage surfaces the upstream status instead of a bare 502", async () => {
+    const ck = await cookieFor(ADMIN);
+    const env: any = { ...ENV2, NEON_API_KEY: "definitely-not-a-real-key", NEON_PROJECT_ID: "pid-does-not-exist" };
+    const r = await app.request("/api/admin/neon-usage", { headers: { Cookie: ck } }, env);
+    expect(r.status).toBe(502);
+    const j: any = await r.json();
+    // 401/403 (bad key) and an outage are different fixes; the UI needs to say
+    // which one it hit.
+    expect(j.error).toBe("neon api unavailable");
+    expect(typeof j.status).toBe("number");
   }, 30_000);
 
   // guards the host + field mapping: api.neon.tech stopped resolving, which

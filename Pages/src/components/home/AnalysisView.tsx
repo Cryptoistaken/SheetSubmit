@@ -489,12 +489,29 @@ export default function AnalysisView() {
           </div>
         ) : neonUsage.configured === false ? (
           <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
-            Neon usage is not configured — set NEON_API_KEY + NEON_PROJECT_ID on the backend, then wait for Railway to
-            redeploy.
+            {neonUsage.missing?.length ? (
+              <>
+                Neon usage is not configured — this backend is missing{" "}
+                <code className="font-mono">{neonUsage.missing.join(" + ")}</code>. Set{" "}
+                {neonUsage.missing.length > 1 ? " them" : " it"} on the Railway service that serves this backend
+                (not just the one you have open) and restart the service.
+              </>
+            ) : (
+              <>
+                Neon usage is not configured — set NEON_API_KEY + NEON_PROJECT_ID on the Railway service that
+                serves this backend, then restart the service.
+              </>
+            )}
           </div>
         ) : "error" in neonUsage ? (
           <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
-            Neon API unavailable — please try again later.
+            {neonUsage.status === 401 || neonUsage.status === 403
+              ? `Neon API rejected the key (HTTP ${neonUsage.status}) — NEON_API_KEY is wrong, expired, or lacks access to NEON_PROJECT_ID.`
+              : neonUsage.status
+                ? `Neon API returned HTTP ${neonUsage.status} — please try again later.`
+                : neonUsage.error === "neon api returned an unrecognised payload"
+                  ? "Neon answered, but the payload did not match the expected shape — the cost tracker cannot read it. This is usually a Neon API change, not a missing setting."
+                  : "Neon API unavailable — please try again later."}
           </div>
         ) : (
           <div className="flex flex-col gap-2">

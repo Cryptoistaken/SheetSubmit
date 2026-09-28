@@ -39,20 +39,29 @@ admin.get("/pooldiag", async (c) => { const key = String(c.req.query("key") || "
 admin.get("/dbhealth", async (c) => c.json(await rpc(c.env.INDEX, "global", "dbHealth", { limit: Math.min(50, Math.max(1, Number(c.req.query("limit")) || 20)) })));
 admin.get("/neon-usage", async (c) => {
   // /analysis support: server-side Neon project fetch (key never logged/returned, 10s cap).
-  const key = c.env.NEON_API_KEY || "", projectId = c.env.NEON_PROJECT_ID || "";
-  if (!key || !projectId) return c.json({ configured: false });
+  const key = (c.env.NEON_API_KEY || "").trim();
+  const projectId = (c.env.NEON_PROJECT_ID || "").trim();
+  // Name the absent variable, never its value. A bare "not configured" is a
+  // dead end when the var is in fact set — on a different service, or a
+  // different environment, or as a stray space. Trimming means a whitespace-only
+  // value is reported as missing instead of being sent as an empty bearer token.
+  const missing = [!key && "NEON_API_KEY", !projectId && "NEON_PROJECT_ID"].filter((v): v is string => !!v);
+  if (missing.length) return c.json({ configured: false, missing });
   const pick = (...vs: any[]) => vs.find((v) => v !== undefined && v !== null) ?? null;
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 10_000);
   try {
     // ponytail: console.neon.tech/api/v2 — api.neon.tech no longer resolves (no DNS record).
     const r = await fetch(`https://console.neon.tech/api/v2/projects/${encodeURIComponent(projectId)}`, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" }, signal: ctl.signal });
-    if (!r.ok) return c.json({ error: "neon api unavailable" }, 502);
+    // Pass the upstream status through: 401/403 means the key is wrong or
+    // expired, which is a different fix from an outage, and the status code
+    // itself leaks nothing.
+    if (!r.ok) return c.json({ error: "neon api unavailable", status: r.status }, 502);
     const p = ((await r.json()) as any)?.project ?? {};
     const con = p.consumption ?? p.current_consumption ?? {};
     const des = p.default_endpoint_settings ?? {};
-    return c.json({
-      configured: true,
+    const body = {
+      configured: true as const,
       computeTimeSeconds: pick(con.compute_time_seconds, p.compute_time_seconds),
       activeTimeSeconds: pick(con.active_time_seconds, p.active_time_seconds),
       dataTransferBytes: pick(con.data_transfer_bytes, p.data_transfer_bytes),
@@ -61,7 +70,15 @@ admin.get("/neon-usage", async (c) => {
       period: p.consumption_period_start ? { from: p.consumption_period_start, to: p.consumption_period_end ?? null } : null,
       plan: pick(p.owner?.subscription_type, p.plan),
       autoscaling: des.autoscaling_limit_min_cu == null && des.autoscaling_limit_max_cu == null ? null : { min_compute_units: des.autoscaling_limit_min_cu, max_compute_units: des.autoscaling_limit_max_cu },
-    });
+    };
+    // An upstream that answers 200 with a shape we do not recognise used to
+    // render as a wall of dashes indistinguishable from "no usage yet" — the
+    // same silent failure the api.neon.tech outage caused. Say so instead.
+    const measured = [body.computeTimeSeconds, body.activeTimeSeconds, body.dataTransferBytes, body.writtenDataBytes, body.syntheticStorageSize];
+    if (!measured.some((v) => typeof v === "number")) {
+      return c.json({ error: "neon api returned an unrecognised payload" }, 502);
+    }
+    return c.json(body);
   } catch { return c.json({ error: "neon api unavailable" }, 502); }
   finally { clearTimeout(t); }
 });

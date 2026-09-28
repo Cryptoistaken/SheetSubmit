@@ -258,7 +258,7 @@ export interface DbHealth {
     | { statsAvailable: true; byTime: DbHealthStatement[]; byCalls: DbHealthStatement[] };
 }
 export type NeonUsage =
-  | { configured: false }
+  | { configured: false; missing?: string[] }
   | {
       configured: true;
       computeTimeSeconds?: number | null;
@@ -270,7 +270,9 @@ export type NeonUsage =
       plan?: string | null;
       autoscaling?: { min_compute_units?: number | null; max_compute_units?: number | null } | null;
     }
-  | { configured?: boolean; error: string };
+  // `configured?: true` (not `boolean`) so `configured === false` narrows to
+  // the not-configured arm: the error payload never claims to be unconfigured.
+  | { configured?: true; error: string; status?: number };
 export interface Withdrawal {
   id: string;
   user_id: string;

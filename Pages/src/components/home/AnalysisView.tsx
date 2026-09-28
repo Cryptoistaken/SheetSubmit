@@ -1,82 +1,97 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { RefreshCw } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
 import { api } from "@/lib/api";
 import type { DbHealth, DownloadMeta, HoldRecord, NeonUsage, Withdrawal } from "@/lib/api";
 import { fmtMoney, useCurrency } from "@/lib/currency";
 import { useToast } from "@/lib/toast";
 import PageSkeleton from "@/components/ui/page-skeleton";
+import SlideSwitch from "@/components/ui/slide-switch";
+import TrendChart from "./charts/TrendChart";
+import DonutChart from "./charts/DonutChart";
+import MatrixChart from "./charts/MatrixChart";
+import HistogramChart from "./charts/HistogramChart";
+import RankBars, { type RankRow } from "./charts/RankBars";
+import { Delta, formatBytes, formatCount, type ChartStatus } from "./charts/ChartKit";
 import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
+  POOL_SERIES,
+  type Range,
+  rangeLabel,
+  type Sale,
+  saleTrend,
+  sumRows,
+  windowDelta,
+} from "./charts/sales";
+
+/* ------------------------------------------------------------- constants */
 
 const PASSWORDS = ["dgddigital", "Love@12345"] as const;
-const POOLS = [
-  { id: "cookies_only", label: "Cookies" },
-  { id: "cookies_2fa", label: "2FA" },
-  { id: "page", label: "Page" },
-] as const;
+const POOLS = POOL_SERIES.map((p) => ({ id: p.id, label: p.label }));
+const POOL_LABEL: Record<string, string> = { cookies_only: "Cookies", cookies_2fa: "2FA", page: "Page" };
+
 const shortPwd = (p: string) => (p === "dgddigital" ? "dgd" : p.length > 8 ? `${p.slice(0, 8)}…` : p);
+const isRejected = (s?: string | null) => String(s || "").toUpperCase() === "REJECTED";
+const isApproved = (s?: string | null) => String(s || "").toUpperCase() === "APPROVED";
+
+const DOWNLOAD_CAP = 500; // GET /pools/downloads caps at 500 rows
+const HOLD_CAP = 200; // GET /pools/holds caps at 200 rows
 
 interface PoolStock { password: string; poolId: string; available: number; claimed: number; invalid: number }
 
-type FeedItem =
-  | { kind: "hold"; ts: number; id: string; label: string; sub: string; to: string }
-  | { kind: "take"; ts: number; id: string; label: string; sub: string; to: string }
-  | { kind: "withdrawal"; ts: number; id: string; label: string; sub: string; to: string };
+type FeedItem = { kind: "hold" | "take" | "withdrawal"; ts: number; id: string; label: string; sub: string; to: string };
 
-function holdTs(h: HoldRecord): number { return Number(h.at ?? h.ts ?? 0) || 0; }
+/* ------------------------------------------------------------ small bits */
 
-function fmtBytes(n: number): string {
-  if (!Number.isFinite(n) || n < 0) return "—";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let v = n, i = 0;
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  return `${v >= 100 ? Math.round(v) : Math.round(v * 10) / 10} ${units[i]}`;
-}
-const fmtInt = (n: number) => Number.isFinite(n) ? Math.round(n).toLocaleString() : "—";
-// monochrome ramps off --chart-1 (theme accent is black/white, never blue)
-const ink = (pct: number) => `color-mix(in srgb, var(--chart-1) ${pct}%, transparent)`;
-
-function CardHead({ label, value, caption }: { label: string; value: string; caption?: string }) {
+function StatTile({
+  label,
+  value,
+  caption,
+  delta,
+}: {
+  label: string;
+  value: string;
+  caption: string;
+  delta?: number;
+}) {
   return (
-    <div className="mb-1 flex items-end justify-between gap-3 px-0.5">
-      <p className="font-mono text-[11px] tracking-wide text-muted-foreground">{label}</p>
-      {caption ? <p className="mb-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">{caption}</p> : null}
-      <p className="font-mono text-lg font-medium tabular-nums">{value}</p>
+    <div className="rounded-lg border bg-card px-4 py-3">
+      <div className="flex items-end justify-between gap-2">
+        <p className="font-mono text-[11px] tracking-wide text-muted-foreground">{label}</p>
+        {delta === undefined ? null : <Delta value={delta} />}
+      </div>
+      <p className="mt-1 font-mono text-xl font-medium tabular-nums text-foreground">{value}</p>
+      <p className="mt-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">{caption}</p>
     </div>
   );
 }
 
-const stockConfig = {
-  available: { label: "Available", color: "var(--chart-1)" },
-  claimed: { label: "Claimed", color: ink(45) },
-  invalid: { label: "Invalid", color: ink(22) },
-} satisfies ChartConfig;
+function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {hint ? <p className="font-mono text-[11px] text-muted-foreground">{hint}</p> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
 
-const holdsConfig = {
-  PENDING: { label: "Pending", color: "var(--chart-1)" },
-  APPROVED: { label: "Approved", color: ink(45) },
-  REJECTED: { label: "Rejected", color: ink(22) },
-} satisfies ChartConfig;
+function Panel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <div className={`rounded-lg border bg-card p-4 ${className}`}>{children}</div>;
+}
+
+/* ------------------------------------------------------------------ page */
 
 export default function AnalysisView() {
   const navigate = useNavigate();
   const showToast = useToast();
   const [currency] = useCurrency();
-  const reduceMotion = useMemo(
-    () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
-    [],
-  );
 
+  const [range, setRange] = useState<Range>("30d");
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [stock, setStock] = useState<PoolStock[]>([]);
   const [holds, setHolds] = useState<HoldRecord[]>([]);
   const [prices, setPrices] = useState<Record<string, number>>({});
@@ -117,6 +132,7 @@ export default function AnalysisView() {
       setStats(s);
       setDbHealth(db);
       setNeonUsage(neon);
+      setUpdatedAt(Date.now());
     } catch {
       setFailed(true);
       showToast("Unable to load analysis. Please try again.");
@@ -127,216 +143,413 @@ export default function AnalysisView() {
 
   useEffect(() => { void load(); }, [load]);
 
-  if (loading) return <PageSkeleton variant="admin" />;
-  if (failed) return (
-    <div style={{ padding: "32px 24px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
-      <p className="text-sm text-muted-foreground">Unable to load analysis.</p>
-      <button type="button" className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => void load()}>Retry</button>
-    </div>
+  /* ------------------------------------------------------------ derived */
+
+  const holdStatus = (h: HoldRecord) =>
+    String(h.status || "").toUpperCase() === "HOLD" ? "PENDING" : String(h.status || "").toUpperCase();
+  const countBy = useCallback((s: string) => holds.filter((h) => holdStatus(h) === s).length, [holds]);
+
+  const moneyInFlight = holds
+    .filter((h) => holdStatus(h) === "PENDING")
+    .reduce((sum, h) => sum + (Number(h.claimed) || 0) * (prices[`${h.password}:${h.poolId}`] ?? 0), 0);
+  const paid = useMemo(() => downloads.filter((d) => isApproved(d.status)), [downloads]);
+  const paidTotal = useMemo(() => paid.reduce((sum, d) => sum + (Number(d.total) || 0), 0), [paid]);
+  const openWd = useMemo(() => withdrawals.filter((w) => w.status === "PENDING"), [withdrawals]);
+  const openWdTotal = useMemo(() => openWd.reduce((sum, w) => sum + (Number(w.amount) || 0), 0), [openWd]);
+
+  // A rejected hold is not a sale, so it stays out of the volume series; only
+  // approved downloads count as money in.
+  const sales = useMemo<Sale[]>(
+    () =>
+      downloads
+        .filter((d) => !isRejected(d.status))
+        .map((d) => ({
+          ts: Number(d.at) || 0,
+          poolId: d.poolId,
+          claimed: Number(d.claimed) || 0,
+          revenue: isApproved(d.status) ? Number(d.total) || 0 : 0,
+        })),
+    [downloads],
   );
 
-  const statusOf = (h: HoldRecord) => String(h.status || "").toUpperCase() === "HOLD" ? "PENDING" : String(h.status || "").toUpperCase();
-  const byStatus = (s: string) => holds.filter((h) => statusOf(h) === s);
-  const moneyInFlight = byStatus("PENDING").reduce((sum, h) => sum + (Number(h.claimed) || 0) * (prices[`${h.password}:${h.poolId}`] ?? 0), 0);
-  const paid = downloads.filter((d) => String(d.status || "").toUpperCase() === "APPROVED");
-  const paidTotal = paid.reduce((sum, d) => sum + (Number(d.total) || 0), 0);
-  const openWd = withdrawals.filter((w) => w.status === "PENDING");
-  const openWdTotal = openWd.reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
+  const trend = useMemo(() => saleTrend(sales, range), [sales, range]);
+  const trendSeries = useMemo(() => POOL_SERIES.map((p) => ({ key: p.id, label: p.label, weight: p.weight })), []);
 
-  const feed: FeedItem[] = [
-    ...holds.map((h): FeedItem => ({
-      kind: "hold", ts: holdTs(h), id: "hold:" + h.id,
-      label: `${statusOf(h)} hold · ${Number(h.claimed) || 0} rows · ${h.password}/${h.poolId}`,
-      sub: new Date(holdTs(h)).toLocaleString(), to: `/approvals?hold=${encodeURIComponent(h.id)}`,
-    })),
-    ...downloads.filter((d) => String(d.status || "").toUpperCase() === "CLAIMED").map((d): FeedItem => ({
-      kind: "take", ts: Number(d.at) || 0, id: "take:" + d.id,
-      label: `Take · ${Number(d.claimed) || 0} rows · ${d.password}/${d.poolId}`,
-      sub: new Date(Number(d.at) || 0).toLocaleString(), to: `/pools/${encodeURIComponent(d.password)}/${encodeURIComponent(d.poolId)}`,
-    })),
-    ...withdrawals.map((w): FeedItem => ({
-      kind: "withdrawal", ts: Number(w.created_at) || 0, id: "wd:" + w.id,
-      label: `${w.status} withdrawal · ${fmtMoney(Number(w.amount), currency)} · ${w.name || w.user_id}`,
-      sub: new Date(Number(w.created_at) || 0).toLocaleString(), to: "/withdrawals",
-    })),
-  ].sort((a, b) => b.ts - a.ts).slice(0, 50);
+  const accountsInRange = useMemo(
+    () => POOL_SERIES.reduce((sum, p) => sum + sumRows(trend.rows, p.id), 0),
+    [trend],
+  );
+  const revenueInRange = useMemo(() => sumRows(trend.rows, "revenue"), [trend]);
+  const accountsDelta = useMemo(
+    () => windowDelta(sales.map((s) => ({ ts: s.ts, value: s.claimed })), trend.cutoff, trend.span),
+    [sales, trend],
+  );
 
-  const stockRows = stock.map((s) => ({
-    name: `${shortPwd(s.password)}·${POOLS.find((p) => p.id === s.poolId)?.label ?? s.poolId}`,
-    available: s.available, claimed: s.claimed, invalid: s.invalid,
-  }));
-  const holdsRows = (["PENDING", "APPROVED", "REJECTED"] as const).map((s) => ({ name: s, value: byStatus(s).length, fill: holdsConfig[s].color }));
-  const slowRows = (dbHealth?.statements.statsAvailable ? dbHealth.statements.byTime : []).slice(0, 5).map((q) => ({
-    name: q.query.replace(/\s+/g, " ").trim().slice(0, 34) + "…",
-    full: q.query, ms: Math.round(q.totalMs),
-    label: `${fmtInt(q.calls)} calls · ${fmtInt(q.totalMs)} ms`,
-  }));
-  const scanRows = (dbHealth?.seqScans ?? []).slice(0, 8).map((t) => ({ name: t.table, scans: t.seqScans }));
+  // Pool stock as a matrix — six combinations, four measures.
+  const stockRows = useMemo(
+    () =>
+      stock.map((s) => ({
+        key: `${s.password}/${s.poolId}`,
+        label: `${shortPwd(s.password)}·${POOL_LABEL[s.poolId] ?? s.poolId}`,
+        // No per-row total column: it is always the row's own max, so under a
+        // share-within-row ramp it renders as a flat stripe carrying no extra
+        // information. The totals row underneath already carries the scale.
+        values: [s.available, s.claimed, s.invalid],
+      })),
+    [stock],
+  );
+  const stockTotalAvailable = useMemo(() => stock.reduce((a, s) => a + s.available, 0), [stock]);
 
-  const axisTick = { fontSize: 11, fill: "var(--muted-foreground)" } as const;
+  // Query latency: pg_stat_statements already aggregates by query shape, so the
+  // byTime set is one statement per distinct query.
+  const latencySamples = useMemo(() => {
+    if (!dbHealth?.statements.statsAvailable) return [];
+    const seen = new Map<string, number>();
+    for (const q of dbHealth.statements.byTime) {
+      const mean = Number(q.meanMs);
+      if (Number.isFinite(mean) && mean > 0) seen.set(q.query, mean);
+    }
+    return [...seen.values()];
+  }, [dbHealth]);
+
+  const slowRows = useMemo<RankRow[]>(
+    () =>
+      (dbHealth?.statements.statsAvailable ? dbHealth.statements.byTime : []).slice(0, 8).map((q, i) => {
+        const full = q.query.replace(/\s+/g, " ").trim();
+        return {
+          key: `${i}-${full.slice(0, 24)}`,
+          name: full.length > 26 ? `${full.slice(0, 26)}…` : full,
+          detail: full,
+          value: Math.round(q.totalMs),
+          extra: [formatCount(q.calls), `${q.meanMs.toFixed(1)} ms`],
+        };
+      }),
+    [dbHealth],
+  );
+
+  const tableRows = useMemo<RankRow[]>(
+    () =>
+      (dbHealth?.tables ?? []).slice(0, 10).map((t) => ({
+        key: t.table,
+        name: t.table,
+        detail: t.table,
+        value: t.bytes,
+        extra: [formatCount(t.rows)],
+      })),
+    [dbHealth],
+  );
+
+  const scanRows = useMemo<RankRow[]>(
+    () =>
+      (dbHealth?.seqScans ?? []).slice(0, 8).map((t) => ({
+        key: t.table,
+        name: t.table,
+        detail: t.table,
+        value: t.seqScans,
+        extra: [formatCount(t.seqTuples), formatCount(t.idxScans)],
+      })),
+    [dbHealth],
+  );
+
+  const feed = useMemo<FeedItem[]>(() => {
+    const stamp = (ts: number) => (ts ? new Date(ts).toLocaleString() : "—");
+    const rows: FeedItem[] = [
+      ...holds.map((h) => {
+        const ts = Number(h.at ?? h.ts ?? 0) || 0;
+        return {
+          kind: "hold" as const, ts, id: `hold:${h.id}`,
+          label: `${holdStatus(h)} hold · ${Number(h.claimed) || 0} rows · ${h.password}/${h.poolId}`,
+          sub: stamp(ts),
+          to: `/approvals?hold=${encodeURIComponent(h.id)}`,
+        };
+      }),
+      ...downloads.filter((d) => String(d.status || "").toUpperCase() === "CLAIMED").map((d) => {
+        const ts = Number(d.at) || 0;
+        return {
+          kind: "take" as const, ts, id: `take:${d.id}`,
+          label: `Take · ${Number(d.claimed) || 0} rows · ${d.password}/${d.poolId}`,
+          sub: stamp(ts),
+          to: `/pools/${encodeURIComponent(d.password)}/${encodeURIComponent(d.poolId)}`,
+        };
+      }),
+      ...withdrawals.map((w) => {
+        const ts = Number(w.created_at) || 0;
+        return {
+          kind: "withdrawal" as const, ts, id: `wd:${w.id}`,
+          label: `${w.status} withdrawal · ${fmtMoney(Number(w.amount), currency)} · ${w.name || w.user_id}`,
+          sub: stamp(ts),
+          to: "/withdrawals",
+        };
+      }),
+    ];
+    return rows.sort((a, b) => b.ts - a.ts).slice(0, 50);
+  }, [holds, downloads, withdrawals, currency]);
+
+  /* ------------------------------------------------------------- states */
+
+  if (loading) return <PageSkeleton variant="admin" />;
+  if (failed) {
+    return (
+      <div className="mx-auto flex w-full max-w-[960px] flex-col px-6 py-8">
+        <p className="text-sm text-muted-foreground">Unable to load analysis.</p>
+        <button type="button" className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => void load()}>Retry</button>
+      </div>
+    );
+  }
+
+  const hasQueries = !!dbHealth?.statements.statsAvailable;
+  const trendStatus: ChartStatus = trend.rows.length > 1 && accountsInRange > 0 ? "ready" : "empty";
+  const truncated = downloads.length >= DOWNLOAD_CAP;
+  const label = rangeLabel(range);
 
   return (
-    <div style={{ padding: "32px 24px", maxWidth: 960, margin: "0 auto", width: "100%" }} className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
+    <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-6 px-4 py-6 sm:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>Analysis</h2>
-          <p style={{ fontSize: 13, color: "var(--text3)", margin: "4px 0 0" }}>Business overview and recent activity</p>
+          <h2 className="text-base font-bold tracking-tight">Analysis</h2>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            Business overview, pool composition and database health
+            {updatedAt ? (
+              <span className="ml-1.5 font-mono text-[11px]">· updated {new Date(updatedAt).toLocaleTimeString()}</span>
+            ) : null}
+          </p>
         </div>
-        <button type="button" className="btn btn-ghost" aria-label="Refresh analysis" onClick={() => void load()}>
-          <RefreshCw size={15} aria-hidden="true" /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <SlideSwitch
+            ariaLabel="Time range"
+            value={range}
+            onChange={setRange}
+            options={[
+              { value: "7d", label: "7d" },
+              { value: "30d", label: "30d" },
+              { value: "90d", label: "90d" },
+              { value: "all", label: "All" },
+            ]}
+          />
+          <button type="button" className="btn btn-ghost" aria-label="Refresh analysis" onClick={() => void load()}>
+            <RefreshCw size={15} aria-hidden="true" /> Refresh
+          </button>
+        </div>
       </div>
 
-      <section>
-        <h3 className="text-sm font-semibold" style={{ marginBottom: 8 }}>Business overview</h3>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-lg border bg-card px-4 py-3">
-            <CardHead label="Money in flight" value={fmtMoney(moneyInFlight, currency)} caption={`${byStatus("PENDING").length} pending`} />
-          </div>
-          <div className="rounded-lg border bg-card px-4 py-3">
-            <CardHead label="Payouts paid" value={fmtMoney(paidTotal, currency)} caption={`${paid.length} settled`} />
-          </div>
-          <div className="rounded-lg border bg-card px-4 py-3">
-            <CardHead label="Open withdrawals" value={fmtMoney(openWdTotal, currency)} caption={`${openWd.length} open`} />
-          </div>
-        </div>
-        <div className="grid gap-2 lg:grid-cols-5" style={{ marginTop: 8 }}>
-          <div className="rounded-lg border bg-card px-4 py-3 lg:col-span-3">
-            <CardHead label="Pool stock" value={fmtInt(stockRows.reduce((a, r) => a + r.available, 0))} caption="available" />
-            <ChartContainer config={stockConfig} className="h-56 w-full">
-              <BarChart data={stockRows} margin={{ top: 8, right: 4, left: -12, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="currentColor" strokeOpacity={0.12} />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={axisTick} interval={0} />
-                <YAxis tickLine={false} axisLine={false} tick={axisTick} width={44} />
-                <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: "currentColor", opacity: 0.06 }} />
-                <Bar dataKey="available" stackId="s" fill="var(--color-available)" radius={[0, 0, 0, 0]} isAnimationActive={!reduceMotion} />
-                <Bar dataKey="claimed" stackId="s" fill="var(--color-claimed)" isAnimationActive={!reduceMotion} />
-                <Bar dataKey="invalid" stackId="s" fill="var(--color-invalid)" radius={[4, 4, 0, 0]} isAnimationActive={!reduceMotion} />
-                <ChartLegend content={<ChartLegendContent />} />
-              </BarChart>
-            </ChartContainer>
-          </div>
-          <div className="rounded-lg border bg-card px-4 py-3 lg:col-span-2">
-            <CardHead label="Holds" value={String(holds.length)} caption="total" />
-            <ChartContainer config={holdsConfig} className="relative h-56 w-full">
-              <PieChart>
-                <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                <Pie data={holdsRows} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="85%" paddingAngle={3} cornerRadius={6} strokeWidth={0} isAnimationActive={!reduceMotion}>
-                  {holdsRows.map((r) => <Cell key={r.name} fill={r.fill} />)}
-                </Pie>
-                <ChartLegend content={<ChartLegendContent />} />
-              </PieChart>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center" style={{ paddingBottom: 28 }}>
-                <span className="font-mono text-xl font-medium tabular-nums">{byStatus("PENDING").length}</span>
-                <span className="font-mono text-[10px] tracking-wide text-muted-foreground">PENDING</span>
-              </div>
-            </ChartContainer>
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground" style={{ padding: "8px 4px 0" }}>
-          {stats?.totalUsers ?? "—"} users · {stats?.totalFiles ?? "—"} files
-        </p>
-      </section>
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <StatTile
+          label="Money in flight"
+          value={fmtMoney(moneyInFlight, currency)}
+          caption={`${countBy("PENDING")} pending holds`}
+        />
+        <StatTile
+          label="Payouts paid"
+          value={fmtMoney(paidTotal, currency)}
+          caption={`${formatCount(paid.length)} settled downloads`}
+        />
+        <StatTile
+          label="Open withdrawals"
+          value={fmtMoney(openWdTotal, currency)}
+          caption={`${openWd.length} awaiting review`}
+        />
+        <StatTile
+          label={`Accounts sold · ${label}`}
+          value={formatCount(accountsInRange)}
+          caption={`${fmtMoney(revenueInRange, currency)} approved`}
+          delta={accountsDelta}
+        />
+      </div>
 
-      <section>
-        <h3 className="text-sm font-semibold" style={{ marginBottom: 8 }}>DB health</h3>
+      <Section title="Volume" hint={`${stats?.totalUsers ?? "—"} users · ${stats?.totalFiles ?? "—"} files`}>
+        <Panel>
+          <TrendChart
+            label={`Accounts taken · ${label}`}
+            caption={`${trend.weekly ? "weekly" : "daily"} buckets${
+              truncated ? ` · newest ${formatCount(downloads.length)} takes only` : ""
+            }`}
+            value={formatCount(accountsInRange)}
+            delta={{ value: accountsDelta }}
+            data={trend.rows}
+            series={trendSeries}
+            overlay={{ key: "revenue", label: "Approved revenue" }}
+            status={trendStatus}
+            height={280}
+            formatTotal={(v) => fmtMoney(v, currency)}
+            emptyTitle="No takes in this range"
+            emptyDescription="Widen the range, or take a hold from a pool to start the series."
+            onRetry={() => void load()}
+          />
+        </Panel>
+      </Section>
+
+      <Section title="Pools">
+        <div className="grid gap-2 lg:grid-cols-5">
+          <Panel className="lg:col-span-3">
+            <MatrixChart
+              label="Pool stock"
+              caption={`${formatCount(stockTotalAvailable)} available across ${stock.length} pool combinations`}
+              rowHeader="Pool"
+              columns={["Avail", "Claimed", "Invalid"]}
+              rows={stockRows}
+              totalLabel="All pools"
+              emptyTitle="No pool stock"
+              emptyDescription="Feed a file to a pool and its rows land here."
+            />
+          </Panel>
+          <Panel className="lg:col-span-2">
+            <DonutChart
+              label="Holds"
+              caption={`${formatCount(holds.length)} total${holds.length >= HOLD_CAP ? " · newest 200" : ""}`}
+              centerValue={formatCount(countBy("PENDING"))}
+              centerLabel="PENDING"
+              slices={[
+                { key: "PENDING", label: "Pending", value: countBy("PENDING") },
+                { key: "APPROVED", label: "Approved", value: countBy("APPROVED") },
+                { key: "REJECTED", label: "Rejected", value: countBy("REJECTED") },
+              ]}
+              emptyTitle="No holds yet"
+              emptyDescription="A hold appears here the moment a taker reserves rows."
+            />
+          </Panel>
+        </div>
+      </Section>
+
+      <Section title="Database" hint={hasQueries ? "pg_stat_statements" : "statements unavailable"}>
         {!dbHealth ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">DB health unavailable.</div>
+          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+            DB health unavailable.
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <div className="rounded-lg border bg-card px-4 py-3">
-              <CardHead label="Tables" value={fmtBytes(dbHealth.tables.reduce((a, t) => a + t.bytes, 0))} caption="total size" />
-              <div className="flex flex-col" style={{ marginTop: 4 }}>
-                {dbHealth.tables.slice(0, 8).map((t) => (
-                  <div key={t.table} className="flex items-center justify-between gap-3 text-sm" style={{ padding: "2px 0" }}>
-                    <span className="font-mono text-xs">{t.table}</span>
-                    <span className="font-mono text-xs tabular-nums text-muted-foreground">{fmtBytes(t.bytes)} · {fmtInt(t.rows)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {dbHealth.statements.statsAvailable ? (
-              <div className="rounded-lg border bg-card px-4 py-3">
-                <CardHead label="Slowest queries" value={`${fmtInt(dbHealth.statements.byTime.slice(0, 5).reduce((a, q) => a + q.totalMs, 0))} ms`} caption="top 5 total" />
-                <ChartContainer config={{ ms: { label: "Total ms", color: "var(--chart-1)" } }} className="h-56 w-full">
-                  <BarChart data={slowRows} layout="vertical" margin={{ top: 0, right: 12, left: 8, bottom: 0 }}>
-                    <CartesianGrid horizontal={false} stroke="currentColor" strokeOpacity={0.12} />
-                    <XAxis type="number" hide />
-                    <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ ...axisTick, fontSize: 10 }} width={150} />
-                    <ChartTooltip content={<ChartTooltipContent labelFormatter={(_, p) => String((p?.[0]?.payload as { full?: string } | undefined)?.full ?? "").slice(0, 120)} />} cursor={{ fill: "currentColor", opacity: 0.06 }} />
-                    <Bar dataKey="ms" fill="var(--color-ms)" radius={[0, 4, 4, 0]} isAnimationActive={!reduceMotion} />
-                  </BarChart>
-                </ChartContainer>
-              </div>
+            <Panel>
+              <HistogramChart
+                label="Query latency"
+                caption={`Mean ms per distinct statement · ${formatCount(latencySamples.length)} samples`}
+                data={latencySamples}
+                format={(v) => (v >= 10 ? `${v.toFixed(0)}ms` : `${v.toFixed(1)}ms`)}
+                percentiles={[50, 95]}
+                height={240}
+                emptyTitle="Not enough spread"
+                emptyDescription="Every tracked statement is taking about the same time, so there is no distribution to draw."
+              />
+            </Panel>
+
+            {hasQueries ? (
+              <Panel>
+                <RankBars
+                  label="Slowest queries"
+                  caption="Total time accumulated since the last stats reset"
+                  rows={slowRows}
+                  seriesKey="ms"
+                  seriesLabel="Total ms"
+                  format={(v) => `${formatCount(v)} ms`}
+                  extraColumns={["Calls", "Mean"]}
+                  emptyTitle="No query stats"
+                  emptyDescription="The pg_stat_statements extension is not installed, so there is nothing to rank."
+                />
+              </Panel>
             ) : (
-              <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">Query stats unavailable — pg_stat_statements extension is not installed.</div>
+              <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
+                Query stats unavailable — the pg_stat_statements extension is not installed.
+              </div>
             )}
-            <div className="rounded-lg border bg-card px-4 py-3">
-              <CardHead label="Seq scans" value={fmtInt(scanRows.reduce((a, r) => a + r.scans, 0))} caption="top 8 tables" />
-              <ChartContainer config={{ scans: { label: "Scans", color: "var(--chart-1)" } }} className="h-52 w-full">
-                <BarChart data={scanRows} margin={{ top: 8, right: 4, left: -8, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke="currentColor" strokeOpacity={0.12} />
-                  <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ ...axisTick, fontSize: 10 }} interval={0} angle={-18} height={44} />
-                  <YAxis tickLine={false} axisLine={false} tick={axisTick} width={48} />
-                  <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: "currentColor", opacity: 0.06 }} />
-                  <Bar dataKey="scans" fill="var(--color-scans)" radius={[4, 4, 0, 0]} isAnimationActive={!reduceMotion} />
-                </BarChart>
-              </ChartContainer>
+
+            <div className="grid gap-2 lg:grid-cols-2">
+              <Panel>
+                <RankBars
+                  label="Largest tables"
+                  caption={`${formatBytes(dbHealth.tables.reduce((a, t) => a + t.bytes, 0))} total`}
+                  rows={tableRows}
+                  seriesKey="bytes"
+                  seriesLabel="Size"
+                  format={formatBytes}
+                  extraColumns={["Rows"]}
+                  emptyTitle="No table sizes"
+                />
+              </Panel>
+              <Panel>
+                <RankBars
+                  label="Sequential scans"
+                  caption="Full-table reads — the first thing to index"
+                  rows={scanRows}
+                  seriesKey="scans"
+                  seriesLabel="Seq scans"
+                  format={formatCount}
+                  extraColumns={["Tuples read", "Index scans"]}
+                  emptyTitle="No scan stats"
+                />
+              </Panel>
             </div>
           </div>
         )}
-      </section>
+      </Section>
 
-      <section>
-        <h3 className="text-sm font-semibold" style={{ marginBottom: 8 }}>Cost tracker</h3>
+      <Section title="Cost" hint="Neon">
         {!neonUsage ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">Usage data unavailable.</div>
+          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+            Usage data unavailable.
+          </div>
         ) : neonUsage.configured === false ? (
-          <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">Neon usage is not configured — set NEON_API_KEY + NEON_PROJECT_ID on the backend, then wait for Railway to redeploy.</div>
+          <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
+            Neon usage is not configured — set NEON_API_KEY + NEON_PROJECT_ID on the backend, then wait for Railway to
+            redeploy.
+          </div>
         ) : "error" in neonUsage ? (
-          <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">Neon API unavailable — please try again later.</div>
+          <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
+            Neon API unavailable — please try again later.
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="rounded-lg border bg-card px-4 py-3">
-                <CardHead label="Compute used" value={`${fmtInt((neonUsage.computeTimeSeconds ?? 0) / 3600)} CU-h`} caption={`active ${fmtInt((neonUsage.activeTimeSeconds ?? 0) / 3600)} h`} />
-              </div>
-              <div className="rounded-lg border bg-card px-4 py-3">
-                <CardHead label="Storage" value={fmtBytes(neonUsage.syntheticStorageSize ?? NaN)} caption={`written ${fmtBytes(neonUsage.writtenDataBytes ?? NaN)}`} />
-              </div>
-              <div className="rounded-lg border bg-card px-4 py-3">
-                <CardHead label="Egress" value={fmtBytes(neonUsage.dataTransferBytes ?? NaN)} caption={neonUsage.plan ?? "—"} />
-              </div>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+              <StatTile
+                label="Compute used"
+                value={`${formatCount((neonUsage.computeTimeSeconds ?? 0) / 3600)} CU-h`}
+                caption={`active ${formatCount((neonUsage.activeTimeSeconds ?? 0) / 3600)} h`}
+              />
+              <StatTile
+                label="Storage"
+                value={formatBytes(neonUsage.syntheticStorageSize ?? NaN)}
+                caption={`written ${formatBytes(neonUsage.writtenDataBytes ?? NaN)}`}
+              />
+              <StatTile
+                label="Egress"
+                value={formatBytes(neonUsage.dataTransferBytes ?? NaN)}
+                caption={neonUsage.plan ?? "—"}
+              />
             </div>
-            <div className="text-xs text-muted-foreground" style={{ padding: "0 4px" }}>
-              {neonUsage.period?.from ? `Billing period ${neonUsage.period.from}${neonUsage.period.to ? ` → ${neonUsage.period.to}` : ""} · ` : ""}
-              Autoscaling {neonUsage.autoscaling?.min_compute_units ?? "—"}–{neonUsage.autoscaling?.max_compute_units ?? "—"} CU
-            </div>
+            <p className="px-1 text-xs text-muted-foreground">
+              {neonUsage.period?.from
+                ? `Billing period ${neonUsage.period.from}${neonUsage.period.to ? ` → ${neonUsage.period.to}` : ""} · `
+                : ""}
+              Autoscaling {neonUsage.autoscaling?.min_compute_units ?? "—"}–
+              {neonUsage.autoscaling?.max_compute_units ?? "—"} CU
+            </p>
           </div>
         )}
-      </section>
+      </Section>
 
-      <section>
-        <h3 className="text-sm font-semibold" style={{ marginBottom: 8 }}>Activity feed</h3>
+      <Section title="Activity" hint={`${formatCount(feed.length)} most recent`}>
         {feed.length ? (
           <div className="flex flex-col gap-1.5">
             {feed.map((f) => (
               <button
-                type="button" key={f.id} onClick={() => navigate(f.to)}
+                type="button"
+                key={f.id}
+                onClick={() => navigate(f.to)}
                 className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-muted"
               >
-                <div>
-                  <div className="font-medium text-sm">{f.label}</div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{f.label}</div>
                   <div className="text-xs text-muted-foreground">{f.sub}</div>
                 </div>
-                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none font-semibold">{f.kind}</span>
+                <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none font-semibold">
+                  {f.kind}
+                </span>
               </button>
             ))}
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No recent activity.</div>
+          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+            No recent activity.
+          </div>
         )}
-      </section>
+      </Section>
     </div>
   );
 }

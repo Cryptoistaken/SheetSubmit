@@ -36,7 +36,8 @@ describe.skipIf(!process.env.DATABASE_URL)("file route guards", () => {
   };
   const poolKeys = async () => {
     const { repository } = await import("../../lib/pg");
-    return (await repository("pools", "dgddigital", "detail", { pool: "cookies_only" })) as { _key: string }[];
+    const d = (await repository("pools", "dgddigital", "detail", { pool: "cookies_only" })) as { rows: { _key: string }[] };
+    return d.rows;
   };
 
   it("M15: POST feed is awaited (row visible in pool detail immediately)", async () => {

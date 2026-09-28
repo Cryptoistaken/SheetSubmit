@@ -55,8 +55,8 @@ describe.skipIf(!process.env.DATABASE_URL)("admin fixes", () => {
     expect(p.status).toBe(200);
     const r = await app.request(`/api/admin/file/${F1}/restore-snapshot`, { method: "POST", headers: H, body: JSON.stringify({}) }, ENV2);
     expect(r.status).toBe(200);
-    const detail = (await repository("pools", PWD, "detail", { pool: POOL })) as { _key: string }[];
-    expect(detail.map((d) => d._key)).toContain(K1);
+    const detail = (await repository("pools", PWD, "detail", { pool: POOL })) as { total: number; rows: { _key: string }[] };
+    expect(detail.rows.map((d) => d._key)).toContain(K1);
   }, 30_000);
 
   it("B2: admin file delete refuses held rows", async () => {

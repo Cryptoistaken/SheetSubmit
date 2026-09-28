@@ -145,8 +145,8 @@ describe.skipIf(!hasDb)("archived files never surface in pools", () => {
     await seedArch();
     const s = (await repository("pools", PX, "summary", { pool: "cookies_2fa" })) as { available: number; claimed: number; users: number };
     expect(s).toMatchObject({ available: 2, claimed: 1, users: 1 });
-    const d = (await repository("pools", PX, "detail", { pool: "cookies_2fa" })) as { _key: string }[];
-    expect(d.map((r) => r._key).sort()).toEqual([KA2, KA3, KL4].sort());
+    const d = (await repository("pools", PX, "detail", { pool: "cookies_2fa" })) as { total: number; rows: { _key: string }[] };
+    expect(d.rows.map((r) => r._key).sort()).toEqual([KA2, KA3, KL4].sort());
     const r = (await repository("pools", PX, "rows", { pool: "cookies_2fa", limit: 100 })) as { total: number };
     expect(r.total).toBe(2);
     const uf = (await repository("pools", PX, "userFiles", { pool: "cookies_2fa" })) as {
@@ -195,8 +195,8 @@ describe.skipIf(!hasDb)("archived files never surface in pools", () => {
       rows: [feedRow(CU1), feedRow(CU2, { check_status: "ineligible" }), feedRow(CU3), feedRow(CU4)], srcUid: UAX, srcFileId: FLIVE, preset: "page",
     })) as { added: number };
     expect(out.added).toBe(4);
-    const d = (await repository("pools", PX, "detail", { pool: "page" })) as { _key: string; check_status?: string; check_page_name?: string; check_linked_number?: string }[];
-    const byKey = new Map(d.map((r) => [r._key, r]));
+    const d = (await repository("pools", PX, "detail", { pool: "page" })) as { total: number; rows: { _key: string; check_status?: string; check_page_name?: string; check_linked_number?: string }[] };
+    const byKey = new Map(d.rows.map((r) => [r._key, r]));
     expect(byKey.get(CU1)).toMatchObject({ check_status: "eligible", check_page_name: "TestPage", check_linked_number: "8801" });
     expect(byKey.get(CU2)?.check_status).toBe("ineligible"); // explicit value beats even a fresh cache hit
     expect(byKey.get(CU3)?.check_status).toBe("eligible"); // legacy wa: cache key still fills new fields
@@ -210,7 +210,7 @@ describe.skipIf(!hasDb)("archived files never surface in pools", () => {
     expect(first.added).toBe(1);
     const second = (await repository("pools", PX, "add", { rows: [feedRow(CU3)], srcUid: UAX, srcFileId: FLIVE, preset: "page" })) as { added: number };
     expect(second.added).toBe(0);
-    const d = (await repository("pools", PX, "detail", { pool: "page" })) as { _key: string; check_status?: string }[];
-    expect(d.find((r) => r._key === CU3)?.check_status).toBe("eligible");
+    const d = (await repository("pools", PX, "detail", { pool: "page" })) as { total: number; rows: { _key: string; check_status?: string }[] };
+    expect(d.rows.find((r) => r._key === CU3)?.check_status).toBe("eligible");
   }, 30_000);
 });

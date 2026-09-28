@@ -69,7 +69,7 @@ async function buildPoolMessage(r: PoolCountRow, rows: PoolCountRow[]): Promise<
  * data.check_status, which moves the page verified split but no counters). */
 export async function poolCountsSnapshot(password: string, pool: string): Promise<PoolCountsMessage | null> {
   try {
-    const all = (await rpc("pools", "global", "summaryAll", {})) as any[];
+    const all = (await rpc("pools", "global", "summaryAll", { password, pool })) as any[];
     const rows: PoolCountRow[] = (Array.isArray(all) ? all : [])
       .map((r) => ({
         password: String(r.password), pool: String(r.pool),
@@ -90,7 +90,8 @@ export async function poolCountsSnapshot(password: string, pool: string): Promis
  * pool. Counts only — no PII, row keys, or holdings. Fail-open. */
 export async function publishPoolCounts(password?: string, pool?: string): Promise<number> {
   try {
-    const all = (await rpc("pools", "global", "summaryAll", {})) as any[];
+    // scoped to the rooms in view — the global matrix stays on GET /pools/ only
+    const all = (await rpc("pools", "global", "summaryAll", { ...(password ? { password } : {}), ...(pool ? { pool } : {}) })) as any[];
     const rows: PoolCountRow[] = (Array.isArray(all) ? all : [])
       .filter((r) => (!password || r.password === password) && (!pool || r.pool === pool))
       .map((r) => ({

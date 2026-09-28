@@ -167,6 +167,8 @@ export async function startWorkerJobs() {
   const tickMs = Math.max(60_000, Number(Bun.env.WORKER_TICK_MS) || 600_000);
   for (;;) {
     if (stopping) break;
+    // idle fast-path: no job due → sleep the tick with zero queries (lets Neon suspend between sweeps)
+    if (!JOBS.some((j) => (last.get(j.name) ?? 0) + j.every <= Date.now())) { await new Promise((r) => setTimeout(r, tickMs)); continue; }
     // single-leader: only one replica sweeps at a time; losers skip the tick
     let leader = false;
     try {

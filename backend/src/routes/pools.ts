@@ -15,6 +15,16 @@ const META: Record<PoolId, { label: string; badge: string; cols: string[]; filen
 };
 const isPool = (v: string): v is PoolId => (POOL_IDS as readonly string[]).includes(v);
 const holdStatus = (m: string) => m.includes("final") ? 409 : m === "not found" ? 404 : 400;
+// single replica (no numReplicas in railway.toml) so an in-process one-shot
+// alarm is enough: exactly one settleHolds call when this decision's 5-minute
+// revert window closes. The hourly sweep in startBackgroundTasks is the
+// crash/deploy backstop (alarms die on restart). No-op without settleAt
+// (revert results carry none — REVERTED rows never settle).
+const scheduleSettle = (c: any, settleAt: unknown) => {
+  const delay = Number(settleAt) - Date.now();
+  if (!Number.isFinite(delay) || delay <= 0) return;
+  setTimeout(() => { void rpc(c.env.INDEX, "global", "settleHolds", {}).catch((e: any) => console.error("hold settle failed", e?.message ?? e)); }, delay);
+};
 
 pools.use("/*", requireAuth);
 const dlMeta = (m: any) => ({
@@ -59,6 +69,7 @@ pools.post("/holds/:id/approve", async (c) => {
     const r: any = await rpc(c.env.POOLS, d.password, "holdApprove", { id, uid: c.get("uid") });
     if (r?.error) return c.json({ error: r.error }, holdStatus(r.error));
     void publishDownloadStates(d.password, id);
+    scheduleSettle(c, r?.settleAt);
     return c.json(r);
   } catch (e) { const m = String((e as Error)?.message || ""); return c.json({ error: m || "not found" }, holdStatus(m || "not found")); }
 });
@@ -72,6 +83,7 @@ const handleReject = async (c: any) => {
     const r: any = await rpc(c.env.POOLS, d.password, "holdReject", { id, uid: c.get("uid") });
     if (r?.error) return c.json({ error: r.error }, holdStatus(r.error));
     void publishDownloadStates(d.password, id);
+    scheduleSettle(c, r?.settleAt);
     return c.json(r);
   } catch (e) { const m = String((e as Error)?.message || ""); return c.json({ error: m || "not found" }, holdStatus(m || "not found")); }
 };
@@ -90,7 +102,7 @@ pools.get("/downloads/:id/detail", async (c) => {
   return c.json({ ...dlMeta({ ...detail, password: d.password }), rows: detail.rows, keys: detail.keys, groups: detail.groups ?? [] });
 });
   pools.get("/downloads/:id", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findRecord(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); const srcUid = c.req.query("srcUid") || "", srcFileId = c.req.query("srcFileId") || ""; let rows: any[] = d.rows || [], filename = String(d.filename || "download.xlsx"); if (srcUid || srcFileId) { const f: any = await rpc(c.env.POOLS, d.password, "downloadRows", { id: d.id, srcUid: srcUid || null, srcFileId: srcFileId || null }).catch(() => null); if (!f) return c.json({ error: "not found" }, 404); rows = f.rows; filename = String(c.req.query("name") || filename).replace(/["\r\n;\\]/g, "_").slice(0, 128); } else { filename = filename.replace(/["\r\n;\\]/g, "_").slice(0, 128); } return c.json({ ...dlMeta({ ...d, rows }), rows, filename }); });
-pools.post("/downloads/:id/revert", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findRecord(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); const r: any = await rpc(c.env.POOLS, d.password, "revertDownload", { id: d.id, uid: c.get("uid") }); void publishDownloadStates(d.password, d.id); return c.json(r); });
+pools.post("/downloads/:id/revert", async (c) => { if (!admin(c)) return c.json({ error: "admin access required" }, 403); const d = await findRecord(c, c.req.param("id")); if (!d) return c.json({ error: "not found" }, 404); const r: any = await rpc(c.env.POOLS, d.password, "revertDownload", { id: d.id, uid: c.get("uid") }); void publishDownloadStates(d.password, d.id); scheduleSettle(c, r?.settleAt); return c.json(r); });
 pools.delete("/downloads/:id", async (c) => {
   if (!admin(c)) return c.json({ error: "admin access required" }, 403);
   const id = c.req.param("id");

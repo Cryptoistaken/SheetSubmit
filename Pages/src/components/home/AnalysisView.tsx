@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { RefreshCw } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
 import { api } from "@/lib/api";
 import type { DbHealth, DownloadMeta, HoldRecord, NeonUsage, Withdrawal } from "@/lib/api";
 import { fmtMoney, useCurrency } from "@/lib/currency";
 import { useToast } from "@/lib/toast";
 import PageSkeleton from "@/components/ui/page-skeleton";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 
 const PASSWORDS = ["dgddigital", "Love@12345"] as const;
 const POOLS = [
@@ -13,6 +22,7 @@ const POOLS = [
   { id: "cookies_2fa", label: "2FA" },
   { id: "page", label: "Page" },
 ] as const;
+const shortPwd = (p: string) => (p === "dgddigital" ? "dgd" : p.length > 8 ? `${p.slice(0, 8)}…` : p);
 
 interface PoolStock { password: string; poolId: string; available: number; claimed: number; invalid: number }
 
@@ -31,11 +41,39 @@ function fmtBytes(n: number): string {
   return `${v >= 100 ? Math.round(v) : Math.round(v * 10) / 10} ${units[i]}`;
 }
 const fmtInt = (n: number) => Number.isFinite(n) ? Math.round(n).toLocaleString() : "—";
+// monochrome ramps off --chart-1 (theme accent is black/white, never blue)
+const ink = (pct: number) => `color-mix(in srgb, var(--chart-1) ${pct}%, transparent)`;
+
+function CardHead({ label, value, caption }: { label: string; value: string; caption?: string }) {
+  return (
+    <div className="mb-1 flex items-end justify-between gap-3 px-0.5">
+      <p className="font-mono text-[11px] tracking-wide text-muted-foreground">{label}</p>
+      {caption ? <p className="mb-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">{caption}</p> : null}
+      <p className="font-mono text-lg font-medium tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+const stockConfig = {
+  available: { label: "Available", color: "var(--chart-1)" },
+  claimed: { label: "Claimed", color: ink(45) },
+  invalid: { label: "Invalid", color: ink(22) },
+} satisfies ChartConfig;
+
+const holdsConfig = {
+  PENDING: { label: "Pending", color: "var(--chart-1)" },
+  APPROVED: { label: "Approved", color: ink(45) },
+  REJECTED: { label: "Rejected", color: ink(22) },
+} satisfies ChartConfig;
 
 export default function AnalysisView() {
   const navigate = useNavigate();
   const showToast = useToast();
   const [currency] = useCurrency();
+  const reduceMotion = useMemo(
+    () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
+    [],
+  );
 
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -104,7 +142,6 @@ export default function AnalysisView() {
   const paidTotal = paid.reduce((sum, d) => sum + (Number(d.total) || 0), 0);
   const openWd = withdrawals.filter((w) => w.status === "PENDING");
   const openWdTotal = openWd.reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
-  const stockTotal = stock.reduce((a, s) => ({ available: a.available + s.available, claimed: a.claimed + s.claimed, invalid: a.invalid + s.invalid }), { available: 0, claimed: 0, invalid: 0 });
 
   const feed: FeedItem[] = [
     ...holds.map((h): FeedItem => ({
@@ -124,13 +161,19 @@ export default function AnalysisView() {
     })),
   ].sort((a, b) => b.ts - a.ts).slice(0, 50);
 
-  const card = (label: string, value: string, sub?: string) => (
-    <div key={label} className="rounded-lg border bg-card px-4 py-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-lg font-semibold">{value}</div>
-      {sub ? <div className="text-xs text-muted-foreground">{sub}</div> : null}
-    </div>
-  );
+  const stockRows = stock.map((s) => ({
+    name: `${shortPwd(s.password)}·${POOLS.find((p) => p.id === s.poolId)?.label ?? s.poolId}`,
+    available: s.available, claimed: s.claimed, invalid: s.invalid,
+  }));
+  const holdsRows = (["PENDING", "APPROVED", "REJECTED"] as const).map((s) => ({ name: s, value: byStatus(s).length, fill: holdsConfig[s].color }));
+  const slowRows = (dbHealth?.statements.statsAvailable ? dbHealth.statements.byTime : []).slice(0, 5).map((q) => ({
+    name: q.query.replace(/\s+/g, " ").trim().slice(0, 34) + "…",
+    full: q.query, ms: Math.round(q.totalMs),
+    label: `${fmtInt(q.calls)} calls · ${fmtInt(q.totalMs)} ms`,
+  }));
+  const scanRows = (dbHealth?.seqScans ?? []).slice(0, 8).map((t) => ({ name: t.table, scans: t.seqScans }));
+
+  const axisTick = { fontSize: 11, fill: "var(--muted-foreground)" } as const;
 
   return (
     <div style={{ padding: "32px 24px", maxWidth: 960, margin: "0 auto", width: "100%" }} className="flex flex-col gap-6">
@@ -147,22 +190,52 @@ export default function AnalysisView() {
       <section>
         <h3 className="text-sm font-semibold" style={{ marginBottom: 8 }}>Business overview</h3>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {card("Pool stock · available", String(stockTotal.available), `claimed ${stockTotal.claimed} · invalid ${stockTotal.invalid}`)}
-          {card("Holds · pending", String(byStatus("PENDING").length), `approved ${byStatus("APPROVED").length} · rejected ${byStatus("REJECTED").length}`)}
-          {card("Money in flight", fmtMoney(moneyInFlight, currency), "pending holds × pool price")}
-          {card("Payouts paid", fmtMoney(paidTotal, currency), `${paid.length} settled approvals`)}
-          {card("Open withdrawals", `${openWd.length} · ${fmtMoney(openWdTotal, currency)}`)}
-          {card("Users / files", `${stats?.totalUsers ?? "—"} / ${stats?.totalFiles ?? "—"}`)}
+          <div className="rounded-lg border bg-card px-4 py-3">
+            <CardHead label="Money in flight" value={fmtMoney(moneyInFlight, currency)} caption={`${byStatus("PENDING").length} pending`} />
+          </div>
+          <div className="rounded-lg border bg-card px-4 py-3">
+            <CardHead label="Payouts paid" value={fmtMoney(paidTotal, currency)} caption={`${paid.length} settled`} />
+          </div>
+          <div className="rounded-lg border bg-card px-4 py-3">
+            <CardHead label="Open withdrawals" value={fmtMoney(openWdTotal, currency)} caption={`${openWd.length} open`} />
+          </div>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" style={{ marginTop: 8 }}>
-          {stock.map((s) => (
-            <div key={`${s.password}:${s.poolId}`} className="rounded-lg border bg-card px-4 py-3">
-              <div className="text-xs text-muted-foreground">{s.password} · {s.poolId}</div>
-              <div className="text-lg font-semibold">{s.available}</div>
-              <div className="text-xs text-muted-foreground">available · {s.claimed} claimed · {s.invalid} invalid</div>
-            </div>
-          ))}
+        <div className="grid gap-2 lg:grid-cols-5" style={{ marginTop: 8 }}>
+          <div className="rounded-lg border bg-card px-4 py-3 lg:col-span-3">
+            <CardHead label="Pool stock" value={fmtInt(stockRows.reduce((a, r) => a + r.available, 0))} caption="available" />
+            <ChartContainer config={stockConfig} className="h-56 w-full">
+              <BarChart data={stockRows} margin={{ top: 8, right: 4, left: -12, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke="currentColor" strokeOpacity={0.12} />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={axisTick} interval={0} />
+                <YAxis tickLine={false} axisLine={false} tick={axisTick} width={44} />
+                <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: "currentColor", opacity: 0.06 }} />
+                <Bar dataKey="available" stackId="s" fill="var(--color-available)" radius={[0, 0, 0, 0]} isAnimationActive={!reduceMotion} />
+                <Bar dataKey="claimed" stackId="s" fill="var(--color-claimed)" isAnimationActive={!reduceMotion} />
+                <Bar dataKey="invalid" stackId="s" fill="var(--color-invalid)" radius={[4, 4, 0, 0]} isAnimationActive={!reduceMotion} />
+                <ChartLegend content={<ChartLegendContent />} />
+              </BarChart>
+            </ChartContainer>
+          </div>
+          <div className="rounded-lg border bg-card px-4 py-3 lg:col-span-2">
+            <CardHead label="Holds" value={String(holds.length)} caption="total" />
+            <ChartContainer config={holdsConfig} className="relative h-56 w-full">
+              <PieChart>
+                <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                <Pie data={holdsRows} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="85%" paddingAngle={3} cornerRadius={6} strokeWidth={0} isAnimationActive={!reduceMotion}>
+                  {holdsRows.map((r) => <Cell key={r.name} fill={r.fill} />)}
+                </Pie>
+                <ChartLegend content={<ChartLegendContent />} />
+              </PieChart>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center" style={{ paddingBottom: 28 }}>
+                <span className="font-mono text-xl font-medium tabular-nums">{byStatus("PENDING").length}</span>
+                <span className="font-mono text-[10px] tracking-wide text-muted-foreground">PENDING</span>
+              </div>
+            </ChartContainer>
+          </div>
         </div>
+        <p className="text-xs text-muted-foreground" style={{ padding: "8px 4px 0" }}>
+          {stats?.totalUsers ?? "—"} users · {stats?.totalFiles ?? "—"} files
+        </p>
       </section>
 
       <section>
@@ -172,35 +245,43 @@ export default function AnalysisView() {
         ) : (
           <div className="flex flex-col gap-2">
             <div className="rounded-lg border bg-card px-4 py-3">
-              <div className="text-xs text-muted-foreground" style={{ marginBottom: 6 }}>Tables by size</div>
-              {dbHealth.tables.slice(0, 10).map((t) => (
-                <div key={t.table} className="flex items-center justify-between gap-3 text-sm" style={{ padding: "2px 0" }}>
-                  <span className="font-mono text-xs">{t.table}</span>
-                  <span className="text-xs text-muted-foreground">{fmtBytes(t.bytes)} · {fmtInt(t.rows)} rows</span>
-                </div>
-              ))}
+              <CardHead label="Tables" value={fmtBytes(dbHealth.tables.reduce((a, t) => a + t.bytes, 0))} caption="total size" />
+              <div className="flex flex-col" style={{ marginTop: 4 }}>
+                {dbHealth.tables.slice(0, 8).map((t) => (
+                  <div key={t.table} className="flex items-center justify-between gap-3 text-sm" style={{ padding: "2px 0" }}>
+                    <span className="font-mono text-xs">{t.table}</span>
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">{fmtBytes(t.bytes)} · {fmtInt(t.rows)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
             {dbHealth.statements.statsAvailable ? (
               <div className="rounded-lg border bg-card px-4 py-3">
-                <div className="text-xs text-muted-foreground" style={{ marginBottom: 6 }}>Slowest queries</div>
-                {dbHealth.statements.byTime.slice(0, 5).map((q, i) => (
-                  <div key={i} className="text-sm" style={{ padding: "2px 0" }}>
-                    <div className="font-mono text-xs" title={q.query} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q.query}</div>
-                    <div className="text-xs text-muted-foreground">{fmtInt(q.calls)} calls · {fmtInt(q.totalMs)} ms total · {fmtInt(q.meanMs)} ms mean</div>
-                  </div>
-                ))}
+                <CardHead label="Slowest queries" value={`${fmtInt(dbHealth.statements.byTime.slice(0, 5).reduce((a, q) => a + q.totalMs, 0))} ms`} caption="top 5 total" />
+                <ChartContainer config={{ ms: { label: "Total ms", color: "var(--chart-1)" } }} className="h-56 w-full">
+                  <BarChart data={slowRows} layout="vertical" margin={{ top: 0, right: 12, left: 8, bottom: 0 }}>
+                    <CartesianGrid horizontal={false} stroke="currentColor" strokeOpacity={0.12} />
+                    <XAxis type="number" hide />
+                    <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ ...axisTick, fontSize: 10 }} width={150} />
+                    <ChartTooltip content={<ChartTooltipContent labelFormatter={(_, p) => String((p?.[0]?.payload as { full?: string } | undefined)?.full ?? "").slice(0, 120)} />} cursor={{ fill: "currentColor", opacity: 0.06 }} />
+                    <Bar dataKey="ms" fill="var(--color-ms)" radius={[0, 4, 4, 0]} isAnimationActive={!reduceMotion} />
+                  </BarChart>
+                </ChartContainer>
               </div>
             ) : (
               <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">Query stats unavailable — pg_stat_statements extension is not installed.</div>
             )}
             <div className="rounded-lg border bg-card px-4 py-3">
-              <div className="text-xs text-muted-foreground" style={{ marginBottom: 6 }}>Seq scans per table</div>
-              {dbHealth.seqScans.slice(0, 8).map((t) => (
-                <div key={t.table} className="flex items-center justify-between gap-3 text-sm" style={{ padding: "2px 0" }}>
-                  <span className="font-mono text-xs">{t.table}</span>
-                  <span className="text-xs text-muted-foreground">{fmtInt(t.seqScans)} scans · {fmtInt(t.seqTuples)} tuples · {fmtInt(t.idxScans)} idx</span>
-                </div>
-              ))}
+              <CardHead label="Seq scans" value={fmtInt(scanRows.reduce((a, r) => a + r.scans, 0))} caption="top 8 tables" />
+              <ChartContainer config={{ scans: { label: "Scans", color: "var(--chart-1)" } }} className="h-52 w-full">
+                <BarChart data={scanRows} margin={{ top: 8, right: 4, left: -8, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke="currentColor" strokeOpacity={0.12} />
+                  <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ ...axisTick, fontSize: 10 }} interval={0} angle={-18} height={44} />
+                  <YAxis tickLine={false} axisLine={false} tick={axisTick} width={48} />
+                  <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: "currentColor", opacity: 0.06 }} />
+                  <Bar dataKey="scans" fill="var(--color-scans)" radius={[4, 4, 0, 0]} isAnimationActive={!reduceMotion} />
+                </BarChart>
+              </ChartContainer>
             </div>
           </div>
         )}
@@ -211,15 +292,21 @@ export default function AnalysisView() {
         {!neonUsage ? (
           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">Usage data unavailable.</div>
         ) : neonUsage.configured === false ? (
-          <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">Neon usage is not configured — set NEON_API_KEY + NEON_PROJECT_ID on the backend.</div>
+          <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">Neon usage is not configured — set NEON_API_KEY + NEON_PROJECT_ID on the backend, then wait for Railway to redeploy.</div>
         ) : "error" in neonUsage ? (
           <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">Neon API unavailable — please try again later.</div>
         ) : (
           <div className="flex flex-col gap-2">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {card("Compute used", `${fmtInt((neonUsage.computeTimeSeconds ?? 0) / 3600)} CU-hours`, `active ${fmtInt((neonUsage.activeTimeSeconds ?? 0) / 3600)} h`)}
-              {card("Storage", fmtBytes(neonUsage.syntheticStorageSize ?? NaN), `written ${fmtBytes(neonUsage.writtenDataBytes ?? NaN)}`)}
-              {card("Egress", fmtBytes(neonUsage.dataTransferBytes ?? NaN), `plan ${neonUsage.plan ?? "—"}`)}
+              <div className="rounded-lg border bg-card px-4 py-3">
+                <CardHead label="Compute used" value={`${fmtInt((neonUsage.computeTimeSeconds ?? 0) / 3600)} CU-h`} caption={`active ${fmtInt((neonUsage.activeTimeSeconds ?? 0) / 3600)} h`} />
+              </div>
+              <div className="rounded-lg border bg-card px-4 py-3">
+                <CardHead label="Storage" value={fmtBytes(neonUsage.syntheticStorageSize ?? NaN)} caption={`written ${fmtBytes(neonUsage.writtenDataBytes ?? NaN)}`} />
+              </div>
+              <div className="rounded-lg border bg-card px-4 py-3">
+                <CardHead label="Egress" value={fmtBytes(neonUsage.dataTransferBytes ?? NaN)} caption={neonUsage.plan ?? "—"} />
+              </div>
             </div>
             <div className="text-xs text-muted-foreground" style={{ padding: "0 4px" }}>
               {neonUsage.period?.from ? `Billing period ${neonUsage.period.from}${neonUsage.period.to ? ` → ${neonUsage.period.to}` : ""} · ` : ""}

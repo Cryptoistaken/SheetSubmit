@@ -68,4 +68,6 @@ export interface Env {
   BACKUP_DATABASE_URL?: string;
   AGENT_TOKEN?: string;
   ALLOW_AGENT_ACCESS?: string;
+  NEON_API_KEY?: string;
+  NEON_PROJECT_ID?: string;
 }

@@ -36,3 +36,30 @@ admin.get("/file/:id/logs", async (c) => {
 });
 admin.get("/file/:id/undo", async (c) => { const f = await findFile(c, c.req.param("id")); if (!f) return c.json({ error: "file not found" }, 404); return c.json({ undo: [], redo: [] }); });
 admin.get("/pooldiag", async (c) => { const key = String(c.req.query("key") || "").trim().slice(0, 64); if (!key) return c.json({ error: "key required" }, 400); return c.json(await rpc(c.env.POOLS, "global", "diag", { key })); });
+admin.get("/dbhealth", async (c) => c.json(await rpc(c.env.INDEX, "global", "dbHealth", { limit: Math.min(50, Math.max(1, Number(c.req.query("limit")) || 20)) })));
+admin.get("/neon-usage", async (c) => {
+  // /analysis support: server-side Neon project fetch (key never logged/returned, 10s cap).
+  const key = c.env.NEON_API_KEY || "", projectId = c.env.NEON_PROJECT_ID || "";
+  if (!key || !projectId) return c.json({ configured: false });
+  const pick = (...vs: any[]) => vs.find((v) => v !== undefined && v !== null) ?? null;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 10_000);
+  try {
+    const r = await fetch(`https://api.neon.tech/v2/projects/${encodeURIComponent(projectId)}`, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" }, signal: ctl.signal });
+    if (!r.ok) return c.json({ error: "neon api unavailable" }, 502);
+    const p = ((await r.json()) as any)?.project ?? {};
+    const con = p.consumption ?? p.current_consumption ?? {};
+    return c.json({
+      configured: true,
+      computeTimeSeconds: pick(con.compute_time_seconds, p.compute_time_seconds),
+      activeTimeSeconds: pick(con.active_time_seconds, p.active_time_seconds),
+      dataTransferBytes: pick(con.data_transfer_bytes, p.data_transfer_bytes),
+      writtenDataBytes: pick(con.written_data_bytes, p.written_data_bytes),
+      syntheticStorageSize: pick(con.synthetic_storage_size, p.synthetic_storage_size),
+      period: con.period ?? (con.from ? { from: con.from, to: con.to ?? null } : null),
+      plan: pick(p.plan, p.subscription_plan, p.subscription?.plan),
+      autoscaling: pick(p.autoscaling, p.settings?.autoscaling),
+    });
+  } catch { return c.json({ error: "neon api unavailable" }, 502); }
+  finally { clearTimeout(t); }
+});

@@ -237,6 +237,40 @@ export interface PoolDiag {
   files: { fileId: string; ownerId: string; name: string | null }[];
   found: PoolDiagFound[];
 }
+export interface DownloadMeta {
+  id: string;
+  at: number;
+  claimedBy?: string | null;
+  password: string;
+  poolId: string;
+  claimed: number;
+  filename: string;
+  status?: string | null;
+  total?: number | null;
+  unitPrice?: number | null;
+}
+export interface DbHealthStatement { query: string; calls: number; totalMs: number; meanMs: number }
+export interface DbHealth {
+  tables: { table: string; bytes: number; rows: number }[];
+  seqScans: { table: string; seqScans: number; seqTuples: number; idxScans: number }[];
+  statements:
+    | { statsAvailable: false }
+    | { statsAvailable: true; byTime: DbHealthStatement[]; byCalls: DbHealthStatement[] };
+}
+export type NeonUsage =
+  | { configured: false }
+  | {
+      configured: true;
+      computeTimeSeconds?: number | null;
+      activeTimeSeconds?: number | null;
+      dataTransferBytes?: number | null;
+      writtenDataBytes?: number | null;
+      syntheticStorageSize?: number | null;
+      period?: { from?: string | null; to?: string | null } | null;
+      plan?: string | null;
+      autoscaling?: { min_compute_units?: number | null; max_compute_units?: number | null } | null;
+    }
+  | { configured?: boolean; error: string };
 export interface Withdrawal {
   id: string;
   user_id: string;
@@ -325,6 +359,8 @@ export const api = {
     }),
 
   adminStats: () => request<{ totalUsers: number; totalFiles: number }>("/admin/stats"),
+  adminDbHealth: () => request<DbHealth>("/admin/dbhealth"),
+  adminNeonUsage: () => request<NeonUsage>("/admin/neon-usage"),
   adminUsers: () => request<AdminUser[]>("/admin/users"),
   adminSearchUsers: (q: string) => request<AdminUser[]>(`/admin/users/search?q=${encodeURIComponent(q)}`),
   adminUser: (userId: string) => request<AdminUser>(`/admin/user/${userId}`),
@@ -383,7 +419,7 @@ export const api = {
   approveHold: (id: string) => request<{ ok: boolean; status: string; approved?: number; dead?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/approve`, { method: "POST" }),
   rejectHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/reject`, { method: "POST" }),
   returnHold: (id: string) => request<{ ok: boolean; status: string; rejected?: number; actionCount?: number; settleAt?: number }>(`/pools/holds/${encodeURIComponent(id)}/return`, { method: "POST" }),
-  getDownloads: () => request<unknown[]>("/pools/downloads"),
+  getDownloads: () => request<DownloadMeta[]>("/pools/downloads"),
   getUserFiles: (password: string, poolId: string): Promise<PoolUserFilesResult> => {
     const enc = (s: string) => encodeURIComponent(s);
     return request<PoolUserFilesResult>(`/pools/${enc(password)}/${enc(poolId)}/user-files`);

@@ -40,7 +40,7 @@
 
 ### Backend — `backend/src/` (Hono/Bun, entry `src/server.ts`)
 ```
-  index.ts              # app setup, routes, API_VERSION (currently 2.0.38; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
+  index.ts              # app setup, routes, API_VERSION (currently 2.0.39; bump on any route change, surfaced by /api/health), typed JSON errors (known client failures → 4xx with message, unknown masked as 500 + logged with method+path),
                       #   + privateEtag (SHA-1 conditional GET + Cache-Control: private, no-cache) on GET /api/files + /api/files/* — JSON only (never buffers SSE/xlsx), CORS headers kept on the 304, browsers revalidate via If-None-Match automatically,
                       #   body-size guard caps chunked bodies without Content-Length too (clone-read stream, 413 over 4MB),
                       #   GET /api/health (all client calls are plain HTTPS — no WebSocket transport),
@@ -50,7 +50,7 @@
                       #   GET /api/auth/telegram/config + POST /api/auth/telegram/verify (official Telegram Login OIDC/JWKS, stores picture+phone; per-IP rate limit 30/60s fail-open),
                       #   GET /api/bot/info, ensureWebhook on first request
                       #   + wallet routes: GET /api/wallet, GET /api/wallet/balance (slim Topbar read), POST /api/wallet/withdraw (optional {requestId} /^[A-Za-z0-9-]{8,64}$/ → idempotent retry returns existing), GET /api/wallet/requests, POST /api/wallet/requests/:id/:action, POST /api/wallet/credit (admin manual add/reduce w/ free-text title+direction → walletCredit op, debits may drive balance negative e.g. advance payments, surfaced on the admin user detail page)
- lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, CHECK_URL, BACKUP_DATABASE_URL, ALLOW_TEST_AUTH, TELEGRAM_LOGIN_CLIENT_ID)
+ lib/shared.ts         # Env type (TG_BOT_TOKEN, ADMIN_IDS, SESSION_SECRET, TG_WEBHOOK_SECRET, BACKEND_URL, FRONTEND_URL, CHECK_URL, BACKUP_DATABASE_URL, ALLOW_TEST_AUTH, TELEGRAM_LOGIN_CLIENT_ID, NEON_API_KEY, NEON_PROJECT_ID)
  src/lib/log.ts          # single JSON logger: one wide event per API request via index.ts middleware (method/path/status/ms/uid/req_id/version; logging-best-practices)
  src/lib/telegramOidc.ts # Telegram Login OIDC/JWKS token verification
   src/lib/session.ts      # signSession, verifySession (HMAC SHA-256, fail-closed), requireAuth (HMAC + DB session + banned check), isAdmin, cookie builder (SameSite=None on https for direct cross-origin calls, Lax on http)
@@ -87,6 +87,8 @@ src/routes/admin.ts       # admin stats, users, files and moderation routes
                       #   GET /users/search (SQL ILIKE, limit 50 via adminUsersSearch op),
                       #   GET /users accepts optional ?q= (delegates to adminUsersSearch),
                       #   GET /pooldiag?key= (cross-password account trace: pool_rows in any state + pool_rejects + downloads + source files + live file-row locate with server-side classify; feeds the Pool lookup tool),
+                       #   GET /dbhealth (read-only /analysis support: top-N table sizes+row estimates via pg_table_size/reltuples (?limit= capped 50), pg_stat_user_tables seq scans, pg_stat_statements top-10 by time+calls with statsAvailable:false when the extension is missing; via dbHealth op in pg.ts),
+                       #   GET /neon-usage (server-side Neon project fetch with NEON_API_KEY+NEON_PROJECT_ID, 10s cap, key never logged/returned; no env → 200 {configured:false}; returns consumption bytes/seconds + period + plan + autoscaling),
                       #   PUT|DELETE /file/:id, GET /file/:id/rows|logs|undo, PUT /file/:id/persist (feeds pools like the owner route, feeds awaited); PUT /file/:id rejects password changes (400); DELETE /file/:id 409s on held pool rows (same guard as owner/archive),
                       #   POST /file/:id/restore-snapshot re-feeds pools correctly (passes the file object),
                       #   DELETE /file/:id (admin archive) wipes the file's pool rows like owner archive; admin archive-restore re-feeds pools like owner restore,

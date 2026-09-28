@@ -162,6 +162,32 @@ async function indexOp(op: string, a: any) {
     case "metaDelMany": { const keys = (Array.isArray(a.keys) ? a.keys : []).map(String).filter(Boolean).slice(0, 1000); if (!keys.length) return { ok: true, deleted: 0 }; const r: any = await db`DELETE FROM meta WHERE k IN ${db(keys)}`; for (const k of keys) void redisDel(`ss:meta:${k}`); return { ok: true, deleted: Number(r.count || 0) }; }
     case "allFiles": return db`SELECT data,owner_id FROM file_index`;
     case "stats": { const r: any = (await db`SELECT (SELECT COUNT(*) FROM users) AS users,(SELECT COUNT(*) FROM file_index WHERE archived=false) AS files`)[0]; return { totalUsers: Number(r.users), totalFiles: Number(r.files) }; }
+    case "dbHealth": {
+      // read-only /analysis support: table sizes (top N by pg_table_size) +
+      // row estimates (reltuples — no per-table COUNT scans) + seq-scan counts.
+      // pg_stat_statements is optional — missing extension → statsAvailable:false.
+      const limit = Math.min(50, Math.max(1, Number(a.limit) || 20));
+      const tables: any[] = await db`SELECT c.relname AS tbl, pg_table_size(c.oid) AS bytes, c.reltuples AS rows FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind='r' AND n.nspname='public' ORDER BY pg_table_size(c.oid) DESC LIMIT ${limit}`;
+      const scans: any[] = await db`SELECT relname AS tbl, seq_scan, seq_tup_read, idx_scan FROM pg_stat_user_tables ORDER BY seq_scan DESC`;
+      let statements: unknown = { statsAvailable: false };
+      const ext: any = (await db`SELECT to_regclass('public.pg_stat_statements') AS v`)[0];
+      if (ext?.v) {
+        try {
+          const cols: any[] = await db`SELECT column_name FROM information_schema.columns WHERE table_name='pg_stat_statements'`;
+          const names = new Set(cols.map((r: any) => String(r.column_name)));
+          const tot = names.has("total_exec_time") ? "total_exec_time" : "total_time";
+          const mean = names.has("mean_exec_time") ? "mean_exec_time" : "mean_time";
+          const byTime: any[] = await db.unsafe(`SELECT left(query, 1000) AS query, calls::float8 AS calls, "${tot}"::float8 AS "totalMs", "${mean}"::float8 AS "meanMs" FROM public.pg_stat_statements ORDER BY "${tot}" DESC LIMIT 10`);
+          const byCalls: any[] = await db.unsafe(`SELECT left(query, 1000) AS query, calls::float8 AS calls, "${tot}"::float8 AS "totalMs", "${mean}"::float8 AS "meanMs" FROM public.pg_stat_statements ORDER BY calls DESC LIMIT 10`);
+          statements = { statsAvailable: true, byTime, byCalls };
+        } catch { statements = { statsAvailable: false }; }
+      }
+      return {
+        tables: tables.map((r: any) => ({ table: String(r.tbl), bytes: Number(r.bytes), rows: Number(r.rows) })),
+        seqScans: scans.map((r: any) => ({ table: String(r.tbl), seqScans: Number(r.seq_scan), seqTuples: Number(r.seq_tup_read), idxScans: Number(r.idx_scan) })),
+        statements,
+      };
+    }
     case "session": await db`INSERT INTO sessions(token,user_id,exp) VALUES(${a.token},${a.uid},${a.exp}) ON CONFLICT(token) DO UPDATE SET user_id=EXCLUDED.user_id,exp=EXCLUDED.exp`; return { ok: true };
     case "getSession": return (await db`SELECT * FROM sessions WHERE token=${a.token} AND exp>${Date.now()}`)[0] || null;
     case "deleteSession": await db`DELETE FROM sessions WHERE token=${a.token}`; return { ok: true };

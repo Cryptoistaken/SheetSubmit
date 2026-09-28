@@ -60,7 +60,31 @@ async function userCount(db: ReturnType<typeof postgres>): Promise<number> {
   return r[0]?.n ?? 0;
 }
 
-async function copyAll(
+/**
+ * Columns Postgres computes itself, read from the catalogue rather than
+ * hardcoded: a STORED generated column rejects an explicit value outright
+ * ("cannot insert a non-DEFAULT value into column X"), so a `SELECT *` copy
+ * that includes one fails the entire sync. Migration 008 added two of them
+ * and the next migration will add more.
+ */
+async function computedColumns(
+  db: ReturnType<typeof postgres>,
+  table: string,
+): Promise<Set<string>> {
+  const rows: any[] = await db.unsafe(
+    `SELECT a.attname
+       FROM pg_attribute a
+       JOIN pg_class c ON c.oid = a.attrelid
+      WHERE c.relname = $1
+        AND a.attnum > 0
+        AND NOT a.attisdropped
+        AND a.attgenerated <> ''`,
+    [table],
+  );
+  return new Set(rows.map((r) => r.attname));
+}
+
+export async function copyAll(
   from: ReturnType<typeof postgres>,
   to: ReturnType<typeof postgres>,
 ) {
@@ -71,7 +95,16 @@ async function copyAll(
     for (const t of BACKUP_TABLES) {
       const rows: any[] = await from.unsafe(`SELECT * FROM "${t}"`);
       if (!rows.length) continue;
-      const cols = Object.keys(rows[0]);
+      // Union both sides: a target that has gained a generated column the
+      // source has not would otherwise be handed a value for it. The target
+      // is read on `tx`, not on the `to` pool — asking the pool for a
+      // connection while its transaction holds one deadlocks a max:1 pool.
+      const computed = new Set<string>([
+        ...(await computedColumns(from, t)),
+        ...(await computedColumns(tx, t)),
+      ]);
+      const cols = Object.keys(rows[0]).filter((c) => !computed.has(c));
+      if (!cols.length) continue;
       const colList = cols.map((c) => `"${c}"`).join(",");
       for (let i = 0; i < rows.length; i += CHUNK) {
         const chunk = rows.slice(i, i + CHUNK);
@@ -83,8 +116,11 @@ async function copyAll(
           });
           return `(${ph.join(",")})`;
         });
+        // OVERRIDING SYSTEM VALUE keeps identity columns (file_logs.id) on the
+        // original ids instead of renumbering them on the standby. Postgres
+        // accepts the clause on tables that have no identity column at all.
         await tx.unsafe(
-          `INSERT INTO "${t}" (${colList}) VALUES ${groups.join(",")}`,
+          `INSERT INTO "${t}" (${colList}) OVERRIDING SYSTEM VALUE VALUES ${groups.join(",")}`,
           vals as any[],
         );
       }

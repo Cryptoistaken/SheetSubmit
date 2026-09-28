@@ -15,11 +15,11 @@ import {
   formatCount,
   ramp,
   useChartMotion,
+  useElementWidth,
 } from "./ChartKit";
 
-const AXIS_W = 168;
-/** ~monospace 11px fits AXIS_W minus padding; longer names are cut, never wrapped. */
-const AXIS_CHARS = 24;
+/** ~monospace 11px fits the axis width minus padding; longer names are cut, never wrapped. */
+const axisFor = (w: number) => (w > 0 && w < 480 ? { width: 118, chars: 17 } : { width: 168, chars: 24 });
 
 /** A single-line category tick. Recharts' default tick wraps on spaces, which
  *  turns one long query into three lines and drags the axis through it. */
@@ -85,7 +85,12 @@ export function RankBars({
   onRetry,
 }: RankBarsProps) {
   const { isAnimationActive, animationDuration } = useChartMotion();
+  const [wrapRef, wrapWidth] = useElementWidth<HTMLDivElement>();
   const [active, setActive] = React.useState<RankRow | null>(null);
+  // A phone cannot spare 168px for labels and still show a readable bar, so
+  // the axis gives ground first — the full query is still in the tooltip,
+  // the data table and the readout.
+  const axis = axisFor(wrapWidth);
 
   const config = React.useMemo<ChartConfig>(() => ({ [seriesKey]: { label: seriesLabel, color: ramp(0) } }), [seriesKey, seriesLabel]);
   const chartHeight = Math.max(height, rows.length * 30 + 12);
@@ -97,7 +102,7 @@ export function RankBars({
   );
 
   return (
-    <div>
+    <div ref={wrapRef} className="flex w-full min-w-0 flex-col">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-mono text-[11px] tracking-wide text-muted-foreground">{label}</p>
@@ -126,9 +131,9 @@ export function RankBars({
               dataKey="name"
               tickLine={false}
               axisLine={false}
-              width={AXIS_W}
+              width={axis.width}
               interval={0}
-              tick={<RowTick chars={AXIS_CHARS} />}
+              tick={<RowTick chars={axis.chars} />}
             />
             <ChartTooltip
               cursor={{ fill: "currentColor", opacity: 0.06 }}

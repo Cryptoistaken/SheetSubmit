@@ -18,6 +18,8 @@ import {
 export type Bin = { from: number; to: number; count: number };
 
 const PAD = { top: 34, right: 52, bottom: 26, left: 12 };
+/** Top room for the percentile pins; they stack upward when they collide. */
+const PIN_TOP = 26;
 
 /** Bin edges on 1/2/2.5/5/10×10ⁿ steps, so the edges read as round numbers. */
 function niceStep(raw: number): number {
@@ -132,7 +134,7 @@ export function HistogramChart({
   const h = height;
   const x0 = PAD.left;
   const x1 = w - PAD.right;
-  const y0 = PAD.top;
+  const y0 = PAD.top + PIN_TOP;
   const y1 = h - PAD.bottom;
   const plotW = Math.max(1, x1 - x0);
 
@@ -338,30 +340,46 @@ export function HistogramChart({
                 </g>
               ) : null}
 
-              {pins.map((pin, index) => {
-                const text = `p${pin.k} ${format(pin.value)}`;
-                const half = text.length * 3.1;
-                const rule = Math.min(x0 + bodyW, xOf(pin.value));
-                const x = Math.max(x0 + half, Math.min(x0 + bodyW - half, rule));
-                const paint = pinInk(index, pins.length);
-                return (
-                  <g key={pin.k} className={reduce ? undefined : "mc-fade"} style={reduce ? undefined : { animationDelay: "380ms" }}>
-                    <line x1={rule} x2={rule} y1={y0 - 6} y2={y1} stroke={paint} strokeWidth={1.25} />
-                    <circle cx={rule} cy={y0 - 6} r={2.5} fill={paint} />
-                    <text
-                      x={x}
-                      y={y0 - 14}
-                      textAnchor="middle"
-                      fontSize={10}
-                      fontWeight={500}
-                      fill="currentColor"
-                      className="font-mono tabular-nums text-foreground"
-                    >
-                      {text}
-                    </text>
-                  </g>
-                );
-              })}
+              {(() => {
+                // Lay the pin labels out first: when two of them would print on
+                // top of each other (narrow phone, close percentiles) the later
+                // one drops to a second line rather than overprinting.
+                const half = (p: { k: number; value: number }) => (`p${p.k} ${format(p.value)}`).length * 3.1;
+                const labelX = pins.map((pin) => {
+                  const h = half(pin);
+                  const rule = Math.min(x0 + bodyW, xOf(pin.value));
+                  return Math.max(x0 + h, Math.min(x0 + bodyW - h, rule));
+                });
+                const tiers = pins.map((_, i) => {
+                  let tier = 0;
+                  while (tier < i && Math.abs(labelX[i] - labelX[tier]) < half(pins[i]) + half(pins[tier])) tier += 1;
+                  return tier;
+                });
+                return pins.map((pin, index) => {
+                  const text = `p${pin.k} ${format(pin.value)}`;
+                  const rule = Math.min(x0 + bodyW, xOf(pin.value));
+                  const paint = pinInk(index, pins.length);
+                  const labelY = y0 - 14 - tiers[index] * 12;
+                  const tickY = labelY + 8;
+                  return (
+                    <g key={pin.k} className={reduce ? undefined : "mc-fade"} style={reduce ? undefined : { animationDelay: "380ms" }}>
+                      <line x1={rule} x2={rule} y1={tickY} y2={y1} stroke={paint} strokeWidth={1.25} />
+                      <circle cx={rule} cy={tickY} r={2.5} fill={paint} />
+                      <text
+                        x={labelX[index]}
+                        y={labelY}
+                        textAnchor="middle"
+                        fontSize={10}
+                        fontWeight={500}
+                        fill="currentColor"
+                        className="font-mono tabular-nums text-foreground"
+                      >
+                        {text}
+                      </text>
+                    </g>
+                  );
+                });
+              })()}
             </svg>
           ) : null}
         </div>

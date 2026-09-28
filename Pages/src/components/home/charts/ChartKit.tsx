@@ -303,6 +303,10 @@ export function ChartState({
 /**
  * The same numbers as a real table. Charts carry colour and position; a
  * screen reader gets neither, so every plot ships its data as text once.
+ *
+ * The clip lives on a wrapping div, not on the table: `sr-only` asks for
+ * `width:1px`, but a <table> is auto-laid-out and expands to its content
+ * instead, which silently widened the page's scroll area on a phone.
  */
 export function ChartDataTable({
   caption,
@@ -314,23 +318,25 @@ export function ChartDataTable({
   rows: (string | number)[][];
 }) {
   return (
-    <table className="sr-only">
-      <caption>{caption}</caption>
-      <thead>
-        <tr>
-          {/* Index keys: a chart may legitimately carry two columns with the
-              same heading (a per-row "Total" beside the column totals). */}
-          {columns.map((c, i) => <th key={i} scope="col">{c}</th>)}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, i) => (
-          <tr key={i}>
-            {row.map((cell, j) => (j === 0 ? <th key={j} scope="row">{cell}</th> : <td key={j}>{cell}</td>))}
+    <div className="sr-only">
+      <table>
+        <caption>{caption}</caption>
+        <thead>
+          <tr>
+            {/* Index keys: a chart may legitimately carry two columns with the
+                same heading (a per-row "Total" beside the column totals). */}
+            {columns.map((c, i) => <th key={i} scope="col">{c}</th>)}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              {row.map((cell, j) => (j === 0 ? <th key={j} scope="row">{cell}</th> : <td key={j}>{cell}</td>))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

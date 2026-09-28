@@ -78,7 +78,9 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 }
 
 function Panel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`rounded-lg border bg-card p-4 ${className}`}>{children}</div>;
+  // min-w-0: a grid item defaults to min-width:auto, so a wide chart inside
+  // would push the card (and the page) past a phone's viewport.
+  return <div className={`min-w-0 rounded-lg border bg-card p-4 ${className}`}>{children}</div>;
 }
 
 /* ------------------------------------------------------------------ page */
@@ -303,7 +305,7 @@ export default function AnalysisView() {
   const label = rangeLabel(range);
 
   return (
-    <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-6 px-4 py-6 sm:px-6">
+    <div className="mx-auto flex w-full min-w-0 max-w-[1180px] flex-col gap-6 px-4 py-6 sm:px-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-bold tracking-tight">Analysis</h2>
@@ -349,9 +351,9 @@ export default function AnalysisView() {
           caption={`${openWd.length} awaiting review`}
         />
         <StatTile
-          label={`Accounts sold · ${label}`}
+          label="Accounts sold"
           value={formatCount(accountsInRange)}
-          caption={`${fmtMoney(revenueInRange, currency)} approved`}
+          caption={`${label} · ${fmtMoney(revenueInRange, currency)} approved`}
           delta={accountsDelta}
         />
       </div>

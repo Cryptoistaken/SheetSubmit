@@ -31,10 +31,13 @@ export interface MatrixChartProps {
   onRetry?: () => void;
 }
 
-const LABEL_W = 104;
 const HEAD_H = 26;
 const ROW_H = 32;
 const GAP = 2;
+
+/** Narrow phones give the row labels less room; the cell grid takes the rest. */
+const LABEL_W = (w: number) => (w < 420 ? 74 : 104);
+const MIN_COL_W = (w: number) => (w < 420 ? 44 : 56);
 
 /**
  * A grid of counts read cell by cell — the cohort-chart engine, pointed at
@@ -73,12 +76,13 @@ export function MatrixChart({
     [columns, rows],
   );
 
-  const colW = Math.max(56, Math.floor(Math.max(160, width - LABEL_W) / Math.max(1, columns.length)));
-  const w = LABEL_W + columns.length * colW;
+  const labelW = LABEL_W(width);
+  const colW = Math.max(MIN_COL_W(width), Math.floor(Math.max(120, width - labelW) / Math.max(1, columns.length)));
+  const w = labelW + columns.length * colW;
   const h = height ?? HEAD_H + (rows.length + 1) * ROW_H + 8;
   const ready = width > 0;
 
-  const cellX = (col: number) => LABEL_W + col * colW;
+  const cellX = (col: number) => labelW + col * colW;
   const hoveredRowIdx = hovered?.row;
   const hoveredCol = hovered?.col;
   const hoveredRow = hoveredRowIdx != null ? rows[hoveredRowIdx] : null;
@@ -89,7 +93,7 @@ export function MatrixChart({
       : 0;
 
   return (
-    <div ref={wrapRef} className="flex w-full flex-col">
+    <div ref={wrapRef} className="flex w-full min-w-0 flex-col">
       <Keyframes />
 
       <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
@@ -108,7 +112,10 @@ export function MatrixChart({
         error={{ title: "Could not load the breakdown" }}
         onRetry={onRetry}
       >
-        <div className="relative w-full overflow-x-auto">
+        {/* min-w-0 lets this scroll instead of widening the page: a flex item
+            defaults to min-width:auto, so the SVG's intrinsic width would push
+            the whole card past the viewport. */}
+        <div className="relative w-full min-w-0 overflow-x-auto">
           {ready ? (
             <svg
               width={w}
@@ -147,7 +154,7 @@ export function MatrixChart({
                       fontSize={11}
                       className={cn("font-mono", rowActive ? "fill-foreground" : "fill-muted-foreground")}
                     >
-                      {row.label}
+                      {colW >= 40 ? row.label : `${row.label.slice(0, Math.max(4, Math.floor(labelW / 6.6)))}…`}
                     </text>
                     {row.values.map((value, c) => {
                       const v = Number(value) || 0;

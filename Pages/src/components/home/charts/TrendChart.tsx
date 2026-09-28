@@ -14,6 +14,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import {
+  ChartDataTable,
   ChartLegend,
   ChartReadout,
   ChartState,
@@ -202,25 +203,15 @@ export function TrendChart({
       </div>
       <ChartReadout>{readout}</ChartReadout>
 
-      <table className="sr-only">
-        <caption>{label}</caption>
-        <thead>
-          <tr>
-            <th scope="col">Period</th>
-            {series.map((s) => <th key={s.key} scope="col">{s.label}</th>)}
-            {overlay ? <th scope="col">{overlay.label}</th> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((row) => (
-            <tr key={row.label}>
-              <th scope="row">{row.label}</th>
-              {series.map((s) => <td key={s.key}>{format(Number(row[s.key]) || 0)}</td>)}
-              {overlay ? <td>{format(Number(row[overlay.key]) || 0)}</td> : null}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <ChartDataTable
+        caption={label}
+        columns={["Period", ...series.map((s) => s.label), ...(overlay ? [overlay.label] : [])]}
+        rows={data.map((row) => [
+          row.label,
+          ...series.map((s) => format(Number(row[s.key]) || 0)),
+          ...(overlay ? [format(Number(row[overlay.key]) || 0)] : []),
+        ])}
+      />
     </div>
   );
 }

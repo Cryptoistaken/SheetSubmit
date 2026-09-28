@@ -164,10 +164,16 @@ async function indexOp(op: string, a: any) {
     case "stats": { const r: any = (await db`SELECT (SELECT COUNT(*) FROM users) AS users,(SELECT COUNT(*) FROM file_index WHERE archived=false) AS files`)[0]; return { totalUsers: Number(r.users), totalFiles: Number(r.files) }; }
     case "dbHealth": {
       // read-only /analysis support: table sizes (top N by pg_table_size) +
-      // row estimates (reltuples — no per-table COUNT scans) + seq-scan counts.
+      // exact row counts (COUNT(*) per table — reltuples estimates are
+      // stale/wrong on this DB; tables are tiny so it's cheap) + seq-scan counts.
       // pg_stat_statements is optional — missing extension → statsAvailable:false.
       const limit = Math.min(50, Math.max(1, Number(a.limit) || 20));
-      const tables: any[] = await db`SELECT c.relname AS tbl, pg_table_size(c.oid) AS bytes, c.reltuples AS rows FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind='r' AND n.nspname='public' ORDER BY pg_table_size(c.oid) DESC LIMIT ${limit}`;
+      const tables: any[] = await db`SELECT c.relname AS tbl, pg_table_size(c.oid) AS bytes FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind='r' AND n.nspname='public' ORDER BY pg_table_size(c.oid) DESC LIMIT ${limit}`;
+      for (const t of tables) {
+        const name = String(t.tbl).replace(/"/g, '""');
+        const c: any = (await db.unsafe(`SELECT COUNT(*) AS n FROM "${name}"`))[0];
+        t.rows = Number(c.n);
+      }
       const scans: any[] = await db`SELECT relname AS tbl, seq_scan, seq_tup_read, idx_scan FROM pg_stat_user_tables ORDER BY seq_scan DESC`;
       let statements: unknown = { statsAvailable: false };
       const ext: any = (await db`SELECT to_regclass('public.pg_stat_statements') AS v`)[0];

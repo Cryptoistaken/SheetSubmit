@@ -15,12 +15,14 @@ import type {
 // blocks third-party cookies, so the app keeps the same-origin proxy; every other
 // host keeps the old behavior (explicit override → proxy). One re-login after deploy:
 // the old host-only pages.dev cookie is not sent cross-origin.
-const DIRECT_API_BASE = "https://sheetsubmit.up.railway.app";
+const DIRECT_API_BASE = "https://prod-main-backend-asia-1e2f7f-20nr8v1pae1.compute.instacloud-edge.com";
 const isProdWeb = typeof location !== "undefined" && location.hostname === "sheetsubmit.pages.dev";
 const isAndroidApp = typeof window !== "undefined" && !!(window as unknown as { Android?: unknown }).Android;
 // ponytail: sticky first-party proxy — pinned after a proxied login (direct cross-site
-// path blocked); keeps every later call on the same host as the session cookie
-const PROXY_FLAG = "ss_api_proxy";
+// path blocked); keeps every later call on the same host as the session cookie.
+// v2: Railway is gone (backend moved to InstaCloud) — old ss_api_proxy pins are ignored
+// so previously-pinned browsers go direct again instead of burning Functions invocations
+const PROXY_FLAG = "ss_api_proxy2";
 function proxyPinned() { try { return localStorage.getItem(PROXY_FLAG) === "1"; } catch { return false; } }
 const RUNTIME_BASE = (proxyPinned() ? "" : (window.APP_CONFIG?.apiBase || import.meta.env.VITE_API_BASE || (!isAndroidApp && isProdWeb ? DIRECT_API_BASE : ""))).replace(/\/+$/, "");
 declare global {

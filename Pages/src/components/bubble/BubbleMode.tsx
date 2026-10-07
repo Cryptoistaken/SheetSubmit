@@ -101,7 +101,9 @@ export default function BubbleMode({ fileId }: { fileId: string }) {
       timer = setTimeout(() => {
         check();
         schedule();
-      }, 6000);
+        // ponytail: 12s, not 6s — each tick is a full /rows refetch through the
+        // Functions proxy on Android; 12s stays fresh for pasting at half the cost
+      }, 12000);
     };
     check();
     schedule();

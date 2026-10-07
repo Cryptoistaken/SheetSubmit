@@ -24,19 +24,44 @@ const isAndroidApp = typeof window !== "undefined" && !!(window as unknown as { 
 // so previously-pinned browsers go direct again instead of burning Functions invocations
 const PROXY_FLAG = "ss_api_proxy2";
 function proxyPinned() { try { return localStorage.getItem(PROXY_FLAG) === "1"; } catch { return false; } }
-const RUNTIME_BASE = (proxyPinned() ? "" : (window.APP_CONFIG?.apiBase || import.meta.env.VITE_API_BASE || (!isAndroidApp && isProdWeb ? DIRECT_API_BASE : ""))).replace(/\/+$/, "");
+function directBase() {
+  return (window.APP_CONFIG?.apiBase || import.meta.env.VITE_API_BASE || (!isAndroidApp && isProdWeb ? DIRECT_API_BASE : "")).replace(/\/+$/, "");
+}
+// ponytail: base is resolved per call (not once at import) so a healed pin
+// takes effect for later requests without a reload
+function runtimeBase() { return proxyPinned() ? "" : directBase(); }
+// ponytail: self-healing proxy pin — a pin from a past outage (or flaky wifi)
+// must not stick until logout. While pinned, occasionally try /auth/me direct;
+// on success drop the pin so later calls go direct again. Throttled: at most
+// one cheap probe per 10 min, only while pinned, never on Android (must proxy).
+let lastHealProbe = 0;
+function maybeHealProxyPin() {
+  if (!proxyPinned() || isAndroidApp) return;
+  const now = Date.now();
+  if (now - lastHealProbe < 10 * 60 * 1000) return;
+  lastHealProbe = now;
+  const direct = directBase();
+  if (!direct) return;
+  fetch(direct + "/api/auth/me", { credentials: "include", signal: AbortSignal.timeout(10000) })
+    .then((res) => {
+      if (res.ok) try { localStorage.removeItem(PROXY_FLAG); } catch {}
+    })
+    .catch(() => {});
+}
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("focus", maybeHealProxyPin);
+  setInterval(maybeHealProxyPin, 10 * 60 * 1000);
+}
 declare global {
   interface Window {
     APP_CONFIG?: { apiBase?: string };
   }
 }
 
-const BASE = RUNTIME_BASE + "/api";
-
 /** Absolute-or-same-origin API root for transports that cannot use fetch
  * (EventSource takes no headers — the live stream authenticates by ticket). */
 export function apiBase(): string {
-  return RUNTIME_BASE;
+  return runtimeBase();
 }
 
 export type ConnStatus = "connecting" | "ok" | "err";
@@ -60,7 +85,7 @@ async function request<T>(path: string, init?: RequestInit, opts?: { keepalive?:
   let res: Response;
   try {
     const hasBody = init?.body !== undefined;
-    res = await fetch(BASE + path, {
+    res = await fetch(runtimeBase() + "/api" + path, {
       ...init,
       keepalive: opts?.keepalive,
       credentials: "include",
@@ -459,7 +484,7 @@ export const api = {
   me: async (): Promise<{ user: User | null; expired: boolean; loginRequired: boolean }> => {
     let res: Response;
     try {
-      res = await fetch(BASE + "/auth/me", { credentials: "include" }).then(markConn);
+      res = await fetch(runtimeBase() + "/api/auth/me", { credentials: "include" }).then(markConn);
     } catch (e) {
       useConnStore.setState({ status: "err" });
       throw e;

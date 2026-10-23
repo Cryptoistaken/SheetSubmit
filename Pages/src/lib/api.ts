@@ -15,7 +15,7 @@ import type {
 // blocks third-party cookies, so the app keeps the same-origin proxy; every other
 // host keeps the old behavior (explicit override → proxy). One re-login after deploy:
 // the old host-only pages.dev cookie is not sent cross-origin.
-const DIRECT_API_BASE = "https://prod-main-backend-asia-1e2f7f-20nr8v1pae1.compute.instacloud-edge.com";
+const DIRECT_API_BASE = "https://prod-main-backend-asia-08a49a-20a1b9bkqe8.compute.instacloud-edge.com";
 const isProdWeb = typeof location !== "undefined" && location.hostname === "sheetsubmit.pages.dev";
 const isAndroidApp = typeof window !== "undefined" && !!(window as unknown as { Android?: unknown }).Android;
 // ponytail: sticky first-party proxy — pinned after a proxied login (direct cross-site

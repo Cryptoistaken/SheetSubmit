@@ -274,6 +274,10 @@ async function fileOp(id: string, op: string, a: any) {
       // the per-file row cap, and roll the pre-write state into snapshots first.
       if (a.rows.length > FILE_ROW_LIMIT) throw new Error("too many rows (max 500 per file)");
       if (isPersistConflict(a.base, current)) throw new Error("version conflict");
+      // A save that carries no base can't be checked against the current seq, so a
+      // stale client could silently truncate a whole file. Every real client sends
+      // base; refuse an unbased save that would shrink the file.
+      if (a.base === undefined && rows.length < (await tx`SELECT count(*)::int n FROM file_rows WHERE file_id=${id}`)[0].n) throw new Error("version conflict");
       const prev = await readSnaps(tx);
       await tx`INSERT INTO meta(k,v) VALUES(${`filesnap:${id}`},${j({ snaps: pushSnapshot(prev, { rows, seq: current, ts: Date.now() }, FILE_SNAPSHOT_LIMIT) })}) ON CONFLICT(k) DO UPDATE SET v=EXCLUDED.v`;
     }

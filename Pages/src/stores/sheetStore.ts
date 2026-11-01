@@ -513,13 +513,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       if (!f?.id) throw new Error("File not found");
       if (seq !== openSeq) return;
       const columns = fileColumns(f);
-      let visibleCols = new Set<string>(columns.map((c) => c.key));
-      try {
-        const saved = localStorage.getItem(`ss_cols_${id}`);
-        if (saved) visibleCols = new Set<string>(JSON.parse(saved) as string[]);
-      } catch {
-        // ignore malformed saved columns
-      }
+      let visibleCols = loadVisibleCols(id, columns);
       const rows: Row[] = [...(full.rows ?? [])];
       void snapshotFile(id, full.rows ?? [], full.seq ?? 0, f).catch(() => {});
       const resumed = await resumeLocal(id, rows);
@@ -570,13 +564,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
         const sf = snap?.file as SheetFile | undefined;
         if (!snap || !sf?.id || seq !== openSeq) throw new Error("no snapshot");
         const columns = fileColumns(sf);
-        let visibleCols = new Set<string>(columns.map((c) => c.key));
-        try {
-          const saved = localStorage.getItem(`ss_cols_${id}`);
-          if (saved) visibleCols = new Set<string>(JSON.parse(saved) as string[]);
-        } catch {
-          // ignore malformed saved columns
-        }
+        let visibleCols = loadVisibleCols(id, columns);
         const resumed = await resumeLocal(id, [...(snap.rows ?? [])]);
         const finalRows = resumed ? resumed.rows : [...(snap.rows ?? [])];
         while (finalRows.length < 100) finalRows.push(makeEmptyRow(columns));
@@ -688,13 +676,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       if (!f?.id) throw new Error("File not found");
       if (seq !== openSeq) return;
       const columns = fileColumns(f);
-      let visibleCols = new Set<string>(columns.map((c) => c.key));
-      try {
-        const saved = localStorage.getItem(`ss_cols_${id}`);
-        if (saved) visibleCols = new Set<string>(JSON.parse(saved) as string[]);
-      } catch {
-        // ignore malformed saved columns
-      }
+      let visibleCols = loadVisibleCols(id, columns);
       const rows: Row[] = [...(rowsRes ?? [])];
       void snapshotFile(id, rowsRes ?? [], f.seq ?? 0, f).catch(() => {});
       const resumed = await resumeLocal(id, rows);
@@ -756,13 +738,7 @@ export const useSheetStore = create<SheetState>()((set, get) => ({
       if (!f?.id) throw new Error("File not found");
       if (seq !== openSeq) return;
       const columns = fileColumns(f);
-      let visibleCols = new Set<string>(columns.map((c) => c.key));
-      try {
-        const saved = localStorage.getItem(`ss_cols_${id}`);
-        if (saved) visibleCols = new Set<string>(JSON.parse(saved) as string[]);
-      } catch {
-        // ignore malformed saved columns
-      }
+      let visibleCols = loadVisibleCols(id, columns);
       const finalRows = [...(full.rows ?? [])];
       while (finalRows.length < 100) finalRows.push(makeEmptyRow(columns));
       set({
@@ -2949,6 +2925,28 @@ function syncMirror(fileId: string) {
 
 // Replay a leftover mirror onto freshly loaded server rows (boot / reopen).
 // Returns null when nothing pending.
+/** The saved column selection for one file, validated against the file's real
+ *  columns. A stale set (keys from an older schema) or an empty one used to hide
+ *  every column, so a file full of rows rendered as an empty sheet. Anything that
+ *  leaves no usable column falls back to showing them all, and the bad entry is
+ *  dropped so the sheet heals on its own. */
+function loadVisibleCols(id: string, columns: { key: string }[]): Set<string> {
+  const all = new Set(columns.map((c) => c.key));
+  try {
+    const saved = localStorage.getItem(`ss_cols_${id}`);
+    if (saved) {
+      const keys = (JSON.parse(saved) as unknown[]).filter(
+        (k): k is string => typeof k === "string" && all.has(k),
+      );
+      if (keys.length) return new Set(keys);
+      localStorage.removeItem(`ss_cols_${id}`);
+    }
+  } catch {
+    // ignore malformed saved columns
+  }
+  return all;
+}
+
 async function resumeLocal(
   id: string,
   serverRows: Row[],
